@@ -1,0 +1,1807 @@
+/**
+ * Workflow Preview Sidebar Styles
+ * Desktop-only sidebar for previewing participant workflow experience
+ * Matches the participants frontend MarkerDetailModule styling
+ */
+
+/* ==============================================
+   PREVIEW SIDEBAR CONTAINER
+   ============================================== */
+.workflow-preview-sidebar {
+    position: fixed;
+    top: 60px; /* Account for main header */
+    right: 0;
+    width: 400px;
+    height: calc(100vh - 60px); /* Subtract header height */
+    background: white;
+    border-left: 1px solid #e0e0e0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    z-index: 1000;
+    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
+    transform: translateX(100%);
+    opacity: 0;
+    visibility: hidden;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+    pointer-events: none;
+}
+
+.workflow-preview-sidebar.open {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(0);
+    pointer-events: auto;
+}
+
+/* ==============================================
+   PREVIEW SIDEBAR HEADER
+   ============================================== */
+.preview-sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px;
+    border-bottom: 1px solid #e0e0e0;
+    background: #f8f9fa;
+    flex-shrink: 0;
+}
+
+.preview-sidebar-header-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 15px;
+}
+
+.preview-sidebar-title-section {
+    flex: 1;
+    min-width: 0;
+}
+
+.preview-sidebar-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #333;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.preview-sidebar-subtitle {
+    margin: 2px 0 0 0;
+    font-size: 12px;
+    color: #666;
+    font-weight: normal;
+}
+
+.preview-sidebar-controls {
+    display: flex;
+    gap: 8px;
+}
+
+.preview-sidebar-refresh {
+    background: none;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #666;
+    transition: all 0.2s ease;
+}
+
+.preview-sidebar-refresh:hover {
+    background: #e9ecef;
+    border-color: #007bff;
+    color: #007bff;
+}
+
+/* ==============================================
+   PREVIEW SIDEBAR CONTENT
+   ============================================== */
+.preview-sidebar-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: #c1c1c1 #f1f1f1;
+}
+
+.preview-sidebar-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.preview-sidebar-content::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.preview-sidebar-content::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+.preview-sidebar-content::-webkit-scrollbar-thumb:hover {
+    background: #a1a1a1;
+}
+
+/* ==============================================
+   MARKER DETAIL CONTAINER (Main Structure)
+   ============================================== */
+.marker-detail-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: white;
+}
+
+/* ==============================================
+   TAB NAVIGATION (Main Tabs: Übersicht, Details, Audit Trail)
+   ============================================== */
+.tab-navigation {
+    flex-shrink: 0;
+    background: white;
+    border-bottom: none;
+    padding: 0 1.25rem 0 1.25rem;
+    margin: 0;
+}
+
+.tab-buttons {
+    display: flex;
+    background: #f7fafc;
+    border-radius: 8px;
+    padding: 4px;
+    gap: 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.tab-btn {
+    padding: 0.5rem 1rem;
+    border: none;
+    background: none;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #718096;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    border-radius: 6px;
+    flex: 1;
+    text-align: center;
+}
+
+.tab-btn.active {
+    color: #1a202c;
+    background: white;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    font-weight: 600;
+}
+
+.tab-btn:hover:not(.active) {
+    color: #4a5568;
+    background: rgba(255, 255, 255, 0.5);
+}
+
+/* ==============================================
+   DETAIL TAB NAVIGATION (Sub-tabs for each stage)
+   ============================================== */
+.detail-tab-navigation {
+    flex-shrink: 0;
+    background: white;
+    border-bottom: 1px solid #e0e4e7;
+    padding: 0 1.25rem 0.5rem 1.25rem;
+    margin: 0;
+}
+
+.detail-tab-buttons.connected-tabs {
+    display: flex;
+    background: #f7fafc;
+    border-radius: 6px;
+    padding: 3px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.detail-tab-btn {
+    padding: 0.5rem 0.75rem;
+    border: none;
+    background: none;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #718096;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    border-radius: 4px;
+    flex-shrink: 0;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+
+.detail-tab-btn.active {
+    color: #1a202c;
+    background: white;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    font-weight: 600;
+}
+
+.detail-tab-btn:hover:not(.active) {
+    color: #4a5568;
+    background: rgba(255, 255, 255, 0.5);
+}
+
+/* Add Stage Button */
+.detail-tab-btn.add-stage-btn {
+    background: #3182ce;
+    color: white;
+    font-weight: 600;
+    border-radius: 6px;
+    margin-left: 8px;
+    min-width: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    box-shadow: 0 2px 4px rgba(49, 130, 206, 0.2);
+}
+
+.detail-tab-btn.add-stage-btn:hover {
+    background: #2b77cb;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(49, 130, 206, 0.3);
+}
+
+.detail-tab-btn.add-stage-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(49, 130, 206, 0.2);
+}
+
+.detail-tab-btn.add-stage-btn .fas {
+    font-size: 1rem;
+}
+
+/* Stage tab plus icons */
+.detail-tab-btn .fas.fa-plus {
+    font-size: 0.7rem;
+    color: inherit;
+}
+
+/* ==============================================
+   TAB CONTENT AREA
+   ============================================== */
+.tab-content-area {
+    flex: 1;
+    overflow-y: auto;
+    background: white;
+    padding: 0;
+    margin: 0;
+}
+
+/* ==============================================
+   OVERVIEW TAB CONTENT (Übersicht)
+   ============================================== */
+.overview-content {
+    padding: 1.25rem;
+}
+
+.core-info-section {
+    margin-bottom: 2rem;
+}
+
+.info-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #f1f1f1;
+}
+
+.info-item:last-child {
+    border-bottom: none;
+}
+
+.info-icon {
+    color: #718096;
+    font-size: 1rem;
+    margin-top: 0.125rem;
+    flex-shrink: 0;
+}
+
+.info-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.info-label {
+    font-size: 0.75rem;
+    color: #718096;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+}
+
+.info-value {
+    font-size: 0.875rem;
+    color: #1a202c;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+}
+
+.info-action {
+    background: none;
+    border: 1px solid #e2e8f0;
+    color: #718096;
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.info-action:hover:not(:disabled) {
+    border-color: #cbd5e0;
+    background: #f7fafc;
+}
+
+.info-action:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Status Section */
+.status-section {
+    margin-bottom: 2rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+}
+
+.status-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.status-header h4 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #333;
+}
+
+.status-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.status-badge.in-progress {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+}
+
+.progress-bar {
+    position: relative;
+    height: 8px;
+    background: #e9ecef;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+}
+
+.progress-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background: #28a745;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    font-size: 0.75rem;
+    color: #666;
+}
+
+/* Quick Actions Section */
+.quick-actions-section {
+    margin-bottom: 2rem;
+}
+
+.quick-actions-section h4 {
+    margin: 0 0 1rem 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #333;
+}
+
+.action-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.action-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    color: #495057;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.action-btn:hover:not(:disabled) {
+    background: #e9ecef;
+    border-color: #dee2e6;
+}
+
+.action-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.no-actions {
+    color: #666;
+    font-style: italic;
+    font-size: 0.875rem;
+    margin: 0;
+}
+
+/* Workflow Info Section */
+.workflow-info-section {
+    margin-bottom: 1rem;
+}
+
+.workflow-info-section h4 {
+    margin: 0 0 1rem 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #333;
+}
+
+.workflow-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.meta-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #f1f1f1;
+    font-size: 0.875rem;
+}
+
+.meta-item:last-child {
+    border-bottom: none;
+}
+
+.meta-label {
+    color: #666;
+    font-weight: 500;
+}
+
+.meta-value {
+    color: #333;
+    font-weight: 600;
+}
+
+/* ==============================================
+   DETAILS TAB CONTENT
+   ============================================== */
+.details-content {
+    padding: 0;
+}
+
+.detail-tab-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.25rem;
+}
+
+/* Stage Content */
+.stage-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.stage-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.stage-header h4 {
+    margin: 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #333;
+}
+
+.stage-type-badge {
+    background: #e9ecef;
+    color: #495057;
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.stage-form-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.stage-time-limit {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #666;
+    font-size: 0.875rem;
+    padding: 0.75rem;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border-left: 4px solid #ffc107;
+}
+
+.stage-content-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 2rem;
+    text-align: center;
+    color: #666;
+}
+
+.stage-content-empty i {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+.stage-content-empty h4 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #333;
+}
+
+.stage-content-empty p {
+    margin: 0;
+    font-size: 0.875rem;
+    color: #666;
+    line-height: 1.4;
+}
+
+/* ==============================================
+   FORM FIELD PREVIEW STYLES
+   ============================================== */
+.form-field-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.field-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #333;
+    margin-bottom: 0.25rem;
+}
+
+.field-label .required {
+    color: #f44336;
+    font-weight: bold;
+    margin-left: 2px;
+}
+
+.field-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    background: #f9f9f9;
+    color: #666;
+    cursor: not-allowed;
+    transition: border-color 0.2s ease;
+}
+
+.field-help {
+    display: block;
+    margin-top: 4px;
+    color: #666;
+    font-size: 12px;
+    font-style: italic;
+}
+
+.field-source {
+    font-size: 11px;
+    color: #666;
+    margin-top: 4px;
+}
+
+/* Checkbox Group */
+.checkbox-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.checkbox-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: #666;
+    cursor: not-allowed;
+}
+
+.checkbox-option input[type="checkbox"] {
+    cursor: not-allowed;
+}
+
+.checkbox-text {
+    flex: 1;
+}
+
+/* Photo Upload Preview */
+.photo-upload-preview {
+    margin-top: 0.5rem;
+}
+
+.photo-upload-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    border: 2px dashed #ddd;
+    border-radius: 8px;
+    background: #f9f9f9;
+    color: #666;
+    text-align: center;
+}
+
+.photo-upload-area i {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+}
+
+/* Smart Dropdown */
+.smart-dropdown {
+    background: #f9f9f9;
+}
+
+/* ==============================================
+   AUDIT TRAIL TAB CONTENT
+   ============================================== */
+.audit-trail-content {
+    padding: 1.25rem;
+}
+
+.audit-trail-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.audit-entry {
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 4px solid #28a745;
+}
+
+.audit-timestamp {
+    font-size: 0.75rem;
+    color: #666;
+    margin-bottom: 0.5rem;
+}
+
+.audit-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.audit-participant {
+    font-weight: 600;
+    color: #333;
+    font-size: 0.875rem;
+}
+
+.audit-action {
+    color: #495057;
+    font-size: 0.875rem;
+}
+
+.audit-stage {
+    color: #666;
+    font-size: 0.75rem;
+}
+
+.audit-trail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.audit-trail-header h4 {
+    margin: 0;
+    font-size: 1.1em;
+    color: #495057;
+}
+
+.audit-stats {
+    display: flex;
+    gap: 16px;
+}
+
+.audit-stat {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85em;
+    color: #6c757d;
+}
+
+.audit-stat i {
+    font-size: 0.9em;
+}
+
+.audit-fields {
+    margin-top: 4px;
+    font-size: 0.85em;
+    color: #6c757d;
+    font-style: italic;
+}
+
+.audit-field-summary {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid #e9ecef;
+}
+
+.audit-field-summary h5 {
+    margin: 0 0 12px 0;
+    font-size: 1em;
+    color: #495057;
+    font-weight: 600;
+}
+
+.field-summary-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.stage-field-summary {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.stage-name {
+    font-weight: 600;
+    color: #495057;
+    font-size: 0.9em;
+}
+
+.stage-field-count {
+    font-size: 0.8em;
+    color: #6c757d;
+}
+
+.stage-field-types {
+    font-size: 0.75em;
+    color: #868e96;
+    font-style: italic;
+    margin-top: 4px;
+}
+
+.no-fields {
+    font-size: 0.8em;
+    color: #adb5bd;
+    font-style: italic;
+}
+
+.audit-preview-note {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    background: #e3f2fd;
+    border-radius: 6px;
+    color: #1565c0;
+    font-size: 0.875rem;
+    margin-top: 20px;
+}
+
+/* ==============================================
+   OVERVIEW TAB FORM FIELDS PREVIEW
+   ============================================== */
+.form-fields-overview-section {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid #e9ecef;
+}
+
+.form-fields-overview-section h4 {
+    margin: 0 0 16px 0;
+    font-size: 1.1em;
+    color: #495057;
+}
+
+.fields-by-stage {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.stage-field-overview {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    padding: 12px;
+}
+
+.stage-overview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.stage-overview-name {
+    font-weight: 600;
+    color: #495057;
+    font-size: 0.9em;
+}
+
+.stage-overview-count {
+    font-size: 0.8em;
+    color: #6c757d;
+    background: #e9ecef;
+    padding: 2px 8px;
+    border-radius: 12px;
+}
+
+.stage-overview-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.field-preview-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 0.8em;
+    color: #495057;
+}
+
+.field-preview-chip small {
+    color: #6c757d;
+    font-size: 0.85em;
+}
+
+.more-fields {
+    color: #6c757d;
+    font-style: italic;
+    font-size: 0.8em;
+    padding: 4px 8px;
+}
+
+.no-stage-fields {
+    color: #adb5bd;
+    font-style: italic;
+    font-size: 0.8em;
+}
+
+/* ==============================================
+   EMPTY STATES
+   ============================================== */
+.preview-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 2rem;
+    text-align: center;
+    color: #666;
+    height: 100%;
+}
+
+.preview-empty i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.3;
+}
+
+.preview-empty h4 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #333;
+}
+
+.preview-empty p {
+    margin: 0;
+    font-size: 0.875rem;
+    color: #666;
+    line-height: 1.4;
+}
+
+.no-data {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    color: #666;
+    font-style: italic;
+    text-align: center;
+}
+
+/* ==============================================
+   STAGE CONTENT AND ADD FIELD STYLES
+   ============================================== */
+
+.stage-content-empty {
+    text-align: center;
+    padding: 2rem 1.5rem;
+    color: #718096;
+    margin-bottom: 1rem;
+}
+
+.stage-content-empty i {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    color: #e2e8f0;
+}
+
+.stage-content-empty h4 {
+    margin: 0 0 0.5rem 0;
+    color: #4a5568;
+    font-size: 1.1rem;
+}
+
+.stage-content-empty p {
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+/* Add Field Section */
+.add-field-section {
+    margin-top: 2rem;
+    padding: 1.5rem;
+    border: 2px dashed #e2e8f0;
+    border-radius: 8px;
+    text-align: center;
+    background: rgba(247, 250, 252, 0.5);
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.add-field-section:hover {
+    border-color: #3182ce;
+    background: rgba(49, 130, 206, 0.05);
+}
+
+.add-field-btn {
+    background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    box-shadow: 0 2px 4px rgba(49, 130, 206, 0.2);
+}
+
+.add-field-btn:hover {
+    background: linear-gradient(135deg, #3182ce 0%, #2b77cb 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(49, 130, 206, 0.3);
+}
+
+.add-field-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(49, 130, 206, 0.2);
+}
+
+.add-field-btn .fas {
+    font-size: 1rem;
+}
+
+.add-field-btn span {
+    font-size: 0.9rem;
+}
+
+/* ==============================================
+   STAGE CONFIGURATION MODAL STYLES
+   ============================================== */
+
+.stage-config-tabs {
+    display: flex;
+    border-bottom: 1px solid #e2e8f0;
+    margin-bottom: 1.5rem;
+}
+
+.stage-config-tabs .tab-btn {
+    padding: 0.75rem 1rem;
+    border: none;
+    background: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #718096;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 2px solid transparent;
+}
+
+.stage-config-tabs .tab-btn.active {
+    color: #3182ce;
+    border-bottom-color: #3182ce;
+    font-weight: 600;
+}
+
+.stage-config-tabs .tab-btn:hover:not(.active) {
+    color: #4a5568;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+.form-fields-section {
+    min-height: 200px;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.section-header h4 {
+    margin: 0;
+    color: #2d3748;
+    font-size: 1rem;
+}
+
+.no-fields-message {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #718096;
+}
+
+.no-fields-message i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    color: #e2e8f0;
+}
+
+.no-fields-message p {
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+.field-item {
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    background: white;
+    transition: all 0.2s ease;
+}
+
+.field-item:hover {
+    border-color: #cbd5e0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.workflow-preview-sidebar .field-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.field-info strong {
+    color: #2d3748;
+    font-size: 0.95rem;
+}
+
+.field-type {
+    display: inline-block;
+    margin-left: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    background: #edf2f7;
+    color: #4a5568;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.field-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.field-actions .btn {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8rem;
+}
+
+.field-description {
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #f7fafc;
+    font-size: 0.85rem;
+    color: #718096;
+}
+
+/* ==============================================
+   WORKFLOW BUILDER DEDICATED DROPDOWN STYLES
+   ============================================== */
+
+.workflow-dropdown-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
+.workflow-dropdown-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+    color: white;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(49, 130, 206, 0.2);
+}
+
+.workflow-dropdown-btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 4px 8px rgba(49, 130, 206, 0.3);
+}
+
+.workflow-dropdown-btn:active {
+    transform: scale(0.95);
+}
+
+.workflow-dropdown-btn i {
+    font-size: 0.75rem;
+}
+
+.workflow-field-dropdown {
+    position: fixed !important;
+    background: white !important;
+    border: 2px solid #007bff !important;
+    border-radius: 4px !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+    z-index: 999999999 !important;
+    min-width: 180px !important;
+    display: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    max-height: 300px !important;
+    overflow-y: auto !important;
+}
+
+.workflow-field-dropdown.show {
+    display: block !important;
+}
+
+.workflow-field-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    background: none;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    color: #495057;
+    transition: background 0.15s ease;
+    font-size: 0.875rem;
+}
+
+.workflow-field-dropdown-item:hover {
+    background: #f8f9fa;
+}
+
+.workflow-field-dropdown-item i {
+    width: 14px;
+    text-align: center;
+    color: #6c757d;
+}
+
+/* ==============================================
+   ROW OPTIONS BUTTON STYLES FOR WORKFLOW PREVIEW
+   ============================================== */
+
+.workflow-preview-sidebar .row-actions-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
+.workflow-preview-sidebar .row-options-btn {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 0.375rem 0.5rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    height: 32px;
+    transition: all 0.2s ease;
+}
+
+.workflow-preview-sidebar .row-options-btn:hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
+}
+
+/* Override conflicting table-crud styles - ONLY for legacy row-actions-dropdown */
+.workflow-preview-sidebar .row-actions-dropdown,
+.workflow-preview-sidebar .row-actions-wrapper .row-actions-dropdown {
+    position: fixed !important;
+    background: white !important;
+    border: 2px solid #007bff !important;
+    border-radius: 4px !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+    z-index: 999999 !important;
+    min-width: 180px !important;
+    display: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    max-height: 300px !important;
+    overflow-y: auto !important;
+    top: auto !important;
+    right: auto !important;
+    left: auto !important;
+    bottom: auto !important;
+    transform: none !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+.workflow-preview-sidebar .row-actions-dropdown.show,
+.workflow-preview-sidebar .row-actions-wrapper .row-actions-dropdown.show {
+    display: block !important;
+}
+
+.workflow-preview-sidebar .row-action-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    background: none;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    color: #495057;
+    transition: background 0.15s ease;
+    font-size: 0.875rem;
+}
+
+.workflow-preview-sidebar .row-action-item:hover {
+    background: #f8f9fa;
+}
+
+.workflow-preview-sidebar .row-action-item i {
+    width: 14px;
+    text-align: center;
+    color: #6c757d;
+}
+
+/* ==============================================
+   PAGE-BASED FORM FIELD STYLES
+   ============================================== */
+
+.stage-form-pages {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.form-page-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: white;
+    overflow: hidden;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.form-page-card:hover {
+    border-color: #cbd5e0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.page-header {
+    background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+    padding: 1rem;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.page-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #2d3748;
+}
+
+.page-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.field-count {
+    font-size: 0.75rem;
+    color: #718096;
+    background: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    border: 1px solid #e2e8f0;
+}
+
+.page-fields {
+    padding: 1rem;
+    padding-top: 1.5rem; /* Extra padding at top for better first-position drop zone */
+    position: relative;
+    /* Removed duplicate styles - they're now in the enhanced drag states section above */
+}
+
+.page-add-field {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    z-index: 10;
+}
+
+/* OLD page-add-field-btn CSS removed - now using workflow-dropdown-btn */
+
+.add-page-card {
+    border: 2px dashed #e2e8f0;
+    border-radius: 8px;
+    padding: 2rem;
+    text-align: center;
+    transition: all 0.2s ease;
+}
+
+.add-page-card:hover {
+    border-color: #3182ce;
+    background: rgba(49, 130, 206, 0.05);
+}
+
+.add-page-btn,
+.workflow-preview-sidebar .row-options-btn.add-page-btn {
+    background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%) !important;
+    color: white !important;
+    border: none !important;
+    padding: 1rem 2rem !important;
+    border-radius: 8px !important;
+    font-size: 0.9rem !important;
+    font-weight: 600 !important;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0.5rem !important;
+    box-shadow: 0 2px 4px rgba(49, 130, 206, 0.2) !important;
+    min-width: auto !important;
+    height: auto !important;
+}
+
+.add-page-btn:hover,
+.workflow-preview-sidebar .row-options-btn.add-page-btn:hover {
+    background: linear-gradient(135deg, #3182ce 0%, #2b77cb 100%) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(49, 130, 206, 0.3) !important;
+}
+
+.add-page-btn:active,
+.workflow-preview-sidebar .row-options-btn.add-page-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(49, 130, 206, 0.2) !important;
+}
+
+/* ==============================================
+   DRAG AND DROP STYLES
+   ============================================== */
+
+.form-field-preview {
+    position: relative;
+    transition: all 0.2s ease;
+    margin-bottom: 1rem;
+}
+
+.form-field-preview[draggable="true"] {
+    cursor: move;
+}
+
+/* Removed old dragging style - replaced with improved version below */
+
+.field-drag-handle {
+    position: absolute;
+    left: -8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 30px;
+    background: rgba(113, 128, 150, 0.1);
+    border-radius: 4px 0 0 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: all 0.2s ease;
+    cursor: grab;
+}
+
+.form-field-preview:hover .field-drag-handle {
+    opacity: 1;
+}
+
+.field-drag-handle:active {
+    cursor: grabbing;
+}
+
+.field-drag-handle i {
+    color: #718096;
+    font-size: 0.75rem;
+}
+
+.form-field-preview:hover {
+    background: rgba(247, 250, 252, 0.8);
+    border-radius: 6px;
+    padding-left: 12px;
+    margin-left: 8px;
+}
+
+/* Drop indicator for precise positioning */
+.drop-indicator {
+    height: 4px;
+    margin: 8px 0;
+    position: relative;
+    pointer-events: none;
+}
+
+.drop-line {
+    height: 2px;
+    background: linear-gradient(90deg, #3182ce, #4299e1);
+    border-radius: 1px;
+    position: relative;
+    animation: dropPulse 1s ease-in-out infinite;
+}
+
+.drop-line::before {
+    content: '';
+    position: absolute;
+    left: -6px;
+    top: -4px;
+    width: 10px;
+    height: 10px;
+    background: #3182ce;
+    border-radius: 50%;
+    border: 2px solid white;
+    box-shadow: 0 0 0 1px #3182ce;
+}
+
+.drop-line::after {
+    content: '';
+    position: absolute;
+    right: -6px;
+    top: -4px;
+    width: 10px;
+    height: 10px;
+    background: #4299e1;
+    border-radius: 50%;
+    border: 2px solid white;
+    box-shadow: 0 0 0 1px #4299e1;
+}
+
+@keyframes dropPulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scaleY(1);
+    }
+    50% {
+        opacity: 0.7;
+        transform: scaleY(1.5);
+    }
+}
+
+/* Enhanced drag states */
+.page-fields {
+    min-height: 80px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.page-fields:empty::after {
+    content: 'Drop fields here or click + to add';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #a0aec0;
+    font-size: 0.875rem;
+    font-style: italic;
+    pointer-events: none;
+}
+
+.page-fields.drag-over {
+    background: linear-gradient(135deg, rgba(49, 130, 206, 0.05) 0%, rgba(66, 153, 225, 0.05) 100%);
+    border: 2px dashed #3182ce;
+    border-radius: 8px;
+    transform: scale(1.02);
+}
+
+/* Improved dragging state - keep stable for drag events */
+.form-field-preview.dragging {
+    opacity: 0.5;
+    z-index: 1000;
+    position: relative;
+}
+
+/* Make drag handle more prominent during drag */
+.form-field-preview.dragging .field-drag-handle {
+    opacity: 1;
+    background: #3182ce;
+    color: white;
+    transform: scale(1.1);
+}
+
+/* Drag handle improvements */
+.field-drag-handle {
+    position: absolute;
+    left: -12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 40px;
+    background: linear-gradient(135deg, rgba(113, 128, 150, 0.1) 0%, rgba(113, 128, 150, 0.2) 100%);
+    border-radius: 6px 0 0 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: all 0.3s ease;
+    cursor: grab;
+    border: 1px solid rgba(113, 128, 150, 0.2);
+}
+
+.form-field-preview:hover .field-drag-handle {
+    opacity: 1;
+    left: -16px;
+    background: linear-gradient(135deg, rgba(49, 130, 206, 0.1) 0%, rgba(66, 153, 225, 0.15) 100%);
+    border-color: rgba(49, 130, 206, 0.3);
+}
+
+.field-drag-handle:active {
+    cursor: grabbing;
+    transform: translateY(-50%) scale(1.1);
+}
+
+.field-drag-handle i {
+    color: #4a5568;
+    font-size: 0.9rem;
+    transition: color 0.2s ease;
+}
+
+.form-field-preview:hover .field-drag-handle i {
+    color: #3182ce;
+}
+
+/* Cross-page drag indication */
+.form-page-card.drag-target {
+    background: linear-gradient(135deg, rgba(72, 187, 120, 0.05) 0%, rgba(56, 161, 105, 0.05) 100%);
+    border-color: #48bb78;
+    transform: scale(1.02);
+    box-shadow: 0 4px 12px rgba(72, 187, 120, 0.2);
+}
+
+/* Update existing field styles to work with pages */
+.stage-form-fields {
+    /* Legacy support - can be removed when all workflows use pages */
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.add-field-section.primary {
+    /* Enhanced styling for primary add field button */
+    border-color: #3182ce;
+    background: rgba(49, 130, 206, 0.05);
+}
+
+.add-field-btn.primary {
+    background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+    box-shadow: 0 2px 4px rgba(72, 187, 120, 0.2);
+}
+
+.add-field-btn.primary:hover {
+    background: linear-gradient(135deg, #38a169 0%, #2f855a 100%);
+    box-shadow: 0 6px 12px rgba(72, 187, 120, 0.3);
+}
+
+/* ==============================================
+   MODAL PAGE MANAGEMENT STYLES
+   ============================================== */
+
+.modal-page-section {
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+    overflow: hidden;
+}
+
+.modal-page-header {
+    background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-page-header h5 {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #2d3748;
+}
+
+.modal-page-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.modal-page-fields {
+    padding: 1rem;
+}
+
+.page-indicator {
+    display: inline-block;
+    margin-left: 0.5rem;
+    padding: 0.125rem 0.375rem;
+    background: #edf2f7;
+    color: #4a5568;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    font-weight: 500;
+}
+
+.add-page-section {
+    text-align: center;
+    padding: 1rem;
+    border-top: 1px solid #e2e8f0;
+    margin-top: 1rem;
+}
+
+.btn.btn-outline-primary {
+    background: transparent;
+    color: #3182ce;
+    border: 1px solid #3182ce;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn.btn-outline-primary:hover {
+    background: #3182ce;
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(49, 130, 206, 0.2);
+}
+
+.btn.btn-outline-primary:active {
+    transform: translateY(0);
+}
+
+/* ==============================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================== */
+@media (max-width: 1200px) {
+    .workflow-preview-sidebar {
+        width: 350px;
+    }
+}
+
+@media (max-width: 992px) {
+    .workflow-preview-sidebar {
+        width: 100%;
+        transform: translateY(100%);
+    }
+    
+    .workflow-preview-sidebar.open {
+        transform: translateY(0);
+    }
+    
+    .overview-content,
+    .detail-tab-content,
+    .audit-trail-content {
+        padding: 1rem;
+    }
+}

@@ -2,45 +2,32 @@ import { error, fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { superValidate } from 'sveltekit-superforms';
 import { zod } from 'sveltekit-superforms/adapters';
-import { mapSettingsSchema, mapLayerSchema } from '$lib/schemas/map-settings';
-import type { MapSettings, MapLayer } from '$lib/types/map-layer';
+import { mapLayerSchema, projectMapDefaultsSchema } from '$lib/schemas/map-settings';
+import type { MapLayer, MapLayerWithSource, ProjectMapDefaults } from '$lib/types/map-layer';
+import type { MapSource } from '$lib/types/map-sources';
 
-// Default view settings
-const DEFAULT_CONFIG = {
-	default_zoom: 10,
-	min_zoom: 1,
-	max_zoom: 18,
-	center_lat: 51.1657,
-	center_lng: 10.4515
+// Default map view settings (used when no base layer exists)
+const DEFAULT_MAP_SETTINGS: ProjectMapDefaults = {
+	zoom: 10,
+	center: { lat: 51.1657, lng: 10.4515 }
 };
 
 export const load: PageServerLoad = async ({ locals: { pb }, params }) => {
 	const { projectId } = params;
 
 	try {
-		// Fetch project details
+		// Fetch project details (including settings for map_defaults fallback)
 		const project = await pb.collection('projects').getOne(projectId, {
-			fields: 'id, name'
+			fields: 'id, name, settings'
 		});
 
-		// Fetch the single map settings for this project (or null if none)
-		let mapSettings: MapSettings | null = null;
+		// Fetch map layers for this project with expanded source data
+		let mapLayers: MapLayerWithSource[] = [];
 		try {
-			const results = await pb.collection('map_settings').getFullList<MapSettings>({
-				filter: `project_id = "${projectId}"`,
-				limit: 1
-			});
-			mapSettings = results[0] || null;
-		} catch {
-			// Collection might not exist yet
-		}
-
-		// Fetch map layers for this project
-		let mapLayers: MapLayer[] = [];
-		try {
-			mapLayers = await pb.collection('map_layers').getFullList<MapLayer>({
-				filter: `project_id = "${projectId}"`,
-				sort: 'display_order'
+			mapLayers = await pb.collection('map_layers').getFullList<MapLayerWithSource>({
+				filter: `project_id = "${projectId}" && is_active = true`,
+				sort: 'display_order',
+				expand: 'source_id'
 			});
 		} catch {
 			// Collection might not exist yet
@@ -53,18 +40,40 @@ export const load: PageServerLoad = async ({ locals: { pb }, params }) => {
 			sort: 'name'
 		});
 
-		// Initialize form with existing config or defaults
-		const initialData = mapSettings?.config || DEFAULT_CONFIG;
-		const settingsForm = await superValidate(initialData, zod(mapSettingsSchema));
+		// Fetch user's map sources (for layer source selection)
+		let mapSources: MapSource[] = [];
+		try {
+			const userId = pb.authStore.record?.id;
+			if (userId) {
+				mapSources = await pb.collection('map_sources').getFullList<MapSource>({
+					filter: `owner_id = "${userId}"`,
+					sort: 'name'
+				});
+			}
+		} catch {
+			// Collection might not exist yet
+		}
+
+		// Get map defaults from project settings or use system defaults
+		const projectSettings = project.settings as { map_defaults?: ProjectMapDefaults } | null;
+		const mapDefaults = projectSettings?.map_defaults || DEFAULT_MAP_SETTINGS;
+
+		// Find base layer for view defaults
+		const baseLayer = mapLayers.find((l) => l.is_base_layer);
+
+		// Initialize forms
 		const layerForm = await superValidate(zod(mapLayerSchema));
+		const defaultsForm = await superValidate(mapDefaults, zod(projectMapDefaultsSchema));
 
 		return {
 			project,
-			mapSettings,
 			mapLayers,
+			mapSources,
 			roles,
-			settingsForm,
-			layerForm
+			mapDefaults,
+			baseLayer,
+			layerForm,
+			defaultsForm
 		};
 	} catch (err) {
 		console.error('Error loading map settings:', err);
@@ -73,39 +82,32 @@ export const load: PageServerLoad = async ({ locals: { pb }, params }) => {
 };
 
 export const actions: Actions = {
-	// Save map view settings (create or update)
-	saveSettings: async ({ request, locals: { pb }, params }) => {
+	// Save project map defaults (fallback when no base layer)
+	saveDefaults: async ({ request, locals: { pb }, params }) => {
 		const { projectId } = params;
-		const form = await superValidate(request, zod(mapSettingsSchema));
+		const form = await superValidate(request, zod(projectMapDefaultsSchema));
 
 		if (!form.valid) {
 			return fail(400, { form });
 		}
 
 		try {
-			// Check if settings exist for this project
-			const existing = await pb.collection('map_settings').getFullList({
-				filter: `project_id = "${projectId}"`,
-				limit: 1
-			});
+			// Get current project settings
+			const project = await pb.collection('projects').getOne(projectId);
+			const currentSettings = (project.settings as Record<string, unknown>) || {};
 
-			if (existing.length > 0) {
-				// Update existing
-				await pb.collection('map_settings').update(existing[0].id, {
-					config: form.data
-				});
-			} else {
-				// Create new
-				await pb.collection('map_settings').create({
-					project_id: projectId,
-					config: form.data
-				});
-			}
+			// Update with new map defaults
+			await pb.collection('projects').update(projectId, {
+				settings: {
+					...currentSettings,
+					map_defaults: form.data
+				}
+			});
 
 			return { form, success: true };
 		} catch (err) {
-			console.error('Error saving map settings:', err);
-			return fail(500, { form, message: 'Failed to save map settings' });
+			console.error('Error saving map defaults:', err);
+			return fail(500, { form, message: 'Failed to save map defaults' });
 		}
 	},
 
@@ -131,14 +133,13 @@ export const actions: Actions = {
 
 			await pb.collection('map_layers').create({
 				project_id: projectId,
+				source_id: form.data.source_id,
 				name: form.data.name,
-				layer_type: form.data.layer_type,
-				url: form.data.url,
-				config: form.data.config,
 				display_order: form.data.display_order,
 				visible_to_roles: form.data.visible_to_roles,
 				is_base_layer: form.data.is_base_layer,
-				is_active: form.data.is_active
+				is_active: form.data.is_active,
+				config: form.data.config
 			});
 
 			return { form, success: true };
@@ -176,14 +177,13 @@ export const actions: Actions = {
 			}
 
 			await pb.collection('map_layers').update(id, {
+				source_id: form.data.source_id,
 				name: form.data.name,
-				layer_type: form.data.layer_type,
-				url: form.data.url,
-				config: form.data.config,
 				display_order: form.data.display_order,
 				visible_to_roles: form.data.visible_to_roles,
 				is_base_layer: form.data.is_base_layer,
-				is_active: form.data.is_active
+				is_active: form.data.is_active,
+				config: form.data.config
 			});
 
 			return { form, success: true };
@@ -264,6 +264,41 @@ export const actions: Actions = {
 		} catch (err) {
 			console.error('Error updating layer roles:', err);
 			return fail(500, { message: 'Failed to update layer roles' });
+		}
+	},
+
+	// Update base layer view defaults
+	updateBaseLayerDefaults: async ({ request, locals: { pb } }) => {
+		const formData = await request.formData();
+		const layerId = formData.get('layerId') as string;
+		const defaultZoom = formData.get('default_zoom');
+		const centerLat = formData.get('center_lat');
+		const centerLng = formData.get('center_lng');
+
+		if (!layerId) {
+			return fail(400, { message: 'Layer ID is required' });
+		}
+
+		try {
+			// Get current layer config
+			const layer = await pb.collection('map_layers').getOne<MapLayer>(layerId);
+			const currentConfig = layer.config || {};
+
+			// Update config with view defaults
+			const newConfig = {
+				...currentConfig,
+				default_zoom: defaultZoom ? Number(defaultZoom) : undefined,
+				default_center:
+					centerLat && centerLng
+						? { lat: Number(centerLat), lng: Number(centerLng) }
+						: undefined
+			};
+
+			await pb.collection('map_layers').update(layerId, { config: newConfig });
+			return { success: true };
+		} catch (err) {
+			console.error('Error updating base layer defaults:', err);
+			return fail(500, { message: 'Failed to update base layer defaults' });
 		}
 	}
 };

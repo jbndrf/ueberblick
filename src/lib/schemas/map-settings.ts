@@ -1,49 +1,52 @@
 /**
- * Map settings form schemas
+ * Map layer and project map defaults schemas
  */
 
 import { z } from 'zod';
 
 /**
- * Map view settings (center and zoom only)
- */
-export const mapSettingsSchema = z.object({
-	default_zoom: z.number().int().min(0).max(22).default(10),
-	min_zoom: z.number().int().min(0).max(22).default(1),
-	max_zoom: z.number().int().min(0).max(22).default(18),
-	center_lat: z.number().min(-90).max(90).default(51.1657),
-	center_lng: z.number().min(-180).max(180).default(10.4515)
-});
-
-/**
  * Schema for map_layers.config JSON field
  */
 export const mapLayerConfigSchema = z.object({
-	attribution: z.string().max(500).optional(),
 	opacity: z.number().min(0).max(1).default(1),
 	min_zoom: z.number().int().min(0).max(22).optional(),
 	max_zoom: z.number().int().min(0).max(22).optional(),
-	// WMS-specific
-	wms_layers: z.string().optional(),
-	wms_format: z.string().optional(),
-	wms_transparent: z.boolean().optional(),
-	// GeoJSON-specific
-	style: z.record(z.unknown()).optional()
+	// Base layer only - view defaults
+	default_zoom: z.number().int().min(0).max(22).optional(),
+	default_center: z
+		.object({
+			lat: z.number().min(-90).max(90),
+			lng: z.number().min(-180).max(180)
+		})
+		.optional()
 });
 
 /**
  * Map layer form schema
  */
 export const mapLayerSchema = z.object({
+	source_id: z.string().min(1, 'Source is required'),
 	name: z.string().min(1, 'Layer name is required').max(255),
-	layer_type: z.enum(['tile', 'wms', 'geojson', 'custom']),
-	url: z.string().max(2000).optional(),
-	config: mapLayerConfigSchema.default({}),
 	display_order: z.number().int().min(0).default(0),
 	visible_to_roles: z.array(z.string()).default([]),
 	is_base_layer: z.boolean().default(false),
-	is_active: z.boolean().default(true)
+	is_active: z.boolean().default(true),
+	config: mapLayerConfigSchema.default({})
 });
 
-export type MapSettingsSchema = typeof mapSettingsSchema;
+/**
+ * Project map defaults fallback schema (stored in projects.settings.map_defaults)
+ */
+export const projectMapDefaultsSchema = z.object({
+	zoom: z.number().int().min(0).max(22).default(10),
+	center: z
+		.object({
+			lat: z.number().min(-90).max(90).default(51.1657),
+			lng: z.number().min(-180).max(180).default(10.4515)
+		})
+		.default({ lat: 51.1657, lng: 10.4515 })
+});
+
+export type MapLayerConfigSchema = typeof mapLayerConfigSchema;
 export type MapLayerSchema = typeof mapLayerSchema;
+export type ProjectMapDefaultsSchema = typeof projectMapDefaultsSchema;

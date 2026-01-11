@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { superForm } from 'sveltekit-superforms';
 	import { zodClient } from 'sveltekit-superforms/adapters';
-	import { mapSettingsSchema, mapLayerSchema } from '$lib/schemas/map-settings';
+	import { mapLayerSchema, projectMapDefaultsSchema } from '$lib/schemas/map-settings';
 	import * as m from '$lib/paraglide/messages';
 	import { toast } from 'svelte-sonner';
 	import { invalidateAll } from '$app/navigation';
@@ -13,65 +13,41 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Switch } from '$lib/components/ui/switch';
 	import { Badge } from '$lib/components/ui/badge';
-	import { Map, Plus, Layers, Trash2, Star, Check } from 'lucide-svelte';
+	import { Map, Plus, Layers, Star, Settings } from 'lucide-svelte';
 	import { BaseTable, type BaseColumnConfig } from '$lib/components/admin/base-table';
-	import type { MapLayer } from '$lib/types/map-layer';
+	import type { MapLayerWithSource, MapLayerConfig } from '$lib/types/map-layer';
+	import type { MapSource } from '$lib/types/map-sources';
 
 	let { data } = $props();
 
 	// Dialog state
 	let showCreateLayerDialog = $state(false);
 	let showDeleteLayerDialog = $state(false);
-	let selectedLayer = $state<MapLayer | null>(null);
+	let showDefaultsDialog = $state(false);
+	let selectedLayer = $state<MapLayerWithSource | null>(null);
 	let isSubmitting = $state(false);
-	let isSaving = $state(false);
-	let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+	let isSavingDefaults = $state(false);
 
-	// Settings form (view settings only - zoom and center)
+	// Project defaults form
 	const {
-		form: settingsForm,
-		errors: settingsErrors,
-		enhance: settingsEnhance
-	} = superForm(data.settingsForm, {
-		validators: zodClient(mapSettingsSchema),
+		form: defaultsForm,
+		enhance: defaultsEnhance
+	} = superForm(data.defaultsForm, {
+		validators: zodClient(projectMapDefaultsSchema),
 		dataType: 'json',
 		onSubmit: () => {
-			isSaving = true;
+			isSavingDefaults = true;
 		},
 		onResult: ({ result }) => {
-			isSaving = false;
+			isSavingDefaults = false;
 			if (result.type === 'success') {
+				toast.success('Map defaults saved');
+				showDefaultsDialog = false;
 				invalidateAll();
 			} else if (result.type === 'failure') {
-				toast.error(result.data?.message || m.mapSettingsSaveError());
+				toast.error(result.data?.message || 'Failed to save map defaults');
 			}
 		}
-	});
-
-	// Auto-save settings with debounce
-	let formRef: HTMLFormElement | undefined = $state();
-	let isInitialLoad = true;
-	$effect(() => {
-		// Track all form values
-		const _ = [$settingsForm.min_zoom, $settingsForm.max_zoom, $settingsForm.default_zoom, $settingsForm.center_lat, $settingsForm.center_lng];
-
-		// Skip initial load
-		if (isInitialLoad) {
-			isInitialLoad = false;
-			return;
-		}
-
-		// Clear existing timeout
-		if (saveTimeout) {
-			clearTimeout(saveTimeout);
-		}
-
-		// Debounce save
-		saveTimeout = setTimeout(() => {
-			if (formRef) {
-				formRef.requestSubmit();
-			}
-		}, 500);
 	});
 
 	// Layer form
@@ -99,26 +75,44 @@
 		}
 	});
 
-	// Get base layer info
-	const baseLayer = $derived(data.mapLayers.find((l) => l.is_base_layer && l.is_active));
+	// Get source name from layer
+	function getSourceName(layer: MapLayerWithSource): string {
+		return layer.expand?.source_id?.name || 'Unknown source';
+	}
+
+	// Get source type from layer
+	function getSourceType(layer: MapLayerWithSource): string {
+		const sourceType = layer.expand?.source_id?.source_type;
+		if (!sourceType) return '-';
+		return sourceType.charAt(0).toUpperCase() + sourceType.slice(1);
+	}
+
+	// Handle source selection - auto-fill name
+	function handleSourceSelect(sourceId: string) {
+		if (sourceId) {
+			const source = data.mapSources.find((s: MapSource) => s.id === sourceId);
+			if (source && !$layerForm.name) {
+				$layerForm.name = source.name;
+			}
+		}
+	}
 
 	// Layer management
 	function openCreateLayerDialog() {
 		resetLayerForm();
 		$layerForm = {
+			source_id: '',
 			name: '',
-			layer_type: 'tile',
-			url: '',
-			config: { opacity: 1, attribution: '' },
 			display_order: data.mapLayers.length,
 			visible_to_roles: [],
-			is_base_layer: !baseLayer, // Default to base if none exists
-			is_active: true
+			is_base_layer: !data.baseLayer,
+			is_active: true,
+			config: { opacity: 1 }
 		};
 		showCreateLayerDialog = true;
 	}
 
-	function openDeleteLayerDialog(layer: MapLayer) {
+	function openDeleteLayerDialog(layer: MapLayerWithSource) {
 		selectedLayer = layer;
 		showDeleteLayerDialog = true;
 	}
@@ -149,7 +143,7 @@
 		}
 	}
 
-	async function setAsBaseLayer(layer: MapLayer) {
+	async function setAsBaseLayer(layer: MapLayerWithSource) {
 		const formData = new FormData();
 		formData.append('id', layer.id);
 
@@ -171,8 +165,22 @@
 		}
 	}
 
+	// Get effective map defaults (from base layer config or project defaults)
+	const effectiveDefaults = $derived(() => {
+		if (data.baseLayer?.config) {
+			const config = data.baseLayer.config as MapLayerConfig;
+			if (config.default_zoom !== undefined && config.default_center) {
+				return {
+					zoom: config.default_zoom,
+					center: config.default_center
+				};
+			}
+		}
+		return data.mapDefaults;
+	});
+
 	// Layer table columns
-	const layerColumns: BaseColumnConfig<MapLayer>[] = [
+	const layerColumns: BaseColumnConfig<MapLayerWithSource>[] = [
 		{
 			id: 'name',
 			header: m.mapLayerName(),
@@ -181,21 +189,28 @@
 			capabilities: { sortable: true, filterable: true }
 		},
 		{
-			id: 'layer_type',
-			header: m.mapLayerType(),
-			accessorFn: (row) => row.layer_type?.toUpperCase() || '-',
+			id: 'source',
+			header: 'Source',
+			accessorFn: (row) => getSourceName(row),
 			fieldType: 'text',
 			capabilities: { sortable: true, filterable: true }
 		},
 		{
-			id: 'url',
-			header: m.mapLayerUrl(),
+			id: 'source_type',
+			header: 'Type',
+			accessorFn: (row) => getSourceType(row),
+			fieldType: 'text',
+			capabilities: { sortable: true, filterable: true }
+		},
+		{
+			id: 'opacity',
+			header: 'Opacity',
 			accessorFn: (row) => {
-				if (!row.url) return '-';
-				return row.url.length > 40 ? row.url.substring(0, 37) + '...' : row.url;
+				const opacity = (row.config as MapLayerConfig)?.opacity;
+				return opacity !== undefined ? `${Math.round(opacity * 100)}%` : '100%';
 			},
 			fieldType: 'text',
-			capabilities: { sortable: false, filterable: false }
+			capabilities: { sortable: false }
 		},
 		{
 			id: 'visible_to_roles',
@@ -245,73 +260,23 @@
 </script>
 
 <div class="flex flex-col gap-6 min-w-0 w-full">
-	<!-- Page Header with Default View Settings -->
+	<!-- Page Header -->
 	<div class="flex items-start justify-between gap-6">
 		<div>
 			<h1 class="text-3xl font-bold tracking-tight">{m.mapSettingsTitle()}</h1>
 			<p class="text-muted-foreground">{m.mapSettingsSubtitle()}</p>
 		</div>
 
-		<!-- Compact Map View Settings - inline with header -->
-		<form bind:this={formRef} method="POST" action="?/saveSettings" use:settingsEnhance class="shrink-0 flex flex-col gap-1.5 text-sm">
-			<div class="flex items-center gap-2">
-				<span class="text-muted-foreground w-14">Zoom:</span>
-				<Input
-					id="min_zoom"
-					name="min_zoom"
-					type="number"
-					min="0"
-					max="22"
-					class="h-7 w-14 text-sm"
-					bind:value={$settingsForm.min_zoom}
-				/>
-				<span class="text-muted-foreground text-xs">min</span>
-				<Input
-					id="max_zoom"
-					name="max_zoom"
-					type="number"
-					min="0"
-					max="22"
-					class="h-7 w-14 text-sm"
-					bind:value={$settingsForm.max_zoom}
-				/>
-				<span class="text-muted-foreground text-xs">max</span>
-				<Input
-					id="default_zoom"
-					name="default_zoom"
-					type="number"
-					min="0"
-					max="22"
-					class="h-7 w-14 text-sm"
-					bind:value={$settingsForm.default_zoom}
-				/>
-				<span class="text-muted-foreground text-xs">default</span>
+		<!-- Map Defaults Summary -->
+		<div class="shrink-0 text-sm text-right">
+			<div class="text-muted-foreground">
+				Default view: Zoom {effectiveDefaults().zoom}, Center {effectiveDefaults().center.lat.toFixed(4)}, {effectiveDefaults().center.lng.toFixed(4)}
 			</div>
-			<div class="flex items-center gap-2">
-				<span class="text-muted-foreground w-14">Center:</span>
-				<Input
-					id="center_lat"
-					name="center_lat"
-					type="number"
-					step="0.0001"
-					class="h-7 w-24 text-sm"
-					bind:value={$settingsForm.center_lat}
-				/>
-				<span class="text-muted-foreground text-xs">lat</span>
-				<Input
-					id="center_lng"
-					name="center_lng"
-					type="number"
-					step="0.0001"
-					class="h-7 w-24 text-sm"
-					bind:value={$settingsForm.center_lng}
-				/>
-				<span class="text-muted-foreground text-xs">lng</span>
-				{#if isSaving}
-					<span class="text-muted-foreground text-xs ml-2">saving...</span>
-				{/if}
-			</div>
-		</form>
+			<Button variant="ghost" size="sm" class="h-7 text-xs" onclick={() => (showDefaultsDialog = true)}>
+				<Settings class="mr-1 h-3 w-3" />
+				Edit defaults
+			</Button>
+		</div>
 	</div>
 
 	<!-- Map Layers Section -->
@@ -324,42 +289,52 @@
 						{m.mapLayersTitle()}
 					</Card.Title>
 					<Card.Description>
-						{#if baseLayer}
-							Base layer: <strong>{baseLayer.name}</strong>
+						{#if data.baseLayer}
+							Base layer: <strong>{data.baseLayer.name}</strong>
 						{:else}
-							No base layer configured - add a tile layer and mark it as base
+							No base layer configured - add a layer and mark it as base
 						{/if}
 					</Card.Description>
 				</div>
-				<Button onclick={openCreateLayerDialog}>
+				<Button onclick={openCreateLayerDialog} disabled={data.mapSources.length === 0}>
 					<Plus class="mr-2 h-4 w-4" />
 					Add Layer
 				</Button>
 			</div>
 		</Card.Header>
 		<Card.Content>
-			<BaseTable
-				data={data.mapLayers.filter((l) => l.is_active)}
-				columns={layerColumns}
-				getRowId={(row) => row.id}
-				emptyMessage={m.mapLayersEmpty()}
-				emptySubMessage={m.mapLayersEmptyDescription()}
-				showToolbar={true}
-				showEditMode={true}
-				editModeLabel="Edit mode"
-				rowActions={{
-					header: 'Actions',
-					onDelete: openDeleteLayerDialog,
-					customActions: [
-						{
-							label: 'Set as Base',
-							icon: Star,
-							onClick: setAsBaseLayer,
-							isVisible: (row) => !row.is_base_layer && row.layer_type === 'tile'
-						}
-					]
-				}}
-			/>
+			{#if data.mapSources.length === 0}
+				<div class="flex flex-col items-center justify-center py-12 text-center">
+					<Map class="h-12 w-12 text-muted-foreground mb-4" />
+					<p class="text-lg font-medium">No map sources available</p>
+					<p class="text-muted-foreground mb-4">
+						Add sources in the <a href="/map-sources" class="underline">Map Sources</a> page first
+					</p>
+				</div>
+			{:else}
+				<BaseTable
+					data={data.mapLayers}
+					columns={layerColumns}
+					getRowId={(row) => row.id}
+					emptyMessage={m.mapLayersEmpty()}
+					emptySubMessage={m.mapLayersEmptyDescription()}
+					showToolbar={true}
+					showEditMode={true}
+					editModeLabel="Edit mode"
+					rowActions={{
+						header: 'Actions',
+						onDelete: openDeleteLayerDialog,
+						customActions: [
+							{
+								label: 'Set as Base',
+								icon: Star,
+								onClick: setAsBaseLayer,
+								isVisible: (row) => !row.is_base_layer
+							}
+						]
+					}}
+				/>
+			{/if}
 		</Card.Content>
 	</Card.Root>
 </div>
@@ -369,47 +344,34 @@
 	<Dialog.Content class="max-w-xl">
 		<Dialog.Header>
 			<Dialog.Title>Add Map Layer</Dialog.Title>
-			<Dialog.Description>Add a tile layer, WMS service, or GeoJSON overlay</Dialog.Description>
+			<Dialog.Description>Add a layer from your map sources library</Dialog.Description>
 		</Dialog.Header>
 		<form method="POST" action="?/createLayer" use:layerEnhance class="space-y-4">
 			<div class="space-y-2">
-				<Label for="layer_name">Name</Label>
-				<Input id="layer_name" name="name" bind:value={$layerForm.name} required />
-			</div>
-
-			<div class="space-y-2">
-				<Label for="layer_type">Layer Type</Label>
+				<Label for="source_id">Source</Label>
 				<select
-					id="layer_type"
-					name="layer_type"
-					bind:value={$layerForm.layer_type}
+					id="source_id"
+					name="source_id"
+					bind:value={$layerForm.source_id}
+					onchange={(e) => handleSourceSelect(e.currentTarget.value)}
 					class="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+					required
 				>
-					<option value="tile">TILE</option>
-					<option value="wms">WMS</option>
-					<option value="geojson">GEOJSON</option>
-					<option value="custom">CUSTOM</option>
+					<option value="">-- Select a source --</option>
+					{#each data.mapSources as source}
+						<option value={source.id}>
+							{source.name} ({source.source_type})
+						</option>
+					{/each}
 				</select>
+				<p class="text-xs text-muted-foreground">
+					Manage sources in <a href="/map-sources" class="underline">Map Sources</a>
+				</p>
 			</div>
 
 			<div class="space-y-2">
-				<Label for="layer_url">URL</Label>
-				<Input
-					id="layer_url"
-					name="url"
-					bind:value={$layerForm.url}
-					placeholder={'https://tile.openstreetmap.org/{z}/{x}/{y}.png'}
-				/>
-			</div>
-
-			<div class="space-y-2">
-				<Label for="layer_attribution">Attribution</Label>
-				<Input
-					id="layer_attribution"
-					name="config.attribution"
-					bind:value={$layerForm.config.attribution}
-					placeholder="OpenStreetMap contributors"
-				/>
+				<Label for="layer_name">Layer Name</Label>
+				<Input id="layer_name" name="name" bind:value={$layerForm.name} required />
 			</div>
 
 			<div class="grid grid-cols-2 gap-4">
@@ -437,6 +399,33 @@
 				</div>
 			</div>
 
+			<div class="grid grid-cols-2 gap-4">
+				<div class="space-y-2">
+					<Label for="min_zoom">Min Zoom (optional)</Label>
+					<Input
+						id="min_zoom"
+						name="config.min_zoom"
+						type="number"
+						min="0"
+						max="22"
+						bind:value={$layerForm.config.min_zoom}
+						placeholder="0"
+					/>
+				</div>
+				<div class="space-y-2">
+					<Label for="max_zoom">Max Zoom (optional)</Label>
+					<Input
+						id="max_zoom"
+						name="config.max_zoom"
+						type="number"
+						min="0"
+						max="22"
+						bind:value={$layerForm.config.max_zoom}
+						placeholder="22"
+					/>
+				</div>
+			</div>
+
 			<div class="flex items-center gap-6">
 				<div class="flex items-center space-x-2">
 					<Switch id="is_base_layer" name="is_base_layer" bind:checked={$layerForm.is_base_layer} />
@@ -448,9 +437,9 @@
 				</div>
 			</div>
 
-			{#if $layerForm.is_base_layer && baseLayer}
+			{#if $layerForm.is_base_layer && data.baseLayer}
 				<p class="text-sm text-muted-foreground">
-					This will replace "{baseLayer.name}" as the base layer.
+					This will replace "{data.baseLayer.name}" as the base layer.
 				</p>
 			{/if}
 
@@ -458,8 +447,69 @@
 				<Button type="button" variant="outline" onclick={() => (showCreateLayerDialog = false)}>
 					Cancel
 				</Button>
-				<Button type="submit" disabled={isSubmitting}>
+				<Button type="submit" disabled={isSubmitting || !$layerForm.source_id}>
 					{isSubmitting ? 'Saving...' : 'Add Layer'}
+				</Button>
+			</Dialog.Footer>
+		</form>
+	</Dialog.Content>
+</Dialog.Root>
+
+<!-- Project Map Defaults Dialog -->
+<Dialog.Root bind:open={showDefaultsDialog}>
+	<Dialog.Content class="max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>Map Default View</Dialog.Title>
+			<Dialog.Description>
+				Fallback settings when no base layer is configured
+			</Dialog.Description>
+		</Dialog.Header>
+		<form method="POST" action="?/saveDefaults" use:defaultsEnhance class="space-y-4">
+			<div class="space-y-2">
+				<Label for="default_zoom">Default Zoom</Label>
+				<Input
+					id="default_zoom"
+					name="zoom"
+					type="number"
+					min="0"
+					max="22"
+					bind:value={$defaultsForm.zoom}
+				/>
+			</div>
+
+			<div class="grid grid-cols-2 gap-4">
+				<div class="space-y-2">
+					<Label for="center_lat">Center Latitude</Label>
+					<Input
+						id="center_lat"
+						name="center.lat"
+						type="number"
+						step="0.0001"
+						min="-90"
+						max="90"
+						bind:value={$defaultsForm.center.lat}
+					/>
+				</div>
+				<div class="space-y-2">
+					<Label for="center_lng">Center Longitude</Label>
+					<Input
+						id="center_lng"
+						name="center.lng"
+						type="number"
+						step="0.0001"
+						min="-180"
+						max="180"
+						bind:value={$defaultsForm.center.lng}
+					/>
+				</div>
+			</div>
+
+			<Dialog.Footer>
+				<Button type="button" variant="outline" onclick={() => (showDefaultsDialog = false)}>
+					Cancel
+				</Button>
+				<Button type="submit" disabled={isSavingDefaults}>
+					{isSavingDefaults ? 'Saving...' : 'Save Defaults'}
 				</Button>
 			</Dialog.Footer>
 		</form>

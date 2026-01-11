@@ -22,7 +22,8 @@
 		Settings,
 		ChevronRight,
 		UserCircle,
-		LogOut
+		LogOut,
+		Layers
 	} from 'lucide-svelte';
 
 	let { data, children } = $props();
@@ -38,20 +39,23 @@
 
 	// Menu items configuration
 	const menuItems = [
-		{ href: '/admin', icon: LayoutDashboard, labelKey: 'navDashboard' },
-		{ href: '/projects', icon: FolderKanban, labelKey: 'navProjects' }
+		{ href: '/admin', icon: LayoutDashboard, label: () => m.navDashboard() },
+		{ href: '/projects', icon: FolderKanban, label: () => m.navProjects() }
 	];
 
 	const projectMenuItems = [
-		{ href: 'participants', icon: Users, labelKey: 'navParticipants' },
-		{ href: 'roles', icon: ShieldCheck, labelKey: 'navRoles' },
-		{ href: 'workflows', icon: Workflow, labelKey: 'navWorkflows', separatorAfter: true },
-		{ href: 'custom-tables', icon: Table, labelKey: 'navCustomTables' },
-		{ href: 'marker-categories', icon: MapPin, labelKey: 'navMarkerCategories', separatorAfter: true },
-		{ href: 'map-settings', icon: Map, labelKey: 'navMapSettings' }
+		{ href: 'participants', icon: Users, label: () => m.navParticipants() },
+		{ href: 'roles', icon: ShieldCheck, label: () => m.navRoles() },
+		{ href: 'workflows', icon: Workflow, label: () => m.navWorkflows(), separatorAfter: true },
+		{ href: 'custom-tables', icon: Table, label: () => m.navCustomTables() },
+		{ href: 'marker-categories', icon: MapPin, label: () => m.navMarkerCategories(), separatorAfter: true },
+		{ href: 'map-settings', icon: Map, label: () => m.navMapSettings() }
 	];
 
-	const globalMenuItems = [{ href: '/rules', icon: Settings, labelKey: 'navGlobalRules' }];
+	const globalMenuItems = [
+		{ href: '/map-sources', icon: Layers, label: () => m.navMapSources() },
+		{ href: '/rules', icon: Settings, label: () => m.navGlobalRules() }
+	];
 
 	function toggleProject(projectId: string) {
 		expandedProjectId = expandedProjectId === projectId ? null : projectId;
@@ -116,9 +120,13 @@
 						{#each menuItems as item}
 							{@const Icon = item.icon}
 							<Sidebar.MenuItem>
-								<Sidebar.MenuButton href={item.href} isActive={$page.url.pathname === item.href}>
-									<Icon class="h-4 w-4" />
-									<span>{m[item.labelKey]()}</span>
+								<Sidebar.MenuButton isActive={$page.url.pathname === item.href}>
+									{#snippet child({ props })}
+										<a href={item.href} {...props}>
+											<Icon class="h-4 w-4" />
+											<span>{item.label()}</span>
+										</a>
+									{/snippet}
 								</Sidebar.MenuButton>
 							</Sidebar.MenuItem>
 						{/each}
@@ -158,7 +166,7 @@
 																	`/projects/${project.id}/${subItem.href}`}
 															>
 																<SubIcon class="h-4 w-4" />
-																<span>{m[subItem.labelKey]()}</span>
+																<span>{subItem.label()}</span>
 															</Sidebar.MenuSubButton>
 														</Sidebar.MenuSubItem>
 														{#if subItem.separatorAfter}
@@ -188,9 +196,13 @@
 						{#each globalMenuItems as item}
 							{@const Icon = item.icon}
 							<Sidebar.MenuItem>
-								<Sidebar.MenuButton href={item.href} isActive={$page.url.pathname === item.href}>
-									<Icon class="h-4 w-4" />
-									<span>{m[item.labelKey]()}</span>
+								<Sidebar.MenuButton isActive={$page.url.pathname === item.href}>
+									{#snippet child({ props })}
+										<a href={item.href} {...props}>
+											<Icon class="h-4 w-4" />
+											<span>{item.label()}</span>
+										</a>
+									{/snippet}
 								</Sidebar.MenuButton>
 							</Sidebar.MenuItem>
 						{/each}

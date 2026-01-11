@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { invalidateAll } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
+	import { page } from '$app/stores';
 	import * as m from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { toast } from 'svelte-sonner';
-	import { Workflow as WorkflowIcon } from 'lucide-svelte';
+	import { Workflow as WorkflowIcon, Hammer } from 'lucide-svelte';
 	import type { PageData } from './$types';
 	import { BaseTable, type BaseColumnConfig } from '$lib/components/admin/base-table';
 	import CrudDialogs, { type CrudDialogConfig } from '$lib/components/admin/crud-dialogs.svelte';
@@ -228,6 +229,15 @@
 		emptySubMessage="Create your first workflow to get started"
 		rowActions={{
 			header: 'Actions',
+			customActions: [
+				{
+					label: 'Build',
+					icon: Hammer,
+					onClick: (workflow) => {
+						goto(`/projects/${$page.params.projectId}/workflows/${workflow.id}/builder`);
+					}
+				}
+			],
 			onEdit: (workflow) => {
 				selectedWorkflow = workflow;
 				editDialogOpen = true;
