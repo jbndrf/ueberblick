@@ -13,14 +13,14 @@
 	let isOpen = $state(defaultOpen);
 </script>
 
-<div class="tool-section">
-	<button class="tool-section-header" onclick={() => (isOpen = !isOpen)}>
-		<span class="tool-section-title">{title}</span>
-		<ChevronDown class="tool-section-chevron {!isOpen ? 'rotated' : ''}" />
+<div class="tool-section border-b border-border">
+	<button class="tool-section-header bg-muted hover:bg-accent border-b border-border" onclick={() => (isOpen = !isOpen)}>
+		<span class="tool-section-title text-muted-foreground">{title}</span>
+		<ChevronDown class="tool-section-chevron text-muted-foreground {!isOpen ? 'rotated' : ''}" />
 	</button>
 
 	{#if isOpen}
-		<div class="tool-section-content">
+		<div class="tool-section-content bg-card">
 			{@render children()}
 		</div>
 	{/if}
@@ -37,30 +37,31 @@
 		align-items: center;
 		width: 100%;
 		padding: 0.75rem 1rem;
-		background: transparent;
+		background: hsl(var(--muted));
 		border: none;
+		border-bottom: 1px solid hsl(var(--border));
 		cursor: pointer;
 		text-align: left;
-		transition: background 0.15s;
+		transition: all 0.2s ease;
 	}
 
 	.tool-section-header:hover {
-		background: hsl(var(--accent) / 0.5);
+		background: hsl(var(--accent));
 	}
 
 	.tool-section-title {
-		font-size: 0.75rem;
+		font-size: 0.6875rem;
 		font-weight: 600;
 		text-transform: uppercase;
-		letter-spacing: 0.025em;
+		letter-spacing: 0.05em;
 		color: hsl(var(--muted-foreground));
 	}
 
 	.tool-section-chevron {
-		width: 1rem;
-		height: 1rem;
+		width: 0.875rem;
+		height: 0.875rem;
 		color: hsl(var(--muted-foreground));
-		transition: transform 0.2s;
+		transition: transform 0.2s ease;
 	}
 
 	.tool-section-chevron.rotated {
@@ -68,6 +69,7 @@
 	}
 
 	.tool-section-content {
-		padding: 0 1rem 1rem;
+		padding: 0.75rem 1rem 1rem;
+		background: hsl(var(--card));
 	}
 </style>

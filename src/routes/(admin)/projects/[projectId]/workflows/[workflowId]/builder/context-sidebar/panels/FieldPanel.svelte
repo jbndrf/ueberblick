@@ -29,11 +29,11 @@
 </script>
 
 <div class="panel">
-	<div class="panel-header">
-		<FormInput class="panel-header-icon" />
+	<div class="panel-header bg-muted border-b border-border">
+		<FormInput class="panel-header-icon text-muted-foreground" />
 		<div class="panel-header-text">
-			<span class="panel-header-title">{context.field.fieldLabel}</span>
-			<span class="panel-header-subtitle">{context.field.fieldType.replace('_', ' ')}</span>
+			<span class="panel-header-title text-foreground">{context.field.fieldLabel}</span>
+			<span class="panel-header-subtitle text-muted-foreground">{context.field.fieldType.replace('_', ' ')}</span>
 		</div>
 	</div>
 
@@ -94,7 +94,8 @@
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
-		padding: 1rem;
+		padding: 1rem 1.125rem;
+		background: hsl(var(--muted));
 		border-bottom: 1px solid hsl(var(--border));
 	}
 

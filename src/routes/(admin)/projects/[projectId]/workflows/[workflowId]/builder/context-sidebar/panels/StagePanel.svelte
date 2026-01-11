@@ -1,19 +1,21 @@
 <script lang="ts">
 	import { Play, Square, CircleStop } from 'lucide-svelte';
 	import type { SelectionContext } from '../context';
+	import { ToolPicker } from '$lib/workflow-builder/components';
 
 	type Props = {
 		context: Extract<SelectionContext, { type: 'stage' }>;
 		onAddField: (fieldType: string) => void;
 		onEditStage: () => void;
 		onDeleteStage: () => void;
+		onAddStageTool: (toolType: string) => void;
 	};
 
-	let { context }: Props = $props();
+	let { context, onAddStageTool }: Props = $props();
 </script>
 
 <div class="panel">
-	<div class="panel-header">
+	<div class="panel-header bg-muted border-b border-border">
 		{#if context.stage.data.stageType === 'start'}
 			<Play class="panel-header-icon text-green-500" />
 		{:else if context.stage.data.stageType === 'end'}
@@ -22,9 +24,14 @@
 			<Square class="panel-header-icon text-blue-500" />
 		{/if}
 		<div class="panel-header-text">
-			<span class="panel-header-title">{context.stage.data.title}</span>
-			<span class="panel-header-subtitle">{context.stage.data.stageType} stage</span>
+			<span class="panel-header-title text-foreground">{context.stage.data.title}</span>
+			<span class="panel-header-subtitle text-muted-foreground">{context.stage.data.stageType} stage</span>
 		</div>
+	</div>
+
+	<!-- Stage Actions -->
+	<div class="panel-content">
+		<ToolPicker category="stage" onSelectTool={onAddStageTool} />
 	</div>
 </div>
 
@@ -39,7 +46,8 @@
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
-		padding: 1rem;
+		padding: 1rem 1.125rem;
+		background: hsl(var(--muted));
 		border-bottom: 1px solid hsl(var(--border));
 	}
 

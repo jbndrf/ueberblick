@@ -1,15 +1,16 @@
 <script lang="ts">
 	import {
-		SvelteFlow,
-		Controls,
-		Background,
-		MiniMap,
+		SvelteFlowProvider,
 		type Node,
 		type Edge,
 		type NodeTypes,
-		type NodeEventWithPointer
+		type EdgeTypes,
+		type NodeEventWithPointer,
+		type Connection
 	} from '@xyflow/svelte';
 	import '@xyflow/svelte/dist/style.css';
+
+	import WorkflowCanvas from './WorkflowCanvas.svelte';
 
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -40,6 +41,7 @@
 
 	import type { PageData } from './$types';
 	import StageNode from './StageNode.svelte';
+	import ActionEdge from './ActionEdge.svelte';
 	import { ContextSidebar, createContext, type SelectionContext, type StageData } from './context-sidebar';
 
 	let { data }: { data: PageData } = $props();
@@ -47,6 +49,11 @@
 	// Node types registration
 	const nodeTypes: NodeTypes = {
 		stage: StageNode
+	};
+
+	// Edge types registration
+	const edgeTypes: EdgeTypes = {
+		action: ActionEdge
 	};
 
 	// Convert database stages to xyflow nodes
@@ -82,9 +89,13 @@
 			source: action.from_stage_id,
 			target: action.to_stage_id,
 			label: action.button_label || action.name,
-			type: action.is_edit_action ? 'smoothstep' : 'default',
+			type: 'action',
 			animated: action.is_edit_action,
-			style: action.button_color ? `stroke: ${action.button_color}` : undefined
+			style: action.button_color ? `stroke: ${action.button_color}` : undefined,
+			data: {
+				tools: [],
+				onAddTool: () => handleAddProgressToolForEdge(action.id)
+			}
 		}));
 	}
 
@@ -110,49 +121,9 @@
 	// Preview tab
 	let previewTab = $state('overview');
 
-	// Handle drop on canvas
-	function onDrop(event: DragEvent) {
-		event.preventDefault();
-		if (!event.dataTransfer) return;
-
-		const type = event.dataTransfer.getData('application/xyflow') as 'start' | 'intermediate' | 'end';
-		if (!type) return;
-
-		// Check if start node already exists
-		if (type === 'start' && hasStartStage) {
-			console.warn('Only one start node allowed');
-			return;
-		}
-
-		// Get drop position relative to canvas
-		const canvasEl = event.currentTarget as HTMLElement;
-		const bounds = canvasEl.getBoundingClientRect();
-		const position = {
-			x: event.clientX - bounds.left,
-			y: event.clientY - bounds.top
-		};
-
-		const newNode: Node = {
-			id: `temp_${Date.now()}`,
-			type: 'stage',
-			position,
-			data: {
-				title: type === 'start' ? 'Start' : type === 'end' ? 'End' : 'New Stage',
-				key: `${type}_${Date.now()}`,
-				stageType: type,
-				maxHours: null
-			}
-		};
-
-		nodes = [...nodes, newNode];
-		// Don't select - stay at canvas view
-	}
-
-	function onDragOver(event: DragEvent) {
-		event.preventDefault();
-		if (event.dataTransfer) {
-			event.dataTransfer.dropEffect = 'move';
-		}
+	// Callback when a new node is added via drag-drop
+	function onNodeAdded(node: Node) {
+		nodes = [...nodes, node];
 	}
 
 	// Get selected stage data
@@ -173,24 +144,34 @@
 			// Start connection
 			connectingFrom = nodeId;
 		} else if (connectingFrom === nodeId) {
-			// Same node - create edit action
+			// Same node - create edit action (stage action)
+			const editEdgeId = `action_${Date.now()}`;
 			const newEdge: Edge = {
-				id: `action_${Date.now()}`,
+				id: editEdgeId,
 				source: nodeId,
 				target: nodeId,
 				label: 'Edit',
-				type: 'smoothstep',
-				animated: true
+				type: 'action',
+				data: {
+					tools: [],
+					onAddTool: () => handleAddProgressToolForEdge(editEdgeId)
+				}
 			};
 			edges = [...edges, newEdge];
 			connectingFrom = null;
 		} else {
-			// Different node - create normal action
+			// Different node - create normal action (progress action)
+			const edgeId = `action_${Date.now()}`;
 			const newEdge: Edge = {
-				id: `action_${Date.now()}`,
+				id: edgeId,
 				source: connectingFrom,
 				target: nodeId,
-				label: 'Action'
+				label: 'Action',
+				type: 'action',
+				data: {
+					tools: [],
+					onAddTool: () => handleAddProgressToolForEdge(edgeId)
+				}
 			};
 			edges = [...edges, newEdge];
 			connectingFrom = null;
@@ -201,6 +182,28 @@
 	function onPaneClick() {
 		connectingFrom = null;
 		selectionContext = createContext.none();
+	}
+
+	// Handle connection via handle drag (standard xyflow way)
+	function handleConnect(connection: Connection) {
+		if (!connection.source || !connection.target) return;
+
+		const edgeId = `action_${Date.now()}`;
+		const isEditAction = connection.source === connection.target;
+
+		const newEdge: Edge = {
+			id: edgeId,
+			source: connection.source,
+			target: connection.target,
+			label: isEditAction ? 'Edit' : 'Action',
+			type: 'action',
+			data: {
+				tools: [],
+				onAddTool: () => handleAddProgressToolForEdge(edgeId)
+			}
+		};
+
+		edges = [...edges, newEdge];
 	}
 
 	// Handle node click for selection
@@ -277,6 +280,27 @@
 	function handleDeleteField() {
 		console.log('Delete field');
 		// TODO: Delete field
+	}
+
+	// Tool handlers
+	function handleAddStageTool(toolType: string) {
+		console.log('Add stage tool:', toolType, 'to stage:', selectedStageId);
+		// TODO: Create tool instance and attach to stage
+	}
+
+	function handleAddProgressTool(toolType: string) {
+		if (selectionContext.type === 'action') {
+			console.log('Add progress tool:', toolType, 'to action:', selectionContext.actionId);
+			// TODO: Create tool instance and attach to edge
+		}
+	}
+
+	function handleAddProgressToolForEdge(edgeId: string) {
+		// Select the edge and open the tool picker in sidebar
+		const edge = edges.find((e) => e.id === edgeId);
+		if (edge) {
+			selectionContext = createContext.action(edge);
+		}
 	}
 </script>
 
@@ -356,9 +380,11 @@
 			onAddField={handleAddField}
 			onEditStage={handleEditStage}
 			onDeleteStage={handleDeleteStage}
+			onAddStageTool={handleAddStageTool}
 			onChangeActionType={handleChangeActionType}
 			onEditAction={handleEditAction}
 			onDeleteAction={handleDeleteAction}
+			onAddProgressTool={handleAddProgressTool}
 			onToggleRequired={handleToggleRequired}
 			onMoveFieldUp={handleMoveFieldUp}
 			onMoveFieldDown={handleMoveFieldDown}
@@ -368,27 +394,25 @@
 		/>
 
 		<!-- Canvas (main area) -->
-		<div class="canvas-container" role="application" ondrop={onDrop} ondragover={onDragOver}>
-			{#if connectingFrom}
-				<div class="connecting-indicator">
-					Connecting from node... Right-click another node to connect, or click canvas to cancel.
-				</div>
-			{/if}
-
-			<SvelteFlow
-				bind:nodes
-				bind:edges
-				{nodeTypes}
-				fitView
-				onpaneclick={onPaneClick}
-				onnodeclick={onNodeClick}
-				onedgeclick={onEdgeClick}
-				onnodecontextmenu={handleNodeContextMenu}
-			>
-				<Controls />
-				<Background />
-				<MiniMap />
-			</SvelteFlow>
+		<div class="canvas-container">
+			<SvelteFlowProvider>
+				<WorkflowCanvas
+					bind:nodes
+					bind:edges
+					{nodeTypes}
+					{edgeTypes}
+					{hasStartStage}
+					{connectingFrom}
+					onNodesChange={(n) => (nodes = n)}
+					onEdgesChange={(e) => (edges = e)}
+					{onPaneClick}
+					{onNodeClick}
+					{onEdgeClick}
+					onNodeContextMenu={handleNodeContextMenu}
+					{onNodeAdded}
+					onConnect={handleConnect}
+				/>
+			</SvelteFlowProvider>
 		</div>
 
 		<!-- Preview Sidebar (right side) -->
@@ -410,15 +434,15 @@
 					<Tabs.Trigger value="audit">Audit</Tabs.Trigger>
 				</Tabs.List>
 
-				<div class="preview-content">
+				<div class="preview-content bg-card">
 					<Tabs.Content value="overview" class="preview-tab-content">
 						<!-- Mock location info -->
 						<div class="preview-section">
 							<div class="preview-section-header">
 								<MapPin class="h-4 w-4 text-muted-foreground" />
-								<span>Location</span>
+								<span class="text-muted-foreground">Location</span>
 							</div>
-							<div class="preview-mock-field">
+							<div class="preview-mock-field bg-muted/50 border border-dashed border-border">
 								<span class="text-sm text-muted-foreground">Sample Location</span>
 							</div>
 						</div>
@@ -427,15 +451,15 @@
 						<div class="preview-section">
 							<div class="preview-section-header">
 								<Clock class="h-4 w-4 text-muted-foreground" />
-								<span>Timeline</span>
+								<span class="text-muted-foreground">Timeline</span>
 							</div>
 							<div class="preview-info-row">
 								<span class="text-xs text-muted-foreground">Created</span>
-								<span class="text-xs">--</span>
+								<span class="text-xs text-foreground">--</span>
 							</div>
 							<div class="preview-info-row">
 								<span class="text-xs text-muted-foreground">Updated</span>
-								<span class="text-xs">--</span>
+								<span class="text-xs text-foreground">--</span>
 							</div>
 						</div>
 
@@ -443,11 +467,11 @@
 						<div class="preview-section">
 							<div class="preview-section-header">
 								<User class="h-4 w-4 text-muted-foreground" />
-								<span>Status</span>
+								<span class="text-muted-foreground">Status</span>
 							</div>
 							<div class="preview-info-row">
 								<span class="text-xs text-muted-foreground">Current Stage</span>
-								<span class="text-xs">{selectedStage?.data?.title || 'None selected'}</span>
+								<span class="text-xs text-foreground">{selectedStage?.data?.title || 'None selected'}</span>
 							</div>
 						</div>
 
@@ -455,13 +479,13 @@
 						<div class="preview-section">
 							<div class="preview-section-header">
 								<FileText class="h-4 w-4 text-muted-foreground" />
-								<span>Form Fields</span>
+								<span class="text-muted-foreground">Form Fields</span>
 							</div>
 							{#if nodes.length === 0}
 								<p class="text-xs text-muted-foreground py-2">No stages yet</p>
 							{:else}
 								{#each nodes as node}
-									<div class="preview-stage-summary">
+									<div class="preview-stage-summary bg-accent/30 border border-border">
 										<div class="preview-stage-name">
 											{#if node.data.stageType === 'start'}
 												<Play class="h-3 w-3 text-green-500" />
@@ -470,7 +494,7 @@
 											{:else}
 												<Square class="h-3 w-3 text-blue-500" />
 											{/if}
-											<span class="text-xs font-medium">{node.data.title}</span>
+											<span class="text-xs font-medium text-foreground">{node.data.title}</span>
 										</div>
 										<span class="text-xs text-muted-foreground">0 fields</span>
 									</div>
@@ -491,14 +515,14 @@
 								<div class="preview-stage-badge" class:start={selectedStage.data.stageType === 'start'} class:end={selectedStage.data.stageType === 'end'}>
 									{selectedStage.data.stageType}
 								</div>
-								<h3 class="text-sm font-medium">{selectedStage.data.title}</h3>
+								<h3 class="text-sm font-medium text-foreground">{selectedStage.data.title}</h3>
 							</div>
 
 							<!-- Stage tabs (sub-navigation) -->
 							<div class="preview-stage-tabs">
 								{#each nodes as node}
 									<button
-										class="preview-stage-tab"
+										class="preview-stage-tab text-muted-foreground hover:bg-accent"
 										class:active={node.id === selectedStageId}
 										onclick={() => (selectionContext = createContext.stage(node as Node<StageData>))}
 									>
@@ -521,7 +545,7 @@
 						<div class="preview-section">
 							<div class="preview-section-header">
 								<History class="h-4 w-4 text-muted-foreground" />
-								<span>Activity Log</span>
+								<span class="text-muted-foreground">Activity Log</span>
 							</div>
 							<div class="preview-audit-list">
 								<p class="text-xs text-muted-foreground text-center py-4">
@@ -550,10 +574,16 @@
 		justify-content: space-between;
 		align-items: center;
 		padding: 0.5rem 1rem;
-		border-bottom: 1px solid hsl(var(--border));
-		background: hsl(var(--card));
 		gap: 1rem;
 		flex-shrink: 0;
+		/* Light mode: visible background and border */
+		background: oklch(0.96 0.005 250);
+		border-bottom: 1px solid oklch(0.88 0.01 250);
+	}
+
+	:global(.dark) .toolbar {
+		background: hsl(var(--muted));
+		border-bottom-color: oklch(1 0 0 / 20%);
 	}
 
 	.toolbar-left {
@@ -578,31 +608,25 @@
 	.canvas-container {
 		flex: 1;
 		position: relative;
-		background: hsl(var(--muted) / 0.3);
-	}
-
-	.connecting-indicator {
-		position: absolute;
-		top: 1rem;
-		left: 50%;
-		transform: translateX(-50%);
-		z-index: 10;
-		padding: 0.5rem 1rem;
-		background: hsl(var(--primary));
-		color: hsl(var(--primary-foreground));
-		border-radius: 0.375rem;
-		font-size: 0.875rem;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+		background: hsl(var(--card));
 	}
 
 	/* Preview Sidebar */
 	.preview-sidebar {
 		width: 360px;
-		border-left: 1px solid hsl(var(--border));
-		background: hsl(var(--card));
 		display: flex;
 		flex-direction: column;
 		flex-shrink: 0;
+		/* Light mode: visible background and border */
+		background: oklch(0.965 0.005 250);
+		border-left: 1px solid oklch(0.88 0.01 250);
+		box-shadow: -2px 0 12px oklch(0 0 0 / 0.06);
+	}
+
+	:global(.dark) .preview-sidebar {
+		background: hsl(var(--muted));
+		border-left-color: oklch(1 0 0 / 20%);
+		box-shadow: -2px 0 8px oklch(0 0 0 / 0.3);
 	}
 
 	.preview-header {
@@ -610,7 +634,11 @@
 		justify-content: space-between;
 		align-items: center;
 		padding: 0.75rem 1rem;
-		border-bottom: 1px solid hsl(var(--border));
+		border-bottom: 1px solid oklch(0.88 0.01 250);
+	}
+
+	:global(.dark) .preview-header {
+		border-bottom-color: oklch(1 0 0 / 20%);
 	}
 
 	.preview-title {
@@ -623,9 +651,12 @@
 		width: 100%;
 		justify-content: stretch;
 		border-radius: 0;
-		background: transparent;
-		border-bottom: 1px solid hsl(var(--border));
 		padding: 0 0.5rem;
+		border-bottom: 1px solid oklch(0.88 0.01 250);
+	}
+
+	:global(.dark) .preview-tabs {
+		border-bottom-color: oklch(1 0 0 / 20%);
 	}
 
 	.preview-content {
@@ -639,7 +670,11 @@
 
 	.preview-section {
 		padding: 1rem;
-		border-bottom: 1px solid hsl(var(--border));
+		border-bottom: 1px solid oklch(0.88 0.01 250);
+	}
+
+	:global(.dark) .preview-section {
+		border-bottom-color: oklch(1 0 0 / 20%);
 	}
 
 	.preview-section-header {
@@ -649,15 +684,12 @@
 		font-size: 0.75rem;
 		font-weight: 500;
 		text-transform: uppercase;
-		color: hsl(var(--muted-foreground));
 		margin-bottom: 0.75rem;
 	}
 
 	.preview-mock-field {
 		padding: 0.5rem 0.75rem;
-		background: hsl(var(--muted) / 0.5);
 		border-radius: 0.375rem;
-		border: 1px dashed hsl(var(--border));
 	}
 
 	.preview-info-row {
@@ -671,7 +703,6 @@
 		justify-content: space-between;
 		align-items: center;
 		padding: 0.5rem 0.75rem;
-		background: hsl(var(--accent) / 0.3);
 		border-radius: 0.375rem;
 		margin-bottom: 0.375rem;
 	}
@@ -697,7 +728,11 @@
 		align-items: center;
 		gap: 0.75rem;
 		padding: 1rem;
-		border-bottom: 1px solid hsl(var(--border));
+		border-bottom: 1px solid oklch(0.88 0.01 250);
+	}
+
+	:global(.dark) .preview-stage-header {
+		border-bottom-color: oklch(1 0 0 / 20%);
 	}
 
 	.preview-stage-badge {
@@ -724,8 +759,12 @@
 		display: flex;
 		gap: 0.25rem;
 		padding: 0.5rem 1rem;
-		border-bottom: 1px solid hsl(var(--border));
 		overflow-x: auto;
+		border-bottom: 1px solid oklch(0.88 0.01 250);
+	}
+
+	:global(.dark) .preview-stage-tabs {
+		border-bottom-color: oklch(1 0 0 / 20%);
 	}
 
 	.preview-stage-tab {

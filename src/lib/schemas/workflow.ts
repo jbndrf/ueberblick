@@ -5,6 +5,7 @@
  */
 
 import { z } from 'zod';
+import { toolConfigSchema } from '$lib/workflow-builder/tools';
 
 /**
  * Workflow Schema
@@ -35,12 +36,14 @@ export const stageSchema = z.object({
  */
 export const actionSchema = z.object({
   action_name: z.string().min(1, 'Action name is required').max(100),
-  action_type: z.enum(['forward', 'edit']),
+  tool_type: z.string().min(1, 'Tool type is required'),
+  tool_config: toolConfigSchema,
   button_label: z.string().min(1, 'Button label is required').max(50),
   button_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Invalid color format'),
   allowed_roles: z.array(z.string()).default([]),
   requires_confirmation: z.boolean().default(false),
-  confirmation_message: z.string().max(200).optional()
+  confirmation_message: z.string().max(200).optional(),
+  action_order: z.number().int().min(0).default(0)
 });
 
 /**

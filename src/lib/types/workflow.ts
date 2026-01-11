@@ -5,6 +5,8 @@
  * stages, actions, form fields, and related entities.
  */
 
+import type { ToolConfig } from '$lib/workflow-builder/tools';
+
 export interface Workflow {
   id: string;
   project_id: string;
@@ -40,15 +42,19 @@ export interface Action {
   from_stage_id: string;
   to_stage_id: string;
   action_name: string;
-  action_type: 'forward' | 'edit';
+  /** Tool type identifier (e.g., 'form', 'edit') */
+  tool_type: string;
+  /** Tool-specific configuration */
+  tool_config: ToolConfig;
   button_label: string;
   button_color: string;
-  form_id?: string;
   allowed_roles: string[];
   conditions: Record<string, any>;
   requires_confirmation: boolean;
   confirmation_message: string;
   visual_config: Record<string, any>;
+  /** Display order for multiple tools on same connection */
+  action_order: number;
   created: string;
 }
 

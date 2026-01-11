@@ -1,27 +1,34 @@
 <script lang="ts">
 	import { ArrowRight } from 'lucide-svelte';
 	import type { SelectionContext } from '../context';
+	import { ToolPicker } from '$lib/workflow-builder/components';
 
 	type Props = {
 		context: Extract<SelectionContext, { type: 'action' }>;
 		onChangeActionType: (type: string) => void;
 		onEditAction: () => void;
 		onDeleteAction: () => void;
+		onAddProgressTool: (toolType: string) => void;
 	};
 
-	let { context }: Props = $props();
+	let { context, onAddProgressTool }: Props = $props();
 
 	const isEditAction = $derived(context.action.source === context.action.target);
 	const actionLabel = $derived((context.action.label as string) || 'Unnamed Action');
 </script>
 
 <div class="panel">
-	<div class="panel-header">
-		<ArrowRight class="panel-header-icon" />
+	<div class="panel-header bg-muted border-b border-border">
+		<ArrowRight class="panel-header-icon text-muted-foreground" />
 		<div class="panel-header-text">
-			<span class="panel-header-title">{actionLabel}</span>
-			<span class="panel-header-subtitle">{isEditAction ? 'Edit action' : 'Transition action'}</span>
+			<span class="panel-header-title text-foreground">{actionLabel}</span>
+			<span class="panel-header-subtitle text-muted-foreground">{isEditAction ? 'Edit action' : 'Transition action'}</span>
 		</div>
+	</div>
+
+	<!-- Progress Actions -->
+	<div class="panel-content">
+		<ToolPicker category="progress" onSelectTool={onAddProgressTool} />
 	</div>
 </div>
 
@@ -36,7 +43,8 @@
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
-		padding: 1rem;
+		padding: 1rem 1.125rem;
+		background: hsl(var(--muted));
 		border-bottom: 1px solid hsl(var(--border));
 	}
 

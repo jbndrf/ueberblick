@@ -20,14 +20,14 @@
 	}: Props = $props();
 </script>
 
-<button class="tool-button" class:primary={variant === 'primary'} class:muted={variant === 'muted'} {disabled} {onclick}>
+<button class="tool-button bg-card border border-border hover:bg-accent" class:primary={variant === 'primary'} class:muted={variant === 'muted'} {disabled} {onclick}>
 	{#if Icon}
-		<Icon class="tool-button-icon" />
+		<Icon class="tool-button-icon text-muted-foreground" />
 	{/if}
 	<div class="tool-button-text">
-		<span class="tool-button-label">{label}</span>
+		<span class="tool-button-label text-foreground">{label}</span>
 		{#if description}
-			<span class="tool-button-description">{description}</span>
+			<span class="tool-button-description text-muted-foreground">{description}</span>
 		{/if}
 	</div>
 </button>
@@ -38,18 +38,19 @@
 		align-items: center;
 		gap: 0.625rem;
 		width: 100%;
-		padding: 0.5rem 0.75rem;
-		background: hsl(var(--accent) / 0.3);
+		padding: 0.625rem 0.875rem;
+		background: hsl(var(--card));
 		border: 1px solid hsl(var(--border));
 		border-radius: 0.375rem;
 		cursor: pointer;
 		text-align: left;
-		transition: all 0.15s;
+		transition: all 0.2s ease;
 	}
 
 	.tool-button:hover:not(:disabled) {
 		background: hsl(var(--accent));
 		border-color: hsl(var(--accent-foreground) / 0.2);
+		box-shadow: 0 1px 3px hsl(var(--foreground) / 0.05);
 	}
 
 	.tool-button:disabled {
@@ -65,6 +66,7 @@
 	.tool-button.primary:hover:not(:disabled) {
 		background: hsl(var(--primary) / 0.2);
 		border-color: hsl(var(--primary) / 0.5);
+		box-shadow: 0 1px 3px hsl(var(--primary) / 0.1);
 	}
 
 	.tool-button.muted {
@@ -74,6 +76,7 @@
 
 	.tool-button.muted:hover:not(:disabled) {
 		background: hsl(var(--accent) / 0.5);
+		border-color: hsl(var(--border) / 0.5);
 	}
 
 	.tool-button :global(.tool-button-icon) {
