@@ -1,0 +1,440 @@
+<script lang="ts">
+	import { enhance } from '$app/forms';
+	import { invalidateAll } from '$app/navigation';
+	import { page } from '$app/stores';
+	import * as m from '$lib/paraglide/messages';
+	import { Button } from '$lib/components/ui/button';
+	import * as Dialog from '$lib/components/ui/dialog';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog';
+	import { ArrowLeft, RefreshCw, Upload } from 'lucide-svelte';
+	import { toast } from 'svelte-sonner';
+	import type { PageData } from './$types';
+	import { BaseTable, type BaseColumnConfig } from '$lib/components/admin/base-table';
+	import CustomFieldManagerGeneric, {
+		type FieldConfig
+	} from '$lib/components/admin/custom-field-manager-generic.svelte';
+	import { Label } from '$lib/components/ui/label';
+	import { Input } from '$lib/components/ui/input';
+	import { Checkbox } from '$lib/components/ui/checkbox';
+
+	type MarkerRow = {
+		id: string;
+		project_id: string;
+		category_id: string;
+		title: string;
+		description: string | null;
+		location: any;
+		properties: Record<string, any>;
+		visible_to_roles: string[];
+		created_by: string | null;
+		created_at: string;
+		updated_at: string;
+	};
+
+	let { data }: { data: PageData } = $props();
+
+	let tableRef: BaseTable<MarkerRow>;
+	let fieldManagerOpen = $state(false);
+	let deleteMarkerOpen = $state(false);
+	let selectedMarker = $state<MarkerRow | null>(null);
+	let importDialogOpen = $state(false);
+	let replaceData = $state(false);
+	let csvFile = $state<File | null>(null);
+	let importing = $state(false);
+
+	const fieldConfig: FieldConfig = {
+		tableName: 'marker_categories',
+		fieldIdColumn: 'id',
+		fieldNameColumn: 'field_name',
+		fieldTypeColumn: 'field_type',
+		isRequiredColumn: 'is_required',
+		defaultValueColumn: 'default_value',
+		foreignKeyColumn: 'id',
+		foreignKeyValue: $page.params.categoryId,
+		createAction: 'createField',
+		updateAction: 'updateField',
+		deleteAction: 'deleteField',
+		labels: {
+			title: 'Manage Custom Fields',
+			description: 'Define custom fields for markers in this category',
+			addButton: 'Add Field',
+			fieldName: 'Field Name',
+			fieldType: 'Field Type',
+			defaultValue: 'Default Value (Optional)',
+			required: 'Required field',
+			noFields: 'No custom fields defined',
+			createSuccess: 'Field created successfully',
+			createError: 'Failed to create field',
+			updateSuccess: 'Field updated successfully',
+			updateError: 'Failed to update field',
+			deleteSuccess: 'Field deleted successfully',
+			deleteError: 'Failed to delete field',
+			deleteConfirm: (fieldName: string) =>
+				`Are you sure you want to delete the field '${fieldName}'? This will permanently remove all data in this field.`
+		}
+	};
+
+	const globalFilterFn = (row: any, _columnId: string, filterValue: string) => {
+		if (!filterValue) return true;
+		const searchValue = String(filterValue).toLowerCase();
+		const marker = row.original;
+		const properties = marker.properties || {};
+		return (
+			marker.title?.toLowerCase().includes(searchValue) ||
+			marker.description?.toLowerCase().includes(searchValue) ||
+			Object.values(properties).some(
+				(value) => String(value ?? '').toLowerCase().includes(searchValue)
+			)
+		);
+	};
+
+	const columns = $derived.by((): BaseColumnConfig<MarkerRow>[] => {
+		// Add standard marker columns first
+		const standardColumns: BaseColumnConfig<MarkerRow>[] = [
+			{
+				id: 'title',
+				header: 'Title',
+				accessorKey: 'title',
+				fieldType: 'text',
+				capabilities: {
+					editable: true,
+					sortable: true,
+					filterable: true
+				},
+				onUpdate: async (rowId: string, value: string) => {
+					const formData = new FormData();
+					formData.append('marker_id', rowId);
+					formData.append('field', 'title');
+					formData.append('value', value);
+
+					const response = await fetch('?/updateMarkerField', {
+						method: 'POST',
+						body: formData
+					});
+
+					const result = await response.json();
+					if (result.type === 'success') {
+						await invalidateAll();
+					} else {
+						throw new Error(result.data?.message || 'Failed to update field');
+					}
+				}
+			},
+			{
+				id: 'description',
+				header: 'Description',
+				accessorKey: 'description',
+				fieldType: 'text',
+				capabilities: {
+					editable: true,
+					sortable: true,
+					filterable: true
+				},
+				onUpdate: async (rowId: string, value: string) => {
+					const formData = new FormData();
+					formData.append('marker_id', rowId);
+					formData.append('field', 'description');
+					formData.append('value', value);
+
+					const response = await fetch('?/updateMarkerField', {
+						method: 'POST',
+						body: formData
+					});
+
+					const result = await response.json();
+					if (result.type === 'success') {
+						await invalidateAll();
+					} else {
+						throw new Error(result.data?.message || 'Failed to update field');
+					}
+				}
+			}
+		];
+
+		// Add custom property columns from category fields
+		const propertyColumns = data.fields.map((field) => {
+			const fieldType = field.field_type as 'text' | 'number' | 'date' | 'boolean';
+
+			return {
+				id: field.field_name,
+				header: field.field_name,
+				accessorFn: (row) => row.properties?.[field.field_name] ?? null,
+				fieldType,
+				capabilities: {
+					editable: true,
+					sortable: true,
+					filterable: true
+				},
+				onUpdate: async (rowId: string, value: string) => {
+					const formData = new FormData();
+					formData.append('marker_id', rowId);
+					formData.append('property_name', field.field_name);
+					formData.append('value', value);
+
+					const response = await fetch('?/updateMarkerProperty', {
+						method: 'POST',
+						body: formData
+					});
+
+					const result = await response.json();
+					if (result.type === 'success') {
+						await invalidateAll();
+					} else {
+						throw new Error(result.data?.message || 'Failed to update property');
+					}
+				}
+			};
+		});
+
+		return [...standardColumns, ...propertyColumns];
+	});
+
+	function handleSuccess(message: string) {
+		deleteMarkerOpen = false;
+		selectedMarker = null;
+		invalidateAll();
+		toast.success(message);
+	}
+
+	function handleError(message: string) {
+		toast.error(message);
+	}
+
+	async function handleImportCSV() {
+		if (!csvFile) {
+			toast.error(m.csvImportSelectFile());
+			return;
+		}
+
+		importing = true;
+		const formData = new FormData();
+		formData.append('file', csvFile);
+		formData.append('replaceData', replaceData.toString());
+
+		try {
+			const response = await fetch('?/importCSV', {
+				method: 'POST',
+				body: formData
+			});
+
+			const result = await response.json();
+			if (result.type === 'success') {
+				toast.success(result.data?.message || m.csvImportSuccess());
+				importDialogOpen = false;
+				csvFile = null;
+				replaceData = false;
+				await invalidateAll();
+			} else {
+				toast.error(result.data?.message || m.csvImportError());
+			}
+		} catch (error) {
+			console.error('Import error:', error);
+			toast.error(m.csvImportError());
+		} finally {
+			importing = false;
+		}
+	}
+</script>
+
+<div class="flex flex-col gap-6 min-w-0 w-full">
+	<!-- Header with Back Button -->
+	<div class="flex items-center gap-4">
+		<Button
+			variant="outline"
+			size="sm"
+			href="/projects/{$page.params.projectId}/marker-categories"
+		>
+			<ArrowLeft class="mr-2 h-4 w-4" />
+			Back to Categories
+		</Button>
+	</div>
+
+	<!-- Page Header -->
+	<div class="flex items-center justify-between">
+		<div>
+			<h1 class="text-3xl font-bold tracking-tight">
+				{data.category.name}
+			</h1>
+			<p class="text-muted-foreground">Manage markers and custom fields for this category</p>
+		</div>
+		<div class="flex gap-2">
+			<Button variant="outline" onclick={() => (importDialogOpen = true)}>
+				<Upload class="mr-2 h-4 w-4" />
+				{m.csvImportButton()}
+			</Button>
+			<Button variant="outline" onclick={() => invalidateAll()}>
+				<RefreshCw class="mr-2 h-4 w-4" />
+				{m.customTableEditRefresh()}
+			</Button>
+		</div>
+	</div>
+
+	<!-- Base Table -->
+	<BaseTable
+		bind:this={tableRef}
+		data={data.markers}
+		{columns}
+		{globalFilterFn}
+		enableRowSelection={true}
+		enableShiftSelect={true}
+		showToolbar={true}
+		showEditMode={true}
+		editModeLabel="Edit mode"
+		emptyMessage="No markers in this category"
+		rowActions={{
+			header: m.rolesActions(),
+			onDelete: (marker) => {
+				selectedMarker = marker;
+				deleteMarkerOpen = true;
+			}
+		}}
+		columnManagement={{
+			fields: data.fields.map((field) => ({
+				field_name: field.field_name,
+				field_type: field.field_type
+			})),
+			onOpen: () => (fieldManagerOpen = true)
+		}}
+		inlineRowCreation={{
+			enabled: true,
+			createButtonLabel: 'Add Marker',
+			requiredFields: ['title', ...data.fields
+				.filter((field) => field.is_required)
+				.map((field) => field.field_name)],
+			onCreateRow: async (rowData) => {
+				const formData = new FormData();
+				formData.append('title', rowData.title || '');
+				formData.append('description', rowData.description || '');
+
+				// Extract custom properties (everything except title and description)
+				const properties: Record<string, any> = {};
+				Object.keys(rowData).forEach((key) => {
+					if (key !== 'title' && key !== 'description') {
+						properties[key] = rowData[key];
+					}
+				});
+				formData.append('properties', JSON.stringify(properties));
+
+				const response = await fetch('?/createMarker', {
+					method: 'POST',
+					body: formData
+				});
+
+				const result = await response.json();
+				if (result.type === 'success') {
+					await invalidateAll();
+					toast.success('Marker created successfully');
+				} else {
+					toast.error('Failed to create marker');
+					throw new Error(result.data?.message || 'Failed to create marker');
+				}
+			},
+			getDefaultValues: () => {
+				const defaults: Record<string, any> = {};
+				data.fields.forEach((field) => {
+					if (field.default_value) {
+						defaults[field.field_name] = field.default_value;
+					}
+				});
+				return defaults;
+			}
+		}}
+	/>
+</div>
+
+<!-- Field Manager Dialog -->
+<Dialog.Root bind:open={fieldManagerOpen}>
+	<Dialog.Content class="max-w-2xl">
+		<CustomFieldManagerGeneric fields={data.fields || []} config={fieldConfig} />
+		<Dialog.Footer>
+			<Button variant="outline" onclick={() => (fieldManagerOpen = false)}>
+				{m.commonClose?.() ?? 'Close'}
+			</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
+
+<!-- Delete Marker Dialog -->
+<AlertDialog.Root bind:open={deleteMarkerOpen}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>Delete Marker</AlertDialog.Title>
+			<AlertDialog.Description>
+				Are you sure you want to delete this marker? This action cannot be undone.
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		{#if selectedMarker}
+			<AlertDialog.Footer>
+				<AlertDialog.Cancel>{m.commonCancel()}</AlertDialog.Cancel>
+				<form
+					method="POST"
+					action="?/deleteMarker"
+					use:enhance={() => {
+						return async ({ result }) => {
+							if (result.type === 'success') {
+								handleSuccess('Marker deleted successfully');
+							} else if (result.type === 'failure') {
+								handleError('Failed to delete marker');
+							}
+						};
+					}}
+				>
+					<input type="hidden" name="marker_id" value={selectedMarker.id} />
+					<AlertDialog.Action
+						type="submit"
+						class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+					>
+						{m.commonDelete()}
+					</AlertDialog.Action>
+				</form>
+			</AlertDialog.Footer>
+		{/if}
+	</AlertDialog.Content>
+</AlertDialog.Root>
+
+<!-- Import CSV Dialog -->
+<Dialog.Root bind:open={importDialogOpen}>
+	<Dialog.Content class="max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>{m.csvImportMarkerDialogTitle()}</Dialog.Title>
+			<Dialog.Description>
+				{m.csvImportMarkerDialogDescription()}
+			</Dialog.Description>
+		</Dialog.Header>
+		<div class="space-y-4 py-4">
+			<div class="space-y-2">
+				<Label for="csv-file">{m.csvImportFileLabel()}</Label>
+				<Input
+					id="csv-file"
+					type="file"
+					accept=".csv"
+					onchange={(e) => {
+						const target = e.target as HTMLInputElement;
+						csvFile = target.files?.[0] || null;
+					}}
+				/>
+			</div>
+			<div class="flex items-center space-x-2">
+				<Checkbox
+					id="replace-data"
+					checked={replaceData}
+					onCheckedChange={(checked) => (replaceData = checked === true)}
+				/>
+				<Label
+					for="replace-data"
+					class="text-sm font-normal cursor-pointer"
+				>
+					{m.csvImportReplaceMarkers()}
+				</Label>
+			</div>
+		</div>
+		<Dialog.Footer>
+			<Button variant="outline" onclick={() => (importDialogOpen = false)} disabled={importing}>
+				{m.csvImportCancel()}
+			</Button>
+			<Button onclick={handleImportCSV} disabled={!csvFile || importing}>
+				{importing ? m.csvImportImporting() : m.csvImportImportMarkers()}
+			</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>

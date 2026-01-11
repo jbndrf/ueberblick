@@ -1,0 +1,93 @@
+<script lang="ts">
+	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
+	import * as m from '$lib/paraglide/messages';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import { Button } from '$lib/components/ui/button';
+	import ModeToggle from '$lib/components/mode-toggle.svelte';
+	import LanguageSelectorDropdown from '$lib/components/language-selector-dropdown.svelte';
+	import { UserCircle, LogOut } from 'lucide-svelte';
+
+	let { data, children } = $props();
+
+	// Hide layout chrome on login page
+	const isLoginPage = $derived($page.url.pathname === '/participant/login');
+
+	async function handleSignOut() {
+		try {
+			// Call logout endpoint to clear cookie
+			await fetch('/participant/logout', {
+				method: 'POST',
+				redirect: 'manual'
+			});
+		} catch (error) {
+			console.error('Logout error:', error);
+		} finally {
+			// Navigate to login page with full reload
+			await goto('/participant/login', { replaceState: true, invalidateAll: true });
+		}
+	}
+</script>
+
+{#if isLoginPage}
+	{@render children()}
+{:else}
+	<!-- Mobile-optimized layout for authenticated participants -->
+	<div class="fixed inset-0 flex flex-col overflow-hidden">
+		<!-- Mobile Header -->
+		<header class="flex h-14 shrink-0 items-center justify-between border-b bg-background px-4">
+			<div class="flex items-center gap-2">
+				<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path>
+						<circle cx="12" cy="10" r="3"></circle>
+					</svg>
+				</div>
+				<span class="font-semibold">Karte</span>
+			</div>
+
+			{#if data.participant}
+				<DropdownMenu.Root>
+					<DropdownMenu.Trigger>
+						{#snippet child({ props })}
+							<Button variant="ghost" size="icon" {...props}>
+								<UserCircle class="h-5 w-5" />
+								<span class="sr-only">{m.profileAccount()}</span>
+							</Button>
+						{/snippet}
+					</DropdownMenu.Trigger>
+					<DropdownMenu.Content align="end" class="w-56">
+						<DropdownMenu.Label>
+							<div class="flex flex-col space-y-1">
+								<p class="text-sm font-medium leading-none">{m.profileAccount()}</p>
+								{#if data.participant.email}
+									<p class="text-xs leading-none text-muted-foreground">
+										{data.participant.email}
+									</p>
+								{/if}
+							</div>
+						</DropdownMenu.Label>
+						<DropdownMenu.Separator />
+
+						<!-- Theme Toggle -->
+						<ModeToggle />
+
+						<!-- Language Selector -->
+						<LanguageSelectorDropdown />
+
+						<DropdownMenu.Separator />
+						<DropdownMenu.Item onclick={handleSignOut}>
+							<LogOut class="mr-2 h-4 w-4" />
+							{m.profileSignOut()}
+						</DropdownMenu.Item>
+					</DropdownMenu.Content>
+				</DropdownMenu.Root>
+			{/if}
+		</header>
+
+		<!-- Main Content -->
+		<main class="flex-1 overflow-hidden">
+			{@render children()}
+		</main>
+	</div>
+{/if}

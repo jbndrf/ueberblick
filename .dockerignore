@@ -1,0 +1,58 @@
+# Node
+node_modules
+npm-debug.log
+.npm
+
+# Build output
+build
+.svelte-kit
+dist
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# PocketBase data (will be mounted as volume)
+pb/pb_data
+
+# Runtime data (mounted as volumes)
+data/
+
+# Documentation
+*.md
+docs/
+CONTRIBUTING.md
+CLAUDE.md
+
+# CI/CD
+.github
+
+# Cache
+.cache
+.temp
+
+# Misc
+.prettierignore
+.prettierrc
+.eslintrc
+eslint.config.js

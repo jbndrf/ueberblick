@@ -1,0 +1,69 @@
+# Dependencies
+node_modules
+
+# Build output
+.output
+.vercel
+.netlify
+.wrangler
+/.svelte-kit
+/build
+/dist
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.*
+!.env.example
+!.env.test
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Paraglide (auto-generated)
+src/lib/paraglide
+
+# Storybook
+*storybook.log
+storybook-static
+
+# Testing
+test-results
+playwright-report
+coverage
+.nyc_output
+
+# PocketBase / Go
+pb/myapp
+pb/pb_data
+pb/*.exe
+pb/*.dll
+pb/*.so
+pb/*.dylib
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Misc
+*.local
+.cache
+
+# Git credentials
+git_login.md
+
+# Data directory (Docker volumes, local data)
+/data

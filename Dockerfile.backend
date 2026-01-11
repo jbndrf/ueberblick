@@ -1,0 +1,59 @@
+# Build stage - compile Go with SpatiaLite support
+FROM golang:1.24-bookworm AS builder
+
+# Install build dependencies for SpatiaLite
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libspatialite-dev \
+    libsqlite3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Copy Go module files first for better caching
+COPY pb/go.mod pb/go.sum ./
+RUN go mod download
+
+# Copy the rest of the source code
+COPY pb/ ./
+
+# Build with CGO enabled for SpatiaLite
+ENV CGO_ENABLED=1
+RUN go build -o pocketbase .
+
+# Runtime stage - minimal image with SpatiaLite runtime
+FROM debian:bookworm-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    libspatialite7 \
+    libsqlite3-mod-spatialite \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /pb
+
+# Copy the compiled binary from builder
+COPY --from=builder /build/pocketbase ./pocketbase
+
+# Copy PocketBase migrations and hooks
+COPY pb/pb_migrations ./pb_migrations
+COPY pb/pb_hooks ./pb_hooks
+COPY pb/security ./security
+
+# Copy the entrypoint script
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh ./pocketbase
+
+# Create directory for PocketBase data
+RUN mkdir -p /pb/pb_data
+
+# Expose PocketBase port
+EXPOSE 8090
+
+# Set the entrypoint
+ENTRYPOINT ["./docker-entrypoint.sh"]
+
+# Default command
+CMD ["./pocketbase", "serve", "--http=0.0.0.0:8090"]
