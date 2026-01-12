@@ -351,7 +351,13 @@ export class WorkflowBuilderState {
 	// Form Field Operations
 	// =========================================================================
 
-	addFormField(formId: string, fieldType: ToolsFormField['field_type']): ToolsFormField {
+	addFormField(
+		formId: string,
+		fieldType: ToolsFormField['field_type'],
+		rowIndex: number,
+		columnPosition: ToolsFormField['column_position'],
+		page: number = 1
+	): ToolsFormField {
 		const existingFields = this.visibleFormFields.filter((f) => f.data.form_id === formId);
 
 		const newField: ToolsFormField = {
@@ -360,7 +366,9 @@ export class WorkflowBuilderState {
 			field_label: 'New Field',
 			field_type: fieldType,
 			field_order: existingFields.length,
-			page: 1,
+			page,
+			row_index: rowIndex,
+			column_position: columnPosition,
 			is_required: false
 		};
 
@@ -468,6 +476,112 @@ export class WorkflowBuilderState {
 
 	getEditToolsForStage(stageId: string): TrackedEditTool[] {
 		return this.visibleEditTools.filter((e) => e.data.stage_id === stageId);
+	}
+
+	// =========================================================================
+	// Ancestor Form Fields (for Smart Dropdowns)
+	// =========================================================================
+
+	/**
+	 * Get all ancestor stages for a given stage (stages that can reach this stage)
+	 * Traverses backwards through connections
+	 */
+	getAncestorStages(stageId: string): TrackedStage[] {
+		const visited = new Set<string>();
+		const ancestors: TrackedStage[] = [];
+
+		const traverse = (currentStageId: string) => {
+			// Find all connections leading TO this stage
+			const incomingConnections = this.visibleConnections.filter(
+				(c) => c.data.to_stage_id === currentStageId && c.data.from_stage_id
+			);
+
+			for (const conn of incomingConnections) {
+				const fromStageId = conn.data.from_stage_id!;
+				if (!visited.has(fromStageId)) {
+					visited.add(fromStageId);
+					const stage = this.visibleStages.find((s) => s.data.id === fromStageId);
+					if (stage) {
+						ancestors.push(stage);
+						traverse(fromStageId);
+					}
+				}
+			}
+		};
+
+		traverse(stageId);
+		return ancestors;
+	}
+
+	/**
+	 * Get all ancestor stages for a connection (based on its source stage)
+	 */
+	getAncestorStagesForConnection(connectionId: string): TrackedStage[] {
+		const connection = this.visibleConnections.find((c) => c.data.id === connectionId);
+		if (!connection || !connection.data.from_stage_id) return [];
+
+		// Include the source stage itself plus its ancestors
+		const sourceStage = this.visibleStages.find(
+			(s) => s.data.id === connection.data.from_stage_id
+		);
+		const ancestors = this.getAncestorStages(connection.data.from_stage_id);
+
+		if (sourceStage) {
+			return [sourceStage, ...ancestors];
+		}
+		return ancestors;
+	}
+
+	/**
+	 * Get all form fields from ancestor stages, grouped by stage and form
+	 * Used for smart dropdown source field selection
+	 */
+	getAncestorFormFields(connectionId: string): Array<{
+		stage: WorkflowStage;
+		form: ToolsForm;
+		fields: ToolsFormField[];
+	}> {
+		const ancestorStages = this.getAncestorStagesForConnection(connectionId);
+		const result: Array<{
+			stage: WorkflowStage;
+			form: ToolsForm;
+			fields: ToolsFormField[];
+		}> = [];
+
+		for (const trackedStage of ancestorStages) {
+			// Get forms for this stage
+			const stageForms = this.getFormsForStage(trackedStage.data.id);
+			for (const trackedForm of stageForms) {
+				const fields = this.getFieldsForForm(trackedForm.data.id);
+				if (fields.length > 0) {
+					result.push({
+						stage: trackedStage.data,
+						form: trackedForm.data,
+						fields: fields.map((f) => f.data)
+					});
+				}
+			}
+
+			// Also get forms from connections leading TO this stage
+			const incomingConnections = this.visibleConnections.filter(
+				(c) => c.data.to_stage_id === trackedStage.data.id
+			);
+			for (const conn of incomingConnections) {
+				const connForms = this.getFormsForConnection(conn.data.id);
+				for (const trackedForm of connForms) {
+					const fields = this.getFieldsForForm(trackedForm.data.id);
+					if (fields.length > 0) {
+						result.push({
+							stage: trackedStage.data,
+							form: trackedForm.data,
+							fields: fields.map((f) => f.data)
+						});
+					}
+				}
+			}
+		}
+
+		return result;
 	}
 
 	// =========================================================================

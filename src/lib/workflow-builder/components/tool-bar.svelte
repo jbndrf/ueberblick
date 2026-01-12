@@ -12,14 +12,16 @@
 		onSelectTool?: (toolId: string) => void;
 		/** Callback when the add button is clicked */
 		onAddTool?: () => void;
+		/** Layout direction - horizontal (default) or vertical */
+		direction?: 'horizontal' | 'vertical';
 	};
 
-	let { tools, selectedToolId, onSelectTool, onAddTool }: Props = $props();
+	let { tools, selectedToolId, onSelectTool, onAddTool, direction = 'horizontal' }: Props = $props();
 
 	const sortedTools = $derived([...tools].sort((a, b) => a.order - b.order));
 </script>
 
-<div class="tool-bar">
+<div class="tool-bar" class:vertical={direction === 'vertical'}>
 	{#each sortedTools as tool (tool.id)}
 		<ToolIcon
 			{tool}
@@ -41,6 +43,10 @@
 		background: oklch(from var(--card) l c h / 0.9);
 		border-radius: 6px;
 		backdrop-filter: blur(4px);
+	}
+
+	.tool-bar.vertical {
+		flex-direction: column;
 	}
 
 	.add-tool {

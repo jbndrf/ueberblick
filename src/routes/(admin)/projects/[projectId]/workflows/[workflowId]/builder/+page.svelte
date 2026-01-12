@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import {
 		SvelteFlowProvider,
 		type Node,
@@ -39,8 +40,15 @@
 		createWorkflowBuilderState,
 		saveWorkflow,
 		type WorkflowStage,
-		type WorkflowConnection
+		type WorkflowConnection,
+		type TrackedForm,
+		type TrackedFormField,
+		type TrackedEditTool,
+		type ToolsForm,
+		type ToolsFormField
 	} from '$lib/workflow-builder';
+	import type { ToolInstance, FormToolConfig, EditToolConfig } from '$lib/workflow-builder/tools';
+	import type { ColumnPosition } from '$lib/workflow-builder';
 	import { getPocketBase } from '$lib/pocketbase';
 
 	let { data }: { data: PageData } = $props();
@@ -88,6 +96,60 @@
 	}
 
 	// ==========================================================================
+	// Tool Instance Helpers
+	// ==========================================================================
+
+	/**
+	 * Convert forms to ToolInstances for display on canvas
+	 */
+	function formsToToolInstances(forms: TrackedForm[]): ToolInstance[] {
+		return forms.map((form, index) => ({
+			id: form.data.id,
+			toolType: 'form',
+			config: {
+				toolType: 'form',
+				formId: form.data.id,
+				buttonLabel: form.data.name || 'Form'
+			} as FormToolConfig,
+			order: index
+		}));
+	}
+
+	/**
+	 * Convert edit tools to ToolInstances for display on canvas
+	 */
+	function editToolsToToolInstances(editTools: TrackedEditTool[]): ToolInstance[] {
+		return editTools.map((tool, index) => ({
+			id: tool.data.id,
+			toolType: 'edit',
+			config: {
+				toolType: 'edit',
+				editableFields: tool.data.editable_fields,
+				buttonLabel: 'Edit'
+			} as EditToolConfig,
+			order: index + 100 // Offset to keep forms first
+		}));
+	}
+
+	/**
+	 * Get all tools for a connection
+	 */
+	function getToolsForConnection(connectionId: string): ToolInstance[] {
+		const forms = builderState.getFormsForConnection(connectionId);
+		const editTools = builderState.getEditToolsForConnection(connectionId);
+		return [...formsToToolInstances(forms), ...editToolsToToolInstances(editTools)];
+	}
+
+	/**
+	 * Get all tools for a stage
+	 */
+	function getToolsForStage(stageId: string): ToolInstance[] {
+		const forms = builderState.getFormsForStage(stageId);
+		const editTools = builderState.getEditToolsForStage(stageId);
+		return [...formsToToolInstances(forms), ...editToolsToToolInstances(editTools)];
+	}
+
+	// ==========================================================================
 	// XYFlow Integration
 	// ==========================================================================
 
@@ -110,8 +172,12 @@
 			},
 			data: {
 				title: stage.stage_name,
+				key: stage.id.slice(0, 8), // Short ID for display
 				stageType: stage.stage_type,
-				visible_to_roles: stage.visible_to_roles || []
+				visible_to_roles: stage.visible_to_roles || [],
+				tools: getToolsForStage(stage.id),
+				onSelectTool: (toolId: string) => handleSelectStageTool(stage.id, toolId),
+				onAddTool: () => handleAddStageToolClick(stage.id)
 			}
 		}));
 	}
@@ -132,8 +198,9 @@
 					animated: isSelfLoop,
 					style: conn.visual_config?.button_color ? `stroke: ${conn.visual_config.button_color}` : undefined,
 					data: {
-						tools: [],
+						tools: getToolsForConnection(conn.id),
 						isSelfLoop,
+						onSelectTool: (toolId: string) => handleSelectConnectionTool(conn.id, toolId),
 						onAddTool: () => handleAddProgressToolForEdge(conn.id),
 						allowed_roles: conn.allowed_roles || [],
 						visual_config: conn.visual_config || {}
@@ -151,11 +218,32 @@
 	);
 
 	// Sync nodes/edges when state changes
+	// Include forms and editTools in dependencies so tools update on canvas
 	$effect(() => {
-		nodes = stagesToNodes(builderState.visibleStages.map((s) => s.data));
+		// Access these to create dependency
+		const _forms = builderState.visibleForms;
+		const _editTools = builderState.visibleEditTools;
+		const _stages = builderState.visibleStages;
+
+		// Preserve current node positions (they're only synced to state on save)
+		// Use untrack to read nodes without creating circular dependency
+		const currentPositions = untrack(() => new Map(nodes.map(n => [n.id, n.position])));
+		const newNodes = stagesToNodes(_stages.map((s) => s.data));
+
+		// Merge: use current position if node already existed, otherwise use state position
+		nodes = newNodes.map(node => {
+			const currentPos = currentPositions.get(node.id);
+			if (currentPos) {
+				return { ...node, position: currentPos };
+			}
+			return node;
+		});
 	});
 
 	$effect(() => {
+		// Access these to create dependency
+		const _forms = builderState.visibleForms;
+		const _editTools = builderState.visibleEditTools;
 		edges = connectionsToEdges(builderState.visibleConnections.map((c) => c.data));
 	});
 
@@ -170,6 +258,28 @@
 		selectionContext.type === 'stage' ? selectionContext.stageId : null
 	);
 	const hasStartStage = $derived(builderState.hasStartStage);
+
+	// Form editor derived state
+	const selectedForm = $derived.by((): ToolsForm | null => {
+		if (selectionContext.type !== 'form') return null;
+		const form = builderState.getFormById(selectionContext.formId);
+		return form?.data ?? null;
+	});
+
+	const formFields = $derived.by((): TrackedFormField[] => {
+		if (selectionContext.type !== 'form') return [];
+		return builderState.getFieldsForForm(selectionContext.formId);
+	});
+
+	// Ancestor fields for smart dropdown configuration
+	const ancestorFields = $derived.by(() => {
+		if (selectionContext.type !== 'form') return [];
+		// Only get ancestors if form is attached to a connection
+		if (selectionContext.attachedTo.type === 'connection') {
+			return builderState.getAncestorFormFields(selectionContext.attachedTo.connectionId);
+		}
+		return [];
+	});
 
 	// Callback when a new node is added via drag-drop (from DefaultPanel)
 	function onNodeAdded(node: Node) {
@@ -294,14 +404,28 @@
 
 	// Tool handlers
 	function handleAddStageTool(toolType: string) {
-		console.log('Add stage tool:', toolType, 'to stage:', selectedStageId);
-		// TODO: Create tool instance and attach to stage
+		if (!selectedStageId) return;
+
+		if (toolType === 'form') {
+			// Create a new form attached to this stage
+			builderState.addForm({ stageId: selectedStageId });
+		} else if (toolType === 'edit') {
+			// Create a new edit tool attached to this stage
+			builderState.addEditTool({ stageId: selectedStageId });
+		}
 	}
 
 	function handleAddProgressTool(toolType: string) {
 		if (selectionContext.type === 'action') {
-			console.log('Add progress tool:', toolType, 'to action:', selectionContext.actionId);
-			// TODO: Create tool instance and attach to edge
+			const connectionId = selectionContext.actionId;
+
+			if (toolType === 'form') {
+				// Create a new form attached to this connection
+				builderState.addForm({ connectionId });
+			} else if (toolType === 'edit') {
+				// Create a new edit tool attached to this connection
+				builderState.addEditTool({ connectionId });
+			}
 		}
 	}
 
@@ -310,6 +434,59 @@
 		const edge = edges.find((e) => e.id === edgeId);
 		if (edge) {
 			selectionContext = createContext.action(edge);
+		}
+	}
+
+	/**
+	 * Handle tool selection on a stage (from canvas click)
+	 */
+	function handleSelectStageTool(stageId: string, toolId: string) {
+		// Find the tool to determine its type
+		const forms = builderState.getFormsForStage(stageId);
+		const editTools = builderState.getEditToolsForStage(stageId);
+
+		const form = forms.find(f => f.data.id === toolId);
+		if (form) {
+			selectionContext = createContext.form(toolId, { type: 'stage', stageId });
+			return;
+		}
+
+		const editTool = editTools.find(e => e.data.id === toolId);
+		if (editTool) {
+			// TODO: Open edit tool editor in sidebar
+			console.log('Selected edit tool:', toolId, 'on stage:', stageId);
+		}
+	}
+
+	/**
+	 * Handle tool selection on a connection (from canvas click)
+	 */
+	function handleSelectConnectionTool(connectionId: string, toolId: string) {
+		// Find the tool to determine its type
+		const forms = builderState.getFormsForConnection(connectionId);
+		const editTools = builderState.getEditToolsForConnection(connectionId);
+
+		const form = forms.find(f => f.data.id === toolId);
+		if (form) {
+			selectionContext = createContext.form(toolId, { type: 'connection', connectionId });
+			return;
+		}
+
+		const editTool = editTools.find(e => e.data.id === toolId);
+		if (editTool) {
+			// TODO: Open edit tool editor in sidebar
+			console.log('Selected edit tool:', toolId, 'on connection:', connectionId);
+		}
+	}
+
+	/**
+	 * Handle add tool button click on stage
+	 */
+	function handleAddStageToolClick(stageId: string) {
+		// Select the stage and let sidebar show tool picker
+		const node = nodes.find(n => n.id === stageId);
+		if (node) {
+			selectionContext = createContext.stage(node as Node<StageData>);
 		}
 	}
 
@@ -359,6 +536,79 @@
 
 	function handleSelectStage(node: Node<StageData>) {
 		selectionContext = createContext.stage(node);
+	}
+
+	// Form editor handlers
+	function handleFormNameChange(formId: string, name: string) {
+		builderState.updateForm(formId, { name });
+	}
+
+	function handleAddFormField(formId: string, fieldType: string, page: number, rowIndex: number, columnPosition: ColumnPosition) {
+		// Add the field with explicit row positioning
+		builderState.addFormField(
+			formId,
+			fieldType as ToolsFormField['field_type'],
+			rowIndex,
+			columnPosition,
+			page
+		);
+	}
+
+	function handleFormFieldUpdate(fieldId: string, updates: Partial<ToolsFormField>) {
+		builderState.updateFormField(fieldId, updates);
+	}
+
+	function handleFormFieldDelete(fieldId: string) {
+		builderState.deleteFormField(fieldId);
+	}
+
+	function handleFormFieldsReorder(formId: string, fieldIds: string[]) {
+		// Update field_order for each field based on new order
+		fieldIds.forEach((fieldId, index) => {
+			builderState.updateFormField(fieldId, { field_order: index });
+		});
+	}
+
+	function handleFormAddPage(formId: string) {
+		// Get all fields for this form to find the next page number
+		const formFields = builderState.getFieldsForForm(formId);
+		const maxPage = formFields.reduce((max, f) => Math.max(max, f.data.page ?? 1), 1);
+		const nextPage = maxPage + 1;
+
+		// Add a placeholder field on the new page so it shows up
+		const newField = builderState.addFormField(formId, 'short_text', 0, 'full', nextPage);
+		if (newField) {
+			builderState.updateFormField(newField.id, {
+				page_title: `Page ${nextPage}`,
+				field_label: 'New Field'
+			});
+		}
+	}
+
+	function handleFormDeletePage(formId: string, page: number) {
+		// Get all fields on this page and delete them
+		const formFields = builderState.getFieldsForForm(formId);
+		const fieldsOnPage = formFields.filter(f => (f.data.page ?? 1) === page);
+
+		for (const field of fieldsOnPage) {
+			builderState.deleteFormField(field.data.id);
+		}
+	}
+
+	function handleFormPageTitleChange(formId: string, page: number, title: string) {
+		// Update page_title on the first field of the page
+		const formFields = builderState.getFieldsForForm(formId);
+		const fieldsOnPage = formFields
+			.filter(f => (f.data.page ?? 1) === page)
+			.sort((a, b) => (a.data.field_order ?? 0) - (b.data.field_order ?? 0));
+
+		if (fieldsOnPage.length > 0) {
+			builderState.updateFormField(fieldsOnPage[0].data.id, { page_title: title });
+		}
+	}
+
+	function handleFormClose() {
+		selectionContext = createContext.none();
 	}
 </script>
 
@@ -491,6 +741,9 @@
 			{nodes}
 			{edges}
 			roles={data.roles}
+			{selectedForm}
+			{formFields}
+			{ancestorFields}
 			onStageRename={handleStageRename}
 			onStageDelete={handleDeleteStage}
 			onStageRolesChange={handleStageRolesChange}
@@ -500,6 +753,15 @@
 			onEdgeSettingsChange={handleEdgeSettingsChange}
 			onSelectAction={handleSelectAction}
 			onSelectStage={handleSelectStage}
+			onFormNameChange={handleFormNameChange}
+			onAddFormField={handleAddFormField}
+			onFormFieldUpdate={handleFormFieldUpdate}
+			onFormFieldDelete={handleFormFieldDelete}
+			onFormFieldsReorder={handleFormFieldsReorder}
+			onFormAddPage={handleFormAddPage}
+			onFormDeletePage={handleFormDeletePage}
+			onFormPageTitleChange={handleFormPageTitleChange}
+			onFormClose={handleFormClose}
 		/>
 	</div>
 </div>

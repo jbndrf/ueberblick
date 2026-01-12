@@ -70,6 +70,8 @@ export type FieldType =
 	| 'multiple_choice'
 	| 'smart_dropdown';
 
+export type ColumnPosition = 'left' | 'right' | 'full';
+
 export interface ToolsFormField {
 	id: string;
 	form_id: string;
@@ -78,6 +80,8 @@ export interface ToolsFormField {
 	field_order?: number;
 	page?: number;
 	page_title?: string;
+	row_index: number; // Which visual row (0-based)
+	column_position: ColumnPosition; // 'left'/'right' = half width, 'full' = full width
 	is_required?: boolean;
 	placeholder?: string;
 	help_text?: string;

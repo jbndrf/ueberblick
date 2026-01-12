@@ -63,11 +63,26 @@
 	const edgePath = $derived(pathData[0]);
 	const labelX = $derived(pathData[1]);
 	const labelY = $derived(pathData[2]);
+
+	// Calculate line direction for tool bar orientation
+	// Vertical/diagonal lines -> horizontal toolbar (tools beside +)
+	// Horizontal lines -> vertical toolbar (tools above/below +)
+	const toolbarDirection = $derived.by((): 'horizontal' | 'vertical' => {
+		if (isSelfLoop) return 'horizontal'; // Self-loops always horizontal
+
+		const dx = targetX - sourceX;
+		const dy = targetY - sourceY;
+		const angle = Math.abs(Math.atan2(dy, dx) * (180 / Math.PI));
+
+		// If angle is between 45-135 degrees (mostly vertical), use horizontal toolbar
+		// Otherwise (mostly horizontal), use vertical toolbar
+		return angle > 45 && angle < 135 ? 'horizontal' : 'vertical';
+	});
 </script>
 
 <BaseEdge path={edgePath} {markerEnd} />
 
-<!-- Always show toolbar for debugging -->
+<!-- Tool bar positioned at edge midpoint, direction based on line angle -->
 <EdgeLabel x={labelX} y={labelY}>
 	<div class="edge-toolbar-container nodrag nopan">
 		<ToolBar
@@ -75,6 +90,7 @@
 			selectedToolId={data?.selectedToolId}
 			onSelectTool={data?.onSelectTool}
 			onAddTool={data?.onAddTool}
+			direction={toolbarDirection}
 		/>
 	</div>
 </EdgeLabel>

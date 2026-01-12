@@ -1,0 +1,330 @@
+/* Role Selector Component Styles */
+.role-selector {
+    margin: 0.5rem 0;
+}
+
+.role-selector.disabled {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.role-selector label {
+    display: block;
+    margin-bottom: 0.25rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+    color: var(--color-text-secondary, #666);
+}
+
+.role-input-container {
+    position: relative;
+    margin-bottom: 0.5rem;
+}
+
+.role-input-container input {
+    width: 100%;
+    padding: 0.5rem 2rem 0.5rem 0.5rem;
+    border: 1px solid var(--color-border, #ddd);
+    border-radius: var(--border-radius, 4px);
+    background: white;
+    font-size: 0.875rem;
+    transition: border-color 0.2s;
+}
+
+.role-input-container input:focus {
+    outline: none;
+    border-color: var(--color-primary, #007bff);
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
+}
+
+.role-input-container input:disabled {
+    background: #f8f9fa;
+    cursor: not-allowed;
+}
+
+.role-quick-select-btn {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.25rem;
+    font-size: 0.75rem;
+    color: #666;
+    border-radius: 2px;
+    width: 1.5rem;
+    height: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+}
+
+.role-quick-select-btn:hover {
+    background: #f0f0f0;
+    color: #333;
+}
+
+.role-suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid var(--color-border, #ddd);
+    border-top: none;
+    border-radius: 0 0 var(--border-radius, 4px) var(--border-radius, 4px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    z-index: 1000;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.role-suggestion {
+    padding: 0.5rem;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background-color 0.2s;
+}
+
+.role-suggestion:hover,
+.role-suggestion.highlighted {
+    background: #f8f9fa;
+}
+
+.role-suggestion.highlighted {
+    background: #e3f2fd;
+    border-left: 3px solid #2196F3;
+}
+
+.role-suggestion.new {
+    background: #e8f5e8;
+}
+
+.role-suggestion.new:hover,
+.role-suggestion.new.highlighted {
+    background: #d4edda;
+}
+
+.role-suggestion.disabled {
+    color: #999;
+    cursor: not-allowed;
+    font-style: italic;
+}
+
+.role-suggestion.disabled:hover {
+    background: transparent;
+}
+
+.role-name {
+    font-size: 0.875rem;
+}
+
+.role-type {
+    font-size: 0.75rem;
+    color: #666;
+    font-style: italic;
+}
+
+.role-suggestion.new .role-type {
+    color: #28a745;
+    font-weight: bold;
+}
+
+.role-quick-select {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid var(--color-border, #ddd);
+    border-top: none;
+    border-radius: 0 0 var(--border-radius, 4px) var(--border-radius, 4px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    z-index: 1000;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.role-quick-option {
+    padding: 0.5rem;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 0.875rem;
+    transition: background-color 0.2s;
+}
+
+.role-quick-option:hover {
+    background: #f8f9fa;
+}
+
+.role-quick-option:last-child {
+    border-bottom: none;
+}
+
+.role-quick-option.disabled {
+    color: #999;
+    cursor: not-allowed;
+    font-style: italic;
+}
+
+.role-quick-option.disabled:hover {
+    background: transparent;
+}
+
+.selected-roles {
+    min-height: 2rem;
+    padding: 0.25rem;
+    border: 1px solid var(--color-border, #ddd);
+    border-radius: var(--border-radius, 4px);
+    background: #f8f9fa;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.selected-roles:empty {
+    min-height: 1.5rem;
+    background: transparent;
+    border-style: dashed;
+    border-color: #ccc;
+}
+
+.role-tag {
+    display: inline-flex;
+    align-items: center;
+    background: var(--color-primary, #007bff);
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 1rem;
+    font-size: 0.75rem;
+    gap: 0.25rem;
+    animation: fadeIn 0.2s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.8); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.role-tag .remove-role {
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    padding: 0;
+    font-size: 1rem;
+    line-height: 1;
+    margin-left: 0.25rem;
+    transition: all 0.2s;
+}
+
+.role-tag .remove-role:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    width: 1.2rem;
+    height: 1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.role-tag .remove-role:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .role-input-container input {
+        font-size: 16px; /* Prevent zoom on iOS */
+    }
+    
+    .role-suggestions,
+    .role-quick-select {
+        max-height: 120px;
+    }
+}
+
+/* Mode-specific styles for EntitySelector */
+/* Creation-only mode */
+.entity-selector.mode-create-only .entity-quick-select-btn,
+.entity-selector.mode-create-only .role-quick-select-btn {
+    display: none;
+}
+
+.entity-selector.mode-create-only .entity-suggestion.existing,
+.entity-selector.mode-create-only .role-suggestion.existing {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+/* Selection-only mode */
+.entity-selector.mode-select-only .entity-suggestion.new,
+.entity-selector.mode-select-only .role-suggestion.new {
+    display: none;
+}
+
+/* View-only mode */
+.entity-selector.mode-view-only input {
+    background: #f8f9fa;
+    cursor: default;
+}
+
+.entity-selector.mode-view-only .entity-quick-select-btn,
+.entity-selector.mode-view-only .role-quick-select-btn {
+    display: none;
+}
+
+.entity-selector.mode-view-only .entity-suggestion,
+.entity-selector.mode-view-only .role-suggestion {
+    cursor: default;
+    pointer-events: none;
+}
+
+/* Mode indicators */
+.entity-selector {
+    position: relative;
+}
+
+.entity-selector.mode-create-only::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 8px;
+    height: 8px;
+    background: #28a745;
+    border-radius: 50%;
+    z-index: 1;
+}
+
+.entity-selector.mode-select-only::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 8px;
+    height: 8px;
+    background: #007bff;
+    border-radius: 50%;
+    z-index: 1;
+}
+
+.entity-selector.mode-view-only::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 8px;
+    height: 8px;
+    background: #6c757d;
+    border-radius: 50%;
+    z-index: 1;
+}
+

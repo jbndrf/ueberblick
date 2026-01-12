@@ -25,12 +25,20 @@ export type FormFieldData = {
 	stageId: string;
 };
 
+// Form context data
+export type FormContextData = {
+	formId: string;
+	/** Connection or stage this form is attached to */
+	attachedTo: { type: 'connection'; connectionId: string } | { type: 'stage'; stageId: string };
+};
+
 // Selection context union type
 export type SelectionContext =
 	| { type: 'none' }
 	| { type: 'stage'; stageId: string; stage: Node<StageData> }
 	| { type: 'action'; actionId: string; action: Edge }
-	| { type: 'field'; fieldId: string; field: FormFieldData; stageId: string };
+	| { type: 'field'; fieldId: string; field: FormFieldData; stageId: string }
+	| { type: 'form'; formId: string; attachedTo: FormContextData['attachedTo'] };
 
 // Helper to create contexts
 export const createContext = {
@@ -53,6 +61,12 @@ export const createContext = {
 		fieldId: field.id,
 		field,
 		stageId
+	}),
+
+	form: (formId: string, attachedTo: FormContextData['attachedTo']): SelectionContext => ({
+		type: 'form',
+		formId,
+		attachedTo
 	})
 };
 
@@ -67,4 +81,8 @@ export function isActionContext(ctx: SelectionContext): ctx is Extract<Selection
 
 export function isFieldContext(ctx: SelectionContext): ctx is Extract<SelectionContext, { type: 'field' }> {
 	return ctx.type === 'field';
+}
+
+export function isFormContext(ctx: SelectionContext): ctx is Extract<SelectionContext, { type: 'form' }> {
+	return ctx.type === 'form';
 }

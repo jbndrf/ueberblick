@@ -1,0 +1,265 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "projects": "Projekte",
+    "participants": "Teilnehmer",
+    "roles": "Rollen",
+    "custom_tables": "Benutzerdefinierte Tabellen",
+    "map_settings": "Karteneinstellungen",
+    "rules": "Regeln",
+    "workflows": "Arbeitsabläufe",
+    "marker_categories": "Marker-Kategorien",
+    "your_projects": "Ihre Projekte",
+    "global_rules": "Globale Regeln",
+    "no_projects_yet": "Noch keine Projekte.",
+    "create_first_project": "Erstellen Sie Ihr erstes Projekt"
+  },
+  "actions": {
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "delete": "Löschen",
+    "edit": "Bearbeiten",
+    "add": "Hinzufügen",
+    "create": "Erstellen",
+    "update": "Aktualisieren",
+    "remove": "Entfernen",
+    "search": "Suchen",
+    "filter": "Filtern",
+    "export": "Exportieren",
+    "import": "Importieren",
+    "upload": "Hochladen",
+    "download": "Herunterladen",
+    "submit": "Senden",
+    "reset": "Zurücksetzen",
+    "clear": "Löschen",
+    "confirm": "Bestätigen",
+    "logout": "Abmelden"
+  },
+  "messages": {
+    "loading": "Laden...",
+    "saving": "Speichern...",
+    "saved": "Erfolgreich gespeichert",
+    "deleted": "Erfolgreich gelöscht",
+    "updated": "Erfolgreich aktualisiert",
+    "created": "Erfolgreich erstellt",
+    "error": "Ein Fehler ist aufgetreten",
+    "success": "Operation erfolgreich abgeschlossen",
+    "confirm_delete": "Sind Sie sicher, dass Sie dieses Element löschen möchten?",
+    "confirm_delete_participant": "Sind Sie sicher, dass Sie Teilnehmer \"{{name}}\" löschen möchten?",
+    "no_data": "Keine Daten verfügbar",
+    "validation_error": "Bitte überprüfen Sie das Formular auf Fehler",
+    "network_error": "Netzwerkfehler, bitte versuchen Sie es erneut",
+    "permission_denied": "Zugriff verweigert"
+  },
+  "forms": {
+    "name": "Name",
+    "title": "Titel",
+    "description": "Beschreibung",
+    "email": "E-Mail",
+    "password": "Passwort",
+    "username": "Benutzername",
+    "role": "Rolle",
+    "status": "Status",
+    "created_at": "Erstellt",
+    "updated_at": "Aktualisiert",
+    "required_field": "Dieses Feld ist erforderlich",
+    "invalid_email": "Bitte geben Sie eine gültige E-Mail-Adresse ein",
+    "password_too_short": "Das Passwort muss mindestens 8 Zeichen lang sein"
+  },
+  "tables": {
+    "no_items": "Keine Elemente anzuzeigen",
+    "items_selected": "{{count}} Element ausgewählt",
+    "items_selected_other": "{{count}} Elemente ausgewählt",
+    "rows_per_page": "Zeilen pro Seite",
+    "page_info": "Zeige {{start}} bis {{end}} von {{total}} Einträgen"
+  },
+  "participants": {
+    "title": "Teilnehmer",
+    "add_participant": "Teilnehmer hinzufügen",
+    "participant_details": "Teilnehmer-Details",
+    "participants_selected": "{{count}} Teilnehmer ausgewählt",
+    "participants_selected_other": "{{count}} Teilnehmer ausgewählt",
+    "manage_for_project": "Teilnehmer für dieses Projekt verwalten",
+    "manage_all_projects": "Teilnehmer für alle Projekte verwalten",
+    "no_role": "Keine Rollen zugewiesen",
+    "no_token": "Kein Token",
+    "assigned_roles": "Zugewiesene Rollen",
+    "active": "Aktiv",
+    "inactive": "Inaktiv",
+    "last_active": "Zuletzt aktiv",
+    "manage_roles": "Rollen verwalten",
+    "manage_roles_for": "Rollen verwalten für {{name}}",
+    "bulk_role_assignment": "Massen-Rollenzuweisung",
+    "assign_roles": "Rollen zuweisen",
+    "close": "Schließen",
+    "select_roles": "Rollen zum Zuweisen auswählen",
+    "assign_to_selected": "Zu Ausgewählten zuweisen"
+  },
+  "roles": {
+    "title": "Rollen",
+    "add_role": "Rolle hinzufügen",
+    "role_details": "Rollen-Details",
+    "permissions": "Berechtigungen",
+    "manage_roles": "Rollen verwalten",
+    "role_name": "Rollenname",
+    "description": "Beschreibung",
+    "participants_count": "Teilnehmer",
+    "workflows_count": "Arbeitsabläufe",
+    "created_date": "Erstellt",
+    "updated_date": "Aktualisiert"
+  },
+  "projects": {
+    "title": "Projekte",
+    "add_project": "Projekt hinzufügen",
+    "project_details": "Projekt-Details",
+    "project_name": "Projektname",
+    "description": "Beschreibung",
+    "status": "Status",
+    "created": "Erstellt",
+    "updated": "Aktualisiert",
+    "manage": "Verwalten",
+    "no_projects": "Keine Projekte gefunden",
+    "create_first": "Erstellen Sie Ihr erstes Projekt um zu beginnen"
+  },
+  "login": {
+    "title": "Anmeldung",
+    "email": "E-Mail",
+    "password": "Passwort",
+    "sign_in": "Anmelden",
+    "signing_in": "Anmelden...",
+    "welcome": "Willkommen bei PunktStudio",
+    "subtitle": "Bitte melden Sie sich an um fortzufahren",
+    "invalid_credentials": "Ungültige E-Mail oder Passwort",
+    "network_error": "Netzwerkfehler, bitte versuchen Sie es erneut"
+  },
+  "map_settings": {
+    "title": "Karteneinstellungen",
+    "layers": "Kartenebenen",
+    "add_layer": "Ebene hinzufügen",
+    "layer_name": "Ebenenname",
+    "layer_url": "Ebenen-URL",
+    "layer_type": "Ebenentyp"
+  },
+  "custom_tables": {
+    "title": "Benutzerdefinierte Tabellen",
+    "add_table": "Tabelle hinzufügen",
+    "table_name": "Tabellenname",
+    "columns": "Spalten",
+    "records": "Datensätze"
+  },
+  "workflows": {
+    "title": "Arbeitsabläufe",
+    "add_workflow": "Stufe hinzufügen",
+    "workflow_builder": "Arbeitsablauf-Builder",
+    "stage": "Stufe",
+    "action": "Aktion",
+    "condition": "Bedingung",
+    "type": "Typ",
+    "incident_workflow": "Incident-Arbeitsablauf",
+    "survey_workflow": "Umfrage-Arbeitsablauf"
+  },
+  "dashboard": {
+    "welcome_back": "Willkommen zurück!",
+    "projects_title": "Projekte",
+    "connection_status": {
+      "connected": "Mit Supabase verbunden",
+      "all_systems_operational": "Alle Systeme funktionsfähig",
+      "database_connection_issue": "Datenbankverbindungsproblem",
+      "unable_to_connect": "Verbindung nicht möglich",
+      "check_supabase_running": "Überprüfen Sie, ob Supabase auf http://localhost:8000 läuft"
+    },
+    "projects": {
+      "name": "Name",
+      "description": "Beschreibung",
+      "created": "Erstellt",
+      "manage": "Verwalten",
+      "view_all_projects": "Alle {{count}} Projekte anzeigen",
+      "no_projects_found": "Keine Projekte gefunden.",
+      "create_first_project": "Erstellen Sie Ihr erstes Projekt",
+      "to_get_started": "um zu beginnen."
+    }
+  },
+  "common": {
+    "unknown": "Unbekannt",
+    "never": "Nie",
+    "back": "Zurück",
+    "show": "Anzeigen",
+    "hide": "Verbergen",
+    "all_participants": "Alle Teilnehmer",
+    "no_token": "Kein Token",
+    "main_column": "Hauptspalte",
+    "display_name": "Anzeigename"
+  },
+  "marker_categories": {
+    "title": "Marker-Kategorien",
+    "edit_fields": "Felder bearbeiten",
+    "manage_roles": "Rollen verwalten",
+    "design_icon": "Icon gestalten"
+  },
+  "rules": {
+    "title": "Regel-Engine",
+    "subtitle": "Automatisierte Datenbankaktionen und Geschäftslogik",
+    "add_rule": "Regel hinzufügen",
+    "rule_name": "Regelname",
+    "trigger": "Auslöser",
+    "actions": "Aktionen",
+    "edit_rule": "Regel bearbeiten"
+  },
+  "ui_designer": {
+    "title": "UI Designer",
+    "subtitle": "Visuelle Oberfläche zur Konfiguration von Layouts",
+    "no_project": "Kein Projekt ausgewählt",
+    "select_project": "Bitte wählen Sie ein Projekt aus, um UI-Einstellungen zu konfigurieren",
+    "view_projects": "Projekte anzeigen"
+  },
+  "table_edit": {
+    "title": "Tabelle bearbeiten",
+    "table_not_found": "Tabelle nicht gefunden",
+    "no_project_context": "Kein Projektkontext",
+    "back_to_tables": "Zurück zu Tabellen",
+    "columns": "Spalten",
+    "data": "Daten"
+  },
+  "map_layers": {
+    "title": "Kartenebenen",
+    "subtitle": "Kartenebenen und Kachelsätze verwalten",
+    "add_layer": "Ebene hinzufügen",
+    "layer_name": "Ebenenname",
+    "layer_url": "Ebenen-URL",
+    "layer_type": "Ebenentyp",
+    "presets": "Vorlagen",
+    "upload_tiles": "Eigene Kacheln hochladen",
+    "add_preset_layer": "Vorlagen-Ebene hinzufügen",
+    "manage_visibility": "Sichtbarkeit für \"{{name}}\" verwalten",
+    "upload_tiles_button": "Kacheln hochladen"
+  },
+  "modals": {
+    "confirm_title": "Aktion bestätigen",
+    "delete_confirm": "Sind Sie sicher, dass Sie \"{{name}}\" löschen möchten?",
+    "close": "Schließen",
+    "processing": "Verarbeitung...",
+    "upload_progress": "Upload-Fortschritt",
+    "please_wait": "Bitte warten...",
+    "success": "Erfolg",
+    "error": "Fehler",
+    "warning": "Warnung"
+  },
+  "file_upload": {
+    "select_file": "Datei auswählen",
+    "drag_drop_here": "Dateien hier hineinziehen",
+    "file_selected": "Datei ausgewählt: {{filename}}",
+    "max_file_size": "Maximale Dateigröße: {{size}}",
+    "supported_formats": "Unterstützte Formate: {{formats}}"
+  },
+  "workflow_preview": {
+    "title": "Workflow-Vorschau",
+    "participant_view": "Teilnehmer-Ansicht",
+    "refresh_preview": "Vorschau aktualisieren",
+    "preview_error": "Fehler beim Laden der Workflow-Vorschau",
+    "retry": "Erneut versuchen",
+    "empty_state": {
+      "title": "Beginnen Sie mit dem Erstellen Ihres Workflows, um die Teilnehmer-Vorschau zu sehen",
+      "subtitle": "Fügen Sie Stufen hinzu und konfigurieren Sie Formulare, um zu sehen, wie Teilnehmer mit Ihrem Workflow interagieren werden"
+    }
+  }
+}

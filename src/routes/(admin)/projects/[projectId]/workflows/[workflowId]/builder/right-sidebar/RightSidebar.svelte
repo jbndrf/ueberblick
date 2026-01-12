@@ -4,6 +4,15 @@
 
 	import PreviewView from './views/preview/PreviewView.svelte';
 	import PropertyView from './views/properties/PropertyView.svelte';
+	import { FormEditorView } from './views/form-editor';
+
+	import type { ToolsForm, ToolsFormField, TrackedFormField, WorkflowStage, ColumnPosition } from '$lib/workflow-builder';
+
+	type AncestorFieldGroup = {
+		stage: WorkflowStage;
+		form: ToolsForm;
+		fields: ToolsFormField[];
+	};
 
 	type Role = {
 		id: string;
@@ -17,6 +26,10 @@
 		nodes: Node[];
 		edges: Edge[];
 		roles: Role[];
+		// Form editor props
+		selectedForm?: ToolsForm | null;
+		formFields?: TrackedFormField[];
+		ancestorFields?: AncestorFieldGroup[];
 		// Handlers for property updates
 		onStageRename?: (stageId: string, newName: string) => void;
 		onStageDelete?: (stageId: string) => void;
@@ -27,6 +40,16 @@
 		onEdgeSettingsChange?: (edgeId: string, settings: Record<string, any>) => void;
 		onSelectAction?: (edge: Edge) => void;
 		onSelectStage?: (node: Node) => void;
+		// Form editor handlers
+		onFormNameChange?: (formId: string, name: string) => void;
+		onAddFormField?: (formId: string, fieldType: string, page: number, rowIndex: number, columnPosition: ColumnPosition) => void;
+		onFormFieldUpdate?: (fieldId: string, updates: Partial<ToolsFormField>) => void;
+		onFormFieldDelete?: (fieldId: string) => void;
+		onFormFieldsReorder?: (formId: string, fieldIds: string[]) => void;
+		onFormAddPage?: (formId: string) => void;
+		onFormDeletePage?: (formId: string, page: number) => void;
+		onFormPageTitleChange?: (formId: string, page: number, title: string) => void;
+		onFormClose?: () => void;
 	};
 
 	let {
@@ -35,6 +58,9 @@
 		nodes,
 		edges,
 		roles,
+		selectedForm = null,
+		formFields = [],
+		ancestorFields = [],
 		onStageRename,
 		onStageDelete,
 		onStageRolesChange,
@@ -43,15 +69,46 @@
 		onEdgeRolesChange,
 		onEdgeSettingsChange,
 		onSelectAction,
-		onSelectStage
+		onSelectStage,
+		onFormNameChange,
+		onAddFormField,
+		onFormFieldUpdate,
+		onFormFieldDelete,
+		onFormFieldsReorder,
+		onFormAddPage,
+		onFormDeletePage,
+		onFormPageTitleChange,
+		onFormClose
 	}: Props = $props();
 
-	// Auto-switch logic: show PropertyView when something is selected
-	const hasSelection = $derived(context.type !== 'none');
+	// Track palette expanded state for sidebar width
+	let paletteExpanded = $state(false);
+
+	// Form editor mode
+	const isFormEditor = $derived(context.type === 'form');
+
+	// Auto-switch logic: show PropertyView when something is selected (not form)
+	const hasSelection = $derived(context.type !== 'none' && context.type !== 'form');
 </script>
 
-<aside class="right-sidebar">
-	{#if hasSelection}
+<aside class="right-sidebar" class:wide={isFormEditor} class:expanded={isFormEditor && paletteExpanded}>
+	{#if isFormEditor && selectedForm}
+		<FormEditorView
+			form={selectedForm}
+			fields={formFields}
+			{ancestorFields}
+			onFormNameChange={(name) => onFormNameChange?.(selectedForm.id, name)}
+			onAddField={(fieldType, page, rowIndex, columnPosition) => onAddFormField?.(selectedForm.id, fieldType, page, rowIndex, columnPosition)}
+			onFieldUpdate={onFormFieldUpdate}
+			onFieldDelete={onFormFieldDelete}
+			onFieldsReorder={(fieldIds) => onFormFieldsReorder?.(selectedForm.id, fieldIds)}
+			onAddPage={() => onFormAddPage?.(selectedForm.id)}
+			onDeletePage={(page) => onFormDeletePage?.(selectedForm.id, page)}
+			onPageTitleChange={(page, title) => onFormPageTitleChange?.(selectedForm.id, page, title)}
+			onClose={onFormClose}
+			onPaletteExpandedChange={(expanded) => paletteExpanded = expanded}
+		/>
+	{:else if hasSelection}
 		<PropertyView
 			{context}
 			{nodes}
@@ -82,6 +139,17 @@
 		border-left: 1px solid oklch(0.88 0.01 250);
 		box-shadow: -2px 0 12px oklch(0 0 0 / 0.06);
 		overflow: hidden;
+		transition: width 0.2s ease;
+	}
+
+	/* Wide mode for form editor (~375px mobile width + collapsed palette) */
+	.right-sidebar.wide {
+		width: 520px;
+	}
+
+	/* Expanded mode when palette is expanded (+130px for labels) */
+	.right-sidebar.wide.expanded {
+		width: 650px;
 	}
 
 	:global(.dark) .right-sidebar {

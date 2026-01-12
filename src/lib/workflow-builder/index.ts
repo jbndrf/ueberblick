@@ -1,6 +1,15 @@
 // State management
 export { WorkflowBuilderState, createWorkflowBuilderState } from './state.svelte';
 
+// Field type definitions
+export {
+	FIELD_TYPES,
+	fieldTypeIcons,
+	fieldTypeLabels,
+	getFieldType,
+	type FieldTypeDefinition
+} from './field-types';
+
 // Types
 export type {
 	WorkflowStage,
@@ -15,6 +24,7 @@ export type {
 	TrackedEditTool,
 	StageType,
 	FieldType,
+	ColumnPosition,
 	ItemStatus,
 	TrackedItem
 } from './types';

@@ -1,0 +1,1650 @@
+/**
+ * Marker Detail Module Styles
+ * Mobile-first responsive design for marker detail views
+ */
+
+/* Page Data Card Styles */
+.page-data-card {
+    background: #ffffff;
+    border: 1px solid #e1e5e9;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+
+.page-card-header {
+    background: #f8f9fa;
+    border-bottom: 1px solid #e1e5e9;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.page-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #495057;
+}
+
+.page-field-count {
+    font-size: 12px;
+    color: #6c757d;
+    background: #e9ecef;
+    padding: 4px 8px;
+    border-radius: 12px;
+}
+
+.page-card-content {
+    padding: 16px;
+}
+
+.page-card-content .field-item {
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #f1f3f4;
+}
+
+.page-card-content .field-item:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+/* Edit Mode Styles */
+.field-group.edit-mode .field-item.editable {
+    border: 1px solid #e3f2fd;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+    background-color: #fafffe;
+    transition: all 0.2s ease;
+}
+
+.field-group.edit-mode .field-item.editable:hover {
+    border-color: #2196f3;
+    box-shadow: 0 2px 8px rgba(33, 150, 243, 0.1);
+}
+
+.field-group.edit-mode .field-item.readonly {
+    opacity: 0.7;
+    background-color: #f9f9f9;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+}
+
+.field-group.edit-mode .field-item.empty-field {
+    border-style: dashed;
+    border-color: #ddd;
+    background-color: #fff;
+}
+
+.field-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.field-input:focus {
+    outline: none;
+    border-color: #2196f3;
+    box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+}
+
+.field-input-container {
+    margin-top: 6px;
+}
+
+.field-help {
+    display: block;
+    margin-top: 4px;
+    color: #666;
+    font-size: 12px;
+    font-style: italic;
+}
+
+.field-label .required {
+    color: #f44336;
+    font-weight: bold;
+    margin-left: 2px;
+}
+
+/* Edit Action Buttons - Transparent style like other buttons */
+.action-roll-btn.edit-confirm {
+    background: white;
+    border: 2px solid #34C759;
+}
+
+.action-roll-btn.edit-confirm .action-icon,
+.action-roll-btn.edit-confirm .action-label {
+    color: #34C759;
+}
+
+.action-roll-btn.edit-confirm:hover {
+    background: #34C759;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(52, 199, 89, 0.3);
+}
+
+.action-roll-btn.edit-confirm:hover .action-icon,
+.action-roll-btn.edit-confirm:hover .action-label {
+    color: white;
+}
+
+.action-roll-btn.edit-discard {
+    background: white;
+    border: 2px solid #FF3B30;
+}
+
+.action-roll-btn.edit-discard .action-icon,
+.action-roll-btn.edit-discard .action-label {
+    color: #FF3B30;
+}
+
+.action-roll-btn.edit-discard:hover {
+    background: #FF3B30;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 59, 48, 0.3);
+}
+
+.action-roll-btn.edit-discard:hover .action-icon,
+.action-roll-btn.edit-discard:hover .action-label {
+    color: white;
+}
+
+/* Location Update Button */
+.action-roll-btn.location-update {
+    background: rgba(0, 122, 255, 0.1);
+    border: 1px solid rgba(0, 122, 255, 0.3);
+}
+
+.action-roll-btn.location-update .action-icon,
+.action-roll-btn.location-update .action-label {
+    color: #007AFF;
+}
+
+.action-roll-btn.location-update:hover {
+    background: #007AFF;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+}
+
+.action-roll-btn.location-update:hover .action-icon,
+.action-roll-btn.location-update:hover .action-label {
+    color: white;
+}
+
+/* Temporary location marker styles */
+.temp-location-marker {
+    z-index: 1000;
+}
+
+.temp-location-marker div {
+    transition: all 0.2s ease;
+    cursor: move;
+}
+
+.temp-location-marker:hover div {
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(0, 122, 255, 0.4);
+}
+
+/* Marker Detail Container */
+.marker-detail-content {
+    padding: 1rem;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.5;
+    color: #333;
+}
+
+/* Marker Header */
+.marker-header {
+    margin-bottom: 1rem;
+    border-bottom: 1px solid #e0e0e0;
+    padding-bottom: 1rem;
+}
+
+.marker-type-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
+}
+
+.marker-type-badge.static {
+    background-color: #f8f9fa;
+    color: #495057;
+}
+
+.marker-type-badge.workflow {
+    background-color: #f8f9fa;
+    color: #495057;
+}
+
+.marker-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem 0;
+    color: #2c3e50;
+}
+
+.marker-category {
+    font-size: 0.9rem;
+    color: #666;
+    font-weight: 500;
+}
+
+.workflow-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.workflow-name {
+    font-size: 0.9rem;
+    color: #555;
+    font-weight: 500;
+}
+
+.workflow-status {
+    padding: 0.25rem 0.5rem;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.workflow-status.status-active {
+    background-color: #f8f9fa;
+    color: #495057;
+}
+
+.workflow-status.status-completed {
+    background-color: #f8f9fa;
+    color: #495057;
+}
+
+.workflow-status.status-pending {
+    background-color: #f8f9fa;
+    color: #495057;
+}
+
+/* Workflow Progress */
+.workflow-progress {
+    margin: 1rem 0;
+    padding: 0.75rem;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background-color: #e0e0e0;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+}
+
+.progress-fill {
+    height: 100%;
+    background: #6c757d;
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    font-size: 0.9rem;
+    color: #666;
+    font-weight: 500;
+}
+
+/* Workflow Stage */
+.workflow-stage {
+    margin: 1rem 0;
+    padding: 0.75rem;
+    background-color: #f8f9fa;
+    border-left: 4px solid #6c757d;
+    border-radius: 4px;
+    font-size: 0.95rem;
+}
+
+/* Info Sections */
+.info-section,
+.workflow-data {
+    margin: 1.5rem 0;
+}
+
+.info-section h4,
+.workflow-data h4 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0 0 0.75rem 0;
+    color: #2c3e50;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+
+
+/* Stage Data Sections */
+.stage-data-section {
+    margin: 1rem 0;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.stage-data-title {
+    background-color: #f8f9fa;
+    padding: 0.75rem 1rem;
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #495057;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.stage-data-content {
+    padding: 0.75rem 1rem;
+}
+
+/* Data and Property Rows */
+.data-row,
+.property-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin: 0.5rem 0;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #f0f0f0;
+    gap: 1rem;
+}
+
+.data-row:last-child,
+.property-row:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.data-label,
+.property-label {
+    font-weight: 600;
+    color: #555;
+    flex-shrink: 0;
+    min-width: 120px;
+}
+
+.data-value,
+.property-value {
+    color: #333;
+    text-align: right;
+    flex-grow: 1;
+    word-break: break-word;
+}
+
+.data-value em,
+.property-value em {
+    color: #999;
+    font-style: italic;
+}
+
+/* Actions Section */
+.workflow-actions {
+    margin: 1.5rem 0;
+}
+
+.workflow-actions h4 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0 0 0.75rem 0;
+    color: #2c3e50;
+}
+
+
+.action-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.action-button {
+    padding: 0.75rem 1rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: center;
+    background: #495057;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.action-button:hover {
+    background: #343a40;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.action-button:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Workflow Details */
+.workflow-details {
+    margin: 1.5rem 0;
+    padding: 1rem;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 0.5rem 0;
+    font-size: 0.9rem;
+}
+
+.detail-label {
+    font-weight: 600;
+    color: #666;
+}
+
+.detail-value {
+    color: #333;
+    font-family: 'Courier New', monospace;
+}
+
+/* No Data States */
+.no-data {
+    text-align: center;
+    padding: 2rem;
+    color: #999;
+    font-style: italic;
+}
+
+
+/* Error States */
+.error-container {
+    text-align: center;
+    padding: 2rem;
+    color: #dc3545;
+}
+
+.error-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}
+
+.error-message {
+    font-size: 1.1rem;
+    font-weight: 500;
+}
+
+.error {
+    color: #dc3545;
+    font-weight: 500;
+}
+
+/* Action Form Container */
+.action-form-container {
+    padding: 1rem;
+}
+
+.form-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.form-header h3 {
+    margin: 0;
+    font-size: 1.3rem;
+    color: #2c3e50;
+}
+
+.btn-back {
+    padding: 0.5rem 1rem;
+    border: 1px solid #6c757d;
+    border-radius: 6px;
+    background-color: transparent;
+    color: #6c757d;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-back:hover {
+    background-color: #6c757d;
+    color: white;
+}
+
+.form-content {
+    margin: 1rem 0;
+}
+
+.form-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e0e0e0;
+}
+
+.btn-submit {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    border: none;
+    border-radius: 6px;
+    background-color: #28a745;
+    color: white;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-submit:hover {
+    background-color: #218838;
+}
+
+.btn-cancel {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    border: 1px solid #dc3545;
+    border-radius: 6px;
+    background-color: transparent;
+    color: #dc3545;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-cancel:hover {
+    background-color: #dc3545;
+    color: white;
+}
+
+/* Responsive Design */
+@media (min-width: 768px) {
+    .marker-detail-content {
+        padding: 1.5rem;
+    }
+    
+    .action-buttons {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+    
+    .action-button {
+        flex: 1;
+        min-width: 200px;
+    }
+    
+    .form-actions {
+        justify-content: flex-end;
+    }
+    
+    .btn-submit,
+    .btn-cancel {
+        flex: 0 0 auto;
+        min-width: 120px;
+    }
+}
+
+/* Special field value displays */
+.data-value .fas,
+.property-value .fas {
+    margin-right: 0.5rem;
+    color: #666;
+}
+
+/* Workflow instance specific styling */
+.workflow-instance .marker-title {
+    color: #2c3e50;
+}
+
+.workflow-instance .stage-data-title {
+    background: #f8f9fa;
+}
+
+/* Animation for loading states */
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.loading {
+    animation: pulse 1.5s infinite;
+}
+
+/* Touch improvements for mobile */
+@media (max-width: 767px) {
+    .action-button {
+        min-height: 44px;
+        font-size: 1rem;
+    }
+    
+    .btn-back,
+    .btn-submit,
+    .btn-cancel {
+        min-height: 44px;
+        padding: 0.75rem 1rem;
+    }
+    
+    .data-row,
+    .property-row {
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+    
+    .data-label,
+    .property-label {
+        min-width: auto;
+    }
+    
+    .data-value,
+    .property-value {
+        text-align: left;
+    }
+}
+
+/* ==================================================
+   NEW TABBED BOTTOM SHEET DESIGN
+   Based on the nice_bottomsheet requirements
+   ================================================== */
+
+/* Main Container */
+.dynamic-bottom-sheet {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: white;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Header Section */
+.bottom-sheet-header-section {
+    flex-shrink: 0;
+    padding: 1rem 1.25rem 0.75rem;
+    border-bottom: 1px solid #e0e4e7;
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.title-section {
+    flex: 1;
+}
+
+.incident-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1a202c;
+    margin: 0 0 0.5rem 0;
+    line-height: 1.2;
+}
+
+.meta-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.875rem;
+    color: #4a5568;
+}
+
+.stage-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.stage-badge {
+    width: 20px;
+    height: 20px;
+    background: #3182ce;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.time-info {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.time-info i {
+    font-size: 0.75rem;
+}
+
+.current-stage-info {
+    font-size: 0.875rem;
+    color: #718096;
+}
+
+.header-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.header-action-btn {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: #f7fafc;
+    color: #4a5568;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.header-action-btn:hover {
+    background: #edf2f7;
+    color: #2d3748;
+}
+
+/* Action Buttons Section */
+.action-buttons-section {
+    flex-shrink: 0;
+    padding: 0 1.25rem 1rem;
+    border-bottom: 1px solid #e0e4e7;
+}
+
+.action-buttons-row {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.modern-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.25rem;
+    border: none;
+    border-radius: 24px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.modern-action-btn.btn-edit {
+    background: #38b2ac;
+    color: white;
+}
+
+.modern-action-btn.btn-edit:hover {
+    background: #319795;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(56, 178, 172, 0.3);
+}
+
+.modern-action-btn.btn-forward {
+    background: #e2e8f0;
+    color: #2b6cb0;
+}
+
+.modern-action-btn.btn-forward:hover {
+    background: #cbd5e0;
+    color: #2c5aa0;
+    transform: translateY(-1px);
+}
+
+.modern-action-btn i {
+    font-size: 0.875rem;
+}
+
+/* Tab Navigation - Connected Single Unit Design */
+.tab-navigation {
+    flex-shrink: 0;
+    background: white;
+    border-bottom: none;
+    padding: 0 1.25rem 0 1.25rem;
+    margin: 0;
+}
+
+.tab-buttons {
+    display: flex;
+    background: #f7fafc;
+    border-radius: 8px;
+    padding: 4px;
+    gap: 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.tab-btn {
+    padding: 0.5rem 1rem;
+    border: none;
+    background: none;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #718096;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    border-radius: 6px;
+    flex: 1;
+    text-align: center;
+}
+
+.tab-btn.active {
+    color: #1a202c;
+    background: white;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    font-weight: 600;
+}
+
+.tab-btn:hover:not(.active) {
+    color: #4a5568;
+    background: rgba(255, 255, 255, 0.5);
+}
+
+/* Tab Content Area */
+.tab-content-area {
+    flex: 1;
+    overflow-y: auto;
+    background: white;
+    padding: 0;
+    margin: 0;
+}
+
+/* Overview Tab Styles */
+.overview-content {
+    padding: 1.25rem;
+}
+
+.core-info-section {
+    margin-bottom: 2rem;
+}
+
+.info-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.info-icon {
+    width: 20px;
+    height: 20px;
+    color: #718096;
+    margin-top: 0.125rem;
+    flex-shrink: 0;
+}
+
+.info-content {
+    flex: 1;
+}
+
+.info-value {
+    font-weight: 600;
+    color: #1a202c;
+    margin-bottom: 0.25rem;
+}
+
+.info-subtext {
+    font-size: 0.875rem;
+    color: #718096;
+}
+
+.info-action {
+    background: none;
+    border: none;
+    color: #38b2ac;
+    font-size: 0.875rem;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 0;
+}
+
+.info-action:hover {
+    color: #319795;
+}
+
+/* Photo Gallery */
+.photo-gallery-section {
+    margin-bottom: 2rem;
+}
+
+.section-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #1a202c;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.section-title i {
+    font-size: 1rem;
+    color: #718096;
+}
+
+.photo-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.photo-item {
+    position: relative;
+    border-radius: 0.75rem;
+    overflow: hidden;
+    background: #f7fafc;
+}
+
+.photo-image {
+    width: 100%;
+    height: 8rem;
+    object-fit: cover;
+    display: block;
+}
+
+.photo-caption {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+    color: white;
+    font-size: 0.75rem;
+    padding: 0.5rem;
+}
+
+.show-all-photos-btn {
+    width: 100%;
+    padding: 0.5rem;
+    border: none;
+    background: none;
+    color: #38b2ac;
+    font-size: 0.875rem;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.show-all-photos-btn:hover {
+    color: #319795;
+}
+
+/* Details Tab Styles */
+.details-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding-top: 0;
+    margin-top: 0;
+}
+
+.detail-tab-navigation {
+    flex-shrink: 0;
+    background: white;
+    border-bottom: 1px solid #e0e4e7;
+    padding: 0 1.25rem 0.5rem 1.25rem;
+    margin: 0;
+}
+
+.detail-tab-buttons.connected-tabs {
+    display: flex;
+    background: #f7fafc;
+    border-radius: 6px;
+    padding: 3px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.detail-tab-btn {
+    padding: 0.5rem 0.75rem;
+    border: none;
+    background: none;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #718096;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    border-radius: 4px;
+    flex-shrink: 0;
+    text-align: center;
+}
+
+.detail-tab-btn.active {
+    color: #1a202c;
+    background: white;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    font-weight: 600;
+}
+
+.detail-tab-btn:hover:not(.active) {
+    color: #4a5568;
+    background: rgba(255, 255, 255, 0.5);
+}
+
+.organization-toggle {
+    padding: 0.5rem 1.25rem;
+    border-top: 1px solid #e0e4e7;
+    background: white;
+}
+
+.toggle-categories-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0;
+    border: none;
+    background: none;
+    color: #38b2ac;
+    font-size: 0.875rem;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.toggle-categories-btn:hover {
+    color: #319795;
+}
+
+.detail-tab-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.25rem;
+}
+
+/* Field Group Styles */
+.field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.field-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.field-item.clickable-field {
+    cursor: pointer;
+    padding: 0.75rem;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+    position: relative;
+}
+
+.field-item.clickable-field:hover {
+    background-color: #f7fafc;
+    border-color: #e0e4e7;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.field-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #4a5568;
+}
+
+.field-value {
+    color: #1a202c;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    position: relative;
+}
+
+.field-edit-icon {
+    position: absolute;
+    top: 50%;
+    right: 0.5rem;
+    transform: translateY(-50%);
+    color: #718096;
+    font-size: 0.75rem;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.clickable-field:hover .field-edit-icon {
+    opacity: 1;
+}
+
+/* Minimal Inline Editing Styles - just enough for functionality */
+.inline-edit-input:focus {
+    background-color: #ffffff !important;
+    border: 1px solid #3182ce !important;
+    border-radius: 4px !important;
+    padding: 4px 8px !important;
+    box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.1) !important;
+}
+
+
+.field-value-edit {
+    margin-top: 0.5rem;
+}
+
+.edit-field-item .field-label {
+    color: #2d3748;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+/* Checkbox styling for inline editing */
+.checkbox-container {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+.checkbox-container input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+}
+
+.checkmark {
+    font-size: 0.875rem;
+    color: #4a5568;
+}
+
+/* Special field value styling */
+.field-value span {
+    display: inline-block;
+}
+
+.field-value span[class*="bg-"] {
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.field-value .bg-blue-100 {
+    background-color: #dbeafe;
+    color: #1e40af;
+}
+
+.field-value .bg-red-100 {
+    background-color: #fee2e2;
+    color: #dc2626;
+}
+
+.field-value .bg-green-100 {
+    background-color: #dcfce7;
+    color: #16a34a;
+}
+
+/* Audit Trail Styles */
+.audit-trail-content {
+    padding: 1.25rem;
+}
+
+.audit-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #1a202c;
+    margin-bottom: 1.5rem;
+}
+
+.audit-timeline {
+    position: relative;
+}
+
+.audit-entry {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+    position: relative;
+}
+
+.audit-avatar {
+    width: 40px;
+    height: 40px;
+    background: #e6fffa;
+    color: #38b2ac;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.audit-content {
+    flex: 1;
+    padding-bottom: 1.5rem;
+}
+
+.audit-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.audit-participant {
+    font-weight: 600;
+    color: #1a202c;
+}
+
+.audit-time {
+    font-size: 0.75rem;
+    color: #718096;
+}
+
+.audit-action {
+    font-size: 0.875rem;
+    color: #4a5568;
+    margin-bottom: 0.5rem;
+}
+
+.audit-notes {
+    font-size: 0.75rem;
+    color: #718096;
+    font-style: italic;
+}
+
+.audit-connector {
+    position: absolute;
+    left: 19px;
+    top: 40px;
+    bottom: -0.5rem;
+    width: 2px;
+    background: #e0e4e7;
+}
+
+/* No Data States */
+.no-data {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #718096;
+    font-style: italic;
+}
+
+/* Responsive Design for New Styles */
+@media (min-width: 768px) {
+    .photo-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+    
+    .action-buttons-row {
+        justify-content: flex-start;
+    }
+    
+    .modern-action-btn {
+        flex: 0 0 auto;
+    }
+}
+
+/* Inline Action Form Styles */
+.inline-action-form {
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+.form-title h4 {
+    margin: 0 0 1rem 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.form-actions-inline {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e0e0e0;
+}
+
+.btn-submit-inline {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    border: none;
+    border-radius: 6px;
+    background-color: #28a745;
+    color: white;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-submit-inline:hover {
+    background-color: #218838;
+}
+
+.btn-cancel-inline {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    border: 1px solid #dc3545;
+    border-radius: 6px;
+    background-color: transparent;
+    color: #dc3545;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-cancel-inline:hover {
+    background-color: #dc3545;
+    color: white;
+}
+
+@media (max-width: 767px) {
+    .bottom-sheet-header-section {
+        padding: 0.75rem 1rem 0.5rem;
+    }
+    
+    .action-buttons-section {
+        padding: 0 1rem 0.75rem;
+    }
+    
+    .tab-content-area,
+    .overview-content,
+    .detail-tab-content,
+    .audit-trail-content {
+        padding: 1rem;
+    }
+    
+    .incident-title {
+        font-size: 1.25rem;
+    }
+    
+    .meta-info {
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+    
+    .action-buttons-row {
+        flex-direction: column;
+    }
+    
+    .modern-action-btn {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .btn-submit-inline,
+    .btn-cancel-inline {
+        min-height: 44px;
+        padding: 0.75rem 1rem;
+    }
+}
+
+/* Custom Marker Styles */
+.custom-marker-icon {
+    transform-origin: center center;
+}
+
+.custom-marker-icon:hover {
+    transform: scale(1.1);
+    transition: transform 0.2s ease;
+}
+
+/* Custom Fields Styles */
+.custom-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.custom-field-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.custom-field-row:last-child {
+    border-bottom: none;
+}
+
+.custom-field-row .field-label {
+    font-weight: 600;
+    color: #555;
+    min-width: 100px;
+    flex-shrink: 0;
+    font-size: 0.9rem;
+}
+
+.custom-field-row .field-value {
+    color: #333;
+    flex: 1;
+    word-break: break-word;
+}
+
+.custom-field-row .field-value a {
+    color: #1976d2;
+    text-decoration: none;
+}
+
+.custom-field-row .field-value a:hover {
+    text-decoration: underline;
+}
+
+.textarea-content {
+    white-space: pre-wrap;
+    line-height: 1.4;
+}
+
+/* Marker Header Enhancements */
+.marker-header {
+    border-bottom: 1px solid #e9ecef;
+    padding-bottom: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.marker-description {
+    color: #666;
+    font-size: 0.95rem;
+    margin: 0.5rem 0;
+    line-height: 1.4;
+}
+
+.marker-meta {
+    display: flex;
+    gap: 1rem;
+    margin-top: 0.75rem;
+    font-size: 0.85rem;
+    color: #888;
+}
+
+.marker-category {
+    background: #e3f2fd;
+    color: #1976d2;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+.marker-date {
+    background: #f5f5f5;
+    color: #666;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+}
+
+.marker-type-badge.static {
+    background: #4caf50;
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    display: inline-block;
+    margin-bottom: 0.5rem;
+}
+
+/* Additional responsive styles for custom fields */
+@media (max-width: 480px) {
+    .custom-field-row {
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+    
+    .custom-field-row .field-label {
+        min-width: auto;
+        font-size: 0.85rem;
+    }
+    
+    .marker-meta {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+}
+
+/* Image modal styles for photo gallery */
+.image-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.9);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.image-modal.show {
+    opacity: 1;
+}
+
+.image-modal-content {
+    position: relative;
+    max-width: 90%;
+    max-height: 90%;
+    transform: scale(0.9);
+    transition: transform 0.3s ease;
+}
+
+.image-modal.show .image-modal-content {
+    transform: scale(1);
+}
+
+.image-modal-content img {
+    max-width: 100%;
+    max-height: 90vh;
+    display: block;
+    border-radius: 4px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+}
+
+.close-modal {
+    position: absolute;
+    top: -40px;
+    right: 0;
+    color: white;
+    font-size: 30px;
+    cursor: pointer;
+    height: 36px;
+    width: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(0,0,0,0.5);
+    border-radius: 50%;
+    transition: background-color 0.2s ease;
+}
+
+.close-modal:hover {
+    background-color: rgba(0,0,0,0.7);
+}
+
+/* Mobile optimizations for image modal */
+@media (max-width: 768px) {
+    .image-modal-content {
+        max-width: 95%;
+        max-height: 95%;
+    }
+    
+    .close-modal {
+        top: -50px;
+        right: 10px;
+        font-size: 24px;
+        height: 40px;
+        width: 40px;
+    }
+}
+
+/* Assignment Field Styles */
+.assignment-item .info-content {
+    width: 100%;
+}
+
+.assignment-field-container {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    gap: 8px;
+}
+
+.assignment-selector {
+    flex: 1;
+    min-width: 0; /* Allow flexbox to shrink */
+}
+
+.assignment-save-btn {
+    flex-shrink: 0;
+    padding: 4px 8px;
+    font-size: 12px;
+    min-width: auto;
+    height: 28px;
+    border-radius: 4px;
+}
+
+.assignment-save-btn i {
+    font-size: 10px;
+}
+
+/* Ensure assignment field fits properly in info-item */
+.assignment-item {
+    align-items: flex-start;
+}
+
+.assignment-item .info-icon {
+    margin-top: 4px; /* Align with field top */
+}

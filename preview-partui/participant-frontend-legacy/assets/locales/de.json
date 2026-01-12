@@ -1,0 +1,55 @@
+{
+  "app": {
+    "title": "Teilnehmer-App",
+    "loading": "Laden...",
+    "error": "Ein Fehler ist aufgetreten",
+    "retry": "Wiederholen",
+    "back": "Zurück"
+  },
+  "map": {
+    "title": "Kartenansicht",
+    "loading_map": "Karte wird geladen...",
+    "search": "Suchen",
+    "filters": "Filter",
+    "layers": "Ebenen",
+    "tools": "Werkzeuge",
+    "location": "Standort",
+    "zoom_in": "Hineinzoomen",
+    "zoom_out": "Herauszoomen",
+    "my_location": "Mein Standort"
+  },
+  "markers": {
+    "details": "Details",
+    "edit": "Bearbeiten",
+    "delete": "Löschen",
+    "add_new": "Neuen Marker hinzufügen",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "loading": "Marker-Daten werden geladen..."
+  },
+  "forms": {
+    "required_field": "Dieses Feld ist erforderlich",
+    "invalid_input": "Ungültige Eingabe",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "submit": "Absenden",
+    "reset": "Zurücksetzen"
+  },
+  "workflow": {
+    "stage": "Stufe",
+    "next": "Weiter",
+    "previous": "Zurück",
+    "complete": "Abschließen",
+    "status": "Status"
+  },
+  "login": {
+    "title": "Anmeldung",
+    "email": "E-Mail",
+    "password": "Passwort",
+    "sign_in": "Anmelden",
+    "signing_in": "Anmelden...",
+    "welcome": "Willkommen",
+    "invalid_credentials": "Ungültige Anmeldedaten",
+    "network_error": "Netzwerkfehler"
+  }
+}
