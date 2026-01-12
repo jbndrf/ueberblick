@@ -6,10 +6,7 @@
 
 // Types
 export type {
-	ToolCategory,
-	BaseToolDefinition,
-	ProgressToolDefinition,
-	StageToolDefinition,
+	AttachmentTarget,
 	ToolDefinition,
 	FormToolConfig,
 	EditToolConfig,
@@ -17,7 +14,7 @@ export type {
 	ToolInstance
 } from './types';
 
-export { isProgressTool, isStageTool, isFormConfig, isEditConfig } from './types';
+export { canAttachToStage, canAttachToConnection, isFormConfig, isEditConfig } from './types';
 
 // Schemas
 export {

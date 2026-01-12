@@ -29,9 +29,9 @@
 		</div>
 	</div>
 
-	<!-- Stage Actions -->
+	<!-- Stage Tools -->
 	<div class="panel-content">
-		<ToolPicker category="stage" onSelectTool={onAddStageTool} />
+		<ToolPicker attachmentTarget="stage" onSelectTool={onAddStageTool} />
 	</div>
 </div>
 

@@ -50,12 +50,13 @@
 	class:node-intermediate={data.stageType === 'intermediate'}
 	class:node-end={data.stageType === 'end'}
 >
-	<!-- Input handle (not for start) -->
+	<!-- Input handle (not for start) - fixed position near top -->
 	{#if data.stageType !== 'start'}
 		<Handle
 			type="target"
 			position={Position.Left}
 			class="handle handle-target"
+			style="top: 24px;"
 		/>
 	{/if}
 
@@ -90,12 +91,13 @@
 		{/if}
 	</div>
 
-	<!-- Output handle (not for end) -->
+	<!-- Output handle (not for end) - fixed position near top -->
 	{#if data.stageType !== 'end'}
 		<Handle
 			type="source"
 			position={Position.Right}
 			class="handle handle-source"
+			style="top: 24px;"
 		/>
 	{/if}
 </div>

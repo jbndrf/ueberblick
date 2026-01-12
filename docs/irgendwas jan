@@ -1,3 +1,0 @@
-check the most recent changes since last commit through YAGNI+SOLID+DRY+KISS principles and tell me what introduced some major best practice concerns... you 
-should start with one agent per commit that checks the validations then reports back to you so you can aggregate
- their findings

@@ -1,25 +1,25 @@
 /**
  * Workflow Builder Tool Types
  *
- * Defines the type system for workflow tools (actions).
- * Two categories:
- * - Progress Actions: Attached to edges, move workflow to next stage
- * - Stage Actions: Attached to nodes, modify data without progression
+ * Defines the type system for workflow tools.
+ * Tools specify where they can be attached via `attachableTo`:
+ * - 'stage': Can be attached directly to a stage
+ * - 'connection': Can be attached to a connection between stages
  */
 
 import type { Component } from 'svelte';
 
 // =============================================================================
-// Tool Categories
+// Attachment Target
 // =============================================================================
 
-export type ToolCategory = 'progress' | 'stage';
+export type AttachmentTarget = 'stage' | 'connection';
 
 // =============================================================================
-// Base Tool Definition
+// Tool Definition
 // =============================================================================
 
-export interface BaseToolDefinition {
+export interface ToolDefinition {
 	/** Unique identifier for the tool type */
 	toolType: string;
 	/** Human-readable display name */
@@ -28,52 +28,22 @@ export interface BaseToolDefinition {
 	description: string;
 	/** Icon component from lucide-svelte */
 	icon: Component<{ class?: string }>;
-	/** Category determines where tool appears and how it behaves */
-	category: ToolCategory;
+	/** Where this tool can be attached */
+	attachableTo: AttachmentTarget[];
 	/** Default button/icon color (hex) */
 	defaultColor: string;
 }
-
-// =============================================================================
-// Progress Tool Definition (Edge Tools)
-// =============================================================================
-
-/**
- * Progress tools belong to edges (connections) between stages.
- * They move the workflow from one stage to another.
- */
-export interface ProgressToolDefinition extends BaseToolDefinition {
-	category: 'progress';
-}
-
-// =============================================================================
-// Stage Tool Definition (Node Tools)
-// =============================================================================
-
-/**
- * Stage tools belong to a single stage (node).
- * They modify data but don't progress the workflow.
- */
-export interface StageToolDefinition extends BaseToolDefinition {
-	category: 'stage';
-}
-
-// =============================================================================
-// Tool Definition Union
-// =============================================================================
-
-export type ToolDefinition = ProgressToolDefinition | StageToolDefinition;
 
 // =============================================================================
 // Tool Configurations (Discriminated by toolType)
 // =============================================================================
 
 /**
- * Form tool config - progress action that shows a form
+ * Form tool config - collects data via form fields
  */
 export interface FormToolConfig {
 	toolType: 'form';
-	/** Form ID to render (references form_fields) */
+	/** Form ID to render (references tools_forms) */
 	formId: string;
 	/** Button label shown to participant */
 	buttonLabel: string;
@@ -84,11 +54,11 @@ export interface FormToolConfig {
 }
 
 /**
- * Edit tool config - stage action that allows editing fields
+ * Edit tool config - allows editing existing fields
  */
 export interface EditToolConfig {
 	toolType: 'edit';
-	/** Which fields can be edited (empty = all stage fields) */
+	/** Which fields can be edited (empty = all fields) */
 	editableFields?: string[];
 	/** Button label */
 	buttonLabel: string;
@@ -104,12 +74,12 @@ export type ToolConfig = FormToolConfig | EditToolConfig;
 // Type Guards
 // =============================================================================
 
-export function isProgressTool(def: ToolDefinition): def is ProgressToolDefinition {
-	return def.category === 'progress';
+export function canAttachToStage(def: ToolDefinition): boolean {
+	return def.attachableTo.includes('stage');
 }
 
-export function isStageTool(def: ToolDefinition): def is StageToolDefinition {
-	return def.category === 'stage';
+export function canAttachToConnection(def: ToolDefinition): boolean {
+	return def.attachableTo.includes('connection');
 }
 
 export function isFormConfig(config: ToolConfig): config is FormToolConfig {
@@ -121,11 +91,11 @@ export function isEditConfig(config: ToolConfig): config is EditToolConfig {
 }
 
 // =============================================================================
-// Tool Instance (attached to a stage or edge)
+// Tool Instance (attached to a stage or connection)
 // =============================================================================
 
 /**
- * Represents an instance of a tool attached to a stage or edge.
+ * Represents an instance of a tool attached to a stage or connection.
  * This is what gets stored and rendered.
  */
 export interface ToolInstance {

@@ -1,23 +1,23 @@
 <script lang="ts">
-	import { toolRegistry, type ToolCategory } from '../tools';
+	import { toolRegistry, type AttachmentTarget } from '../tools';
 	import { ChevronDown } from 'lucide-svelte';
 
 	type Props = {
-		/** Which category to show: 'progress' for edges, 'stage' for nodes */
-		category: ToolCategory;
+		/** Where tools will be attached: 'stage' or 'connection' */
+		attachmentTarget: AttachmentTarget;
 		/** Callback when tool is selected */
 		onSelectTool: (toolType: string) => void;
 		/** Currently selected tool type (for highlighting) */
 		selectedToolType?: string;
 	};
 
-	let { category, onSelectTool, selectedToolType }: Props = $props();
+	let { attachmentTarget, onSelectTool, selectedToolType }: Props = $props();
 
-	const tools = $derived(
-		category === 'progress' ? toolRegistry.getProgressTools() : toolRegistry.getStageTools()
+	const tools = $derived(toolRegistry.getToolsFor(attachmentTarget));
+
+	const sectionTitle = $derived(
+		attachmentTarget === 'stage' ? 'Stage Tools' : 'Connection Tools'
 	);
-
-	const sectionTitle = $derived(category === 'progress' ? 'Progress Actions' : 'Stage Actions');
 
 	let isOpen = $state(true);
 </script>

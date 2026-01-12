@@ -15,7 +15,6 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Separator } from '$lib/components/ui/separator';
-	import * as Tabs from '$lib/components/ui/tabs';
 	import {
 		Save,
 		Undo2,
@@ -27,41 +26,81 @@
 		Upload,
 		Trash2,
 		CircleHelp,
-		Play,
-		Square,
-		CircleStop,
 		Workflow,
-		RefreshCw,
-		MapPin,
-		Clock,
-		User,
-		FileText,
-		History
+		Loader2
 	} from 'lucide-svelte';
 
 	import type { PageData } from './$types';
 	import StageNode from './StageNode.svelte';
 	import ActionEdge from './ActionEdge.svelte';
 	import { ContextSidebar, createContext, type SelectionContext, type StageData } from './context-sidebar';
+	import { RightSidebar } from './right-sidebar';
+	import {
+		createWorkflowBuilderState,
+		saveWorkflow,
+		type WorkflowStage,
+		type WorkflowConnection
+	} from '$lib/workflow-builder';
+	import { getPocketBase } from '$lib/pocketbase';
 
 	let { data }: { data: PageData } = $props();
 
-	// Node types registration
+	// ==========================================================================
+	// State Management
+	// ==========================================================================
+
+	const builderState = createWorkflowBuilderState(data.workflow.id);
+
+	// Initialize state from server data
+	$effect(() => {
+		builderState.initFromServer({
+			workflowName: data.workflow?.name,
+			stages: data.stages,
+			connections: data.connections,
+			forms: data.forms,
+			formFields: data.formFields,
+			editTools: data.editTools
+		});
+	});
+
+	// Saving state
+	let isSaving = $state(false);
+	let saveError = $state<string | null>(null);
+
+	async function handleSave() {
+		isSaving = true;
+		saveError = null;
+
+		// First sync positions from xyflow nodes to state
+		for (const node of nodes) {
+			builderState.updateStage(node.id, {
+				position_x: node.position.x,
+				position_y: node.position.y
+			});
+		}
+
+		const result = await saveWorkflow(getPocketBase(), builderState);
+
+		isSaving = false;
+		if (!result.success) {
+			saveError = result.error || 'Failed to save';
+		}
+	}
+
+	// ==========================================================================
+	// XYFlow Integration
+	// ==========================================================================
+
 	const nodeTypes: NodeTypes = {
 		stage: StageNode
 	};
 
-	// Edge types registration
 	const edgeTypes: EdgeTypes = {
 		action: ActionEdge
 	};
 
-	// Convert database stages to xyflow nodes
-	function stagesToNodes(stages: typeof data.stages): Node[] {
-		if (!stages || stages.length === 0) {
-			return [];
-		}
-
+	// Convert state stages to xyflow nodes
+	function stagesToNodes(stages: WorkflowStage[]): Node[] {
 		return stages.map((stage) => ({
 			id: stage.id,
 			type: 'stage',
@@ -70,41 +109,55 @@
 				y: stage.position_y || 100
 			},
 			data: {
-				title: stage.title,
-				key: stage.key,
-				stageType: stage.type,
-				maxHours: stage.max_hours
+				title: stage.stage_name,
+				stageType: stage.stage_type,
+				visible_to_roles: stage.visible_to_roles || []
 			}
 		}));
 	}
 
-	// Convert database actions to xyflow edges
-	function actionsToEdges(actions: typeof data.actions): Edge[] {
-		if (!actions || actions.length === 0) {
-			return [];
-		}
-
-		return actions.map((action) => ({
-			id: action.id,
-			source: action.from_stage_id,
-			target: action.to_stage_id,
-			label: action.button_label || action.name,
-			type: 'action',
-			animated: action.is_edit_action,
-			style: action.button_color ? `stroke: ${action.button_color}` : undefined,
-			data: {
-				tools: [],
-				onAddTool: () => handleAddProgressToolForEdge(action.id)
-			}
-		}));
+	// Convert state connections to xyflow edges
+	// Entry connections (from_stage_id = null) are not rendered - they're just for attaching the initial form
+	function connectionsToEdges(connections: WorkflowConnection[]): Edge[] {
+		return connections
+			.filter((conn) => conn.from_stage_id !== null)
+			.map((conn) => {
+				const isSelfLoop = conn.from_stage_id === conn.to_stage_id;
+				return {
+					id: conn.id,
+					source: conn.from_stage_id as string,
+					target: conn.to_stage_id,
+					label: conn.visual_config?.button_label || conn.action_name,
+					type: 'action',
+					animated: isSelfLoop,
+					style: conn.visual_config?.button_color ? `stroke: ${conn.visual_config.button_color}` : undefined,
+					data: {
+						tools: [],
+						isSelfLoop,
+						onAddTool: () => handleAddProgressToolForEdge(conn.id),
+						allowed_roles: conn.allowed_roles || [],
+						visual_config: conn.visual_config || {}
+					}
+				};
+			});
 	}
 
-	// Initialize state with data from server (Svelte 5 $state.raw for xyflow)
-	let nodes = $state.raw<Node[]>(stagesToNodes(data.stages));
-	let edges = $state.raw<Edge[]>(actionsToEdges(data.actions));
+	// Reactive nodes/edges from state (use $state.raw for xyflow compatibility)
+	let nodes = $state.raw<Node[]>(
+		stagesToNodes(builderState.visibleStages.map((s) => s.data))
+	);
+	let edges = $state.raw<Edge[]>(
+		connectionsToEdges(builderState.visibleConnections.map((c) => c.data))
+	);
 
-	// Workflow name (editable)
-	let workflowName = $state(data.workflow?.name || 'Untitled Workflow');
+	// Sync nodes/edges when state changes
+	$effect(() => {
+		nodes = stagesToNodes(builderState.visibleStages.map((s) => s.data));
+	});
+
+	$effect(() => {
+		edges = connectionsToEdges(builderState.visibleConnections.map((c) => c.data));
+	});
 
 	// Connection state
 	let connectingFrom = $state<string | null>(null);
@@ -116,23 +169,13 @@
 	const selectedStageId = $derived(
 		selectionContext.type === 'stage' ? selectionContext.stageId : null
 	);
-	const hasStartStage = $derived(nodes.some((n) => n.data.stageType === 'start'));
+	const hasStartStage = $derived(builderState.hasStartStage);
 
-	// Preview tab
-	let previewTab = $state('overview');
-
-	// Callback when a new node is added via drag-drop
+	// Callback when a new node is added via drag-drop (from DefaultPanel)
 	function onNodeAdded(node: Node) {
-		nodes = [...nodes, node];
-	}
-
-	// Get selected stage data
-	const selectedStage = $derived(nodes.find((n) => n.id === selectedStageId));
-
-	// Get fields for a stage (placeholder until we have real data)
-	function getFieldsForStage(stageId: string) {
-		// TODO: Return actual form fields from data.formFields filtered by stage
-		return [];
+		// Add to state with proper type
+		const stageType = node.data.stageType as 'start' | 'intermediate' | 'end';
+		builderState.addStage(stageType, node.position);
 	}
 
 	// Handle node context menu (right-click to connect)
@@ -144,36 +187,12 @@
 			// Start connection
 			connectingFrom = nodeId;
 		} else if (connectingFrom === nodeId) {
-			// Same node - create edit action (stage action)
-			const editEdgeId = `action_${Date.now()}`;
-			const newEdge: Edge = {
-				id: editEdgeId,
-				source: nodeId,
-				target: nodeId,
-				label: 'Edit',
-				type: 'action',
-				data: {
-					tools: [],
-					onAddTool: () => handleAddProgressToolForEdge(editEdgeId)
-				}
-			};
-			edges = [...edges, newEdge];
+			// Same node - create edit action (self-loop)
+			builderState.addConnection(nodeId, nodeId);
 			connectingFrom = null;
 		} else {
-			// Different node - create normal action (progress action)
-			const edgeId = `action_${Date.now()}`;
-			const newEdge: Edge = {
-				id: edgeId,
-				source: connectingFrom,
-				target: nodeId,
-				label: 'Action',
-				type: 'action',
-				data: {
-					tools: [],
-					onAddTool: () => handleAddProgressToolForEdge(edgeId)
-				}
-			};
-			edges = [...edges, newEdge];
+			// Different node - create normal transition
+			builderState.addConnection(connectingFrom, nodeId);
 			connectingFrom = null;
 		}
 	};
@@ -187,23 +206,7 @@
 	// Handle connection via handle drag (standard xyflow way)
 	function handleConnect(connection: Connection) {
 		if (!connection.source || !connection.target) return;
-
-		const edgeId = `action_${Date.now()}`;
-		const isEditAction = connection.source === connection.target;
-
-		const newEdge: Edge = {
-			id: edgeId,
-			source: connection.source,
-			target: connection.target,
-			label: isEditAction ? 'Edit' : 'Action',
-			type: 'action',
-			data: {
-				tools: [],
-				onAddTool: () => handleAddProgressToolForEdge(edgeId)
-			}
-		};
-
-		edges = [...edges, newEdge];
+		builderState.addConnection(connection.source, connection.target);
 	}
 
 	// Handle node click for selection
@@ -229,8 +232,15 @@
 
 	function handleDeleteStage() {
 		if (selectedStageId) {
-			nodes = nodes.filter((n) => n.id !== selectedStageId);
-			edges = edges.filter((e) => e.source !== selectedStageId && e.target !== selectedStageId);
+			// Check for affected connections
+			const affected = builderState.getAffectedConnections(selectedStageId);
+			if (affected.length > 0) {
+				// TODO: Show warning dialog before deleting
+				// For now, cascade delete
+				builderState.deleteStage(selectedStageId, true);
+			} else {
+				builderState.deleteStage(selectedStageId, false);
+			}
 			selectionContext = createContext.none();
 		}
 	}
@@ -247,7 +257,7 @@
 
 	function handleDeleteAction() {
 		if (selectionContext.type === 'action') {
-			edges = edges.filter((e) => e.id !== selectionContext.actionId);
+			builderState.deleteConnection(selectionContext.actionId);
 			selectionContext = createContext.none();
 		}
 	}
@@ -302,15 +312,73 @@
 			selectionContext = createContext.action(edge);
 		}
 	}
+
+	// Right sidebar handlers
+	function handleStageRename(stageId: string, newName: string) {
+		builderState.updateStage(stageId, { stage_name: newName });
+	}
+
+	function handleStageRolesChange(stageId: string, roleIds: string[]) {
+		builderState.updateStage(stageId, { visible_to_roles: roleIds });
+	}
+
+	function handleEdgeRename(edgeId: string, newName: string) {
+		const conn = builderState.getConnectionById(edgeId);
+		if (conn) {
+			builderState.updateConnection(edgeId, {
+				visual_config: {
+					...conn.data.visual_config,
+					button_label: newName
+				}
+			});
+		}
+	}
+
+	function handleEdgeRolesChange(edgeId: string, roleIds: string[]) {
+		builderState.updateConnection(edgeId, { allowed_roles: roleIds });
+	}
+
+	function handleEdgeSettingsChange(edgeId: string, settings: Record<string, unknown>) {
+		const conn = builderState.getConnectionById(edgeId);
+		if (conn) {
+			builderState.updateConnection(edgeId, {
+				visual_config: {
+					...conn.data.visual_config,
+					button_label: settings.buttonLabel as string | undefined,
+					button_color: settings.buttonColor as string | undefined,
+					requires_confirmation: settings.requiresConfirmation as boolean | undefined,
+					confirmation_message: settings.confirmationMessage as string | undefined
+				}
+			});
+		}
+	}
+
+	function handleSelectAction(edge: Edge) {
+		selectionContext = createContext.action(edge);
+	}
+
+	function handleSelectStage(node: Node<StageData>) {
+		selectionContext = createContext.stage(node);
+	}
 </script>
 
 <div class="workflow-builder">
 	<!-- Toolbar -->
 	<div class="toolbar">
 		<div class="toolbar-left">
-			<Button variant="outline" size="sm">
-				<Save class="h-4 w-4 mr-2" />
-				Save
+			<Button
+				variant={builderState.isDirty ? 'default' : 'outline'}
+				size="sm"
+				onclick={handleSave}
+				disabled={isSaving || !builderState.isDirty}
+			>
+				{#if isSaving}
+					<Loader2 class="h-4 w-4 mr-2 animate-spin" />
+					Saving...
+				{:else}
+					<Save class="h-4 w-4 mr-2" />
+					Save{builderState.isDirty ? '*' : ''}
+				{/if}
 			</Button>
 
 			<Separator orientation="vertical" class="h-6" />
@@ -362,7 +430,8 @@
 
 		<div class="toolbar-right">
 			<Input
-				bind:value={workflowName}
+				value={builderState.workflowName}
+				oninput={(e) => (builderState.workflowName = e.currentTarget.value)}
 				class="w-64 h-8"
 				placeholder="Workflow name..."
 			/>
@@ -415,148 +484,23 @@
 			</SvelteFlowProvider>
 		</div>
 
-		<!-- Preview Sidebar (right side) -->
-		<div class="preview-sidebar">
-			<div class="preview-header">
-				<div class="preview-title">
-					<span class="text-sm font-medium">{workflowName}</span>
-					<span class="text-xs text-muted-foreground">Participant View</span>
-				</div>
-				<Button variant="ghost" size="icon" class="h-7 w-7" title="Refresh Preview">
-					<RefreshCw class="h-3.5 w-3.5" />
-				</Button>
-			</div>
-
-			<Tabs.Root bind:value={previewTab} class="flex-1 flex flex-col">
-				<Tabs.List class="preview-tabs">
-					<Tabs.Trigger value="overview">Overview</Tabs.Trigger>
-					<Tabs.Trigger value="details">Details</Tabs.Trigger>
-					<Tabs.Trigger value="audit">Audit</Tabs.Trigger>
-				</Tabs.List>
-
-				<div class="preview-content bg-card">
-					<Tabs.Content value="overview" class="preview-tab-content">
-						<!-- Mock location info -->
-						<div class="preview-section">
-							<div class="preview-section-header">
-								<MapPin class="h-4 w-4 text-muted-foreground" />
-								<span class="text-muted-foreground">Location</span>
-							</div>
-							<div class="preview-mock-field bg-muted/50 border border-dashed border-border">
-								<span class="text-sm text-muted-foreground">Sample Location</span>
-							</div>
-						</div>
-
-						<!-- Timestamps -->
-						<div class="preview-section">
-							<div class="preview-section-header">
-								<Clock class="h-4 w-4 text-muted-foreground" />
-								<span class="text-muted-foreground">Timeline</span>
-							</div>
-							<div class="preview-info-row">
-								<span class="text-xs text-muted-foreground">Created</span>
-								<span class="text-xs text-foreground">--</span>
-							</div>
-							<div class="preview-info-row">
-								<span class="text-xs text-muted-foreground">Updated</span>
-								<span class="text-xs text-foreground">--</span>
-							</div>
-						</div>
-
-						<!-- Current stage -->
-						<div class="preview-section">
-							<div class="preview-section-header">
-								<User class="h-4 w-4 text-muted-foreground" />
-								<span class="text-muted-foreground">Status</span>
-							</div>
-							<div class="preview-info-row">
-								<span class="text-xs text-muted-foreground">Current Stage</span>
-								<span class="text-xs text-foreground">{selectedStage?.data?.title || 'None selected'}</span>
-							</div>
-						</div>
-
-						<!-- Form fields overview -->
-						<div class="preview-section">
-							<div class="preview-section-header">
-								<FileText class="h-4 w-4 text-muted-foreground" />
-								<span class="text-muted-foreground">Form Fields</span>
-							</div>
-							{#if nodes.length === 0}
-								<p class="text-xs text-muted-foreground py-2">No stages yet</p>
-							{:else}
-								{#each nodes as node}
-									<div class="preview-stage-summary bg-accent/30 border border-border">
-										<div class="preview-stage-name">
-											{#if node.data.stageType === 'start'}
-												<Play class="h-3 w-3 text-green-500" />
-											{:else if node.data.stageType === 'end'}
-												<CircleStop class="h-3 w-3 text-pink-500" />
-											{:else}
-												<Square class="h-3 w-3 text-blue-500" />
-											{/if}
-											<span class="text-xs font-medium text-foreground">{node.data.title}</span>
-										</div>
-										<span class="text-xs text-muted-foreground">0 fields</span>
-									</div>
-								{/each}
-							{/if}
-						</div>
-					</Tabs.Content>
-
-					<Tabs.Content value="details" class="preview-tab-content">
-						{#if !selectedStage}
-							<div class="preview-empty">
-								<FileText class="h-8 w-8 text-muted-foreground/50" />
-								<p class="text-sm text-muted-foreground">Select a stage to preview its form</p>
-							</div>
-						{:else}
-							<!-- Stage header -->
-							<div class="preview-stage-header">
-								<div class="preview-stage-badge" class:start={selectedStage.data.stageType === 'start'} class:end={selectedStage.data.stageType === 'end'}>
-									{selectedStage.data.stageType}
-								</div>
-								<h3 class="text-sm font-medium text-foreground">{selectedStage.data.title}</h3>
-							</div>
-
-							<!-- Stage tabs (sub-navigation) -->
-							<div class="preview-stage-tabs">
-								{#each nodes as node}
-									<button
-										class="preview-stage-tab text-muted-foreground hover:bg-accent"
-										class:active={node.id === selectedStageId}
-										onclick={() => (selectionContext = createContext.stage(node as Node<StageData>))}
-									>
-										{node.data.title}
-									</button>
-								{/each}
-							</div>
-
-							<!-- Form fields preview -->
-							<div class="preview-form">
-								<p class="text-xs text-muted-foreground text-center py-8">
-									No form fields configured yet.<br />
-									Double-click the stage to add fields.
-								</p>
-							</div>
-						{/if}
-					</Tabs.Content>
-
-					<Tabs.Content value="audit" class="preview-tab-content">
-						<div class="preview-section">
-							<div class="preview-section-header">
-								<History class="h-4 w-4 text-muted-foreground" />
-								<span class="text-muted-foreground">Activity Log</span>
-							</div>
-							<div class="preview-audit-list">
-								<p class="text-xs text-muted-foreground text-center py-4">
-									Preview mode - no activity yet
-								</p>
-							</div>
-						</div>
-					</Tabs.Content>
-				</div>
-			</Tabs.Root>
-		</div>
+		<!-- Right Sidebar (context-aware: PropertyView when selected, PreviewView otherwise) -->
+		<RightSidebar
+			context={selectionContext}
+			workflowName={builderState.workflowName}
+			{nodes}
+			{edges}
+			roles={data.roles}
+			onStageRename={handleStageRename}
+			onStageDelete={handleDeleteStage}
+			onStageRolesChange={handleStageRolesChange}
+			onEdgeRename={handleEdgeRename}
+			onEdgeDelete={handleDeleteAction}
+			onEdgeRolesChange={handleEdgeRolesChange}
+			onEdgeSettingsChange={handleEdgeSettingsChange}
+			onSelectAction={handleSelectAction}
+			onSelectStage={handleSelectStage}
+		/>
 	</div>
 </div>
 
@@ -609,191 +553,6 @@
 		flex: 1;
 		position: relative;
 		background: hsl(var(--card));
-	}
-
-	/* Preview Sidebar */
-	.preview-sidebar {
-		width: 360px;
-		display: flex;
-		flex-direction: column;
-		flex-shrink: 0;
-		/* Light mode: visible background and border */
-		background: oklch(0.965 0.005 250);
-		border-left: 1px solid oklch(0.88 0.01 250);
-		box-shadow: -2px 0 12px oklch(0 0 0 / 0.06);
-	}
-
-	:global(.dark) .preview-sidebar {
-		background: hsl(var(--muted));
-		border-left-color: oklch(1 0 0 / 20%);
-		box-shadow: -2px 0 8px oklch(0 0 0 / 0.3);
-	}
-
-	.preview-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 0.75rem 1rem;
-		border-bottom: 1px solid oklch(0.88 0.01 250);
-	}
-
-	:global(.dark) .preview-header {
-		border-bottom-color: oklch(1 0 0 / 20%);
-	}
-
-	.preview-title {
-		display: flex;
-		flex-direction: column;
-		gap: 0.125rem;
-	}
-
-	.preview-tabs {
-		width: 100%;
-		justify-content: stretch;
-		border-radius: 0;
-		padding: 0 0.5rem;
-		border-bottom: 1px solid oklch(0.88 0.01 250);
-	}
-
-	:global(.dark) .preview-tabs {
-		border-bottom-color: oklch(1 0 0 / 20%);
-	}
-
-	.preview-content {
-		flex: 1;
-		overflow-y: auto;
-	}
-
-	.preview-tab-content {
-		padding: 0;
-	}
-
-	.preview-section {
-		padding: 1rem;
-		border-bottom: 1px solid oklch(0.88 0.01 250);
-	}
-
-	:global(.dark) .preview-section {
-		border-bottom-color: oklch(1 0 0 / 20%);
-	}
-
-	.preview-section-header {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		font-size: 0.75rem;
-		font-weight: 500;
-		text-transform: uppercase;
-		margin-bottom: 0.75rem;
-	}
-
-	.preview-mock-field {
-		padding: 0.5rem 0.75rem;
-		border-radius: 0.375rem;
-	}
-
-	.preview-info-row {
-		display: flex;
-		justify-content: space-between;
-		padding: 0.25rem 0;
-	}
-
-	.preview-stage-summary {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 0.5rem 0.75rem;
-		border-radius: 0.375rem;
-		margin-bottom: 0.375rem;
-	}
-
-	.preview-stage-name {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.preview-empty {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		padding: 3rem 1rem;
-		gap: 0.75rem;
-		text-align: center;
-	}
-
-	.preview-stage-header {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		padding: 1rem;
-		border-bottom: 1px solid oklch(0.88 0.01 250);
-	}
-
-	:global(.dark) .preview-stage-header {
-		border-bottom-color: oklch(1 0 0 / 20%);
-	}
-
-	.preview-stage-badge {
-		font-size: 0.625rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		padding: 0.25rem 0.5rem;
-		border-radius: 0.25rem;
-		background: hsl(var(--accent));
-		color: hsl(var(--accent-foreground));
-	}
-
-	.preview-stage-badge.start {
-		background: hsl(142 76% 36% / 0.15);
-		color: hsl(142 76% 36%);
-	}
-
-	.preview-stage-badge.end {
-		background: hsl(346 87% 60% / 0.15);
-		color: hsl(346 87% 60%);
-	}
-
-	.preview-stage-tabs {
-		display: flex;
-		gap: 0.25rem;
-		padding: 0.5rem 1rem;
-		overflow-x: auto;
-		border-bottom: 1px solid oklch(0.88 0.01 250);
-	}
-
-	:global(.dark) .preview-stage-tabs {
-		border-bottom-color: oklch(1 0 0 / 20%);
-	}
-
-	.preview-stage-tab {
-		font-size: 0.75rem;
-		padding: 0.375rem 0.75rem;
-		border-radius: 0.25rem;
-		background: transparent;
-		border: none;
-		cursor: pointer;
-		white-space: nowrap;
-		color: hsl(var(--muted-foreground));
-		transition: all 0.15s;
-	}
-
-	.preview-stage-tab:hover {
-		background: hsl(var(--accent));
-	}
-
-	.preview-stage-tab.active {
-		background: hsl(var(--primary));
-		color: hsl(var(--primary-foreground));
-	}
-
-	.preview-form {
-		padding: 1rem;
-	}
-
-	.preview-audit-list {
-		min-height: 100px;
 	}
 
 	/* XYFlow overrides */

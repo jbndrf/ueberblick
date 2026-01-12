@@ -3,15 +3,15 @@
  *
  * Central registry for all available workflow tools.
  * Tools register themselves here and the UI discovers them dynamically.
+ *
+ * Adding a new tool:
+ * 1. Define the tool with toolType, displayName, description, icon, attachableTo, defaultColor
+ * 2. Call toolRegistry.register(yourTool)
+ * 3. The UI will automatically show it in the right places based on attachableTo
  */
 
 import { FileText, Edit3 } from 'lucide-svelte';
-import type {
-	ToolDefinition,
-	ProgressToolDefinition,
-	StageToolDefinition,
-	ToolCategory
-} from './types';
+import type { ToolDefinition, AttachmentTarget } from './types';
 
 // =============================================================================
 // Tool Registry Class
@@ -52,24 +52,24 @@ class ToolRegistry {
 	}
 
 	/**
-	 * Get tools by category
+	 * Get tools that can be attached to a specific target
 	 */
-	getByCategory(category: ToolCategory): ToolDefinition[] {
-		return this.getAll().filter((t) => t.category === category);
+	getToolsFor(target: AttachmentTarget): ToolDefinition[] {
+		return this.getAll().filter((t) => t.attachableTo.includes(target));
 	}
 
 	/**
-	 * Get all progress tools (edge tools)
+	 * Get tools that can be attached to stages
 	 */
-	getProgressTools(): ProgressToolDefinition[] {
-		return this.getByCategory('progress') as ProgressToolDefinition[];
+	getStageTools(): ToolDefinition[] {
+		return this.getToolsFor('stage');
 	}
 
 	/**
-	 * Get all stage tools (node tools)
+	 * Get tools that can be attached to connections
 	 */
-	getStageTools(): StageToolDefinition[] {
-		return this.getByCategory('stage') as StageToolDefinition[];
+	getConnectionTools(): ToolDefinition[] {
+		return this.getToolsFor('connection');
 	}
 
 	/**
@@ -90,23 +90,23 @@ export const toolRegistry = new ToolRegistry();
 // Register Built-in Tools
 // =============================================================================
 
-// Form tool - progress action that shows a form
-const formTool: ProgressToolDefinition = {
+// Form tool - collects data via form fields (connections only)
+const formTool: ToolDefinition = {
 	toolType: 'form',
 	displayName: 'Form',
-	description: 'Progress workflow when form is submitted',
+	description: 'Collect data via form fields',
 	icon: FileText,
-	category: 'progress',
+	attachableTo: ['connection'],
 	defaultColor: '#3B82F6'
 };
 
-// Edit tool - stage action that allows editing fields
-const editTool: StageToolDefinition = {
+// Edit tool - allows editing existing fields
+const editTool: ToolDefinition = {
 	toolType: 'edit',
 	displayName: 'Edit Fields',
-	description: 'Edit stage fields without progressing',
+	description: 'Allow editing existing fields',
 	icon: Edit3,
-	category: 'stage',
+	attachableTo: ['stage', 'connection'],
 	defaultColor: '#6366F1'
 };
 

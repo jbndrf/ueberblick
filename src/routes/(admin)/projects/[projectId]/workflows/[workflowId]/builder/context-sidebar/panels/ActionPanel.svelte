@@ -26,9 +26,9 @@
 		</div>
 	</div>
 
-	<!-- Progress Actions -->
+	<!-- Connection Tools -->
 	<div class="panel-content">
-		<ToolPicker category="progress" onSelectTool={onAddProgressTool} />
+		<ToolPicker attachmentTarget="connection" onSelectTool={onAddProgressTool} />
 	</div>
 </div>
 
