@@ -7,6 +7,14 @@
 	import FieldCard from './FieldCard.svelte';
 	import type { TrackedFormField, FieldType, ToolsFormField, ColumnPosition } from '$lib/workflow-builder';
 
+	// Drop zone configuration type
+	type DropZoneConfig = {
+		mode: 'new-field' | 'reorder';
+		rowIndex: number;
+		type: 'new-row' | 'between-row';
+		small?: boolean;
+	};
+
 	type Props = {
 		fields: TrackedFormField[];
 		selectedFieldId?: string | null;
@@ -380,7 +388,119 @@
 			currentPage = pages.find((p) => p !== page) || 1;
 		}
 	}
+
+	// =============================================================================
+	// Unified Drop Zone Helpers
+	// =============================================================================
+
+	type CellPosition = 'left' | 'middle' | 'right';
+	const CELL_ICONS = { left: AlignLeft, middle: Maximize2, right: AlignRight } as const;
+
+	function isNewFieldCellActive(rowIndex: number, type: 'new-row' | 'between-row', pos: CellPosition): boolean {
+		if (!hoverTarget) return false;
+		return hoverTarget.type === type && hoverTarget.rowIndex === rowIndex && hoverTarget.position === pos;
+	}
+
+	function isReorderCellActive(rowIndex: number, pos: ColumnPosition): boolean {
+		if (!reorderTarget) return false;
+		return reorderTarget.rowIndex === rowIndex && reorderTarget.position === pos;
+	}
+
+	function getColPosFromCell(pos: CellPosition): ColumnPosition {
+		return pos === 'middle' ? 'full' : pos;
+	}
 </script>
+
+{#snippet dropZoneCell(mode: 'new-field' | 'reorder', rowIndex: number, type: 'new-row' | 'between-row', pos: CellPosition, small: boolean = false)}
+	{@const isActive = mode === 'new-field' ? isNewFieldCellActive(rowIndex, type, pos) : isReorderCellActive(rowIndex, getColPosFromCell(pos))}
+	{@const Icon = CELL_ICONS[pos]}
+	{@const previewText = mode === 'new-field' ? 'New field' : 'Move here'}
+	<div
+		class="drop-zone-cell"
+		class:active={isActive}
+		ondragover={(e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			if (mode === 'new-field') {
+				hoverTarget = { type, position: pos, rowIndex };
+			} else {
+				reorderTarget = { rowIndex, position: getColPosFromCell(pos) };
+			}
+		}}
+		ondrop={(e) => {
+			if (mode === 'new-field') {
+				handleCellDrop(e, type, pos, rowIndex);
+			} else {
+				handleReorderDrop(e, rowIndex, getColPosFromCell(pos));
+			}
+		}}
+		role="button"
+		tabindex="-1"
+	>
+		{#if isActive}
+			<div class="preview-placeholder" class:small class:full-width={pos === 'middle'}>{previewText}</div>
+		{:else}
+			<Icon class="zone-icon" />
+		{/if}
+	</div>
+{/snippet}
+
+{#snippet dropZoneRow(config: DropZoneConfig)}
+	{@const { mode, rowIndex, type, small = false } = config}
+	{@const isExpanded = mode === 'new-field'
+		? (hoverTarget?.type === type && hoverTarget?.rowIndex === rowIndex)
+		: (reorderTarget?.rowIndex === rowIndex)}
+	{@const isVisible = mode === 'new-field' ? isDraggingFieldType : !!draggedFieldId}
+	<div
+		class="row-insert-indicator"
+		class:reorder-zone={mode === 'reorder'}
+		class:hidden={!isVisible}
+		class:expanded={isExpanded}
+		class:small
+	>
+		{@render dropZoneCell(mode, rowIndex, type, 'left', small)}
+		{@render dropZoneCell(mode, rowIndex, type, 'middle', small)}
+		{@render dropZoneCell(mode, rowIndex, type, 'right', small)}
+	</div>
+{/snippet}
+
+{#snippet emptySideZone(mode: 'new-field' | 'reorder', rowIndex: number, side: 'left' | 'right')}
+	{@const isActive = mode === 'new-field'
+		? (hoverTarget?.type === 'empty-side' && hoverTarget?.rowIndex === rowIndex && hoverTarget?.position === side)
+		: (reorderTarget?.rowIndex === rowIndex && reorderTarget?.position === side)}
+	{@const Icon = side === 'left' ? AlignLeft : AlignRight}
+	{@const previewText = mode === 'new-field' ? 'New field' : 'Move here'}
+	<div
+		class="empty-side-indicator"
+		class:reorder-zone={mode === 'reorder'}
+		class:active={isActive}
+		ondragover={(e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			if (mode === 'new-field') {
+				hoverTarget = { type: 'empty-side', position: side, rowIndex };
+			} else {
+				reorderTarget = { rowIndex, position: side };
+			}
+		}}
+		ondragleave={() => {}}
+		ondrop={(e) => {
+			if (mode === 'new-field') {
+				handleCellDrop(e, 'empty-side', side, rowIndex);
+			} else {
+				handleReorderDrop(e, rowIndex, side);
+			}
+		}}
+		role="button"
+		tabindex="-1"
+	>
+		{#if isActive}
+			<div class="preview-placeholder">{previewText}</div>
+		{:else}
+			<Icon class="zone-icon" />
+		{/if}
+	</div>
+{/snippet}
 
 <div
 	class="form-preview"
@@ -456,215 +576,24 @@
 		{:else if currentPageFields.length === 0 && isDraggingFieldType}
 			<!-- Empty form - show new row indicator with preview -->
 			<div class="new-row-indicator" class:has-preview={hoverTarget?.type === 'new-row'}>
-				<div
-					class="drop-zone-cell"
-					class:active={hoverTarget?.type === 'new-row' && hoverTarget?.position === 'left'}
-					ondragover={(e) => handleCellDragOver(e, 'new-row', 'left', 0)}
-					ondragleave={handleCellDragLeave}
-					ondrop={(e) => handleCellDrop(e, 'new-row', 'left', 0)}
-					role="button"
-					tabindex="-1"
-				>
-					{#if hoverTarget?.type === 'new-row' && hoverTarget?.position === 'left'}
-						<div class="preview-placeholder">New field</div>
-					{:else}
-						<AlignLeft class="zone-icon" />
-					{/if}
-				</div>
-				<div
-					class="drop-zone-cell"
-					class:active={hoverTarget?.type === 'new-row' && hoverTarget?.position === 'middle'}
-					ondragover={(e) => handleCellDragOver(e, 'new-row', 'middle', 0)}
-					ondragleave={handleCellDragLeave}
-					ondrop={(e) => handleCellDrop(e, 'new-row', 'middle', 0)}
-					role="button"
-					tabindex="-1"
-				>
-					{#if hoverTarget?.type === 'new-row' && hoverTarget?.position === 'middle'}
-						<div class="preview-placeholder">New field</div>
-					{:else}
-						<Maximize2 class="zone-icon" />
-					{/if}
-				</div>
-				<div
-					class="drop-zone-cell"
-					class:active={hoverTarget?.type === 'new-row' && hoverTarget?.position === 'right'}
-					ondragover={(e) => handleCellDragOver(e, 'new-row', 'right', 0)}
-					ondragleave={handleCellDragLeave}
-					ondrop={(e) => handleCellDrop(e, 'new-row', 'right', 0)}
-					role="button"
-					tabindex="-1"
-				>
-					{#if hoverTarget?.type === 'new-row' && hoverTarget?.position === 'right'}
-						<div class="preview-placeholder">New field</div>
-					{:else}
-						<AlignRight class="zone-icon" />
-					{/if}
-				</div>
+				{@render dropZoneCell('new-field', 0, 'new-row', 'left')}
+				{@render dropZoneCell('new-field', 0, 'new-row', 'middle')}
+				{@render dropZoneCell('new-field', 0, 'new-row', 'right')}
 			</div>
 		{:else}
 			<!-- Field list for current page with row layout -->
 			<div class="fields-list">
 				<!-- Top reorder indicator (before first row) - for existing fields -->
 				{#if fieldRows.length > 0}
-					{@const insertRowIndex = -0.5}
-					<div
-						class="row-insert-indicator reorder-zone"
-						class:hidden={!draggedFieldId}
-						class:expanded={reorderTarget?.rowIndex === insertRowIndex}
-					>
-						<div
-							class="drop-zone-cell"
-							class:active={reorderTarget?.rowIndex === insertRowIndex && reorderTarget?.position === 'left'}
-							ondragover={(e) => handleReorderDragOver(e, insertRowIndex, 'left')}
-							ondrop={(e) => handleReorderDrop(e, insertRowIndex, 'left')}
-							role="button"
-							tabindex="-1"
-						>
-							{#if reorderTarget?.rowIndex === insertRowIndex && reorderTarget?.position === 'left'}
-								<div class="preview-placeholder small">Move here</div>
-							{:else}
-								<AlignLeft class="zone-icon" />
-							{/if}
-						</div>
-						<div
-							class="drop-zone-cell"
-							class:active={reorderTarget?.rowIndex === insertRowIndex && reorderTarget?.position === 'full'}
-							ondragover={(e) => handleReorderDragOver(e, insertRowIndex, 'full')}
-							ondrop={(e) => handleReorderDrop(e, insertRowIndex, 'full')}
-							role="button"
-							tabindex="-1"
-						>
-							{#if reorderTarget?.rowIndex === insertRowIndex && reorderTarget?.position === 'full'}
-								<div class="preview-placeholder small full-width">Move here</div>
-							{:else}
-								<Maximize2 class="zone-icon" />
-							{/if}
-						</div>
-						<div
-							class="drop-zone-cell"
-							class:active={reorderTarget?.rowIndex === insertRowIndex && reorderTarget?.position === 'right'}
-							ondragover={(e) => handleReorderDragOver(e, insertRowIndex, 'right')}
-							ondrop={(e) => handleReorderDrop(e, insertRowIndex, 'right')}
-							role="button"
-							tabindex="-1"
-						>
-							{#if reorderTarget?.rowIndex === insertRowIndex && reorderTarget?.position === 'right'}
-								<div class="preview-placeholder small">Move here</div>
-							{:else}
-								<AlignRight class="zone-icon" />
-							{/if}
-						</div>
-					</div>
+					{@render dropZoneRow({ mode: 'reorder', rowIndex: -0.5, type: 'between-row', small: true })}
 				{/if}
 
 				{#each fieldRows as row, idx (row.rowIndex)}
-					<!-- Between-row indicator (before each row except first) - for new fields -->
-					{#if isDraggingFieldType && idx > 0}
-						{@const insertRowIndex = fieldRows[idx - 1].rowIndex + 0.5}
-						<div
-							class="row-insert-indicator"
-							class:expanded={hoverTarget?.type === 'between-row' && hoverTarget?.rowIndex === insertRowIndex}
-						>
-							<div
-								class="drop-zone-cell"
-								class:active={hoverTarget?.type === 'between-row' && hoverTarget?.rowIndex === insertRowIndex && hoverTarget?.position === 'left'}
-								ondragover={(e) => handleCellDragOver(e, 'between-row', 'left', insertRowIndex)}
-								ondragleave={handleCellDragLeave}
-								ondrop={(e) => handleCellDrop(e, 'between-row', 'left', insertRowIndex)}
-								role="button"
-								tabindex="-1"
-							>
-								{#if hoverTarget?.type === 'between-row' && hoverTarget?.rowIndex === insertRowIndex && hoverTarget?.position === 'left'}
-									<div class="preview-placeholder small">New field</div>
-								{:else}
-									<AlignLeft class="zone-icon" />
-								{/if}
-							</div>
-							<div
-								class="drop-zone-cell"
-								class:active={hoverTarget?.type === 'between-row' && hoverTarget?.rowIndex === insertRowIndex && hoverTarget?.position === 'middle'}
-								ondragover={(e) => handleCellDragOver(e, 'between-row', 'middle', insertRowIndex)}
-								ondragleave={handleCellDragLeave}
-								ondrop={(e) => handleCellDrop(e, 'between-row', 'middle', insertRowIndex)}
-								role="button"
-								tabindex="-1"
-							>
-								{#if hoverTarget?.type === 'between-row' && hoverTarget?.rowIndex === insertRowIndex && hoverTarget?.position === 'middle'}
-									<div class="preview-placeholder small full-width">New field</div>
-								{:else}
-									<Maximize2 class="zone-icon" />
-								{/if}
-							</div>
-							<div
-								class="drop-zone-cell"
-								class:active={hoverTarget?.type === 'between-row' && hoverTarget?.rowIndex === insertRowIndex && hoverTarget?.position === 'right'}
-								ondragover={(e) => handleCellDragOver(e, 'between-row', 'right', insertRowIndex)}
-								ondragleave={handleCellDragLeave}
-								ondrop={(e) => handleCellDrop(e, 'between-row', 'right', insertRowIndex)}
-								role="button"
-								tabindex="-1"
-							>
-								{#if hoverTarget?.type === 'between-row' && hoverTarget?.rowIndex === insertRowIndex && hoverTarget?.position === 'right'}
-									<div class="preview-placeholder small">New field</div>
-								{:else}
-									<AlignRight class="zone-icon" />
-								{/if}
-							</div>
-						</div>
-					{/if}
-
-					<!-- Between-row reorder indicator (before each row except first) - for existing fields -->
+					<!-- Between-row indicators (before each row except first) -->
 					{#if idx > 0}
 						{@const insertRowIndex = fieldRows[idx - 1].rowIndex + 0.5}
-						<div
-							class="row-insert-indicator reorder-zone"
-							class:hidden={!draggedFieldId}
-							class:expanded={reorderTarget?.rowIndex === insertRowIndex}
-						>
-							<div
-								class="drop-zone-cell"
-								class:active={reorderTarget?.rowIndex === insertRowIndex && reorderTarget?.position === 'left'}
-								ondragover={(e) => handleReorderDragOver(e, insertRowIndex, 'left')}
-								ondrop={(e) => handleReorderDrop(e, insertRowIndex, 'left')}
-								role="button"
-								tabindex="-1"
-							>
-								{#if reorderTarget?.rowIndex === insertRowIndex && reorderTarget?.position === 'left'}
-									<div class="preview-placeholder small">Move here</div>
-								{:else}
-									<AlignLeft class="zone-icon" />
-								{/if}
-							</div>
-							<div
-								class="drop-zone-cell"
-								class:active={reorderTarget?.rowIndex === insertRowIndex && reorderTarget?.position === 'full'}
-								ondragover={(e) => handleReorderDragOver(e, insertRowIndex, 'full')}
-								ondrop={(e) => handleReorderDrop(e, insertRowIndex, 'full')}
-								role="button"
-								tabindex="-1"
-							>
-								{#if reorderTarget?.rowIndex === insertRowIndex && reorderTarget?.position === 'full'}
-									<div class="preview-placeholder small full-width">Move here</div>
-								{:else}
-									<Maximize2 class="zone-icon" />
-								{/if}
-							</div>
-							<div
-								class="drop-zone-cell"
-								class:active={reorderTarget?.rowIndex === insertRowIndex && reorderTarget?.position === 'right'}
-								ondragover={(e) => handleReorderDragOver(e, insertRowIndex, 'right')}
-								ondrop={(e) => handleReorderDrop(e, insertRowIndex, 'right')}
-								role="button"
-								tabindex="-1"
-							>
-								{#if reorderTarget?.rowIndex === insertRowIndex && reorderTarget?.position === 'right'}
-									<div class="preview-placeholder small">Move here</div>
-								{:else}
-									<AlignRight class="zone-icon" />
-								{/if}
-							</div>
-						</div>
+						{@render dropZoneRow({ mode: 'new-field', rowIndex: insertRowIndex, type: 'between-row', small: true })}
+						{@render dropZoneRow({ mode: 'reorder', rowIndex: insertRowIndex, type: 'between-row', small: true })}
 					{/if}
 
 					<div
@@ -809,105 +738,19 @@
 					</div>
 				{/each}
 
-				<!-- Main new-row indicator at bottom - for new fields -->
+				<!-- Bottom indicators for new fields and reordering -->
 				{#if isDraggingFieldType}
 					<div class="new-row-indicator" class:has-preview={hoverTarget?.type === 'new-row'}>
-						<div
-							class="drop-zone-cell"
-							class:active={hoverTarget?.type === 'new-row' && hoverTarget?.position === 'left'}
-							class:has-preview={hoverTarget?.type === 'new-row' && hoverTarget?.position === 'left'}
-							ondragover={(e) => handleCellDragOver(e, 'new-row', 'left', nextRowIndex)}
-							ondragleave={handleCellDragLeave}
-							ondrop={(e) => handleCellDrop(e, 'new-row', 'left', nextRowIndex)}
-							role="button"
-							tabindex="-1"
-						>
-							{#if hoverTarget?.type === 'new-row' && hoverTarget?.position === 'left'}
-								<div class="preview-placeholder">New field</div>
-							{:else}
-								<AlignLeft class="zone-icon" />
-							{/if}
-						</div>
-						<div
-							class="drop-zone-cell"
-							class:active={hoverTarget?.type === 'new-row' && hoverTarget?.position === 'middle'}
-							class:has-preview={hoverTarget?.type === 'new-row' && hoverTarget?.position === 'middle'}
-							ondragover={(e) => handleCellDragOver(e, 'new-row', 'middle', nextRowIndex)}
-							ondragleave={handleCellDragLeave}
-							ondrop={(e) => handleCellDrop(e, 'new-row', 'middle', nextRowIndex)}
-							role="button"
-							tabindex="-1"
-						>
-							{#if hoverTarget?.type === 'new-row' && hoverTarget?.position === 'middle'}
-								<div class="preview-placeholder full-width">New field</div>
-							{:else}
-								<Maximize2 class="zone-icon" />
-							{/if}
-						</div>
-						<div
-							class="drop-zone-cell"
-							class:active={hoverTarget?.type === 'new-row' && hoverTarget?.position === 'right'}
-							class:has-preview={hoverTarget?.type === 'new-row' && hoverTarget?.position === 'right'}
-							ondragover={(e) => handleCellDragOver(e, 'new-row', 'right', nextRowIndex)}
-							ondragleave={handleCellDragLeave}
-							ondrop={(e) => handleCellDrop(e, 'new-row', 'right', nextRowIndex)}
-							role="button"
-							tabindex="-1"
-						>
-							{#if hoverTarget?.type === 'new-row' && hoverTarget?.position === 'right'}
-								<div class="preview-placeholder">New field</div>
-							{:else}
-								<AlignRight class="zone-icon" />
-							{/if}
-						</div>
+						{@render dropZoneCell('new-field', nextRowIndex, 'new-row', 'left')}
+						{@render dropZoneCell('new-field', nextRowIndex, 'new-row', 'middle')}
+						{@render dropZoneCell('new-field', nextRowIndex, 'new-row', 'right')}
 					</div>
 				{/if}
-
-				<!-- Reorder new-row indicator at bottom - for moving existing fields -->
 				<div class="new-row-indicator reorder-zone" class:hidden={!draggedFieldId} class:has-preview={reorderTarget?.rowIndex === nextRowIndex}>
-						<div
-							class="drop-zone-cell"
-							class:active={reorderTarget?.rowIndex === nextRowIndex && reorderTarget?.position === 'left'}
-							ondragover={(e) => handleReorderDragOver(e, nextRowIndex, 'left')}
-							ondrop={(e) => handleReorderDrop(e, nextRowIndex, 'left')}
-							role="button"
-							tabindex="-1"
-						>
-							{#if reorderTarget?.rowIndex === nextRowIndex && reorderTarget?.position === 'left'}
-								<div class="preview-placeholder">Move here</div>
-							{:else}
-								<AlignLeft class="zone-icon" />
-							{/if}
-						</div>
-						<div
-							class="drop-zone-cell"
-							class:active={reorderTarget?.rowIndex === nextRowIndex && reorderTarget?.position === 'full'}
-							ondragover={(e) => handleReorderDragOver(e, nextRowIndex, 'full')}
-							ondrop={(e) => handleReorderDrop(e, nextRowIndex, 'full')}
-							role="button"
-							tabindex="-1"
-						>
-							{#if reorderTarget?.rowIndex === nextRowIndex && reorderTarget?.position === 'full'}
-								<div class="preview-placeholder full-width">Move here</div>
-							{:else}
-								<Maximize2 class="zone-icon" />
-							{/if}
-						</div>
-						<div
-							class="drop-zone-cell"
-							class:active={reorderTarget?.rowIndex === nextRowIndex && reorderTarget?.position === 'right'}
-							ondragover={(e) => handleReorderDragOver(e, nextRowIndex, 'right')}
-							ondrop={(e) => handleReorderDrop(e, nextRowIndex, 'right')}
-							role="button"
-							tabindex="-1"
-						>
-							{#if reorderTarget?.rowIndex === nextRowIndex && reorderTarget?.position === 'right'}
-								<div class="preview-placeholder">Move here</div>
-							{:else}
-								<AlignRight class="zone-icon" />
-							{/if}
-						</div>
-					</div>
+					{@render dropZoneCell('reorder', nextRowIndex, 'new-row', 'left')}
+					{@render dropZoneCell('reorder', nextRowIndex, 'new-row', 'middle')}
+					{@render dropZoneCell('reorder', nextRowIndex, 'new-row', 'right')}
+				</div>
 			</div>
 		{/if}
 	</div>

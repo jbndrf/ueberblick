@@ -73,6 +73,11 @@
 		 * Hint text shown on mobile when create is allowed
 		 */
 		createHintLabel?: string;
+		/**
+		 * When true (default), multiple selections show as "N selected".
+		 * When false, shows all selected items as badges in the trigger.
+		 */
+		summarizeMultiple?: boolean;
 	};
 
 	let {
@@ -91,7 +96,8 @@
 		hideSelected = false,
 		autoAddCreated = false,
 		emptyLabel = 'No options found',
-		createHintLabel = 'Press Enter to create'
+		createHintLabel = 'Press Enter to create',
+		summarizeMultiple = false
 	}: Props = $props();
 
 	let isOpen = $state(false);
@@ -507,15 +513,21 @@
 			disabled && 'cursor-not-allowed opacity-50'
 		)}
 	>
-		<span class="flex-1 text-left truncate">
-			{#if selectedOptions.length === 0}
-				<span class="text-muted-foreground">{placeholder}</span>
-			{:else if selectedOptions.length === 1}
-				{getOptionLabel(selectedOptions[0])}
-			{:else}
-				{selectedOptions.length} selected
-			{/if}
-		</span>
+		{#if selectedOptions.length === 0}
+			<span class="flex-1 text-left truncate text-muted-foreground">{placeholder}</span>
+		{:else if selectedOptions.length === 1}
+			<span class="flex-1 text-left truncate">{getOptionLabel(selectedOptions[0])}</span>
+		{:else if summarizeMultiple || isOpen}
+			<span class="flex-1 text-left truncate">{selectedOptions.length} selected</span>
+		{:else}
+			<div class="flex-1 flex flex-wrap gap-1 overflow-hidden pointer-events-none">
+				{#each selectedOptions as option (getOptionId(option))}
+					<Badge variant="secondary" class="text-xs shrink-0">
+						{getOptionLabel(option)}
+					</Badge>
+				{/each}
+			</div>
+		{/if}
 		<ChevronDown class={cn('ml-2 h-4 w-4 shrink-0 text-muted-foreground transition-transform', isOpen && 'rotate-180')} />
 	</button>
 
