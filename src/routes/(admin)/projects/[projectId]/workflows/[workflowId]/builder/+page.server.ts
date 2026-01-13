@@ -52,9 +52,12 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 		const formIds = forms.map((f: any) => f.id);
 		const workflowFormFields = formFields.filter((f: any) => formIds.includes(f.form_id));
 
-		// Filter edit tools to only those belonging to this workflow's connections
+		// Filter edit tools to only those belonging to this workflow's connections or stages
 		const connectionIds = connections.map((c: any) => c.id);
-		const workflowEditTools = editTools.filter((e: any) => connectionIds.includes(e.connection_id));
+		const stageIds = stages.map((s: any) => s.id);
+		const workflowEditTools = editTools.filter(
+			(e: any) => connectionIds.includes(e.connection_id) || stageIds.includes(e.stage_id)
+		);
 
 		return {
 			workflow,

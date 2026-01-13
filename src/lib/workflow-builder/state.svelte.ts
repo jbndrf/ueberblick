@@ -29,6 +29,7 @@ export class WorkflowBuilderState {
 	// Core data
 	workflowId: string;
 	workflowName = $state<string>('');
+	private initialized = false;
 
 	// Tracked collections
 	stages = $state<TrackedStage[]>([]);
@@ -74,6 +75,10 @@ export class WorkflowBuilderState {
 		formFields?: ToolsFormField[];
 		editTools?: ToolsEdit[];
 	}) {
+		// Guard against re-initialization (prevents infinite effect loops)
+		if (this.initialized) return;
+		this.initialized = true;
+
 		this.workflowName = data.workflowName || '';
 
 		this.stages = (data.stages || []).map((s) => ({
@@ -82,11 +87,37 @@ export class WorkflowBuilderState {
 			original: structuredClone(s)
 		}));
 
-		this.connections = (data.connections || []).map((c) => ({
+		// Build connections array with entry connections for start stages
+		const loadedConnections: TrackedConnection[] = (data.connections || []).map((c) => ({
 			data: c,
 			status: 'unchanged' as ItemStatus,
 			original: structuredClone(c)
 		}));
+
+		// Ensure entry connections exist for all start stages
+		const startStages = this.stages.filter((s) => s.data.stage_type === 'start');
+		for (const stage of startStages) {
+			const hasEntryConnection = loadedConnections.some(
+				(c) => !c.data.from_stage_id && c.data.to_stage_id === stage.data.id
+			);
+			if (!hasEntryConnection) {
+				// Create entry connection inline (don't use addEntryConnection to avoid reactive push)
+				const entryConnection: WorkflowConnection = {
+					id: generateId(),
+					workflow_id: this.workflowId,
+					from_stage_id: null,
+					to_stage_id: stage.data.id,
+					action_name: 'entry',
+					visual_config: { button_label: 'Start' }
+				};
+				loadedConnections.push({
+					data: entryConnection,
+					status: 'new'
+				});
+			}
+		}
+
+		this.connections = loadedConnections;
 
 		this.forms = (data.forms || []).map((f) => ({
 			data: f,
@@ -289,12 +320,22 @@ export class WorkflowBuilderState {
 	// =========================================================================
 
 	addForm(target: { connectionId: string } | { stageId: string }): ToolsForm {
+		const isStageAttached = 'stageId' in target;
+
 		const newForm: ToolsForm = {
 			id: generateId(),
 			workflow_id: this.workflowId,
 			connection_id: 'connectionId' in target ? target.connectionId : undefined,
-			stage_id: 'stageId' in target ? target.stageId : undefined,
-			name: 'New Form'
+			stage_id: isStageAttached ? target.stageId : undefined,
+			name: 'New Form',
+			// Stage-attached forms need their own config; connection-attached forms inherit
+			...(isStageAttached && {
+				allowed_roles: [],
+				visual_config: {
+					button_label: 'Submit',
+					button_color: '#3b82f6'
+				}
+			})
 		};
 
 		this.forms.push({
@@ -427,11 +468,22 @@ export class WorkflowBuilderState {
 	// =========================================================================
 
 	addEditTool(target: { connectionId: string } | { stageId: string }): ToolsEdit {
+		const isStageAttached = 'stageId' in target;
+
 		const newEditTool: ToolsEdit = {
 			id: generateId(),
 			connection_id: 'connectionId' in target ? target.connectionId : undefined,
-			stage_id: 'stageId' in target ? target.stageId : undefined,
-			editable_fields: []
+			stage_id: isStageAttached ? target.stageId : undefined,
+			name: 'Edit Fields',
+			editable_fields: [],
+			// Stage-attached edit tools need their own config; connection-attached tools inherit
+			...(isStageAttached && {
+				allowed_roles: [],
+				visual_config: {
+					button_label: 'Edit',
+					button_color: '#f97316' // orange for edit actions
+				}
+			})
 		};
 
 		this.editTools.push({
@@ -567,6 +619,87 @@ export class WorkflowBuilderState {
 				(c) => c.data.to_stage_id === trackedStage.data.id
 			);
 			for (const conn of incomingConnections) {
+				const connForms = this.getFormsForConnection(conn.data.id);
+				for (const trackedForm of connForms) {
+					const fields = this.getFieldsForForm(trackedForm.data.id);
+					if (fields.length > 0) {
+						result.push({
+							stage: trackedStage.data,
+							form: trackedForm.data,
+							fields: fields.map((f) => f.data)
+						});
+					}
+				}
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * Get all form fields from ancestor stages for a stage-attached tool.
+	 * Similar to getAncestorFormFields but starts from a stage instead of a connection.
+	 */
+	getAncestorFormFieldsForStage(stageId: string): Array<{
+		stage: WorkflowStage;
+		form: ToolsForm;
+		fields: ToolsFormField[];
+	}> {
+		const result: Array<{
+			stage: WorkflowStage;
+			form: ToolsForm;
+			fields: ToolsFormField[];
+		}> = [];
+
+		// Get forms from connections leading INTO this stage
+		const incomingConnections = this.visibleConnections.filter(
+			(c) => c.data.to_stage_id === stageId
+		);
+
+		for (const conn of incomingConnections) {
+			const connForms = this.getFormsForConnection(conn.data.id);
+			for (const trackedForm of connForms) {
+				const fields = this.getFieldsForForm(trackedForm.data.id);
+				if (fields.length > 0) {
+					// Use the source stage if available, otherwise create a placeholder
+					const sourceStage = conn.data.from_stage_id
+						? this.visibleStages.find((s) => s.data.id === conn.data.from_stage_id)
+						: null;
+					result.push({
+						stage: sourceStage?.data ?? {
+							id: 'entry',
+							workflow_id: this.workflowId,
+							stage_name: 'Entry',
+							stage_type: 'start'
+						},
+						form: trackedForm.data,
+						fields: fields.map((f) => f.data)
+					});
+				}
+			}
+		}
+
+		// Get all ancestor stages and their forms
+		const ancestorStages = this.getAncestorStages(stageId);
+		for (const trackedStage of ancestorStages) {
+			// Get forms attached directly to this stage
+			const stageForms = this.getFormsForStage(trackedStage.data.id);
+			for (const trackedForm of stageForms) {
+				const fields = this.getFieldsForForm(trackedForm.data.id);
+				if (fields.length > 0) {
+					result.push({
+						stage: trackedStage.data,
+						form: trackedForm.data,
+						fields: fields.map((f) => f.data)
+					});
+				}
+			}
+
+			// Get forms from connections leading INTO this ancestor stage
+			const ancestorIncoming = this.visibleConnections.filter(
+				(c) => c.data.to_stage_id === trackedStage.data.id
+			);
+			for (const conn of ancestorIncoming) {
 				const connForms = this.getFormsForConnection(conn.data.id);
 				for (const trackedForm of connForms) {
 					const fields = this.getFieldsForForm(trackedForm.data.id);

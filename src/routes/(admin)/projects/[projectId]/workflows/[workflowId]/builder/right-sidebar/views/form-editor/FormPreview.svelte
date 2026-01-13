@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { flip } from 'svelte/animate';
+	import { tick } from 'svelte';
 	import { Plus, X, Pencil, Check, AlignLeft, AlignRight, Maximize2 } from 'lucide-svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -93,6 +94,29 @@
 	const nextRowIndex = $derived(
 		fieldRows.length > 0 ? Math.max(...fieldRows.map(r => r.rowIndex)) + 1 : 0
 	);
+
+	/**
+	 * Recalculate field_order based on visual position after reordering.
+	 * Waits for state to update, then calls onFieldsReorder with the new order.
+	 * This ensures smart dropdowns can see fields that are now visually before them.
+	 */
+	async function recalculateFieldOrder() {
+		// Wait for the state to update after onFieldUpdate calls
+		await tick();
+
+		// Sort fields on current page by visual position: row_index, then column_position (left before right)
+		const positionOrder: Record<ColumnPosition, number> = { left: 0, right: 1, full: 0 };
+		const sortedFields = [...fields]
+			.filter((f) => (f.data.page ?? 1) === currentPage)
+			.sort((a, b) => {
+				const rowDiff = (a.data.row_index ?? 0) - (b.data.row_index ?? 0);
+				if (rowDiff !== 0) return rowDiff;
+				return positionOrder[a.data.column_position] - positionOrder[b.data.column_position];
+			});
+
+		// Call onFieldsReorder with the new order
+		onFieldsReorder?.(sortedFields.map((f) => f.data.id));
+	}
 
 	// Drop zone state - with live preview support
 	let isDraggingFieldType = $state(false);
@@ -326,6 +350,9 @@
 		// Reset state after move
 		draggedFieldId = null;
 		reorderTarget = null;
+
+		// Recalculate field_order to match new visual positions
+		recalculateFieldOrder();
 	}
 
 	function handleAddPage() {

@@ -5,8 +5,9 @@
 	import PreviewView from './views/preview/PreviewView.svelte';
 	import PropertyView from './views/properties/PropertyView.svelte';
 	import { FormEditorView } from './views/form-editor';
+	import { EditToolEditorView } from './views/edit-tool-editor';
 
-	import type { ToolsForm, ToolsFormField, TrackedFormField, WorkflowStage, ColumnPosition } from '$lib/workflow-builder';
+	import type { ToolsForm, ToolsFormField, TrackedFormField, WorkflowStage, ColumnPosition, ToolsEdit, VisualConfig } from '$lib/workflow-builder';
 
 	type AncestorFieldGroup = {
 		stage: WorkflowStage;
@@ -30,6 +31,13 @@
 		selectedForm?: ToolsForm | null;
 		formFields?: TrackedFormField[];
 		ancestorFields?: AncestorFieldGroup[];
+		// Edit tool editor props
+		selectedEditTool?: ToolsEdit | null;
+		editToolAncestorFields?: AncestorFieldGroup[];
+		// Stage/Connection tools for property view
+		stageEditTools?: ToolsEdit[];
+		connectionForms?: ToolsForm[];
+		connectionEditTools?: ToolsEdit[];
 		// Handlers for property updates
 		onStageRename?: (stageId: string, newName: string) => void;
 		onStageDelete?: (stageId: string) => void;
@@ -40,6 +48,10 @@
 		onEdgeSettingsChange?: (edgeId: string, settings: Record<string, any>) => void;
 		onSelectAction?: (edge: Edge) => void;
 		onSelectStage?: (node: Node) => void;
+		// Tool handlers (for stage property panel)
+		onToolRolesChange?: (toolId: string, roleIds: string[]) => void;
+		onToolVisualConfigChange?: (toolId: string, config: VisualConfig) => void;
+		onSelectTool?: (toolType: string, toolId: string) => void;
 		// Form editor handlers
 		onFormNameChange?: (formId: string, name: string) => void;
 		onAddFormField?: (formId: string, fieldType: string, page: number, rowIndex: number, columnPosition: ColumnPosition) => void;
@@ -50,6 +62,13 @@
 		onFormDeletePage?: (formId: string, page: number) => void;
 		onFormPageTitleChange?: (formId: string, page: number, title: string) => void;
 		onFormClose?: () => void;
+		onFormRolesChange?: (formId: string, roleIds: string[]) => void;
+		onFormVisualConfigChange?: (formId: string, config: VisualConfig) => void;
+		// Edit tool editor handlers
+		onEditToolNameChange?: (editToolId: string, name: string) => void;
+		onEditToolFieldsChange?: (editToolId: string, fieldIds: string[]) => void;
+		onEditToolDelete?: (editToolId: string) => void;
+		onEditToolClose?: () => void;
 	};
 
 	let {
@@ -61,6 +80,11 @@
 		selectedForm = null,
 		formFields = [],
 		ancestorFields = [],
+		selectedEditTool = null,
+		editToolAncestorFields = [],
+		stageEditTools = [],
+		connectionForms = [],
+		connectionEditTools = [],
 		onStageRename,
 		onStageDelete,
 		onStageRolesChange,
@@ -70,6 +94,9 @@
 		onEdgeSettingsChange,
 		onSelectAction,
 		onSelectStage,
+		onToolRolesChange,
+		onToolVisualConfigChange,
+		onSelectTool,
 		onFormNameChange,
 		onAddFormField,
 		onFormFieldUpdate,
@@ -78,7 +105,13 @@
 		onFormAddPage,
 		onFormDeletePage,
 		onFormPageTitleChange,
-		onFormClose
+		onFormClose,
+		onFormRolesChange,
+		onFormVisualConfigChange,
+		onEditToolNameChange,
+		onEditToolFieldsChange,
+		onEditToolDelete,
+		onEditToolClose
 	}: Props = $props();
 
 	// Track palette expanded state for sidebar width
@@ -87,16 +120,22 @@
 	// Form editor mode
 	const isFormEditor = $derived(context.type === 'form');
 
-	// Auto-switch logic: show PropertyView when something is selected (not form)
-	const hasSelection = $derived(context.type !== 'none' && context.type !== 'form');
+	// Edit tool editor mode
+	const isEditToolEditor = $derived(context.type === 'editTool');
+
+	// Auto-switch logic: show PropertyView when something is selected (not form or editTool)
+	const hasSelection = $derived(
+		context.type !== 'none' && context.type !== 'form' && context.type !== 'editTool'
+	);
 </script>
 
-<aside class="right-sidebar" class:wide={isFormEditor} class:expanded={isFormEditor && paletteExpanded}>
+<aside class="right-sidebar" class:wide={isFormEditor || isEditToolEditor} class:expanded={isFormEditor && paletteExpanded}>
 	{#if isFormEditor && selectedForm}
 		<FormEditorView
 			form={selectedForm}
 			fields={formFields}
 			{ancestorFields}
+			{roles}
 			onFormNameChange={(name) => onFormNameChange?.(selectedForm.id, name)}
 			onAddField={(fieldType, page, rowIndex, columnPosition) => onAddFormField?.(selectedForm.id, fieldType, page, rowIndex, columnPosition)}
 			onFieldUpdate={onFormFieldUpdate}
@@ -107,6 +146,17 @@
 			onPageTitleChange={(page, title) => onFormPageTitleChange?.(selectedForm.id, page, title)}
 			onClose={onFormClose}
 			onPaletteExpandedChange={(expanded) => paletteExpanded = expanded}
+			onRolesChange={(roleIds) => onFormRolesChange?.(selectedForm.id, roleIds)}
+			onVisualConfigChange={(config) => onFormVisualConfigChange?.(selectedForm.id, config)}
+		/>
+	{:else if isEditToolEditor && selectedEditTool}
+		<EditToolEditorView
+			editTool={selectedEditTool}
+			ancestorFields={editToolAncestorFields}
+			onNameChange={(name) => onEditToolNameChange?.(selectedEditTool.id, name)}
+			onFieldsChange={(fieldIds) => onEditToolFieldsChange?.(selectedEditTool.id, fieldIds)}
+			onDelete={() => onEditToolDelete?.(selectedEditTool.id)}
+			onClose={onEditToolClose}
 		/>
 	{:else if hasSelection}
 		<PropertyView
@@ -114,6 +164,9 @@
 			{nodes}
 			{edges}
 			{roles}
+			{stageEditTools}
+			{connectionForms}
+			{connectionEditTools}
 			{onStageRename}
 			{onStageDelete}
 			{onStageRolesChange}
@@ -121,7 +174,9 @@
 			{onEdgeDelete}
 			{onEdgeRolesChange}
 			{onEdgeSettingsChange}
-			{onSelectAction}
+			{onToolRolesChange}
+			{onToolVisualConfigChange}
+			{onSelectTool}
 		/>
 	{:else}
 		<PreviewView {workflowName} {nodes} {edges} {onSelectStage} />

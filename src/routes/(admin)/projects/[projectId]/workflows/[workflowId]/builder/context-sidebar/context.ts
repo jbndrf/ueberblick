@@ -32,13 +32,21 @@ export type FormContextData = {
 	attachedTo: { type: 'connection'; connectionId: string } | { type: 'stage'; stageId: string };
 };
 
+// Edit tool context data
+export type EditToolContextData = {
+	editToolId: string;
+	/** Connection or stage this edit tool is attached to */
+	attachedTo: { type: 'connection'; connectionId: string } | { type: 'stage'; stageId: string };
+};
+
 // Selection context union type
 export type SelectionContext =
 	| { type: 'none' }
 	| { type: 'stage'; stageId: string; stage: Node<StageData> }
 	| { type: 'action'; actionId: string; action: Edge }
 	| { type: 'field'; fieldId: string; field: FormFieldData; stageId: string }
-	| { type: 'form'; formId: string; attachedTo: FormContextData['attachedTo'] };
+	| { type: 'form'; formId: string; attachedTo: FormContextData['attachedTo'] }
+	| { type: 'editTool'; editToolId: string; attachedTo: EditToolContextData['attachedTo'] };
 
 // Helper to create contexts
 export const createContext = {
@@ -67,6 +75,15 @@ export const createContext = {
 		type: 'form',
 		formId,
 		attachedTo
+	}),
+
+	editTool: (
+		editToolId: string,
+		attachedTo: EditToolContextData['attachedTo']
+	): SelectionContext => ({
+		type: 'editTool',
+		editToolId,
+		attachedTo
 	})
 };
 
@@ -85,4 +102,10 @@ export function isFieldContext(ctx: SelectionContext): ctx is Extract<SelectionC
 
 export function isFormContext(ctx: SelectionContext): ctx is Extract<SelectionContext, { type: 'form' }> {
 	return ctx.type === 'form';
+}
+
+export function isEditToolContext(
+	ctx: SelectionContext
+): ctx is Extract<SelectionContext, { type: 'editTool' }> {
+	return ctx.type === 'editTool';
 }

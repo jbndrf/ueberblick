@@ -50,15 +50,13 @@
 	class:node-intermediate={data.stageType === 'intermediate'}
 	class:node-end={data.stageType === 'end'}
 >
-	<!-- Input handle (not for start) - fixed position near top -->
-	{#if data.stageType !== 'start'}
-		<Handle
-			type="target"
-			position={Position.Left}
-			class="handle handle-target"
-			style="top: 24px;"
-		/>
-	{/if}
+	<!-- Input handle - all stages have target handles (start stages receive entry connections) -->
+	<Handle
+		type="target"
+		position={Position.Left}
+		class="handle handle-target"
+		style="top: 24px;"
+	/>
 
 	<div class="stage-content">
 		<div class="stage-header">

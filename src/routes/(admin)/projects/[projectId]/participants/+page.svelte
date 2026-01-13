@@ -13,7 +13,8 @@
 	import CustomFieldManagerGeneric, {
 		type FieldConfig
 	} from '$lib/components/admin/custom-field-manager-generic.svelte';
-	import EntitySelector from '$lib/components/entity-selector.svelte';
+	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
+	import { getPocketBase } from '$lib/pocketbase';
 	import CrudDialogs, { type CrudDialogConfig } from '$lib/components/admin/crud-dialogs.svelte';
 	import {
 		createFieldUpdateHandler,
@@ -38,6 +39,18 @@
 	const updateCustomField = createCustomFieldUpdateHandler('updateCustomField');
 	const updateRoles = createArrayFieldUpdateHandler('updateRoles', 'roleIds', 'participantId');
 	const toggleStatus = createToggleHandler('toggleStatus', 'is_active');
+
+	// Create role callback for MobileMultiSelect
+	async function createRole(name: string) {
+		const pb = getPocketBase();
+		const newRole = await pb.collection('roles').create({
+			project_id: $page.params.projectId,
+			name: name,
+			description: ''
+		});
+		await invalidateAll();
+		return newRole;
+	}
 
 	// Dialog configuration for CRUD operations
 	const dialogConfig: CrudDialogConfig = {
@@ -200,7 +213,7 @@
 				getEntityDescription: (role) => role.description,
 				availableEntities: data.roles,
 				allowCreate: true,
-				createAction: '?/createRole'
+				onCreateEntity: createRole
 			},
 			onUpdate: updateRoles
 		},
@@ -369,15 +382,15 @@
 				<input type="hidden" name="participantId" value={selectedParticipant.id} />
 				<input type="hidden" name="roleIds" value={JSON.stringify(selectedRoleIds)} />
 				<div class="py-4">
-					<EntitySelector
-						bind:selectedEntityIds={selectedRoleIds}
-						availableEntities={data.roles}
-						getEntityId={(r) => r.id}
-						getEntityName={(r) => r.name}
-						getEntityDescription={(r) => r.description}
+					<MobileMultiSelect
+						bind:selectedIds={selectedRoleIds}
+						options={data.roles}
+						getOptionId={(r) => r.id}
+						getOptionLabel={(r) => r.name}
+						getOptionDescription={(r) => r.description}
 						allowCreate={true}
-						createAction="?/createRole"
-						placeholder="Type # to see all or type to search/create..."
+						onCreateOption={createRole}
+						placeholder="Select or search roles..."
 					/>
 				</div>
 				<Dialog.Footer>

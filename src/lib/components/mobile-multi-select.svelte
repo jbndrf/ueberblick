@@ -59,6 +59,20 @@
 		 * When false, selected options remain visible with filled radio dots
 		 */
 		hideSelected?: boolean;
+		/**
+		 * When true, automatically add created option to local options array.
+		 * When false (default), parent is responsible for updating options after create.
+		 * Set to false to avoid duplicates when parent refetches from database.
+		 */
+		autoAddCreated?: boolean;
+		/**
+		 * Message shown when no options match the search query
+		 */
+		emptyLabel?: string;
+		/**
+		 * Hint text shown on mobile when create is allowed
+		 */
+		createHintLabel?: string;
 	};
 
 	let {
@@ -74,7 +88,10 @@
 		allowCreate = false,
 		onCreateOption,
 		createLabel = (query: string) => `Create "${query}"`,
-		hideSelected = false
+		hideSelected = false,
+		autoAddCreated = false,
+		emptyLabel = 'No options found',
+		createHintLabel = 'Press Enter to create'
 	}: Props = $props();
 
 	let isOpen = $state(false);
@@ -84,6 +101,9 @@
 	let triggerElement: HTMLButtonElement | null = $state(null);
 	let dropdownElement: HTMLDivElement | null = $state(null);
 	let viewportHeight = $state(0); // For keyboard detection
+	let dropdownPosition = $state({ top: 0, left: 0, width: 0 }); // For fixed positioning
+	let highlightedIndex = $state(-1); // For keyboard navigation on desktop
+	let openUpward = $state(false); // Whether dropdown opens upward (when near bottom of viewport)
 
 	// Derived state
 	const selectedOptions = $derived(
@@ -161,7 +181,9 @@
 
 		try {
 			const newOption = await onCreateOption(searchQuery.trim());
-			options = [...options, newOption];
+			if (autoAddCreated) {
+				options = [...options, newOption];
+			}
 			const newId = getOptionId(newOption);
 
 			if (singleSelect) {
@@ -178,14 +200,42 @@
 
 	// Handle keydown in search input
 	function handleSearchKeydown(e: KeyboardEvent) {
-		if (e.key === 'Backspace' && searchQuery === '' && selectedOptions.length > 0 && !singleSelect) {
+		// Calculate total items: create button (if visible) + filtered options
+		const hasCreateOption = canCreate ? 1 : 0;
+		const totalItems = hasCreateOption + filteredOptions.length;
+
+		if (e.key === 'ArrowDown') {
+			e.preventDefault();
+			if (totalItems > 0) {
+				highlightedIndex = (highlightedIndex + 1) % totalItems;
+			}
+		} else if (e.key === 'ArrowUp') {
+			e.preventDefault();
+			if (totalItems > 0) {
+				highlightedIndex = highlightedIndex <= 0 ? totalItems - 1 : highlightedIndex - 1;
+			}
+		} else if (e.key === 'Enter') {
+			e.preventDefault();
+			if (highlightedIndex >= 0) {
+				// If create option is visible and highlighted (index 0)
+				if (canCreate && highlightedIndex === 0) {
+					createOption();
+				} else {
+					// Select the highlighted option (adjust index if create is visible)
+					const optionIndex = canCreate ? highlightedIndex - 1 : highlightedIndex;
+					if (optionIndex >= 0 && optionIndex < filteredOptions.length) {
+						toggleOption(filteredOptions[optionIndex]);
+					}
+				}
+			} else if (canCreate) {
+				// No highlight but can create - create the option
+				createOption();
+			}
+		} else if (e.key === 'Backspace' && searchQuery === '' && selectedOptions.length > 0 && !singleSelect) {
 			e.preventDefault();
 			// Remove the last selected option
 			const lastOption = selectedOptions[selectedOptions.length - 1];
 			removeOption(getOptionId(lastOption));
-		} else if (e.key === 'Enter' && canCreate) {
-			e.preventDefault();
-			createOption();
 		} else if (e.key === 'Escape') {
 			close();
 		}
@@ -196,10 +246,29 @@
 		if (disabled) return;
 		isOpen = true;
 		searchQuery = '';
+		highlightedIndex = -1; // Reset keyboard navigation
 		// Start listening to viewport changes for keyboard detection
 		if (isMobile && window.visualViewport) {
 			viewportHeight = window.visualViewport.height;
 			window.visualViewport.addEventListener('resize', handleViewportResize);
+			// Lock body scroll on mobile to prevent scroll bleed-through
+			document.body.style.overflow = 'hidden';
+		}
+		// Calculate dropdown position for desktop (portaled to body, so getBoundingClientRect gives correct viewport coords)
+		if (!isMobile && triggerElement) {
+			const rect = triggerElement.getBoundingClientRect();
+			const dropdownHeight = 280; // Approximate max height (max-h-60 = 240px + padding)
+			const spaceBelow = window.innerHeight - rect.bottom;
+			const spaceAbove = rect.top;
+
+			// Open upward if not enough space below but enough above
+			openUpward = spaceBelow < dropdownHeight && spaceAbove > spaceBelow;
+
+			dropdownPosition = {
+				top: openUpward ? rect.top - 4 : rect.bottom + 4,
+				left: rect.left,
+				width: rect.width
+			};
 		}
 	}
 
@@ -211,6 +280,8 @@
 		if (window.visualViewport) {
 			window.visualViewport.removeEventListener('resize', handleViewportResize);
 		}
+		// Restore body scroll
+		document.body.style.overflow = '';
 	}
 
 	// Handle viewport resize (keyboard open/close)
@@ -278,6 +349,24 @@
 			tick().then(() => searchInput?.focus());
 		}
 	});
+
+	// Reset highlighted index when search query changes
+	$effect(() => {
+		searchQuery; // dependency
+		highlightedIndex = -1;
+	});
+
+	// Scroll highlighted option into view
+	$effect(() => {
+		if (highlightedIndex >= 0 && dropdownElement && !isMobile) {
+			const options = dropdownElement.querySelectorAll('[role="option"]');
+			const highlighted = options[highlightedIndex];
+			if (highlighted) {
+				highlighted.scrollIntoView({ block: 'nearest' });
+			}
+		}
+	});
+
 </script>
 
 {#snippet searchBox(size: 'sm' | 'lg')}
@@ -318,7 +407,7 @@
 	</div>
 {/snippet}
 
-{#snippet createOptionBtn(size: 'sm' | 'lg')}
+{#snippet createOptionBtn(size: 'sm' | 'lg', highlighted: boolean = false)}
 	{@const isLg = size === 'lg'}
 	<button
 		type="button"
@@ -326,7 +415,8 @@
 			'w-full flex items-center text-left transition-colors bg-primary/5',
 			isLg
 				? 'gap-4 px-4 min-h-[56px] border-b border-border/50 hover:bg-muted/50 active:bg-muted'
-				: 'gap-2 px-3 py-2 hover:bg-accent focus:bg-accent focus:outline-none'
+				: 'gap-2 px-3 py-2 hover:bg-accent focus:bg-accent focus:outline-none',
+			highlighted && !isLg && 'bg-accent'
 		)}
 		onclick={createOption}
 		onmousedown={isLg ? preventFocusLoss : undefined}
@@ -344,13 +434,13 @@
 				{createLabel(searchQuery.trim())}
 			</div>
 			{#if isLg}
-				<div class="text-sm text-muted-foreground">Press Enter to create</div>
+				<div class="text-sm text-muted-foreground">{createHintLabel}</div>
 			{/if}
 		</div>
 	</button>
 {/snippet}
 
-{#snippet optionItem(option: T, size: 'sm' | 'lg')}
+{#snippet optionItem(option: T, size: 'sm' | 'lg', highlighted: boolean = false)}
 	{@const isLg = size === 'lg'}
 	{@const selected = isSelected(option)}
 	<button
@@ -360,7 +450,8 @@
 			isLg
 				? 'gap-4 px-4 min-h-[56px] border-b border-border/50 hover:bg-muted/50 active:bg-muted'
 				: 'gap-2 px-3 py-2 hover:bg-accent focus:bg-accent focus:outline-none',
-			selected && (isLg ? 'bg-primary/5' : 'bg-accent/50')
+			selected && (isLg ? 'bg-primary/5' : 'bg-accent/50'),
+			highlighted && !isLg && 'bg-accent'
 		)}
 		onclick={() => toggleOption(option)}
 		onmousedown={isLg ? preventFocusLoss : undefined}
@@ -399,7 +490,7 @@
 		'text-center text-muted-foreground',
 		isLg ? 'px-4 py-8' : 'px-3 py-4 text-sm'
 	)}>
-		No options found
+		{emptyLabel}
 	</div>
 {/snippet}
 
@@ -408,7 +499,7 @@
 	<button
 		bind:this={triggerElement}
 		type="button"
-		onclick={open}
+		onclick={() => isOpen ? close() : open()}
 		{disabled}
 		class={cn(
 			'flex min-h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background transition-colors',
@@ -431,51 +522,51 @@
 	<!-- MOBILE: Full-screen Modal -->
 	{#if isOpen && isMobile}
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="fixed inset-0 z-50" onkeydown={handleKeydown}>
-			<!-- Backdrop -->
-			<!-- svelte-ignore a11y_click_events_have_key_events -->
-			<div
-				class="absolute inset-0 bg-black/50"
-				onclick={close}
-				role="button"
-				tabindex="-1"
-				aria-label="Close"
-			></div>
+		<div class="fixed inset-0 z-[100]" onkeydown={handleKeydown}>
+				<!-- Backdrop -->
+				<!-- svelte-ignore a11y_click_events_have_key_events -->
+				<div
+					class="absolute inset-0 bg-black/50 touch-none"
+					onclick={close}
+					role="button"
+					tabindex="-1"
+					aria-label="Close"
+				></div>
 
-			<!-- Modal Content - uses visualViewport height for keyboard awareness -->
-			<div
-				class="absolute left-0 right-0 bg-background rounded-xl flex flex-col shadow-xl overflow-hidden transition-all duration-150"
-				style="top: {viewportHeight * 0.1}px; height: {viewportHeight * 0.8}px;"
-				role="dialog"
-				aria-modal="true"
-				aria-label="Select options"
-			>
-				<!-- Header: Search box with inline badges -->
-				<div class="p-4 border-b border-border shrink-0">
-					{@render searchBox('lg')}
-				</div>
+				<!-- Modal Content - uses visualViewport height for keyboard awareness -->
+				<div
+					class="absolute left-0 right-0 bg-background rounded-xl flex flex-col shadow-xl overflow-hidden transition-all duration-150"
+					style="top: {viewportHeight * 0.1}px; height: {viewportHeight * 0.8}px;"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Select options"
+				>
+					<!-- Header: Search box with inline badges -->
+					<div class="p-4 border-b border-border shrink-0">
+						{@render searchBox('lg')}
+					</div>
 
-				<!-- Options List (scrollable) -->
-				<div class="flex-1 overflow-auto overscroll-contain">
-					{#if filteredOptions.length === 0 && !canCreate}
-						{@render emptyState('lg')}
-					{:else}
-						{#if canCreate}
-							{@render createOptionBtn('lg')}
+					<!-- Options List (scrollable) -->
+					<div class="flex-1 overflow-auto overscroll-contain">
+						{#if filteredOptions.length === 0 && !canCreate}
+							{@render emptyState('lg')}
+						{:else}
+							{#if canCreate}
+								{@render createOptionBtn('lg')}
+							{/if}
+							{#each filteredOptions as option (getOptionId(option))}
+								{@render optionItem(option, 'lg')}
+							{/each}
 						{/if}
-						{#each filteredOptions as option (getOptionId(option))}
-							{@render optionItem(option, 'lg')}
-						{/each}
-					{/if}
-				</div>
+					</div>
 
-				<!-- Footer -->
-				<div class="p-4 border-t border-border shrink-0">
-					<Button class="w-full" onclick={close}>
-						Done {#if selectedOptions.length > 0}({selectedOptions.length}){/if}
-					</Button>
+					<!-- Footer -->
+					<div class="p-4 border-t border-border shrink-0">
+						<Button class="w-full" onclick={close}>
+							Done {#if selectedOptions.length > 0}({selectedOptions.length}){/if}
+						</Button>
+					</div>
 				</div>
-			</div>
 		</div>
 	{/if}
 
@@ -483,7 +574,8 @@
 	{#if isOpen && !isMobile}
 		<div
 			bind:this={dropdownElement}
-			class="absolute z-50 mt-1 w-full bg-popover border border-border rounded-md shadow-lg overflow-hidden"
+			class="fixed z-[9999] bg-popover border border-border rounded-md shadow-lg overflow-hidden"
+			style="top: {dropdownPosition.top}px; left: {dropdownPosition.left}px; width: {dropdownPosition.width}px;{openUpward ? ' transform: translateY(-100%);' : ''}"
 			role="listbox"
 			aria-label="Options"
 		>
@@ -498,10 +590,10 @@
 					{@render emptyState('sm')}
 				{:else}
 					{#if canCreate}
-						{@render createOptionBtn('sm')}
+						{@render createOptionBtn('sm', highlightedIndex === 0)}
 					{/if}
-					{#each filteredOptions as option (getOptionId(option))}
-						{@render optionItem(option, 'sm')}
+					{#each filteredOptions as option, i (getOptionId(option))}
+						{@render optionItem(option, 'sm', highlightedIndex === (canCreate ? i + 1 : i))}
 					{/each}
 				{/if}
 			</div>

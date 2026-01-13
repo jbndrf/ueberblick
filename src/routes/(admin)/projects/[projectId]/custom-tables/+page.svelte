@@ -9,7 +9,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Label } from '$lib/components/ui/label';
-	import EntitySelector from '$lib/components/entity-selector.svelte';
+	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 	import { toast } from 'svelte-sonner';
 	import { Settings } from 'lucide-svelte';
 	import type { PageData } from './$types';
@@ -331,14 +331,13 @@
 				</div>
 				<div class="grid gap-2">
 					<Label>{m.customTablesVisibleToRoles()}</Label>
-					<EntitySelector
-						bind:selectedEntityIds={createVisibleToRoles}
-						availableEntities={data.roles}
-						getEntityId={(r) => r.id}
-						getEntityName={(r) => r.name}
-						getEntityDescription={(r) => r.description}
-						allowCreate={false}
-						placeholder="Type # to see all roles..."
+					<MobileMultiSelect
+						bind:selectedIds={createVisibleToRoles}
+						options={data.roles}
+						getOptionId={(r) => r.id}
+						getOptionLabel={(r) => r.name}
+						getOptionDescription={(r) => r.description}
+						placeholder="Select roles..."
 					/>
 				</div>
 				<input type="hidden" name="visible_to_roles" value={JSON.stringify(createVisibleToRoles)} />
@@ -419,14 +418,13 @@
 					</div>
 					<div class="grid gap-2">
 						<Label>{m.customTablesVisibleToRoles()}</Label>
-						<EntitySelector
-							bind:selectedEntityIds={editVisibleToRoles}
-							availableEntities={data.roles}
-							getEntityId={(r) => r.id}
-							getEntityName={(r) => r.name}
-							getEntityDescription={(r) => r.description}
-							allowCreate={false}
-							placeholder="Type # to see all roles..."
+						<MobileMultiSelect
+							bind:selectedIds={editVisibleToRoles}
+							options={data.roles}
+							getOptionId={(r) => r.id}
+							getOptionLabel={(r) => r.name}
+							getOptionDescription={(r) => r.description}
+							placeholder="Select roles..."
 						/>
 					</div>
 					<input type="hidden" name="visible_to_roles" value={JSON.stringify(editVisibleToRoles)} />

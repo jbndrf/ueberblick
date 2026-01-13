@@ -17,6 +17,7 @@ export type {
 	ToolsForm,
 	ToolsFormField,
 	ToolsEdit,
+	VisualConfig,
 	TrackedStage,
 	TrackedConnection,
 	TrackedForm,
@@ -26,7 +27,19 @@ export type {
 	FieldType,
 	ColumnPosition,
 	ItemStatus,
-	TrackedItem
+	TrackedItem,
+	// Field option types
+	FieldOption,
+	TextValidation,
+	NumberValidation,
+	DateFieldOptions,
+	FileFieldOptions,
+	OptionsFieldOptions,
+	MultipleChoiceValidation,
+	SmartDropdownMapping,
+	SmartDropdownFieldOptions,
+	EntitySourceType,
+	EntitySelectorOptions
 } from './types';
 
 // Save

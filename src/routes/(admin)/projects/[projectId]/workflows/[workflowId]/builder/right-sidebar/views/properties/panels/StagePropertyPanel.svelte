@@ -1,15 +1,22 @@
 <script lang="ts">
 	import type { Node, Edge } from '@xyflow/svelte';
+	import { invalidateAll } from '$app/navigation';
+	import { page } from '$app/stores';
+	import { getPocketBase } from '$lib/pocketbase';
 
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import * as Tabs from '$lib/components/ui/tabs';
-	import EntitySelector from '$lib/components/entity-selector.svelte';
+	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 
-	import { Play, Square, CircleStop, Trash2, ArrowRight, RotateCcw } from 'lucide-svelte';
+	import { Play, Square, CircleStop, Trash2 } from 'lucide-svelte';
 
 	import PropertySection from '../shared/PropertySection.svelte';
+	import ConnectedToolItem from '../shared/ConnectedToolItem.svelte';
 	import FieldList from '../shared/FieldList.svelte';
+
+	import { toolRegistry } from '$lib/workflow-builder/tools';
+	import type { ToolsEdit, VisualConfig } from '$lib/workflow-builder';
 
 	type Role = {
 		id: string;
@@ -22,13 +29,18 @@
 		nodes: Node[];
 		edges: Edge[];
 		roles: Role[];
-		outgoingActions: Edge[];
-		editActions: Edge[];
 		ancestors: string[];
+		/** Stage-attached edit tools */
+		stageEditTools?: ToolsEdit[];
 		onRename?: (stageId: string, newName: string) => void;
 		onDelete?: (stageId: string) => void;
 		onRolesChange?: (stageId: string, roleIds: string[]) => void;
-		onSelectAction?: (edge: Edge) => void;
+		/** Callback when a tool's allowed_roles change */
+		onToolRolesChange?: (toolId: string, roleIds: string[]) => void;
+		/** Callback when a tool's visual config changes */
+		onToolVisualConfigChange?: (toolId: string, config: VisualConfig) => void;
+		/** Callback when a tool is selected */
+		onSelectTool?: (toolType: string, toolId: string) => void;
 	};
 
 	let {
@@ -36,13 +48,14 @@
 		nodes,
 		edges,
 		roles,
-		outgoingActions,
-		editActions,
 		ancestors,
+		stageEditTools = [],
 		onRename,
 		onDelete,
 		onRolesChange,
-		onSelectAction
+		onToolRolesChange,
+		onToolVisualConfigChange,
+		onSelectTool
 	}: Props = $props();
 
 	// Local state for editing
@@ -52,6 +65,18 @@
 
 	// Track current stage ID to detect stage switches
 	let currentStageId = $state(stage.id);
+
+	// Local state for tool roles (keyed by tool ID)
+	let toolRolesMap = $state<Record<string, string[]>>({});
+
+	// Initialize tool roles map
+	$effect(() => {
+		const newMap: Record<string, string[]> = {};
+		for (const tool of stageEditTools) {
+			newMap[tool.id] = tool.allowed_roles || [];
+		}
+		toolRolesMap = newMap;
+	});
 
 	// Update local state when stage changes (user selected different stage)
 	$effect(() => {
@@ -118,19 +143,37 @@
 		}
 	}
 
-	// Handle roles change
-	function handleRolesChange() {
-		onRolesChange?.(stage.id, selectedRoleIds);
-	}
-
 	// Handle delete
 	function handleDelete() {
 		onDelete?.(stage.id);
 	}
 
-	// Get node by ID
-	function getNodeById(id: string): Node | undefined {
-		return nodes.find((n) => n.id === id);
+	// Create role callback for MobileMultiSelect
+	async function createRole(name: string) {
+		const pb = getPocketBase();
+		const newRole = await pb.collection('roles').create({
+			project_id: $page.params.projectId,
+			name: name,
+			description: ''
+		});
+		await invalidateAll();
+		return newRole;
+	}
+
+	// Handle tool roles change
+	function handleToolRolesChange(toolId: string, newRoleIds: string[]) {
+		toolRolesMap[toolId] = newRoleIds;
+		onToolRolesChange?.(toolId, newRoleIds);
+	}
+
+	// Get tool icon from registry
+	function getToolIcon(toolType: string) {
+		return toolRegistry.get(toolType)?.icon;
+	}
+
+	// Get tool color from registry
+	function getToolColor(toolType: string) {
+		return toolRegistry.get(toolType)?.defaultColor ?? '#6B7280';
 	}
 
 	const StageIcon = $derived(getStageIcon(stage.data.stageType));
@@ -161,72 +204,90 @@
 	<Tabs.Root bind:value={activeTab} class="flex-1 flex flex-col">
 		<Tabs.List class="panel-tabs">
 			<Tabs.Trigger value="permissions">Permissions</Tabs.Trigger>
-			<Tabs.Trigger value="actions">Actions</Tabs.Trigger>
+			<Tabs.Trigger value="tools">Tools</Tabs.Trigger>
 			<Tabs.Trigger value="fields">Fields</Tabs.Trigger>
 		</Tabs.List>
 
 		<div class="panel-content">
 			<!-- Permissions Tab -->
 			<Tabs.Content value="permissions" class="tab-content">
-				<PropertySection title="Visible to Roles">
-					<EntitySelector
-						bind:selectedEntityIds={selectedRoleIds}
-						availableEntities={roles}
-						getEntityId={(r) => r.id}
-						getEntityName={(r) => r.name}
-						getEntityDescription={(r) => r.description}
-						allowCreate={true}
-						createAction="?/createRole"
-						placeholder="Type # to see all or search..."
-						class="w-full"
-					/>
-					<p class="help-text">
-						Only participants with these roles can see this stage. Leave empty to make visible to
-						all.
-					</p>
-				</PropertySection>
-			</Tabs.Content>
+				<!-- Stage Visibility - Primary/Prominent Section -->
+				<div class="primary-permission-section">
+					<div class="primary-permission-header">
+						<span class="primary-permission-title">Stage Visibility</span>
+					</div>
+					<div class="primary-permission-content">
+						<MobileMultiSelect
+							bind:selectedIds={selectedRoleIds}
+							options={roles}
+							getOptionId={(r) => r.id}
+							getOptionLabel={(r) => r.name}
+							getOptionDescription={(r) => r.description}
+							allowCreate={true}
+							onCreateOption={createRole}
+							placeholder="Select or search roles..."
+							class="w-full"
+						/>
+						<p class="help-text">
+							Only participants with these roles can see this stage. Leave empty to make visible to all.
+						</p>
+					</div>
+				</div>
 
-			<!-- Actions Tab -->
-			<Tabs.Content value="actions" class="tab-content">
-				<PropertySection title="Progress Actions" defaultOpen={true}>
-					{#if outgoingActions.length === 0}
-						<p class="empty-text">No progress actions. Connect to another stage to create one.</p>
-					{:else}
-						<div class="action-list">
-							{#each outgoingActions as action}
-								{@const targetNode = getNodeById(action.target)}
-								<button class="action-item" onclick={() => onSelectAction?.(action)}>
-									<div class="action-icon">
-										<ArrowRight class="h-3.5 w-3.5" />
+				<!-- Tool Permissions Section -->
+				{#if stageEditTools.length > 0}
+					<PropertySection title="Tool Permissions" defaultOpen={true}>
+						<div class="tool-permissions-list">
+							{#each stageEditTools as tool (tool.id)}
+								{@const ToolIcon = getToolIcon('edit')}
+								{@const iconColor = getToolColor('edit')}
+								<div class="tool-permission-item">
+									<div class="tool-permission-header">
+										<div class="tool-icon" style="--icon-color: {iconColor}">
+											{#if ToolIcon}
+												<ToolIcon class="icon" />
+											{/if}
+										</div>
+										<span class="tool-name">{tool.name}</span>
 									</div>
-									<div class="action-info">
-										<span class="action-name">{action.label || 'Untitled'}</span>
-										<span class="action-target">
-											to {targetNode?.data.title || 'Unknown'}
-										</span>
+									<div class="tool-permission-roles">
+										<MobileMultiSelect
+											selectedIds={toolRolesMap[tool.id] || []}
+											onSelectedIdsChange={(ids) => handleToolRolesChange(tool.id, ids)}
+											options={roles}
+											getOptionId={(r) => r.id}
+											getOptionLabel={(r) => r.name}
+											getOptionDescription={(r) => r.description}
+											allowCreate={true}
+											onCreateOption={createRole}
+											placeholder="All roles..."
+											class="w-full"
+										/>
 									</div>
-								</button>
+								</div>
 							{/each}
 						</div>
-					{/if}
-				</PropertySection>
+					</PropertySection>
+				{/if}
+			</Tabs.Content>
 
-				<PropertySection title="Edit Actions" defaultOpen={true}>
-					{#if editActions.length === 0}
-						<p class="empty-text">No edit actions. Right-click this stage twice to create one.</p>
+			<!-- Tools Tab -->
+			<Tabs.Content value="tools" class="tab-content">
+				<PropertySection title="Connected Tools" defaultOpen={true}>
+					{#if stageEditTools.length === 0}
+						<p class="empty-text">No tools attached to this stage.</p>
 					{:else}
-						<div class="action-list">
-							{#each editActions as action}
-								<button class="action-item" onclick={() => onSelectAction?.(action)}>
-									<div class="action-icon edit">
-										<RotateCcw class="h-3.5 w-3.5" />
-									</div>
-									<div class="action-info">
-										<span class="action-name">{action.label || 'Edit'}</span>
-										<span class="action-target">stays on this stage</span>
-									</div>
-								</button>
+						<div class="tools-list">
+							{#each stageEditTools as tool (tool.id)}
+								<ConnectedToolItem
+									toolType="edit"
+									name={tool.name}
+									visualConfig={tool.visual_config || {}}
+									onVisualConfigChange={(config) => onToolVisualConfigChange?.(tool.id, config)}
+									onSelect={() => onSelectTool?.('edit', tool.id)}
+									defaultButtonLabel="Edit"
+									defaultButtonColor="#6366F1"
+								/>
 							{/each}
 						</div>
 					{/if}
@@ -340,6 +401,31 @@
 		padding: 0;
 	}
 
+	/* Primary permission section - prominent styling */
+	.primary-permission-section {
+		margin: 0.75rem;
+		border-radius: 0.5rem;
+		border: 2px solid hsl(var(--primary) / 0.2);
+		background: hsl(var(--primary) / 0.05);
+	}
+
+	.primary-permission-header {
+		padding: 0.5rem 0.75rem;
+		border-bottom: 1px solid hsl(var(--primary) / 0.1);
+	}
+
+	.primary-permission-title {
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: hsl(var(--primary));
+		text-transform: uppercase;
+		letter-spacing: 0.025em;
+	}
+
+	.primary-permission-content {
+		padding: 0.75rem;
+	}
+
 	.help-text {
 		font-size: 0.75rem;
 		color: hsl(var(--muted-foreground));
@@ -353,63 +439,59 @@
 		padding: 1rem 0;
 	}
 
-	.action-list {
+	/* Tool permissions styling */
+	.tool-permissions-list {
 		display: flex;
 		flex-direction: column;
-		gap: 0.375rem;
+		gap: 0.75rem;
 	}
 
-	.action-item {
-		display: flex;
-		align-items: center;
-		gap: 0.625rem;
-		padding: 0.5rem 0.625rem;
+	.tool-permission-item {
+		padding: 0.625rem;
 		border-radius: 0.375rem;
 		background: hsl(var(--accent) / 0.3);
 		border: 1px solid hsl(var(--border));
-		cursor: pointer;
-		transition: all 0.15s ease;
-		text-align: left;
-		width: 100%;
 	}
 
-	.action-item:hover {
-		background: hsl(var(--accent) / 0.5);
-	}
-
-	.action-icon {
-		flex-shrink: 0;
-		padding: 0.375rem;
-		border-radius: 0.25rem;
-		background: hsl(var(--primary) / 0.1);
-		color: hsl(var(--primary));
-	}
-
-	.action-icon.edit {
-		background: hsl(var(--muted));
-		color: hsl(var(--muted-foreground));
-	}
-
-	.action-info {
-		flex: 1;
+	.tool-permission-header {
 		display: flex;
-		flex-direction: column;
-		gap: 0.125rem;
-		min-width: 0;
+		align-items: center;
+		gap: 0.5rem;
+		margin-bottom: 0.5rem;
 	}
 
-	.action-name {
+	.tool-icon {
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 20px;
+		height: 20px;
+		background: color-mix(in srgb, var(--icon-color) 15%, transparent);
+		border-radius: 0.25rem;
+	}
+
+	.tool-icon :global(.icon) {
+		width: 12px;
+		height: 12px;
+		color: var(--icon-color);
+	}
+
+	.tool-name {
 		font-size: 0.8125rem;
 		font-weight: 500;
 		color: hsl(var(--foreground));
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 	}
 
-	.action-target {
-		font-size: 0.6875rem;
-		color: hsl(var(--muted-foreground));
+	.tool-permission-roles {
+		/* Roles selector */
+	}
+
+	/* Tools list styling */
+	.tools-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
 	}
 
 	.panel-footer {

@@ -29,7 +29,7 @@
 			onclick={() => onSelectTool?.(tool.id)}
 		/>
 	{/each}
-	<button class="add-tool" onclick={onAddTool} title="Add tool" type="button">
+	<button class="add-tool" onclick={(e) => { e.stopPropagation(); onAddTool?.(); }} title="Add tool" type="button">
 		<Plus class="add-icon" />
 	</button>
 </div>

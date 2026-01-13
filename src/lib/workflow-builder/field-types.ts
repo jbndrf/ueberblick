@@ -15,7 +15,8 @@ import {
 	Upload,
 	ChevronDown,
 	List,
-	Sparkles
+	Sparkles,
+	Table
 } from 'lucide-svelte';
 import type { FieldType } from './types';
 
@@ -80,6 +81,12 @@ export const FIELD_TYPES: FieldTypeDefinition[] = [
 		label: 'Smart Dropdown',
 		description: 'Dynamic options based on other fields',
 		icon: Sparkles
+	},
+	{
+		type: 'custom_table_selector',
+		label: 'Custom Table',
+		description: 'Select from a custom table',
+		icon: Table
 	}
 ];
 

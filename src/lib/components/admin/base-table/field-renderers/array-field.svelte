@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { Badge } from '$lib/components/ui/badge';
-	import EntitySelector from '$lib/components/entity-selector.svelte';
-	import * as Dialog from '$lib/components/ui/dialog';
+	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { toast } from 'svelte-sonner';
 	import * as m from '$lib/paraglide/messages';
@@ -18,7 +17,6 @@
 			availableEntities?: any[];
 			allowCreate?: boolean;
 			onCreateEntity?: (name: string) => Promise<any>;
-			createAction?: string;
 		};
 		emptyText?: string;
 	}
@@ -97,16 +95,15 @@
 {#if isEditing && entityConfig}
 	<div class="flex flex-col gap-2 w-full">
 		{#if entitySelectorLoaded}
-			<EntitySelector
-				bind:selectedEntityIds={selectedIds}
-				bind:availableEntities={entityConfig.availableEntities}
-				getEntityId={entityConfig.getEntityId}
-				getEntityName={entityConfig.getEntityName}
-				getEntityDescription={entityConfig.getEntityDescription}
+			<MobileMultiSelect
+				bind:selectedIds
+				bind:options={entityConfig.availableEntities}
+				getOptionId={entityConfig.getEntityId}
+				getOptionLabel={entityConfig.getEntityName}
+				getOptionDescription={entityConfig.getEntityDescription}
 				allowCreate={entityConfig.allowCreate ?? false}
-				onCreateEntity={entityConfig.onCreateEntity}
-				createAction={entityConfig.createAction}
-				placeholder="Type # to see all or type to search/create..."
+				onCreateOption={entityConfig.onCreateEntity}
+				placeholder="Select or search..."
 			/>
 		{:else}
 			<div class="text-sm text-muted-foreground">Loading...</div>

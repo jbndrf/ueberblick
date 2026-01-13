@@ -1,19 +1,26 @@
 <script lang="ts">
-	import { X, ChevronLeft, ChevronRight } from 'lucide-svelte';
+	import { X, ChevronLeft, ChevronRight, Link, Settings2 } from 'lucide-svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import { Switch } from '$lib/components/ui/switch';
 
 	import FieldTypesPalette from './FieldTypesPalette.svelte';
 	import FieldConfigPanel from './FieldConfigPanel.svelte';
 	import FormPreview from './FormPreview.svelte';
 
-	import type { ToolsForm, ToolsFormField, TrackedFormField, WorkflowStage, ColumnPosition } from '$lib/workflow-builder';
+	import type { ToolsForm, ToolsFormField, TrackedFormField, WorkflowStage, ColumnPosition, VisualConfig } from '$lib/workflow-builder';
 
 	type AncestorFieldGroup = {
 		stage: WorkflowStage;
 		form: ToolsForm;
 		fields: ToolsFormField[];
+	};
+
+	type Role = {
+		id: string;
+		name: string;
+		description?: string;
 	};
 
 	type Props = {
@@ -23,6 +30,8 @@
 		fields: TrackedFormField[];
 		/** Ancestor fields for smart dropdown configuration */
 		ancestorFields?: AncestorFieldGroup[];
+		/** Available roles for permissions (only used for stage-attached forms) */
+		roles?: Role[];
 		/** Callback when form name changes */
 		onFormNameChange?: (name: string) => void;
 		/** Callback when a field is added */
@@ -43,12 +52,17 @@
 		onClose?: () => void;
 		/** Callback when palette expanded state changes */
 		onPaletteExpandedChange?: (expanded: boolean) => void;
+		/** Callback when roles change (only for stage-attached forms) */
+		onRolesChange?: (roleIds: string[]) => void;
+		/** Callback when visual config changes (only for stage-attached forms) */
+		onVisualConfigChange?: (config: VisualConfig) => void;
 	};
 
 	let {
 		form,
 		fields,
 		ancestorFields = [],
+		roles = [],
 		onFormNameChange,
 		onAddField,
 		onFieldUpdate,
@@ -58,8 +72,16 @@
 		onDeletePage,
 		onPageTitleChange,
 		onClose,
-		onPaletteExpandedChange
+		onPaletteExpandedChange,
+		onRolesChange,
+		onVisualConfigChange
 	}: Props = $props();
+
+	// Determine if this is a stage-attached form (has its own config)
+	const isStageAttached = $derived(!!form.stage_id && !form.connection_id);
+
+	// Settings panel visibility (only for stage-attached forms)
+	let showSettings = $state(false);
 
 	// Palette expanded state (for field types view)
 	let paletteExpanded = $state(false);
@@ -167,6 +189,22 @@
 					placeholder="Form name..."
 				/>
 			</div>
+			{#if isStageAttached}
+				<Button
+					variant={showSettings ? 'secondary' : 'ghost'}
+					size="icon"
+					onclick={() => showSettings = !showSettings}
+					class="settings-btn"
+					title="Button & Role Settings"
+				>
+					<Settings2 class="h-4 w-4" />
+				</Button>
+			{:else}
+				<div class="inheritance-badge" title="Inherits config from connection">
+					<Link class="h-3 w-3" />
+					<span>Inherited</span>
+				</div>
+			{/if}
 			<Button variant="ghost" size="icon" onclick={onClose} class="close-btn">
 				<X class="h-4 w-4" />
 			</Button>
@@ -175,47 +213,165 @@
 
 	<!-- Main content area -->
 	<div class="form-editor-content">
-		<!-- Left Panel: Field Types Palette OR Field Config -->
-		<div class="left-panel" class:wide={leftPanelWide}>
-			{#if selectedField}
-				<!-- Field Configuration Mode -->
-				<FieldConfigPanel
-					field={selectedField}
-					ancestorFields={availableSourceFields}
-					onUpdate={handleFieldConfigUpdate}
-					onDelete={handleFieldConfigDelete}
-					onClose={handleFieldConfigClose}
-				/>
-			{:else}
-				<!-- Field Types Palette Mode -->
-				<button class="palette-toggle" onclick={togglePalette} type="button">
-					{#if paletteExpanded}
-						<ChevronRight class="h-4 w-4" />
-					{:else}
-						<ChevronLeft class="h-4 w-4" />
-					{/if}
-				</button>
-				<FieldTypesPalette
-					expanded={paletteExpanded}
-					onFieldDrag={handleFieldDrop}
-				/>
-			{/if}
-		</div>
+		{#if showSettings && isStageAttached}
+			<!-- Settings Panel (replaces form editor when open) -->
+			<div class="settings-panel">
+				<div class="settings-section">
+					<div class="settings-header">
+						<span class="settings-title">Button Appearance</span>
+					</div>
+					<div class="settings-content">
+						<div class="form-field">
+							<Label for="button-label">Button Label</Label>
+							<Input
+								id="button-label"
+								value={form.visual_config?.button_label || 'Submit'}
+								oninput={(e) => onVisualConfigChange?.({
+									...form.visual_config,
+									button_label: e.currentTarget.value
+								})}
+								placeholder="e.g., Submit, Save, Continue"
+							/>
+						</div>
 
-		<!-- Form Preview (main area) -->
-		<div class="preview-container">
-			<FormPreview
-				{fields}
-				{selectedFieldId}
-				onFieldSelect={handleFieldSelect}
-				onFieldsReorder={onFieldsReorder}
-				onFieldDrop={handleFieldDrop}
-				{onFieldUpdate}
-				{onAddPage}
-				{onDeletePage}
-				{onPageTitleChange}
-			/>
-		</div>
+						<div class="form-field">
+							<Label for="button-color">Button Color</Label>
+							<div class="color-picker">
+								<input
+									type="color"
+									id="button-color"
+									value={form.visual_config?.button_color || '#3b82f6'}
+									oninput={(e) => onVisualConfigChange?.({
+										...form.visual_config,
+										button_color: e.currentTarget.value
+									})}
+									class="color-input"
+								/>
+								<Input
+									value={form.visual_config?.button_color || '#3b82f6'}
+									oninput={(e) => onVisualConfigChange?.({
+										...form.visual_config,
+										button_color: e.currentTarget.value
+									})}
+									placeholder="#3b82f6"
+									class="color-text"
+								/>
+							</div>
+						</div>
+
+						<div class="form-field-switch">
+							<div class="switch-info">
+								<Label for="requires-confirmation">Requires Confirmation</Label>
+								<p class="switch-description">
+									Show a confirmation dialog before submitting
+								</p>
+							</div>
+							<Switch
+								id="requires-confirmation"
+								checked={form.visual_config?.requires_confirmation || false}
+								onCheckedChange={(checked) => onVisualConfigChange?.({
+									...form.visual_config,
+									requires_confirmation: checked
+								})}
+							/>
+						</div>
+
+						{#if form.visual_config?.requires_confirmation}
+							<div class="form-field">
+								<Label for="confirmation-message">Confirmation Message</Label>
+								<Input
+									id="confirmation-message"
+									value={form.visual_config?.confirmation_message || 'Are you sure you want to submit?'}
+									oninput={(e) => onVisualConfigChange?.({
+										...form.visual_config,
+										confirmation_message: e.currentTarget.value
+									})}
+									placeholder="Are you sure you want to submit?"
+								/>
+							</div>
+						{/if}
+					</div>
+				</div>
+
+				<div class="settings-section">
+					<div class="settings-header">
+						<span class="settings-title">Allowed Roles</span>
+					</div>
+					<div class="settings-content">
+						<div class="roles-list">
+							{#each roles as role}
+								<label class="role-checkbox">
+									<input
+										type="checkbox"
+										checked={(form.allowed_roles || []).includes(role.id)}
+										onchange={(e) => {
+											const currentRoles = form.allowed_roles || [];
+											if (e.currentTarget.checked) {
+												onRolesChange?.([...currentRoles, role.id]);
+											} else {
+												onRolesChange?.(currentRoles.filter(id => id !== role.id));
+											}
+										}}
+									/>
+									<span class="role-name">{role.name}</span>
+									{#if role.description}
+										<span class="role-desc">{role.description}</span>
+									{/if}
+								</label>
+							{:else}
+								<p class="no-roles">No roles defined for this project.</p>
+							{/each}
+						</div>
+						<p class="help-text">
+							Only participants with selected roles can use this form. Leave empty to allow all.
+						</p>
+					</div>
+				</div>
+			</div>
+		{:else}
+			<!-- Left Panel: Field Types Palette OR Field Config -->
+			<div class="left-panel" class:wide={leftPanelWide}>
+				{#if selectedField}
+					<!-- Field Configuration Mode -->
+					<FieldConfigPanel
+						field={selectedField}
+						ancestorFields={availableSourceFields}
+						{roles}
+						onUpdate={handleFieldConfigUpdate}
+						onDelete={handleFieldConfigDelete}
+						onClose={handleFieldConfigClose}
+					/>
+				{:else}
+					<!-- Field Types Palette Mode -->
+					<button class="palette-toggle" onclick={togglePalette} type="button">
+						{#if paletteExpanded}
+							<ChevronRight class="h-4 w-4" />
+						{:else}
+							<ChevronLeft class="h-4 w-4" />
+						{/if}
+					</button>
+					<FieldTypesPalette
+						expanded={paletteExpanded}
+						onFieldDrag={handleFieldDrop}
+					/>
+				{/if}
+			</div>
+
+			<!-- Form Preview (main area) -->
+			<div class="preview-container">
+				<FormPreview
+					{fields}
+					{selectedFieldId}
+					onFieldSelect={handleFieldSelect}
+					onFieldsReorder={onFieldsReorder}
+					onFieldDrop={handleFieldDrop}
+					{onFieldUpdate}
+					{onAddPage}
+					{onDeletePage}
+					{onPageTitleChange}
+				/>
+			</div>
+		{/if}
 	</div>
 </div>
 
@@ -310,5 +466,176 @@
 
 	:global(.dark) .preview-container {
 		background: oklch(0.15 0.02 260);
+	}
+
+	/* Settings button and badge */
+	.settings-btn {
+		flex-shrink: 0;
+	}
+
+	.inheritance-badge {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.25rem 0.5rem;
+		background: hsl(var(--muted));
+		border-radius: 0.25rem;
+		font-size: 0.6875rem;
+		color: hsl(var(--muted-foreground));
+	}
+
+	/* Settings panel */
+	.settings-panel {
+		flex: 1;
+		overflow-y: auto;
+		padding: 1rem;
+		background: hsl(var(--background));
+	}
+
+	.settings-section {
+		margin-bottom: 1.5rem;
+		border: 1px solid hsl(var(--border));
+		border-radius: 0.5rem;
+		overflow: hidden;
+	}
+
+	.settings-section:last-child {
+		margin-bottom: 0;
+	}
+
+	.settings-header {
+		padding: 0.625rem 1rem;
+		background: hsl(var(--muted));
+		border-bottom: 1px solid hsl(var(--border));
+	}
+
+	.settings-title {
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: hsl(var(--foreground));
+		text-transform: uppercase;
+		letter-spacing: 0.025em;
+	}
+
+	.settings-content {
+		padding: 1rem;
+	}
+
+	.form-field {
+		margin-bottom: 1rem;
+	}
+
+	.form-field:last-child {
+		margin-bottom: 0;
+	}
+
+	.form-field :global(label) {
+		display: block;
+		font-size: 0.75rem;
+		font-weight: 500;
+		margin-bottom: 0.375rem;
+	}
+
+	.form-field-switch {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
+		gap: 1rem;
+		margin-bottom: 1rem;
+	}
+
+	.switch-info {
+		flex: 1;
+	}
+
+	.switch-info :global(label) {
+		font-size: 0.8125rem;
+		font-weight: 500;
+	}
+
+	.switch-description {
+		font-size: 0.75rem;
+		color: hsl(var(--muted-foreground));
+		margin-top: 0.125rem;
+	}
+
+	.color-picker {
+		display: flex;
+		gap: 0.5rem;
+		align-items: center;
+	}
+
+	.color-input {
+		width: 2.5rem;
+		height: 2.5rem;
+		padding: 0.125rem;
+		border: 1px solid hsl(var(--border));
+		border-radius: 0.375rem;
+		cursor: pointer;
+	}
+
+	.color-input::-webkit-color-swatch-wrapper {
+		padding: 0;
+	}
+
+	.color-input::-webkit-color-swatch {
+		border: none;
+		border-radius: 0.25rem;
+	}
+
+	.color-text {
+		flex: 1;
+	}
+
+	/* Roles list */
+	.roles-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.role-checkbox {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem;
+		background: hsl(var(--muted));
+		border-radius: 0.375rem;
+		cursor: pointer;
+		transition: background 0.15s ease;
+	}
+
+	.role-checkbox:hover {
+		background: hsl(var(--accent));
+	}
+
+	.role-checkbox input[type="checkbox"] {
+		width: 1rem;
+		height: 1rem;
+		accent-color: hsl(var(--primary));
+	}
+
+	.role-name {
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: hsl(var(--foreground));
+	}
+
+	.role-desc {
+		font-size: 0.75rem;
+		color: hsl(var(--muted-foreground));
+		margin-left: auto;
+	}
+
+	.no-roles {
+		font-size: 0.75rem;
+		color: hsl(var(--muted-foreground));
+		font-style: italic;
+	}
+
+	.help-text {
+		font-size: 0.75rem;
+		color: hsl(var(--muted-foreground));
+		margin-top: 0.75rem;
 	}
 </style>

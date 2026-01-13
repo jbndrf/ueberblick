@@ -5,6 +5,8 @@
 	import StagePropertyPanel from './panels/StagePropertyPanel.svelte';
 	import EdgePropertyPanel from './panels/EdgePropertyPanel.svelte';
 
+	import type { ToolsEdit, ToolsForm, VisualConfig } from '$lib/workflow-builder';
+
 	type Role = {
 		id: string;
 		name: string;
@@ -16,6 +18,12 @@
 		nodes: Node[];
 		edges: Edge[];
 		roles: Role[];
+		/** Stage-attached edit tools (for stage property panel) */
+		stageEditTools?: ToolsEdit[];
+		/** Connection-attached forms (for edge property panel) */
+		connectionForms?: ToolsForm[];
+		/** Connection-attached edit tools (for edge property panel) */
+		connectionEditTools?: ToolsEdit[];
 		onStageRename?: (stageId: string, newName: string) => void;
 		onStageDelete?: (stageId: string) => void;
 		onStageRolesChange?: (stageId: string, roleIds: string[]) => void;
@@ -23,7 +31,12 @@
 		onEdgeDelete?: (edgeId: string) => void;
 		onEdgeRolesChange?: (edgeId: string, roleIds: string[]) => void;
 		onEdgeSettingsChange?: (edgeId: string, settings: Record<string, any>) => void;
-		onSelectAction?: (edge: Edge) => void;
+		/** Callback when a tool's allowed_roles change (for stage-attached tools) */
+		onToolRolesChange?: (toolId: string, roleIds: string[]) => void;
+		/** Callback when a tool's visual config changes (for stage-attached tools) */
+		onToolVisualConfigChange?: (toolId: string, config: VisualConfig) => void;
+		/** Callback when a tool is selected */
+		onSelectTool?: (toolType: string, toolId: string) => void;
 	};
 
 	let {
@@ -31,6 +44,9 @@
 		nodes,
 		edges,
 		roles,
+		stageEditTools = [],
+		connectionForms = [],
+		connectionEditTools = [],
 		onStageRename,
 		onStageDelete,
 		onStageRolesChange,
@@ -38,21 +54,10 @@
 		onEdgeDelete,
 		onEdgeRolesChange,
 		onEdgeSettingsChange,
-		onSelectAction
+		onToolRolesChange,
+		onToolVisualConfigChange,
+		onSelectTool
 	}: Props = $props();
-
-	// Compute outgoing and edit actions for selected stage
-	const stageOutgoingActions = $derived(
-		context.type === 'stage'
-			? edges.filter((e) => e.source === context.stageId && e.target !== context.stageId)
-			: []
-	);
-
-	const stageEditActions = $derived(
-		context.type === 'stage'
-			? edges.filter((e) => e.source === context.stageId && e.target === context.stageId)
-			: []
-	);
 
 	// Compute ancestor chain for field inheritance
 	function computeAncestors(stageId: string): string[] {
@@ -87,23 +92,27 @@
 			{nodes}
 			{edges}
 			{roles}
-			outgoingActions={stageOutgoingActions}
-			editActions={stageEditActions}
+			{stageEditTools}
 			ancestors={stageAncestors}
 			onRename={onStageRename}
 			onDelete={onStageDelete}
 			onRolesChange={onStageRolesChange}
-			{onSelectAction}
+			{onToolRolesChange}
+			{onToolVisualConfigChange}
+			{onSelectTool}
 		/>
 	{:else if context.type === 'action'}
 		<EdgePropertyPanel
 			edge={context.action}
 			{nodes}
 			{roles}
+			{connectionForms}
+			{connectionEditTools}
 			onRename={onEdgeRename}
 			onDelete={onEdgeDelete}
 			onRolesChange={onEdgeRolesChange}
 			onSettingsChange={onEdgeSettingsChange}
+			{onSelectTool}
 		/>
 	{/if}
 </div>

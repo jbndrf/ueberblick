@@ -17,7 +17,7 @@
 	import { formatDistanceToNow } from 'date-fns';
 	import MarkerIconDesigner from '$lib/components/admin/marker-icon-designer.svelte';
 	import { getPocketBase } from '$lib/pocketbase';
-	import EntitySelector from '$lib/components/entity-selector.svelte';
+	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -29,6 +29,18 @@
 	let editRolesDialogOpen = $state(false);
 	let selectedCategory = $state<MarkerCategory | null>(null);
 	let selectedRoleIds = $state<string[]>([]);
+
+	// Create role callback for MobileMultiSelect
+	async function createRole(name: string) {
+		const pb = getPocketBase();
+		const newRole = await pb.collection('roles').create({
+			project_id: $page.params.projectId,
+			name: name,
+			description: ''
+		});
+		await invalidateAll();
+		return newRole;
+	}
 
 	const globalFilterFn = (row: any, _columnId: string, filterValue: string) => {
 		const searchValue = String(filterValue).toLowerCase();
@@ -500,15 +512,15 @@
 				<input type="hidden" name="categoryId" value={selectedCategory.id} />
 				<input type="hidden" name="roleIds" value={JSON.stringify(selectedRoleIds)} />
 				<div class="py-4">
-					<EntitySelector
-						bind:selectedEntityIds={selectedRoleIds}
-						availableEntities={data.roles}
-						getEntityId={(r) => r.id}
-						getEntityName={(r) => r.name}
-						getEntityDescription={(r) => r.description}
+					<MobileMultiSelect
+						bind:selectedIds={selectedRoleIds}
+						options={data.roles}
+						getOptionId={(r) => r.id}
+						getOptionLabel={(r) => r.name}
+						getOptionDescription={(r) => r.description}
 						allowCreate={true}
-						createAction="?/createRole"
-						placeholder="Type # to see all or type to search/create..."
+						onCreateOption={createRole}
+						placeholder="Select or search roles..."
 					/>
 				</div>
 				<Dialog.Footer>

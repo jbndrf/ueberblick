@@ -10,7 +10,7 @@
 	import { BaseTable, type BaseColumnConfig } from '$lib/components/admin/base-table';
 	import { getPocketBase } from '$lib/pocketbase';
 	import { page } from '$app/stores';
-	import EntitySelector from '$lib/components/entity-selector.svelte';
+	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 	import CrudDialogs, { type CrudDialogConfig } from '$lib/components/admin/crud-dialogs.svelte';
 	import { createFieldUpdateHandler } from '$lib/utils/table-actions';
 
@@ -35,6 +35,17 @@
 	let editParticipantsDialogOpen = $state(false);
 	let selectedRole = $state<Role | null>(null);
 	let selectedParticipantIds = $state<string[]>([]);
+
+	// Create participant callback for MobileMultiSelect
+	async function createParticipant(name: string) {
+		const pb = getPocketBase();
+		const newParticipant = await pb.collection('participants').create({
+			project_id: $page.params.projectId,
+			name: name
+		});
+		await invalidateAll();
+		return newParticipant;
+	}
 
 	// Create reusable update handler
 	const updateField = createFieldUpdateHandler('updateField');
@@ -299,14 +310,14 @@
 				<input type="hidden" name="roleId" value={selectedRole.id} />
 				<input type="hidden" name="participantIds" value={JSON.stringify(selectedParticipantIds)} />
 				<div class="py-4">
-					<EntitySelector
-						bind:selectedEntityIds={selectedParticipantIds}
-						availableEntities={data.participants}
-						getEntityId={(p) => p.id}
-						getEntityName={(p) => p.name}
+					<MobileMultiSelect
+						bind:selectedIds={selectedParticipantIds}
+						options={data.participants}
+						getOptionId={(p) => p.id}
+						getOptionLabel={(p) => p.name}
 						allowCreate={true}
-						createAction="?/createParticipant"
-						placeholder="Type # to see all or type to search/create..."
+						onCreateOption={createParticipant}
+						placeholder="Select or search participants..."
 					/>
 				</div>
 				<Dialog.Footer>

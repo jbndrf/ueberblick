@@ -33,6 +33,7 @@
 
 	import type { PageData } from './$types';
 	import StageNode from './StageNode.svelte';
+	import EntryMarkerNode from './EntryMarkerNode.svelte';
 	import ActionEdge from './ActionEdge.svelte';
 	import { ContextSidebar, createContext, type SelectionContext, type StageData } from './context-sidebar';
 	import { RightSidebar } from './right-sidebar';
@@ -45,7 +46,9 @@
 		type TrackedFormField,
 		type TrackedEditTool,
 		type ToolsForm,
-		type ToolsFormField
+		type ToolsFormField,
+		type ToolsEdit,
+		type VisualConfig
 	} from '$lib/workflow-builder';
 	import type { ToolInstance, FormToolConfig, EditToolConfig } from '$lib/workflow-builder/tools';
 	import type { ColumnPosition } from '$lib/workflow-builder';
@@ -125,7 +128,7 @@
 			config: {
 				toolType: 'edit',
 				editableFields: tool.data.editable_fields,
-				buttonLabel: 'Edit'
+				buttonLabel: tool.data.name || 'Edit'
 			} as EditToolConfig,
 			order: index + 100 // Offset to keep forms first
 		}));
@@ -154,7 +157,8 @@
 	// ==========================================================================
 
 	const nodeTypes: NodeTypes = {
-		stage: StageNode
+		stage: StageNode,
+		entryMarker: EntryMarkerNode
 	};
 
 	const edgeTypes: EdgeTypes = {
@@ -182,37 +186,80 @@
 		}));
 	}
 
-	// Convert state connections to xyflow edges
-	// Entry connections (from_stage_id = null) are not rendered - they're just for attaching the initial form
+	// Generate virtual entry marker nodes for entry connections (from_stage_id = null)
+	function entryConnectionsToMarkerNodes(
+		connections: WorkflowConnection[],
+		stages: WorkflowStage[],
+		currentNodePositions: Map<string, { x: number; y: number }>
+	): Node[] {
+		const entryConnections = connections.filter((conn) => !conn.from_stage_id);
+
+		return entryConnections.map((conn) => {
+			// Find target stage position
+			const targetStage = stages.find((s) => s.id === conn.to_stage_id);
+			// Use current node position if available (for drag updates), otherwise use state position
+			const currentPos = currentNodePositions.get(conn.to_stage_id);
+			const targetX = currentPos?.x ?? targetStage?.position_x ?? 100;
+			const targetY = currentPos?.y ?? targetStage?.position_y ?? 100;
+
+			return {
+				id: `entry-marker-${conn.id}`,
+				type: 'entryMarker',
+				position: {
+					x: targetX - 180, // Position 180px to the left of start stage
+					y: targetY + 10 // Slightly below center for visual alignment
+				},
+				data: {
+					label: 'Entry',
+					connectionId: conn.id
+				},
+				draggable: false,
+				selectable: false // Selection happens via the edge, not the marker
+			};
+		});
+	}
+
+	// Convert state connections to xyflow edges (including entry connections)
 	function connectionsToEdges(connections: WorkflowConnection[]): Edge[] {
-		return connections
-			.filter((conn) => conn.from_stage_id !== null)
-			.map((conn) => {
-				const isSelfLoop = conn.from_stage_id === conn.to_stage_id;
-				return {
-					id: conn.id,
-					source: conn.from_stage_id as string,
-					target: conn.to_stage_id,
-					label: conn.visual_config?.button_label || conn.action_name,
-					type: 'action',
-					animated: isSelfLoop,
-					style: conn.visual_config?.button_color ? `stroke: ${conn.visual_config.button_color}` : undefined,
-					data: {
-						tools: getToolsForConnection(conn.id),
-						isSelfLoop,
-						onSelectTool: (toolId: string) => handleSelectConnectionTool(conn.id, toolId),
-						onAddTool: () => handleAddProgressToolForEdge(conn.id),
-						allowed_roles: conn.allowed_roles || [],
-						visual_config: conn.visual_config || {}
-					}
-				};
-			});
+		return connections.map((conn) => {
+			const isEntryConnection = !conn.from_stage_id;
+			const isSelfLoop = !isEntryConnection && conn.from_stage_id === conn.to_stage_id;
+
+			return {
+				id: conn.id,
+				// For entry connections, use the virtual marker node as source
+				source: isEntryConnection ? `entry-marker-${conn.id}` : (conn.from_stage_id as string),
+				target: conn.to_stage_id,
+				label: conn.visual_config?.button_label || conn.action_name,
+				type: 'action',
+				animated: isSelfLoop,
+				style: isEntryConnection
+					? 'stroke: rgb(34 197 94); stroke-dasharray: 5 5;'
+					: conn.visual_config?.button_color
+						? `stroke: ${conn.visual_config.button_color}`
+						: undefined,
+				data: {
+					tools: getToolsForConnection(conn.id),
+					isSelfLoop,
+					isEntry: isEntryConnection,
+					onSelectTool: (toolId: string) => handleSelectConnectionTool(conn.id, toolId),
+					onAddTool: () => handleAddProgressToolForEdge(conn.id),
+					allowed_roles: conn.allowed_roles || [],
+					visual_config: conn.visual_config || {}
+				}
+			};
+		});
 	}
 
 	// Reactive nodes/edges from state (use $state.raw for xyflow compatibility)
-	let nodes = $state.raw<Node[]>(
-		stagesToNodes(builderState.visibleStages.map((s) => s.data))
-	);
+	let nodes = $state.raw<Node[]>([
+		...stagesToNodes(builderState.visibleStages.map((s) => s.data)),
+		...entryConnectionsToMarkerNodes(
+			builderState.visibleConnections.map((c) => c.data),
+			builderState.visibleStages.map((s) => s.data),
+			new Map()
+		)
+	]);
 	let edges = $state.raw<Edge[]>(
 		connectionsToEdges(builderState.visibleConnections.map((c) => c.data))
 	);
@@ -224,27 +271,43 @@
 		const _forms = builderState.visibleForms;
 		const _editTools = builderState.visibleEditTools;
 		const _stages = builderState.visibleStages;
+		const _connections = builderState.visibleConnections;
 
 		// Preserve current node positions (they're only synced to state on save)
 		// Use untrack to read nodes without creating circular dependency
-		const currentPositions = untrack(() => new Map(nodes.map(n => [n.id, n.position])));
-		const newNodes = stagesToNodes(_stages.map((s) => s.data));
+		const currentPositions = untrack(() => new Map(nodes.map((n) => [n.id, n.position])));
 
-		// Merge: use current position if node already existed, otherwise use state position
-		nodes = newNodes.map(node => {
+		// Generate stage nodes with preserved positions
+		const stageNodes = stagesToNodes(_stages.map((s) => s.data)).map((node) => {
 			const currentPos = currentPositions.get(node.id);
-			if (currentPos) {
-				return { ...node, position: currentPos };
-			}
-			return node;
+			return currentPos ? { ...node, position: currentPos } : node;
 		});
+
+		// Generate entry marker nodes (positioned relative to their target stages)
+		const entryMarkerNodes = entryConnectionsToMarkerNodes(
+			_connections.map((c) => c.data),
+			_stages.map((s) => s.data),
+			currentPositions
+		);
+
+		nodes = [...stageNodes, ...entryMarkerNodes];
 	});
 
 	$effect(() => {
-		// Access these to create dependency
+		// Access these to create dependency - force re-run when tools change
 		const _forms = builderState.visibleForms;
 		const _editTools = builderState.visibleEditTools;
-		edges = connectionsToEdges(builderState.visibleConnections.map((c) => c.data));
+		const _connections = builderState.visibleConnections;
+
+		// Log for debugging entry connection tools
+		console.log('All forms:', _forms.map(f => ({ id: f.data.id, connection_id: f.data.connection_id, stage_id: f.data.stage_id, name: f.data.name })));
+		const entryConns = _connections.filter(c => !c.data.from_stage_id);
+		for (const ec of entryConns) {
+			const tools = getToolsForConnection(ec.data.id);
+			console.log('Entry connection', ec.data.id, 'has tools:', tools);
+		}
+
+		edges = connectionsToEdges(_connections.map((c) => c.data));
 	});
 
 	// Connection state
@@ -281,6 +344,46 @@
 		return [];
 	});
 
+	// Edit tool editor derived state
+	const selectedEditTool = $derived.by((): ToolsEdit | null => {
+		if (selectionContext.type !== 'editTool') return null;
+		const editTool = builderState.getEditToolById(selectionContext.editToolId);
+		return editTool?.data ?? null;
+	});
+
+	// Ancestor fields for edit tool configuration
+	const editToolAncestorFields = $derived.by(() => {
+		if (selectionContext.type !== 'editTool') return [];
+		// Get ancestors based on what the edit tool is attached to
+		if (selectionContext.attachedTo.type === 'connection') {
+			return builderState.getAncestorFormFields(selectionContext.attachedTo.connectionId);
+		} else if (selectionContext.attachedTo.type === 'stage') {
+			return builderState.getAncestorFormFieldsForStage(selectionContext.attachedTo.stageId);
+		}
+		return [];
+	});
+
+	// Stage edit tools for property view (when a stage is selected)
+	const stageEditTools = $derived.by((): ToolsEdit[] => {
+		if (selectionContext.type !== 'stage') return [];
+		const tools = builderState.getEditToolsForStage(selectionContext.stageId);
+		return tools.map(t => t.data);
+	});
+
+	// Connection forms for property view (when a connection/action is selected)
+	const connectionForms = $derived.by((): ToolsForm[] => {
+		if (selectionContext.type !== 'action') return [];
+		const forms = builderState.getFormsForConnection(selectionContext.actionId);
+		return forms.map(f => f.data);
+	});
+
+	// Connection edit tools for property view (when a connection/action is selected)
+	const connectionEditTools = $derived.by((): ToolsEdit[] => {
+		if (selectionContext.type !== 'action') return [];
+		const tools = builderState.getEditToolsForConnection(selectionContext.actionId);
+		return tools.map(t => t.data);
+	});
+
 	// Callback when a new node is added via drag-drop (from DefaultPanel)
 	function onNodeAdded(node: Node) {
 		// Add to state with proper type
@@ -291,6 +394,10 @@
 	// Handle node context menu (right-click to connect)
 	const handleNodeContextMenu: NodeEventWithPointer<MouseEvent> = ({ event, node }) => {
 		event.preventDefault();
+
+		// Ignore entry markers for connections
+		if (node.type === 'entryMarker') return;
+
 		const nodeId = node.id;
 
 		if (connectingFrom === null) {
@@ -321,6 +428,16 @@
 
 	// Handle node click for selection
 	function onNodeClick({ node }: { node: Node }) {
+		// Ignore entry marker clicks (or select the entry edge instead)
+		if (node.type === 'entryMarker') {
+			// Find and select the entry edge
+			const connectionId = node.data.connectionId as string;
+			const edge = edges.find((e) => e.id === connectionId);
+			if (edge) {
+				selectionContext = createContext.action(edge);
+			}
+			return;
+		}
 		selectionContext = createContext.stage(node as Node<StageData>);
 	}
 
@@ -453,8 +570,7 @@
 
 		const editTool = editTools.find(e => e.data.id === toolId);
 		if (editTool) {
-			// TODO: Open edit tool editor in sidebar
-			console.log('Selected edit tool:', toolId, 'on stage:', stageId);
+			selectionContext = createContext.editTool(toolId, { type: 'stage', stageId });
 		}
 	}
 
@@ -474,8 +590,7 @@
 
 		const editTool = editTools.find(e => e.data.id === toolId);
 		if (editTool) {
-			// TODO: Open edit tool editor in sidebar
-			console.log('Selected edit tool:', toolId, 'on connection:', connectionId);
+			selectionContext = createContext.editTool(toolId, { type: 'connection', connectionId });
 		}
 	}
 
@@ -609,6 +724,68 @@
 
 	function handleFormClose() {
 		selectionContext = createContext.none();
+	}
+
+	function handleFormRolesChange(formId: string, roleIds: string[]) {
+		builderState.updateForm(formId, { allowed_roles: roleIds });
+	}
+
+	function handleFormVisualConfigChange(formId: string, config: VisualConfig) {
+		builderState.updateForm(formId, { visual_config: config });
+	}
+
+	// Edit tool editor handlers
+	function handleEditToolNameChange(editToolId: string, name: string) {
+		builderState.updateEditTool(editToolId, { name });
+	}
+
+	function handleEditToolFieldsChange(editToolId: string, fieldIds: string[]) {
+		builderState.updateEditTool(editToolId, { editable_fields: fieldIds });
+	}
+
+	function handleEditToolRolesChange(editToolId: string, roleIds: string[]) {
+		builderState.updateEditTool(editToolId, { allowed_roles: roleIds });
+	}
+
+	function handleEditToolVisualConfigChange(editToolId: string, config: VisualConfig) {
+		builderState.updateEditTool(editToolId, { visual_config: config });
+	}
+
+	function handleEditToolClose() {
+		selectionContext = createContext.none();
+	}
+
+	function handleEditToolDelete(editToolId: string) {
+		builderState.deleteEditTool(editToolId);
+		selectionContext = createContext.none();
+	}
+
+	// Tool handlers for stage property panel
+	function handleToolRolesChange(toolId: string, roleIds: string[]) {
+		builderState.updateEditTool(toolId, { allowed_roles: roleIds });
+	}
+
+	function handleToolVisualConfigChange(toolId: string, config: VisualConfig) {
+		builderState.updateEditTool(toolId, { visual_config: config });
+	}
+
+	// Handle tool selection from sidebar Tools tab
+	function handleSelectToolFromSidebar(toolType: string, toolId: string) {
+		if (selectionContext.type === 'stage') {
+			// Tool on a stage
+			if (toolType === 'edit') {
+				selectionContext = createContext.editTool(toolId, { type: 'stage', stageId: selectionContext.stageId });
+			} else if (toolType === 'form') {
+				selectionContext = createContext.form(toolId, { type: 'stage', stageId: selectionContext.stageId });
+			}
+		} else if (selectionContext.type === 'action') {
+			// Tool on a connection
+			if (toolType === 'edit') {
+				selectionContext = createContext.editTool(toolId, { type: 'connection', connectionId: selectionContext.actionId });
+			} else if (toolType === 'form') {
+				selectionContext = createContext.form(toolId, { type: 'connection', connectionId: selectionContext.actionId });
+			}
+		}
 	}
 </script>
 
@@ -744,6 +921,11 @@
 			{selectedForm}
 			{formFields}
 			{ancestorFields}
+			{selectedEditTool}
+			{editToolAncestorFields}
+			{stageEditTools}
+			{connectionForms}
+			{connectionEditTools}
 			onStageRename={handleStageRename}
 			onStageDelete={handleDeleteStage}
 			onStageRolesChange={handleStageRolesChange}
@@ -753,6 +935,9 @@
 			onEdgeSettingsChange={handleEdgeSettingsChange}
 			onSelectAction={handleSelectAction}
 			onSelectStage={handleSelectStage}
+			onToolRolesChange={handleToolRolesChange}
+			onToolVisualConfigChange={handleToolVisualConfigChange}
+			onSelectTool={handleSelectToolFromSidebar}
 			onFormNameChange={handleFormNameChange}
 			onAddFormField={handleAddFormField}
 			onFormFieldUpdate={handleFormFieldUpdate}
@@ -762,6 +947,12 @@
 			onFormDeletePage={handleFormDeletePage}
 			onFormPageTitleChange={handleFormPageTitleChange}
 			onFormClose={handleFormClose}
+			onFormRolesChange={handleFormRolesChange}
+			onFormVisualConfigChange={handleFormVisualConfigChange}
+			onEditToolNameChange={handleEditToolNameChange}
+			onEditToolFieldsChange={handleEditToolFieldsChange}
+			onEditToolDelete={handleEditToolDelete}
+			onEditToolClose={handleEditToolClose}
 		/>
 	</div>
 </div>
