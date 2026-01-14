@@ -214,5 +214,45 @@ export const actions: Actions = {
 			console.error('Error updating participant roles:', err);
 			return fail(500, { message: 'Failed to update participant roles' });
 		}
+	},
+
+	createParticipant: async ({ request, params, locals: { pb } }) => {
+		const { projectId } = params;
+		const formData = await request.formData();
+		const name = formData.get('name') as string;
+
+		if (!name) {
+			return fail(400, { message: 'Participant name is required' });
+		}
+
+		// Generate unique token
+		const timestamp = Date.now().toString(36);
+		const randomPart = Math.random().toString(36).substring(2, 15);
+		const token = `${timestamp}-${randomPart}`;
+
+		// Generate placeholder email
+		const existingCount = await pb.collection('participants').getList(1, 1, {
+			filter: `project_id = "${projectId}"`
+		});
+		const nextNumber = existingCount.totalItems + 1;
+		const email = `participant${nextNumber}@placeholder.local`;
+
+		try {
+			const newParticipant = await pb.collection('participants').create({
+				project_id: projectId,
+				name: name,
+				email: email,
+				emailVisibility: true,
+				token: token,
+				is_active: true,
+				password: token,
+				passwordConfirm: token
+			});
+
+			return { success: true, entity: newParticipant };
+		} catch (error) {
+			console.error('Error creating participant:', error);
+			return fail(500, { message: 'Failed to create participant' });
+		}
 	}
 };

@@ -14,8 +14,8 @@
 		type FieldConfig
 	} from '$lib/components/admin/custom-field-manager-generic.svelte';
 	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
-	import { getPocketBase } from '$lib/pocketbase';
 	import CrudDialogs, { type CrudDialogConfig } from '$lib/components/admin/crud-dialogs.svelte';
+	import { deserialize } from '$app/forms';
 	import {
 		createFieldUpdateHandler,
 		createCustomFieldUpdateHandler,
@@ -40,16 +40,22 @@
 	const updateRoles = createArrayFieldUpdateHandler('updateRoles', 'roleIds', 'participantId');
 	const toggleStatus = createToggleHandler('toggleStatus', 'is_active');
 
-	// Create role callback for MobileMultiSelect
+	// Create role callback for MobileMultiSelect (uses server action)
 	async function createRole(name: string) {
-		const pb = getPocketBase();
-		const newRole = await pb.collection('roles').create({
-			project_id: $page.params.projectId,
-			name: name,
-			description: ''
+		const formData = new FormData();
+		formData.append('name', name);
+
+		const response = await fetch('?/createRole', {
+			method: 'POST',
+			body: formData
 		});
-		await invalidateAll();
-		return newRole;
+
+		const result = deserialize(await response.text());
+		if (result.type === 'success' && result.data?.entity) {
+			await invalidateAll();
+			return result.data.entity;
+		}
+		throw new Error('Failed to create role');
 	}
 
 	// Dialog configuration for CRUD operations

@@ -9,6 +9,7 @@ import {
 	createCustomFieldUpdateAction
 } from '$lib/server/crud-actions';
 import { normalizeRecords, prepareArrayField } from '$lib/server/pocketbase-helpers';
+import { getAdminPb } from '$lib/server/admin-auth';
 
 const participantSchema = z.object({
 	name: z.string().min(1, 'Name is required'),
@@ -39,9 +40,10 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 	const { projectId } = params;
 
 	try {
-		// Fetch participants with their role information
-		// Note: Auth collections may hide email by default, so we explicitly request all fields
-		const participantsRaw = await pb.collection('participants').getFullList({
+		// Use admin client to fetch participants - ensures access to token field
+		// (token is an identity field which PocketBase hides from regular API requests)
+		const adminPb = await getAdminPb();
+		const participantsRaw = await adminPb.collection('participants').getFullList({
 			filter: `project_id = "${projectId}"`,
 			sort: '-created',
 			fields: '*'

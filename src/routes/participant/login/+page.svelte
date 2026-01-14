@@ -8,9 +8,11 @@
 	import { Label } from '$lib/components/ui/label';
 	import * as Card from '$lib/components/ui/card';
 	import * as Tabs from '$lib/components/ui/tabs';
-	import { AlertCircle, MapPin, QrCode, KeyRound } from 'lucide-svelte';
+	import { AlertCircle, MapPin, QrCode, KeyRound, Camera, Upload, Loader2 } from 'lucide-svelte';
 	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
 	import ThemeToggle from '$lib/components/theme-toggle.svelte';
+	import { onMount } from 'svelte';
+	import { browser } from '$app/environment';
 
 	let { data } = $props();
 
@@ -28,6 +30,94 @@
 	const { form: formData, enhance, errors, message, delayed } = form;
 
 	let activeTab = $state('token');
+	let qrScanner: any = $state(null);
+	let scannerReady = $state(false);
+	let scannerError = $state<string | null>(null);
+	let scanningActive = $state(false);
+	let formElement: HTMLFormElement | null = $state(null);
+
+	async function initQrScanner() {
+		if (!browser) return;
+
+		try {
+			const { Html5Qrcode } = await import('html5-qrcode');
+			qrScanner = new Html5Qrcode('qr-reader');
+			scannerReady = true;
+		} catch (err) {
+			console.error('Failed to initialize QR scanner:', err);
+			scannerError = 'Failed to initialize QR scanner';
+		}
+	}
+
+	async function startCameraScanning() {
+		if (!qrScanner || scanningActive) return;
+
+		scannerError = null;
+		try {
+			scanningActive = true;
+			await qrScanner.start(
+				{ facingMode: 'environment' },
+				{ fps: 10, qrbox: { width: 250, height: 250 } },
+				onQrCodeScanned,
+				() => {} // ignore errors during scanning
+			);
+		} catch (err: any) {
+			scanningActive = false;
+			console.error('Camera error:', err);
+			scannerError = err?.message || 'Could not access camera. Try uploading an image instead.';
+		}
+	}
+
+	async function stopCameraScanning() {
+		if (qrScanner && scanningActive) {
+			try {
+				await qrScanner.stop();
+			} catch {
+				// ignore stop errors
+			}
+			scanningActive = false;
+		}
+	}
+
+	async function handleFileUpload(event: Event) {
+		const input = event.target as HTMLInputElement;
+		const file = input.files?.[0];
+		if (!file || !qrScanner) return;
+
+		scannerError = null;
+		try {
+			const result = await qrScanner.scanFile(file, true);
+			onQrCodeScanned(result);
+		} catch (err: any) {
+			console.error('File scan error:', err);
+			scannerError = 'Could not read QR code from image. Make sure the image contains a valid QR code.';
+		}
+		// Reset input so same file can be selected again
+		input.value = '';
+	}
+
+	function onQrCodeScanned(decodedText: string) {
+		// Stop camera if running
+		stopCameraScanning();
+
+		// Set the token and submit immediately
+		$formData.token = decodedText.trim();
+		formElement?.requestSubmit();
+	}
+
+	onMount(() => {
+		initQrScanner();
+		return () => {
+			stopCameraScanning();
+		};
+	});
+
+	// Stop camera when switching away from QR tab
+	$effect(() => {
+		if (activeTab !== 'qr') {
+			stopCameraScanning();
+		}
+	});
 </script>
 
 <svelte:head>
@@ -69,7 +159,7 @@
 
 				<!-- Token Login Tab -->
 				<Tabs.Content value="token" class="mt-4">
-					<form method="POST" use:enhance class="space-y-4">
+					<form method="POST" use:enhance bind:this={formElement} class="space-y-4">
 						<div class="space-y-2">
 							<Label for="token">{m.participantLoginTokenLabel()}</Label>
 							<Input
@@ -125,17 +215,64 @@
 				<!-- QR Code Tab -->
 				<Tabs.Content value="qr" class="mt-4">
 					<div class="space-y-4">
+						<!-- QR Scanner Container -->
 						<div
-							class="flex min-h-[200px] items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/25 bg-muted/10 p-8 text-center"
-						>
-							<div class="space-y-2">
-								<QrCode class="mx-auto h-12 w-12 text-muted-foreground/50" />
-								<p class="text-sm text-muted-foreground">
-									QR code scanning will be available in a future update
-								</p>
-								<p class="text-xs text-muted-foreground">Please use token login for now</p>
+							id="qr-reader"
+							class="min-h-[250px] overflow-hidden rounded-lg border-2 border-muted-foreground/25 bg-muted/10"
+						></div>
+
+						<!-- Scanner Error -->
+						{#if scannerError}
+							<div
+								class="flex items-center gap-2 rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive"
+							>
+								<AlertCircle class="h-4 w-4 shrink-0" />
+								<span>{scannerError}</span>
 							</div>
+						{/if}
+
+						<!-- Scanner Controls -->
+						<div class="flex gap-2">
+							{#if !scanningActive}
+								<Button
+									type="button"
+									variant="outline"
+									class="flex-1"
+									onclick={startCameraScanning}
+									disabled={!scannerReady}
+								>
+									<Camera class="mr-2 h-4 w-4" />
+									{scannerReady ? 'Start Camera' : 'Loading...'}
+								</Button>
+							{:else}
+								<Button
+									type="button"
+									variant="outline"
+									class="flex-1"
+									onclick={stopCameraScanning}
+								>
+									<Loader2 class="mr-2 h-4 w-4 animate-spin" />
+									Stop Camera
+								</Button>
+							{/if}
+
+							<Button type="button" variant="outline" class="flex-1" disabled={!scannerReady}>
+								<label class="flex cursor-pointer items-center justify-center">
+									<Upload class="mr-2 h-4 w-4" />
+									Upload QR Image
+									<input
+										type="file"
+										accept="image/*"
+										class="hidden"
+										onchange={handleFileUpload}
+									/>
+								</label>
+							</Button>
 						</div>
+
+						<p class="text-center text-xs text-muted-foreground">
+							Scan a QR code with your camera or upload an image
+						</p>
 
 						<div class="text-center text-sm text-muted-foreground">
 							<p>
@@ -158,5 +295,18 @@
 <style>
 	:global(body) {
 		overflow: hidden;
+	}
+
+	/* Style the html5-qrcode scanner */
+	:global(#qr-reader video) {
+		border-radius: 0.5rem;
+	}
+
+	:global(#qr-reader__scan_region) {
+		min-height: 200px;
+	}
+
+	:global(#qr-reader__dashboard) {
+		display: none !important;
 	}
 </style>

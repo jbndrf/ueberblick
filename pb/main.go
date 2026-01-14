@@ -2,15 +2,12 @@ package main
 
 import (
 	"log"
-	"path/filepath"
 
 	_ "github.com/shaxbee/go-spatialite"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/plugins/jsvm"
-
-	"myapp/security"
 )
 
 func main() {
@@ -40,19 +37,6 @@ func main() {
 			return db, nil
 		},
 	})
-
-	// Initialize security system
-	log.Println("Initializing security system...")
-	securityConfigPath := filepath.Join(".", "schema_export.json")
-	accessController, err := security.NewAccessController(app, securityConfigPath)
-	if err != nil {
-		log.Printf("Warning: Failed to initialize security system: %v", err)
-		log.Println("Security enforcement will be disabled!")
-	} else {
-		// Register security hooks
-		security.RegisterSecurityHooks(app, accessController)
-		log.Println("Security system initialized successfully")
-	}
 
 	// Enable JavaScript migrations from pb_migrations directory
 	jsvm.MustRegister(app, jsvm.Config{

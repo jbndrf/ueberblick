@@ -52,6 +52,8 @@
 		onToolRolesChange?: (toolId: string, roleIds: string[]) => void;
 		onToolVisualConfigChange?: (toolId: string, config: VisualConfig) => void;
 		onSelectTool?: (toolType: string, toolId: string) => void;
+		// Callback to create a new role via server action
+		onCreateRole?: (name: string) => Promise<Role>;
 		// Form editor handlers
 		onFormNameChange?: (formId: string, name: string) => void;
 		onAddFormField?: (formId: string, fieldType: string, page: number, rowIndex: number, columnPosition: ColumnPosition) => void;
@@ -97,6 +99,7 @@
 		onToolRolesChange,
 		onToolVisualConfigChange,
 		onSelectTool,
+		onCreateRole,
 		onFormNameChange,
 		onAddFormField,
 		onFormFieldUpdate,
@@ -177,6 +180,7 @@
 			{onToolRolesChange}
 			{onToolVisualConfigChange}
 			{onSelectTool}
+			{onCreateRole}
 		/>
 	{:else}
 		<PreviewView {workflowName} {nodes} {edges} {onSelectStage} />

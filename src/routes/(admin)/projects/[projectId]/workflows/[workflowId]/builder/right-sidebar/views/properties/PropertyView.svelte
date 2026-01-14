@@ -37,6 +37,8 @@
 		onToolVisualConfigChange?: (toolId: string, config: VisualConfig) => void;
 		/** Callback when a tool is selected */
 		onSelectTool?: (toolType: string, toolId: string) => void;
+		/** Callback to create a new role via server action */
+		onCreateRole?: (name: string) => Promise<Role>;
 	};
 
 	let {
@@ -56,7 +58,8 @@
 		onEdgeSettingsChange,
 		onToolRolesChange,
 		onToolVisualConfigChange,
-		onSelectTool
+		onSelectTool,
+		onCreateRole
 	}: Props = $props();
 
 	// Compute ancestor chain for field inheritance
@@ -100,6 +103,7 @@
 			{onToolRolesChange}
 			{onToolVisualConfigChange}
 			{onSelectTool}
+			{onCreateRole}
 		/>
 	{:else if context.type === 'action'}
 		<EdgePropertyPanel
@@ -113,6 +117,7 @@
 			onRolesChange={onEdgeRolesChange}
 			onSettingsChange={onEdgeSettingsChange}
 			{onSelectTool}
+			{onCreateRole}
 		/>
 	{/if}
 </div>

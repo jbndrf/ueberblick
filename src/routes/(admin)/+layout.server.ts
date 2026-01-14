@@ -15,6 +15,11 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 		redirect(303, `/login?redirectTo=${encodeURIComponent(redirectTo)}`);
 	}
 
+	// Ensure user is from 'users' collection (admin), not 'participants'
+	if (locals.pb.authStore.record?.collectionName !== 'users') {
+		redirect(303, '/login');
+	}
+
 	// Fetch user's projects for sidebar
 	let projects: Array<{ id: string; name: string }> = [];
 	try {

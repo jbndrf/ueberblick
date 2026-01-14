@@ -99,5 +99,95 @@ export const actions: Actions = {
 			console.error('Error creating role:', err);
 			return fail(500, { message: 'Failed to create role' });
 		}
+	},
+
+	saveWorkflow: async ({ request, locals: { pb } }) => {
+		const formData = await request.formData();
+		const changesJson = formData.get('changes') as string;
+
+		if (!changesJson) {
+			return fail(400, { message: 'No changes provided' });
+		}
+
+		let changes: {
+			stages: { new: any[]; modified: any[]; deleted: string[] };
+			connections: { new: any[]; modified: any[]; deleted: string[] };
+			forms: { new: any[]; modified: any[]; deleted: string[] };
+			formFields: { new: any[]; modified: any[]; deleted: string[] };
+			editTools: { new: any[]; modified: any[]; deleted: string[] };
+		};
+
+		try {
+			changes = JSON.parse(changesJson);
+		} catch {
+			return fail(400, { message: 'Invalid changes format' });
+		}
+
+		try {
+			const batch = pb.createBatch();
+
+			// 1. Stages
+			for (const stage of changes.stages.new) {
+				batch.collection('workflow_stages').create(stage);
+			}
+			for (const stage of changes.stages.modified) {
+				batch.collection('workflow_stages').update(stage.id, stage);
+			}
+			for (const stageId of changes.stages.deleted) {
+				batch.collection('workflow_stages').delete(stageId);
+			}
+
+			// 2. Connections
+			for (const conn of changes.connections.new) {
+				batch.collection('workflow_connections').create(conn);
+			}
+			for (const conn of changes.connections.modified) {
+				batch.collection('workflow_connections').update(conn.id, conn);
+			}
+			for (const connId of changes.connections.deleted) {
+				batch.collection('workflow_connections').delete(connId);
+			}
+
+			// 3. Forms
+			for (const form of changes.forms.new) {
+				batch.collection('tools_forms').create(form);
+			}
+			for (const form of changes.forms.modified) {
+				batch.collection('tools_forms').update(form.id, form);
+			}
+			for (const formId of changes.forms.deleted) {
+				batch.collection('tools_forms').delete(formId);
+			}
+
+			// 4. Form Fields
+			for (const field of changes.formFields.new) {
+				batch.collection('tools_form_fields').create(field);
+			}
+			for (const field of changes.formFields.modified) {
+				batch.collection('tools_form_fields').update(field.id, field);
+			}
+			for (const fieldId of changes.formFields.deleted) {
+				batch.collection('tools_form_fields').delete(fieldId);
+			}
+
+			// 5. Edit Tools
+			for (const tool of changes.editTools.new) {
+				batch.collection('tools_edit').create(tool);
+			}
+			for (const tool of changes.editTools.modified) {
+				batch.collection('tools_edit').update(tool.id, tool);
+			}
+			for (const toolId of changes.editTools.deleted) {
+				batch.collection('tools_edit').delete(toolId);
+			}
+
+			// Execute batch
+			await batch.send();
+
+			return { success: true };
+		} catch (err) {
+			console.error('Failed to save workflow:', err);
+			return fail(500, { message: 'Failed to save workflow' });
+		}
 	}
 };

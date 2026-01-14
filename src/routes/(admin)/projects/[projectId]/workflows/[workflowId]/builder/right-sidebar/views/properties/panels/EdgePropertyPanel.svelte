@@ -1,8 +1,5 @@
 <script lang="ts">
 	import type { Node, Edge } from '@xyflow/svelte';
-	import { invalidateAll } from '$app/navigation';
-	import { page } from '$app/stores';
-	import { getPocketBase } from '$lib/pocketbase';
 
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -38,6 +35,8 @@
 		onSettingsChange?: (edgeId: string, settings: Record<string, any>) => void;
 		/** Callback when a tool is selected */
 		onSelectTool?: (toolType: string, toolId: string) => void;
+		/** Callback to create a new role via server action */
+		onCreateRole?: (name: string) => Promise<Role>;
 	};
 
 	let {
@@ -50,7 +49,8 @@
 		onDelete,
 		onRolesChange,
 		onSettingsChange,
-		onSelectTool
+		onSelectTool,
+		onCreateRole
 	}: Props = $props();
 
 	// Determine edge type
@@ -144,18 +144,6 @@
 		onDelete?.(edge.id);
 	}
 
-	// Create role callback for MobileMultiSelect
-	async function createRole(name: string) {
-		const pb = getPocketBase();
-		const newRole = await pb.collection('roles').create({
-			project_id: $page.params.projectId,
-			name: name,
-			description: ''
-		});
-		await invalidateAll();
-		return newRole;
-	}
-
 	// Handle button config change from tool item
 	function handleButtonConfigChange(config: VisualConfig) {
 		buttonLabel = config.button_label || '';
@@ -227,8 +215,8 @@
 						getOptionId={(r) => r.id}
 						getOptionLabel={(r) => r.name}
 						getOptionDescription={(r) => r.description}
-						allowCreate={true}
-						onCreateOption={createRole}
+						allowCreate={!!onCreateRole}
+						onCreateOption={onCreateRole}
 						placeholder="Select or search roles..."
 						class="w-full"
 					/>

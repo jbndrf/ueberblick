@@ -6,41 +6,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Punktstudio (Karte) is a full-stack application for geographic data collection with offline-first capabilities. It combines a SvelteKit frontend with a PocketBase backend enhanced with SpatiaLite for geospatial queries.
 
-## Commands
-
-### Development
-```bash
-npm run dev              # Start SvelteKit dev server
-npm run build            # Production build
-npm run preview          # Preview production build
-npm run check            # TypeScript type checking
-npm run lint             # Prettier + ESLint
-npm run format           # Auto-format with Prettier
-```
-
-### Testing
-```bash
-npm run test:unit        # Run vitest unit tests
-npm run test:unit -- --run  # Run tests once (no watch)
-npm run test:e2e         # Playwright e2e tests
-npm run test             # Run all tests
-```
-
-### Component Development
-```bash
-npm run storybook        # Storybook at localhost:6006
-npx shadcn-svelte@latest add <component>  # Add shadcn-svelte component
-```
-
-### Docker
-```bash
-docker-compose up --build  # Start full stack (frontend + PocketBase)
-```
-
-### PocketBase Backend
-```bash
-cd pb && go run main.go serve  # Run PocketBase directly (requires Go 1.24+)
-```
 
 ## Architecture
 

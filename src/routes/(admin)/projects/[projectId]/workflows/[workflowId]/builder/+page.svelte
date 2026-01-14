@@ -39,7 +39,6 @@
 	import { RightSidebar } from './right-sidebar';
 	import {
 		createWorkflowBuilderState,
-		saveWorkflow,
 		type WorkflowStage,
 		type WorkflowConnection,
 		type TrackedForm,
@@ -52,7 +51,8 @@
 	} from '$lib/workflow-builder';
 	import type { ToolInstance, FormToolConfig, EditToolConfig } from '$lib/workflow-builder/tools';
 	import type { ColumnPosition } from '$lib/workflow-builder';
-	import { getPocketBase } from '$lib/pocketbase';
+	import { deserialize } from '$app/forms';
+	import { invalidateAll } from '$app/navigation';
 
 	let { data }: { data: PageData } = $props();
 
@@ -90,12 +90,46 @@
 			});
 		}
 
-		const result = await saveWorkflow(getPocketBase(), builderState);
+		// Use server action for saving
+		const changes = builderState.getChanges();
+		const formData = new FormData();
+		formData.append('changes', JSON.stringify(changes));
+
+		try {
+			const response = await fetch('?/saveWorkflow', {
+				method: 'POST',
+				body: formData
+			});
+
+			const result = deserialize(await response.text());
+			if (result.type === 'success') {
+				builderState.markAsSaved();
+			} else {
+				saveError = (result.data as any)?.message || 'Failed to save';
+			}
+		} catch (err) {
+			saveError = err instanceof Error ? err.message : 'Failed to save';
+		}
 
 		isSaving = false;
-		if (!result.success) {
-			saveError = result.error || 'Failed to save';
+	}
+
+	// Create role callback for MobileMultiSelect components in property panels
+	async function createRole(name: string) {
+		const formData = new FormData();
+		formData.append('name', name);
+
+		const response = await fetch('?/createRole', {
+			method: 'POST',
+			body: formData
+		});
+
+		const result = deserialize(await response.text());
+		if (result.type === 'success' && result.data?.entity) {
+			await invalidateAll();
+			return result.data.entity;
 		}
+		throw new Error('Failed to create role');
 	}
 
 	// ==========================================================================
@@ -938,6 +972,7 @@
 			onToolRolesChange={handleToolRolesChange}
 			onToolVisualConfigChange={handleToolVisualConfigChange}
 			onSelectTool={handleSelectToolFromSidebar}
+			onCreateRole={createRole}
 			onFormNameChange={handleFormNameChange}
 			onAddFormField={handleAddFormField}
 			onFormFieldUpdate={handleFormFieldUpdate}

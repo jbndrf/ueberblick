@@ -8,8 +8,8 @@
 	import { Users } from 'lucide-svelte';
 	import type { PageData } from './$types';
 	import { BaseTable, type BaseColumnConfig } from '$lib/components/admin/base-table';
-	import { getPocketBase } from '$lib/pocketbase';
 	import { page } from '$app/stores';
+	import { deserialize } from '$app/forms';
 	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 	import CrudDialogs, { type CrudDialogConfig } from '$lib/components/admin/crud-dialogs.svelte';
 	import { createFieldUpdateHandler } from '$lib/utils/table-actions';
@@ -36,15 +36,22 @@
 	let selectedRole = $state<Role | null>(null);
 	let selectedParticipantIds = $state<string[]>([]);
 
-	// Create participant callback for MobileMultiSelect
+	// Create participant callback for MobileMultiSelect (uses server action)
 	async function createParticipant(name: string) {
-		const pb = getPocketBase();
-		const newParticipant = await pb.collection('participants').create({
-			project_id: $page.params.projectId,
-			name: name
+		const formData = new FormData();
+		formData.append('name', name);
+
+		const response = await fetch('?/createParticipant', {
+			method: 'POST',
+			body: formData
 		});
-		await invalidateAll();
-		return newParticipant;
+
+		const result = deserialize(await response.text());
+		if (result.type === 'success' && result.data?.entity) {
+			await invalidateAll();
+			return result.data.entity;
+		}
+		throw new Error('Failed to create participant');
 	}
 
 	// Create reusable update handler

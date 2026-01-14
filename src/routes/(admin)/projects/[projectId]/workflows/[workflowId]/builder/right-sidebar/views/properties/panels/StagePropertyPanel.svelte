@@ -1,8 +1,5 @@
 <script lang="ts">
 	import type { Node, Edge } from '@xyflow/svelte';
-	import { invalidateAll } from '$app/navigation';
-	import { page } from '$app/stores';
-	import { getPocketBase } from '$lib/pocketbase';
 
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -41,6 +38,8 @@
 		onToolVisualConfigChange?: (toolId: string, config: VisualConfig) => void;
 		/** Callback when a tool is selected */
 		onSelectTool?: (toolType: string, toolId: string) => void;
+		/** Callback to create a new role via server action */
+		onCreateRole?: (name: string) => Promise<Role>;
 	};
 
 	let {
@@ -55,7 +54,8 @@
 		onRolesChange,
 		onToolRolesChange,
 		onToolVisualConfigChange,
-		onSelectTool
+		onSelectTool,
+		onCreateRole
 	}: Props = $props();
 
 	// Local state for editing
@@ -148,18 +148,6 @@
 		onDelete?.(stage.id);
 	}
 
-	// Create role callback for MobileMultiSelect
-	async function createRole(name: string) {
-		const pb = getPocketBase();
-		const newRole = await pb.collection('roles').create({
-			project_id: $page.params.projectId,
-			name: name,
-			description: ''
-		});
-		await invalidateAll();
-		return newRole;
-	}
-
 	// Handle tool roles change
 	function handleToolRolesChange(toolId: string, newRoleIds: string[]) {
 		toolRolesMap[toolId] = newRoleIds;
@@ -223,8 +211,8 @@
 							getOptionId={(r) => r.id}
 							getOptionLabel={(r) => r.name}
 							getOptionDescription={(r) => r.description}
-							allowCreate={true}
-							onCreateOption={createRole}
+							allowCreate={!!onCreateRole}
+							onCreateOption={onCreateRole}
 							placeholder="Select or search roles..."
 							class="w-full"
 						/>
@@ -258,8 +246,8 @@
 											getOptionId={(r) => r.id}
 											getOptionLabel={(r) => r.name}
 											getOptionDescription={(r) => r.description}
-											allowCreate={true}
-											onCreateOption={createRole}
+											allowCreate={!!onCreateRole}
+											onCreateOption={onCreateRole}
 											placeholder="All roles..."
 											class="w-full"
 										/>
