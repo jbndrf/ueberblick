@@ -12,32 +12,11 @@
 		Trash2
 	} from 'lucide-svelte';
 	import * as m from '$lib/paraglide/messages';
-
-	interface Marker {
-		id: string;
-		title: string;
-		description?: string;
-		category?: {
-			name: string;
-			color: string;
-		};
-		location: {
-			lat: number;
-			lng: number;
-		};
-		created_at?: string;
-		created_by?: {
-			name: string;
-		};
-		images?: Array<{
-			url: string;
-			filename: string;
-		}>;
-		custom_data?: Record<string, any>;
-	}
+	import type { Marker as GatewayMarker, MarkerCategory } from '$lib/participant-state/types';
 
 	interface Props {
-		marker: Marker;
+		marker: GatewayMarker;
+		category?: MarkerCategory;
 		canEdit?: boolean;
 		canDelete?: boolean;
 		onEdit?: () => void;
@@ -47,6 +26,7 @@
 
 	let {
 		marker,
+		category,
 		canEdit = false,
 		canDelete = false,
 		onEdit,
@@ -67,21 +47,21 @@
 
 <div class="marker-detail p-4">
 	<!-- Header with category -->
-	{#if marker.category}
+	{#if category}
 		<div class="mb-3">
 			<Badge variant="secondary" class="text-xs">
 				<div
 					class="mr-1.5 h-2 w-2 rounded-full"
-					style="background-color: {marker.category.color}"
+					style="background-color: {category.icon_config?.color || '#6c757d'}"
 				></div>
-				{marker.category.name}
+				{category.name}
 			</Badge>
 		</div>
 	{/if}
 
 	<!-- Title and Description -->
 	<div class="mb-4">
-		<h3 class="mb-2 text-lg font-semibold">{marker.title}</h3>
+		<h3 class="mb-2 text-lg font-semibold">{marker.title || 'Untitled Marker'}</h3>
 		{#if marker.description}
 			<p class="text-sm text-muted-foreground">{marker.description}</p>
 		{/if}
@@ -92,70 +72,48 @@
 	<!-- Metadata -->
 	<div class="space-y-3">
 		<!-- Location -->
-		<div class="flex items-start gap-3 text-sm">
-			<MapPin class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-			<div>
-				<div class="font-medium">Location</div>
-				<div class="text-muted-foreground">
-					{formatCoordinates(marker.location.lat, marker.location.lng)}
-				</div>
-			</div>
-		</div>
-
-		<!-- Created Date -->
-		{#if marker.created_at}
+		{#if marker.location}
 			<div class="flex items-start gap-3 text-sm">
-				<Calendar class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+				<MapPin class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
 				<div>
-					<div class="font-medium">Created</div>
-					<div class="text-muted-foreground">{formatDate(marker.created_at)}</div>
+					<div class="font-medium">Location</div>
+					<div class="text-muted-foreground">
+						{formatCoordinates(marker.location.lat, marker.location.lon)}
+					</div>
 				</div>
 			</div>
 		{/if}
 
-		<!-- Created By -->
+		<!-- Created Date -->
+		{#if marker.created}
+			<div class="flex items-start gap-3 text-sm">
+				<Calendar class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+				<div>
+					<div class="font-medium">Created</div>
+					<div class="text-muted-foreground">{formatDate(marker.created)}</div>
+				</div>
+			</div>
+		{/if}
+
+		<!-- Created By (just ID for now) -->
 		{#if marker.created_by}
 			<div class="flex items-start gap-3 text-sm">
 				<User class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
 				<div>
 					<div class="font-medium">Created by</div>
-					<div class="text-muted-foreground">{marker.created_by.name}</div>
+					<div class="text-muted-foreground">{marker.created_by}</div>
 				</div>
 			</div>
 		{/if}
 	</div>
 
-	<!-- Images -->
-	{#if marker.images && marker.images.length > 0}
-		<Separator class="my-4" />
-		<div>
-			<h4 class="mb-3 text-sm font-medium">Images</h4>
-			<div class="grid grid-cols-2 gap-2">
-				{#each marker.images as image}
-					<a href={image.url} target="_blank" rel="noopener noreferrer" class="group relative">
-						<img
-							src={image.url}
-							alt={image.filename}
-							class="aspect-square w-full rounded-md border object-cover transition-opacity group-hover:opacity-75"
-						/>
-						<div
-							class="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100"
-						>
-							<ExternalLink class="h-5 w-5 text-white drop-shadow-lg" />
-						</div>
-					</a>
-				{/each}
-			</div>
-		</div>
-	{/if}
-
-	<!-- Custom Data -->
-	{#if marker.custom_data && Object.keys(marker.custom_data).length > 0}
+	<!-- Properties (custom data) -->
+	{#if marker.properties && Object.keys(marker.properties).length > 0}
 		<Separator class="my-4" />
 		<div>
 			<h4 class="mb-3 text-sm font-medium">Additional Information</h4>
 			<div class="space-y-2">
-				{#each Object.entries(marker.custom_data) as [key, value]}
+				{#each Object.entries(marker.properties) as [key, value]}
 					<div class="rounded-md border bg-muted/50 p-2 text-sm">
 						<div class="font-medium capitalize">{key.replace(/_/g, ' ')}</div>
 						<div class="text-muted-foreground">{value}</div>

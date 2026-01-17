@@ -23,8 +23,8 @@ migrate((app) => {
     }))
 
     // Update rules to use proper relation checks
-    collection.listRule = `project_id.owner_id = @request.auth.id || (@request.auth.collectionName = "participants" && project_id = @request.auth.project_id && @request.auth.role_id ?~ visible_to_roles)`
-    collection.viewRule = `project_id.owner_id = @request.auth.id || (@request.auth.collectionName = "participants" && project_id = @request.auth.project_id && @request.auth.role_id ?~ visible_to_roles)`
+    collection.listRule = `project_id.owner_id = @request.auth.id || (@request.auth.collectionName = "participants" && project_id = @request.auth.project_id && @request.auth.role_id ?= visible_to_roles)`
+    collection.viewRule = `project_id.owner_id = @request.auth.id || (@request.auth.collectionName = "participants" && project_id = @request.auth.project_id && @request.auth.role_id ?= visible_to_roles)`
 
     app.save(collection)
   }
@@ -48,11 +48,11 @@ migrate((app) => {
     }))
 
     // Update rules with role-based visibility
-    collection.listRule = `project_id.owner_id = @request.auth.id || (@request.auth.collectionName = "participants" && project_id = @request.auth.project_id && @request.auth.role_id ?~ visible_to_roles)`
-    collection.viewRule = `project_id.owner_id = @request.auth.id || (@request.auth.collectionName = "participants" && project_id = @request.auth.project_id && @request.auth.role_id ?~ visible_to_roles)`
+    collection.listRule = `project_id.owner_id = @request.auth.id || (@request.auth.collectionName = "participants" && project_id = @request.auth.project_id && @request.auth.role_id ?= visible_to_roles)`
+    collection.viewRule = `project_id.owner_id = @request.auth.id || (@request.auth.collectionName = "participants" && project_id = @request.auth.project_id && @request.auth.role_id ?= visible_to_roles)`
     collection.createRule = `project_id.owner_id = @request.auth.id || (@request.auth.collectionName = "participants" && project_id = @request.auth.project_id)`
-    collection.updateRule = `project_id.owner_id = @request.auth.id || (@request.auth.collectionName = "participants" && project_id = @request.auth.project_id && @request.auth.role_id ?~ visible_to_roles)`
-    collection.deleteRule = `project_id.owner_id = @request.auth.id || (@request.auth.collectionName = "participants" && project_id = @request.auth.project_id && @request.auth.role_id ?~ visible_to_roles)`
+    collection.updateRule = `project_id.owner_id = @request.auth.id || (@request.auth.collectionName = "participants" && project_id = @request.auth.project_id && @request.auth.role_id ?= visible_to_roles)`
+    collection.deleteRule = `project_id.owner_id = @request.auth.id || (@request.auth.collectionName = "participants" && project_id = @request.auth.project_id && @request.auth.role_id ?= visible_to_roles)`
 
     app.save(collection)
   }

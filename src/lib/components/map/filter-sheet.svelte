@@ -12,10 +12,21 @@
 		active: boolean;
 	}
 
+	interface IconConfig {
+		type: 'svg';
+		svgContent: string;
+		style?: {
+			size?: number;
+			color?: string;
+			shape?: 'none' | 'pin';
+		};
+	}
+
 	interface MarkerCategory {
 		id: string;
 		name: string;
 		visible: boolean;
+		icon_config?: IconConfig | null;
 	}
 
 	interface Props {
@@ -47,6 +58,15 @@
 
 	function toggleCategoryVisibility(categoryId: string, currentState: boolean) {
 		onCategoryVisibilityChange?.(categoryId, !currentState);
+	}
+
+	function renderIcon(config: IconConfig | null | undefined, size: number = 24): string | null {
+		if (!config?.svgContent) return null;
+		const color = config.style?.color || '#333';
+		return config.svgContent.replace(
+			/(<svg[^>]*)(>)/,
+			`$1 style="width: ${size}px; height: ${size}px; fill: ${color};"$2`
+		);
 	}
 </script>
 
@@ -87,15 +107,27 @@
 			{#if markerCategories.length > 0}
 				<div>
 					<h4 class="mb-3 text-sm font-medium">Marker Categories</h4>
-					<div class="space-y-3">
+					<div class="space-y-2">
 						{#each markerCategories as category}
-							<div class="flex items-center justify-between space-x-2">
+							<div class="flex items-center gap-3 rounded-lg border p-3">
+								<!-- Icon -->
+								<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-muted/50">
+									{#if category.icon_config?.svgContent}
+										{@html renderIcon(category.icon_config, 20)}
+									{:else}
+										<div class="h-4 w-4 rounded-full bg-muted-foreground/30"></div>
+									{/if}
+								</div>
+
+								<!-- Name -->
 								<Label
 									for="category-{category.id}"
-									class="flex-1 cursor-pointer text-sm font-normal"
+									class="min-w-0 flex-1 cursor-pointer truncate text-sm font-medium"
 								>
 									{category.name}
 								</Label>
+
+								<!-- Toggle -->
 								<Switch
 									id="category-{category.id}"
 									checked={category.visible}

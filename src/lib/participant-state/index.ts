@@ -2,26 +2,66 @@
  * Participant State - Offline-first data management
  *
  * Main entry point for the participant-state module.
- * Provides offline-first state management with Svelte 5 runes.
+ * Provides a unified gateway for all participant data operations.
  */
 
 // =============================================================================
-// State Management
+// Gateway (Primary Interface)
 // =============================================================================
 
-export { ParticipantState, createParticipantState } from './state.svelte';
+export { createParticipantGateway, type ParticipantGateway } from './gateway.svelte';
+
+// =============================================================================
+// Context (for sharing gateway across components)
+// =============================================================================
+
+export {
+	getParticipantGateway,
+	setParticipantGateway,
+	getReferenceData,
+	setReferenceData,
+	initializeParticipantState,
+	type ReferenceData
+} from './context.svelte';
 
 // =============================================================================
 // Persistence
 // =============================================================================
 
-export { setupPersistence, loadFromDB, clearAllPendingData } from './persistence.svelte';
+export {
+	setupPersistence,
+	saveReferenceData,
+	loadReferenceData,
+	clearAllRecords,
+	clearCollection,
+	clearAllData
+} from './persistence.svelte';
 
 // =============================================================================
 // Sync Engine
 // =============================================================================
 
-export { syncAll, enableAutoSync } from './sync';
+export { downloadAll, uploadChanges, enableAutoSync, triggerSync, getSyncProgress } from './sync.svelte';
+
+// =============================================================================
+// Operation Log
+// =============================================================================
+
+export {
+	createOperationEntry,
+	saveOperation,
+	getAllOperations,
+	getOperationsForEntity,
+	getOperationsByCollection,
+	getPendingOperations,
+	getFailedOperations,
+	getOperationsByParticipant,
+	markOperationSynced,
+	markOperationFailed,
+	linkOperationToToolUsage,
+	cleanupSyncedOperations,
+	getOperationCounts
+} from './operation-log';
 
 // =============================================================================
 // Network Detection
@@ -103,23 +143,42 @@ export { generateId, deepEqual, arraysEqual } from './utils';
 // =============================================================================
 
 export type {
+	// Common
+	GeoPoint,
+
 	// Status tracking
 	ItemStatus,
 	TrackedItem,
 	SyncStatus,
 	SyncProgress,
 
-	// Entity types
+	// Core entity types (matching PocketBase)
 	Marker,
-	Survey,
-	Photo,
-	WorkflowProgress,
+	WorkflowInstance,
+	FieldValue,
+	ToolUsage,
 
 	// Tracked entity types
 	TrackedMarker,
-	TrackedSurvey,
-	TrackedPhoto,
-	TrackedWorkflowProgress,
+	TrackedWorkflowInstance,
+	TrackedFieldValue,
+	TrackedToolUsage,
+
+	// Operation log
+	OperationType,
+	CollectionName,
+	OperationSyncStatus,
+	OperationLogEntry,
+
+	// Reference data types
+	Workflow,
+	WorkflowStage,
+	WorkflowConnection,
+	ToolForm,
+	ToolFormField,
+	ToolEdit,
+	MarkerCategory,
+	Role,
 
 	// Network
 	NetworkStatus,
@@ -130,19 +189,20 @@ export type {
 	DownloadStatus,
 	DownloadProgress,
 
-	// Offline pack data
+	// Storage types
+	StoredMarker,
+	StoredWorkflowInstance,
+	StoredFieldValue,
+	StoredToolUsage,
+	StoredOperationLogEntry,
+
+	// Offline pack content types
 	OfflineMarker,
 	OfflineWorkflow,
-	OfflineWorkflowStage,
 	OfflineForm,
-	OfflineFormField,
-	OfflineFormFieldOption,
 	OfflineMarkerCategory,
 
-	// Storage types
-	StoredItem,
-	StoredMarker,
-	StoredSurvey,
-	StoredPhoto,
-	StoredWorkflowProgress
+	// Gateway result types
+	GatewayResult,
+	BatchResult
 } from './types';

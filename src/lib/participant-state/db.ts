@@ -1,95 +1,59 @@
 /**
  * IndexedDB wrapper for participant state
  *
- * Updated schema to store status metadata with items.
+ * Version 3: Generic 'records' store for any collection.
+ * The gateway is now a transparent proxy - any collection works.
  */
 
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type {
-	OfflinePackMetadata,
-	OfflineMarker,
-	OfflineWorkflow,
-	OfflineForm,
-	OfflineMarkerCategory,
-	Marker,
-	Survey,
-	Photo,
-	WorkflowProgress,
-	ItemStatus
-} from './types';
+import type { OperationLogEntry, OperationSyncStatus } from './types';
 
 /**
- * Database schema definition with status tracking
+ * Generic cached record - can hold any collection's data
+ */
+export interface CachedRecord {
+	_key: string; // compound key: `${collection}/${id}`
+	_collection: string; // collection name
+	_status: 'unchanged' | 'new' | 'modified' | 'deleted';
+	_error?: string;
+	_retryCount?: number;
+	id: string;
+	[key: string]: unknown; // actual record data
+}
+
+/**
+ * Database schema - simplified to generic stores
  */
 interface ParticipantStateDB extends DBSchema {
-	// Downloaded pack data (read-only)
-	pack_metadata: {
-		key: string;
-		value: OfflinePackMetadata & { pack_id?: string };
-		indexes: { 'by-project': string };
-	};
-	markers: {
-		key: string;
-		value: OfflineMarker & { pack_id?: string };
-		indexes: { 'by-pack': string; 'by-category': string };
-	};
-	workflows: {
-		key: string;
-		value: OfflineWorkflow & { pack_id?: string };
-		indexes: { 'by-pack': string };
-	};
-	forms: {
-		key: string;
-		value: OfflineForm & { pack_id?: string };
-		indexes: { 'by-pack': string };
-	};
-	marker_categories: {
-		key: string;
-		value: OfflineMarkerCategory & { pack_id?: string };
-		indexes: { 'by-pack': string };
+	// Generic store for any collection's records
+	records: {
+		key: string; // _key (compound: collection/id)
+		value: CachedRecord;
+		indexes: {
+			by_collection: string;
+			by_status: 'unchanged' | 'new' | 'modified' | 'deleted';
+			by_collection_status: [string, string];
+		};
 	};
 
-	// User-created data (pending sync) - with status tracking
-	pending_markers: {
+	// Operation log (audit trail)
+	operation_log: {
 		key: string;
-		value: Marker & {
-			_status: ItemStatus;
-			_error?: string;
-			_retryCount?: number;
+		value: OperationLogEntry & {
+			_entityKey: string;
 		};
-		indexes: { 'by-status': ItemStatus; 'by-created': string };
-	};
-	pending_surveys: {
-		key: string;
-		value: Survey & {
-			_status: ItemStatus;
-			_error?: string;
-			_retryCount?: number;
+		indexes: {
+			'by-collection': string;
+			'by-entity': string;
+			'by-sync-status': OperationSyncStatus;
+			'by-timestamp': string;
+			'by-participant': string;
 		};
-		indexes: { 'by-status': ItemStatus; 'by-marker': string; 'by-created': string };
-	};
-	pending_photos: {
-		key: string;
-		value: Photo & {
-			_status: ItemStatus;
-			_error?: string;
-			_retryCount?: number;
-		};
-		indexes: { 'by-status': ItemStatus; 'by-marker': string; 'by-created': string };
-	};
-	workflow_progress: {
-		key: string;
-		value: WorkflowProgress & {
-			_status: ItemStatus;
-			_error?: string;
-			_retryCount?: number;
-		};
-		indexes: { 'by-status': ItemStatus; 'by-marker': string; 'by-workflow': string };
 	};
 }
 
 const DB_NAME = 'participant-state';
-const DB_VERSION = 1;
+const DB_VERSION = 3;
 
 let dbInstance: IDBPDatabase<ParticipantStateDB> | null = null;
 
@@ -102,67 +66,52 @@ export async function initDB(): Promise<IDBPDatabase<ParticipantStateDB>> {
 	}
 
 	dbInstance = await openDB<ParticipantStateDB>(DB_NAME, DB_VERSION, {
-		upgrade(db) {
-			// Pack metadata store
-			if (!db.objectStoreNames.contains('pack_metadata')) {
-				const packStore = db.createObjectStore('pack_metadata', { keyPath: 'id' });
-				packStore.createIndex('by-project', 'project_id');
+		upgrade(db, oldVersion) {
+			// Delete all old stores when upgrading to v3
+			if (oldVersion < 3) {
+				const oldStores = [
+					'pending_markers',
+					'pending_surveys',
+					'pending_photos',
+					'workflow_progress',
+					'forms',
+					'markers',
+					'workflow_instances',
+					'workflow_instance_field_values',
+					'workflow_instance_tool_usage',
+					'workflows',
+					'workflow_stages',
+					'workflow_connections',
+					'tools_forms',
+					'tools_form_fields',
+					'tools_edit',
+					'marker_categories',
+					'roles',
+					'pack_metadata'
+				];
+				for (const storeName of oldStores) {
+					if (db.objectStoreNames.contains(storeName as never)) {
+						db.deleteObjectStore(storeName as never);
+					}
+				}
 			}
 
-			// Downloaded markers store
-			if (!db.objectStoreNames.contains('markers')) {
-				const markersStore = db.createObjectStore('markers', { keyPath: 'id' });
-				markersStore.createIndex('by-pack', 'pack_id');
-				markersStore.createIndex('by-category', 'category_id');
+			// Generic records store - holds any collection
+			if (!db.objectStoreNames.contains('records')) {
+				const store = db.createObjectStore('records', { keyPath: '_key' });
+				store.createIndex('by_collection', '_collection');
+				store.createIndex('by_status', '_status');
+				store.createIndex('by_collection_status', ['_collection', '_status']);
 			}
 
-			// Workflows store
-			if (!db.objectStoreNames.contains('workflows')) {
-				const workflowsStore = db.createObjectStore('workflows', { keyPath: 'id' });
-				workflowsStore.createIndex('by-pack', 'pack_id');
-			}
-
-			// Forms store
-			if (!db.objectStoreNames.contains('forms')) {
-				const formsStore = db.createObjectStore('forms', { keyPath: 'id' });
-				formsStore.createIndex('by-pack', 'pack_id');
-			}
-
-			// Marker categories store
-			if (!db.objectStoreNames.contains('marker_categories')) {
-				const categoriesStore = db.createObjectStore('marker_categories', { keyPath: 'id' });
-				categoriesStore.createIndex('by-pack', 'pack_id');
-			}
-
-			// Pending markers store - with status index
-			if (!db.objectStoreNames.contains('pending_markers')) {
-				const pendingMarkersStore = db.createObjectStore('pending_markers', { keyPath: 'id' });
-				pendingMarkersStore.createIndex('by-status', '_status');
-				pendingMarkersStore.createIndex('by-created', 'created_at');
-			}
-
-			// Pending surveys store - with status index
-			if (!db.objectStoreNames.contains('pending_surveys')) {
-				const pendingSurveysStore = db.createObjectStore('pending_surveys', { keyPath: 'id' });
-				pendingSurveysStore.createIndex('by-status', '_status');
-				pendingSurveysStore.createIndex('by-marker', 'marker_id');
-				pendingSurveysStore.createIndex('by-created', 'created_at');
-			}
-
-			// Pending photos store - with status index
-			if (!db.objectStoreNames.contains('pending_photos')) {
-				const pendingPhotosStore = db.createObjectStore('pending_photos', { keyPath: 'id' });
-				pendingPhotosStore.createIndex('by-status', '_status');
-				pendingPhotosStore.createIndex('by-marker', 'marker_id');
-				pendingPhotosStore.createIndex('by-created', 'created_at');
-			}
-
-			// Workflow progress store - with status index
-			if (!db.objectStoreNames.contains('workflow_progress')) {
-				const progressStore = db.createObjectStore('workflow_progress', { keyPath: 'id' });
-				progressStore.createIndex('by-status', '_status');
-				progressStore.createIndex('by-marker', 'marker_id');
-				progressStore.createIndex('by-workflow', 'workflow_id');
+			// Operation log for audit trail
+			if (!db.objectStoreNames.contains('operation_log')) {
+				const store = db.createObjectStore('operation_log', { keyPath: 'id' });
+				store.createIndex('by-collection', 'collection');
+				store.createIndex('by-entity', '_entityKey');
+				store.createIndex('by-sync-status', 'syncStatus');
+				store.createIndex('by-timestamp', 'timestamp');
+				store.createIndex('by-participant', 'participantId');
 			}
 		}
 	});

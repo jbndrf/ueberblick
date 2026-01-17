@@ -47,6 +47,8 @@ Five PocketBase collections power the workflow builder:
 ```
 workflows (existing)
   |
+  +-- entry_allowed_roles --> roles (who can create new instances)
+  |
   +-- workflow_stages
   |     +-- visible_to_roles --> roles
   |
@@ -171,6 +173,116 @@ Connection.allowed_roles   = who can trigger this connection
 Tool.allowed_roles         = who sees this specific tool
                              (null/empty = inherit from parent)
 ```
+
+---
+
+## Access Control Model
+
+The workflow builder implements a 4-layer access control model for secure role-based access.
+
+### Layer 1: Project Membership (Base Requirement)
+
+All access requires project membership:
+```
+participant.project_id = resource.project_id
+```
+
+### Layer 2: Structure Transparency
+
+**These collections are visible to ALL project participants:**
+
+| Collection | What's Visible |
+|------------|----------------|
+| `workflow_stages` | Stage names, types, visual config, positions |
+| `workflow_instances` | Current stage, status, timestamps |
+
+**Purpose:** Users can track progress and see where an instance is in the workflow.
+
+### Layer 3: Role-Based Protection
+
+**These collections have role-based visibility:**
+
+| Collection | Visibility Rule |
+|------------|-----------------|
+| `workflow_connections` | `connection.allowed_roles` - only see transitions you can use |
+| `tools_forms` | Stage-attached: `form.allowed_roles`; Connection-attached: `connection.allowed_roles` |
+| `tools_form_fields` | Inherits from parent form |
+| `tools_edit` | Stage-attached: `tool.allowed_roles`; Connection-attached: `connection.allowed_roles` |
+| `workflow_instance_field_values` | READ: `stage_id.visible_to_roles`; CREATE: `current_stage.visible_to_roles` |
+| `workflow_instance_tool_usage` | `instance.current_stage_id.visible_to_roles` (audit trail) |
+
+**Key points:**
+- **Connections** are protected - you only see action buttons for transitions you can trigger
+- **Tools** use their OWN `allowed_roles` field (not the stage's `visible_to_roles`)
+- **Field values CREATE** uses current stage visibility (allows transition form submission)
+- **Field values READ** uses destination stage visibility (protects data afterward)
+- **No creator bypass** - instance creators are treated like any other participant
+
+### Layer 4: Action Permissions
+
+| Permission | Field | Description |
+|------------|-------|-------------|
+| Create instances | `workflow.entry_allowed_roles` | Who can start new workflow instances |
+| Trigger transitions | `connection.allowed_roles` | Who can move instances between stages |
+| Update instances | `stage.visible_to_roles` | Who can update instance at current stage |
+
+### Empty Array Convention
+
+Empty arrays mean "ALL roles can access":
+- `visible_to_roles = []` - All roles can see
+- `allowed_roles = []` - All roles can execute
+- `entry_allowed_roles = []` - All participants can create instances
+
+### Entry Connection Role Sync
+
+The `entry_allowed_roles` field on workflows is automatically synced from the entry connection's `allowed_roles` when saving in the workflow builder. This enables efficient PocketBase rule enforcement for instance creation.
+
+### Visual Example
+
+```
+REPORTER VIEW (instance at Stage 3 - "Internal Review"):
++----------------------------------------------------------+
+| Instance #123                                             |
+| Current Stage: Internal Review (Stage 3 of 4)             |  <-- VISIBLE (structure)
+| Status: Active                                            |
+|                                                           |
+| WORKFLOW PROGRESS:                                        |
+| [x] Stage 1: Submit Report                                |  <-- VISIBLE (structure)
+| [x] Stage 2: Initial Assessment                           |  <-- VISIBLE (structure)
+| [>] Stage 3: Internal Review                              |  <-- VISIBLE (structure)
+| [ ] Stage 4: Resolution                                   |  <-- VISIBLE (structure)
+|                                                           |
+| STAGE 1 - Submit Report:                                  |
+|   Data: [hidden - role not in visible_to_roles]           |  <-- PROTECTED
+|                                                           |
+| STAGE 2 - Initial Assessment:                             |
+|   Data: [hidden - role not in visible_to_roles]           |  <-- PROTECTED
+|                                                           |
+| STAGE 3 - Internal Review:                                |
+|   Data: [hidden - role not in visible_to_roles]           |  <-- PROTECTED
+|                                                           |
+| Available Actions: (none)                                 |  <-- No connections visible
+| "Waiting for authorized role to proceed"                  |
++----------------------------------------------------------+
+```
+
+The Reporter sees the workflow progress (stage names, current position) but:
+- Cannot see any action buttons (connections filtered by `allowed_roles`)
+- Cannot see field values from any stage (unless role is in `stage.visible_to_roles`)
+- Cannot see tools (filtered by `tool.allowed_roles`)
+
+### Access Control Summary Table
+
+| Collection | Admin | Participant |
+|------------|-------|-------------|
+| `workflow_stages` | Full CRUD | Read all (transparent) |
+| `workflow_connections` | Full CRUD | Read if role in `allowed_roles` |
+| `workflow_instances` | Full CRUD | Read all; Create if role in `entry_allowed_roles`; Update if role in `current_stage.visible_to_roles` |
+| `tools_forms` | Full CRUD | Read if role in `form.allowed_roles` or `connection.allowed_roles` |
+| `tools_form_fields` | Full CRUD | Read (inherits from parent form) |
+| `tools_edit` | Full CRUD | Read if role in `tool.allowed_roles` or `connection.allowed_roles` |
+| `workflow_instance_field_values` | Full CRUD | Read/Update if role in `stage.visible_to_roles`; Create if role in `current_stage.visible_to_roles` |
+| `workflow_instance_tool_usage` | Full CRUD | Read if role in `current_stage.visible_to_roles` |
 
 ---
 
@@ -435,4 +547,6 @@ All items reset to 'unchanged', deleted items removed
 
 ### Database
 - `pb/pb_migrations/1768200000_create_workflow_builder_tables.js` - Schema migration
+- `pb/pb_migrations/1768800000_add_workflow_entry_roles.js` - Add entry_allowed_roles field
+- `pb/pb_migrations/1768800001_workflow_access_rules.js` - 4-layer access control rules
 - `docs/db/workflow-related-tables.md` - Table documentation

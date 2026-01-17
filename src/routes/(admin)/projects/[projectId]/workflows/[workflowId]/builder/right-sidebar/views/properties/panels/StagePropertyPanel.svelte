@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import type { Node, Edge } from '@xyflow/svelte';
 
 	import { Button } from '$lib/components/ui/button';
@@ -69,13 +70,27 @@
 	// Local state for tool roles (keyed by tool ID)
 	let toolRolesMap = $state<Record<string, string[]>>({});
 
-	// Initialize tool roles map
+	// Initialize tool roles map - only update when allowed_roles actually change
 	$effect(() => {
 		const newMap: Record<string, string[]> = {};
 		for (const tool of stageEditTools) {
 			newMap[tool.id] = tool.allowed_roles || [];
 		}
-		toolRolesMap = newMap;
+		// Only reassign if the roles actually changed to avoid triggering loops
+		// when unrelated properties (like visual_config) change
+		// Use untrack to read current value without creating circular dependency
+		const currentMap = untrack(() => toolRolesMap);
+		const hasChanged = Object.keys(newMap).some(toolId => {
+			const current = currentMap[toolId];
+			const next = newMap[toolId];
+			if (!current) return true;
+			if (current.length !== next.length) return true;
+			return current.some((id, i) => id !== next[i]);
+		}) || Object.keys(currentMap).some(toolId => !(toolId in newMap));
+
+		if (hasChanged) {
+			toolRolesMap = newMap;
+		}
 	});
 
 	// Update local state when stage changes (user selected different stage)
@@ -150,8 +165,22 @@
 
 	// Handle tool roles change
 	function handleToolRolesChange(toolId: string, newRoleIds: string[]) {
-		toolRolesMap[toolId] = newRoleIds;
-		onToolRolesChange?.(toolId, newRoleIds);
+		// Guard against the MobileMultiSelect mount-time callback which fires before
+		// toolRolesMap is populated from stageEditTools, causing an overwrite with empty array
+		const currentRoles = toolRolesMap[toolId];
+		if (currentRoles === undefined) {
+			// toolRolesMap not yet initialized - ignore this callback
+			return;
+		}
+
+		// Only update if the value actually changed
+		const changed = currentRoles.length !== newRoleIds.length ||
+			currentRoles.some((id, i) => id !== newRoleIds[i]);
+
+		if (changed) {
+			toolRolesMap[toolId] = newRoleIds;
+			onToolRolesChange?.(toolId, newRoleIds);
+		}
 	}
 
 	// Get tool icon from registry

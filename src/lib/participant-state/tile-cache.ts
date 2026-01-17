@@ -2,11 +2,11 @@
  * Map tile caching for offline use
  *
  * Integrates with leaflet.offline for tile downloads and caching.
- * Updated to use Svelte 5 runes for progress tracking.
+ * Uses the generic 'records' store for pack metadata.
  */
 
-import { getDB } from './db';
-import type { BoundingBox } from './types';
+import { getDB, type CachedRecord } from './db';
+import type { BoundingBox, OfflinePackMetadata } from './types';
 
 // =============================================================================
 // Types
@@ -51,6 +51,28 @@ export function updateTileProgress(downloadedTiles: number): void {
 			downloadedTiles
 		};
 	}
+}
+
+// =============================================================================
+// Helper to access pack metadata in generic store
+// =============================================================================
+
+async function getPackMetadata(packId: string): Promise<OfflinePackMetadata | undefined> {
+	const db = await getDB();
+	const record = await db.get('records', `pack_metadata/${packId}`);
+	if (!record || record._status === 'deleted') return undefined;
+	return record as unknown as OfflinePackMetadata;
+}
+
+async function updatePackMetadata(pack: OfflinePackMetadata): Promise<void> {
+	const db = await getDB();
+	const cached: CachedRecord = {
+		...pack,
+		_key: `pack_metadata/${pack.id}`,
+		_collection: 'pack_metadata',
+		_status: 'unchanged'
+	};
+	await db.put('records', cached);
 }
 
 // =============================================================================
@@ -190,18 +212,15 @@ export async function downloadTilesForPack(
 		const maxZoom = Math.max(...zoomLevels);
 
 		// Download tiles using leaflet.offline
-		// The library will handle caching in IndexedDB automatically
 		await tileLayer.saveTiles(bounds, minZoom, maxZoom, async (status) => {
-			// Confirm download
 			console.log(`Ready to download ${status.nTilesToSave} tiles`);
 			return true;
 		});
 
 		// Update pack metadata with tile info
-		const db = await getDB();
-		const pack = await db.get('pack_metadata', packId);
+		const pack = await getPackMetadata(packId);
 		if (pack) {
-			await db.put('pack_metadata', {
+			await updatePackMetadata({
 				...pack,
 				tile_count: totalTiles,
 				estimated_size_mb: estimateTileSize(totalTiles),
@@ -235,19 +254,14 @@ export async function downloadTilesForPack(
 
 /**
  * Check if tiles are available for a pack
- * This requires integration with leaflet.offline's storage
  */
 export async function areTilesAvailable(packId: string): Promise<boolean> {
-	const db = await getDB();
-	const pack = await db.get('pack_metadata', packId);
+	const pack = await getPackMetadata(packId);
 	return pack !== undefined && pack.tile_count > 0;
 }
 
 /**
  * Clear cached tiles for a pack
- * This should be called when deleting a pack
- *
- * Note: Requires leaflet.offline control instance to delete tiles
  */
 export async function clearPackTiles(
 	packId: string,
@@ -260,10 +274,9 @@ export async function clearPackTiles(
 	}
 
 	// Update pack metadata
-	const db = await getDB();
-	const pack = await db.get('pack_metadata', packId);
+	const pack = await getPackMetadata(packId);
 	if (pack) {
-		await db.put('pack_metadata', {
+		await updatePackMetadata({
 			...pack,
 			tile_count: 0,
 			estimated_size_mb: 0,
@@ -274,26 +287,14 @@ export async function clearPackTiles(
 
 /**
  * Get tile cache statistics
- * Requires leaflet.offline to be initialized
  */
 export async function getTileCacheStats(): Promise<{
 	tileCount: number;
 	cacheSize: number;
 }> {
-	// This would need to query the IndexedDB store used by leaflet.offline
-	// The library stores tiles in a store called 'tileStore'
-	// For now, return placeholder values
-	try {
-		// Note: This is a placeholder - actual implementation would query
-		// the leaflet.offline IndexedDB store directly
-		return {
-			tileCount: 0,
-			cacheSize: 0
-		};
-	} catch {
-		return {
-			tileCount: 0,
-			cacheSize: 0
-		};
-	}
+	// Placeholder - actual implementation would query leaflet.offline IndexedDB store
+	return {
+		tileCount: 0,
+		cacheSize: 0
+	};
 }

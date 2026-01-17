@@ -45,8 +45,8 @@
 		);
 	};
 
-	// Define table columns using BaseColumnConfig
-	const columns: BaseColumnConfig<CustomTable>[] = [
+	// Define table columns using BaseColumnConfig (reactive to update entityConfig when data changes)
+	const columns = $derived.by((): BaseColumnConfig<CustomTable>[] => [
 		{
 			id: 'table_name',
 			header: m.customTablesTableName(),
@@ -185,7 +185,7 @@
 				filterable: false
 			}
 		}
-	];
+	]);
 
 	function handleSuccess(message: string) {
 		createDialogOpen = false;

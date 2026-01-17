@@ -184,6 +184,34 @@ export const actions: Actions = {
 			// Execute batch
 			await batch.send();
 
+			// Sync entry connection's allowed_roles to workflow.entry_allowed_roles
+			// Find entry connection among new + modified connections, or existing ones
+			let entryConnection: any = null;
+
+			// Check new connections for entry connection
+			entryConnection = changes.connections.new.find((c) => !c.from_stage_id);
+
+			// Check modified connections for entry connection
+			if (!entryConnection) {
+				entryConnection = changes.connections.modified.find((c) => !c.from_stage_id);
+			}
+
+			// If entry connection was found/modified, sync its allowed_roles to workflow
+			if (entryConnection) {
+				const workflowId = entryConnection.workflow_id;
+				const entryAllowedRoles = entryConnection.allowed_roles || [];
+
+				console.log(
+					'[saveWorkflow] Syncing entry_allowed_roles:',
+					workflowId,
+					entryAllowedRoles
+				);
+
+				await pb.collection('workflows').update(workflowId, {
+					entry_allowed_roles: entryAllowedRoles
+				});
+			}
+
 			return { success: true };
 		} catch (err) {
 			console.error('Failed to save workflow:', err);

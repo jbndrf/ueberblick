@@ -3,6 +3,7 @@ import Trigger from "./sheet-trigger.svelte";
 import Close from "./sheet-close.svelte";
 import Overlay from "./sheet-overlay.svelte";
 import Content from "./sheet-content.svelte";
+import ContentNoOverlay from "./sheet-content-no-overlay.svelte";
 import Header from "./sheet-header.svelte";
 import Footer from "./sheet-footer.svelte";
 import Title from "./sheet-title.svelte";
@@ -18,6 +19,7 @@ export {
 	Portal,
 	Overlay,
 	Content,
+	ContentNoOverlay,
 	Header,
 	Footer,
 	Title,
@@ -29,6 +31,7 @@ export {
 	Portal as SheetPortal,
 	Overlay as SheetOverlay,
 	Content as SheetContent,
+	ContentNoOverlay as SheetContentNoOverlay,
 	Header as SheetHeader,
 	Footer as SheetFooter,
 	Title as SheetTitle,

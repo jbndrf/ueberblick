@@ -78,6 +78,11 @@
 		 * When false, shows all selected items as badges in the trigger.
 		 */
 		summarizeMultiple?: boolean;
+		/**
+		 * Callback when selectedIds changes (alternative to bind:selectedIds).
+		 * Use this when you need to handle changes without two-way binding.
+		 */
+		onSelectedIdsChange?: (ids: string[]) => void;
 	};
 
 	let {
@@ -97,7 +102,8 @@
 		autoAddCreated = false,
 		emptyLabel = 'No options found',
 		createHintLabel = 'Press Enter to create',
-		summarizeMultiple = false
+		summarizeMultiple = false,
+		onSelectedIdsChange
 	}: Props = $props();
 
 	let isOpen = $state(false);
@@ -371,6 +377,11 @@
 				highlighted.scrollIntoView({ block: 'nearest' });
 			}
 		}
+	});
+
+	// Call onSelectedIdsChange callback when selectedIds changes
+	$effect(() => {
+		onSelectedIdsChange?.(selectedIds);
 	});
 
 </script>

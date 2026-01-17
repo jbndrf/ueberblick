@@ -97,7 +97,7 @@
 		{#if entitySelectorLoaded}
 			<MobileMultiSelect
 				bind:selectedIds
-				bind:options={entityConfig.availableEntities}
+				options={entityConfig.availableEntities ?? []}
 				getOptionId={entityConfig.getEntityId}
 				getOptionLabel={entityConfig.getEntityName}
 				getOptionDescription={entityConfig.getEntityDescription}

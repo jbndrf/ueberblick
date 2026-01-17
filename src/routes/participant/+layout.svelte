@@ -6,12 +6,56 @@
 	import { Button } from '$lib/components/ui/button';
 	import ModeToggle from '$lib/components/mode-toggle.svelte';
 	import LanguageSelectorDropdown from '$lib/components/language-selector-dropdown.svelte';
-	import { UserCircle, LogOut } from 'lucide-svelte';
+	import { UserCircle, LogOut, Layers, Filter, Navigation, Settings, Plus } from 'lucide-svelte';
+	import { mapNavCallbacks } from './map/nav-store.svelte';
+	import {
+		createParticipantGateway,
+		type ParticipantGateway
+	} from '$lib/participant-state/gateway.svelte';
+	import { setupPersistence } from '$lib/participant-state/persistence.svelte';
+	import {
+		setParticipantGateway,
+		setReferenceData
+	} from '$lib/participant-state/context.svelte';
 
 	let { data, children } = $props();
 
 	// Hide layout chrome on login page
 	const isLoginPage = $derived($page.url.pathname === '/participant/login');
+
+	// Gateway state
+	let gateway: ParticipantGateway | null = $state(null);
+	let gatewayInitialized = $state(false);
+
+	// Create gateway synchronously if participant is available
+	// This allows $effect in setupPersistence to work during component init
+	if (data.participant) {
+		gateway = createParticipantGateway(data.participant.id, data.participant.project_id);
+		setParticipantGateway(gateway);
+
+		// Set up auto-persistence (uses $effect, must be called during init)
+		setupPersistence(gateway);
+	}
+
+	// Initialize gateway data asynchronously
+	$effect(() => {
+		if (gateway && !gatewayInitialized) {
+			initGatewayData();
+		}
+	});
+
+	async function initGatewayData() {
+		if (!gateway) return;
+
+		try {
+			// Initialize (loads from IndexedDB)
+			await gateway.init();
+			gatewayInitialized = true;
+			console.log('Participant gateway initialized');
+		} catch (error) {
+			console.error('Failed to initialize gateway:', error);
+		}
+	}
 
 	async function handleSignOut() {
 		try {
@@ -34,7 +78,7 @@
 {:else}
 	<!-- Mobile-optimized layout for authenticated participants -->
 	<div class="fixed inset-0 flex flex-col overflow-hidden">
-		<!-- Mobile Header -->
+		<!-- Header -->
 		<header class="flex h-14 shrink-0 items-center justify-between border-b bg-background px-4">
 			<div class="flex items-center gap-2">
 				<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
@@ -44,6 +88,25 @@
 					</svg>
 				</div>
 				<span class="font-semibold">Karte</span>
+			</div>
+
+			<!-- Desktop Navigation (hidden on mobile) -->
+			<div class="hidden md:flex items-center gap-1">
+				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onLayersClick?.()} title="Layers">
+					<Layers class="h-5 w-5" />
+				</Button>
+				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onFiltersClick?.()} title="Filters">
+					<Filter class="h-5 w-5" />
+				</Button>
+				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onWorkflowClick?.()} title="New">
+					<Plus class="h-5 w-5" />
+				</Button>
+				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onLocationClick?.()} title="Location">
+					<Navigation class="h-5 w-5" />
+				</Button>
+				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onToolsClick?.()} title="Tools">
+					<Settings class="h-5 w-5" />
+				</Button>
 			</div>
 
 			{#if data.participant}

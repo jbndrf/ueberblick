@@ -58,8 +58,8 @@
 		);
 	};
 
-	// Define table columns using BaseColumnConfig
-	const columns: BaseColumnConfig<MarkerCategory>[] = [
+	// Define table columns using BaseColumnConfig (reactive to update entityConfig when data changes)
+	const columns = $derived.by((): BaseColumnConfig<MarkerCategory>[] => [
 		{
 			id: 'icon_preview',
 			header: 'Icon',
@@ -150,18 +150,7 @@
 				getEntityDescription: (role) => role.description,
 				availableEntities: data.roles,
 				allowCreate: true,
-				onCreateEntity: async (name: string) => {
-					try {
-						const newRole = await createRole(name);
-						data.roles = [...data.roles, newRole];
-						toast.success(m.rolesCreateSuccess());
-						return newRole;
-					} catch (error) {
-						console.error('Failed to create role:', error);
-						toast.error(m.rolesCreateError());
-						throw new Error('Failed to create role');
-					}
-				}
+				onCreateEntity: createRole
 			},
 			onUpdate: async (rowId: string, value: string[]) => {
 				const formData = new FormData();
@@ -200,7 +189,7 @@
 				filterable: false
 			}
 		}
-	];
+	]);
 
 	function handleSuccess(message: string) {
 		createDialogOpen = false;

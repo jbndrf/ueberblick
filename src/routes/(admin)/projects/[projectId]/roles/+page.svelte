@@ -135,8 +135,8 @@
 		}))
 	);
 
-	// Define table columns using BaseColumnConfig
-	const columns: BaseColumnConfig<Role>[] = [
+	// Define table columns using BaseColumnConfig (reactive for consistency with other pages)
+	const columns = $derived.by((): BaseColumnConfig<Role>[] => [
 		{
 			id: 'name',
 			header: m.rolesName(),
@@ -176,7 +176,7 @@
 				readonly: true
 			}
 		}
-	];
+	]);
 
 	function openEditParticipants(role: Role) {
 		selectedRole = role;

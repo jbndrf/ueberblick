@@ -21,10 +21,11 @@ const handleAuth: Handle = async ({ event, resolve }) => {
 	const cookieHeader = event.request.headers.get('cookie') || '';
 	event.locals.pb.authStore.loadFromCookie(cookieHeader);
 
-	// Refresh auth if valid
+	// Refresh auth if we have a token
 	try {
-		if (event.locals.pb.authStore.isValid) {
-			// Determine which collection to refresh based on the stored model
+		// Always attempt refresh if we have a token, not just if valid
+		// PocketBase allows refreshing recently-expired tokens
+		if (event.locals.pb.authStore.token) {
 			const collectionName = event.locals.pb.authStore.record?.collectionName;
 
 			if (collectionName === 'participants') {
@@ -33,9 +34,12 @@ const handleAuth: Handle = async ({ event, resolve }) => {
 				await event.locals.pb.collection('users').authRefresh();
 			}
 		}
-	} catch (err) {
-		// Clear auth store on failed refresh
-		event.locals.pb.authStore.clear();
+	} catch (err: any) {
+		// Only clear auth on actual auth errors (401/403), not network issues
+		if (err?.status === 401 || err?.status === 403) {
+			event.locals.pb.authStore.clear();
+		}
+		console.error('[Auth] Refresh failed:', err?.message || err);
 	}
 
 	// Set user/participant in locals for easy access
@@ -47,7 +51,8 @@ const handleAuth: Handle = async ({ event, resolve }) => {
 	const exportedCookie = event.locals.pb.authStore.exportToCookie({
 		httpOnly: false,
 		secure: false,
-		sameSite: 'Lax'
+		sameSite: 'Lax',
+		maxAge: 60 * 60 * 24 * 7 // 1 week
 	});
 	response.headers.append('set-cookie', exportedCookie);
 

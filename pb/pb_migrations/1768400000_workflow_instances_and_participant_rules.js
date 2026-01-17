@@ -19,14 +19,14 @@ migrate((app) => {
       || created_by = @request.auth.id
       || (@request.auth.collectionName = "participants"
           && workflow_id.project_id = @request.auth.project_id
-          && @request.auth.role_id ?~ current_stage_id.visible_to_roles)
+          && @request.auth.role_id ?= current_stage_id.visible_to_roles)
     `,
     viewRule: `
       workflow_id.project_id.owner_id = @request.auth.id
       || created_by = @request.auth.id
       || (@request.auth.collectionName = "participants"
           && workflow_id.project_id = @request.auth.project_id
-          && @request.auth.role_id ?~ current_stage_id.visible_to_roles)
+          && @request.auth.role_id ?= current_stage_id.visible_to_roles)
     `,
     createRule: `
       workflow_id.project_id.owner_id = @request.auth.id
@@ -37,7 +37,7 @@ migrate((app) => {
       workflow_id.project_id.owner_id = @request.auth.id
       || (@request.auth.collectionName = "participants"
           && workflow_id.project_id = @request.auth.project_id
-          && (created_by = @request.auth.id || @request.auth.role_id ?~ current_stage_id.visible_to_roles))
+          && (created_by = @request.auth.id || @request.auth.role_id ?= current_stage_id.visible_to_roles))
     `,
     deleteRule: "workflow_id.project_id.owner_id = @request.auth.id",
     fields: [
@@ -62,14 +62,14 @@ migrate((app) => {
       || instance_id.created_by = @request.auth.id
       || (@request.auth.collectionName = "participants"
           && instance_id.workflow_id.project_id = @request.auth.project_id
-          && @request.auth.role_id ?~ instance_id.current_stage_id.visible_to_roles)
+          && @request.auth.role_id ?= instance_id.current_stage_id.visible_to_roles)
     `,
     viewRule: `
       instance_id.workflow_id.project_id.owner_id = @request.auth.id
       || instance_id.created_by = @request.auth.id
       || (@request.auth.collectionName = "participants"
           && instance_id.workflow_id.project_id = @request.auth.project_id
-          && @request.auth.role_id ?~ instance_id.current_stage_id.visible_to_roles)
+          && @request.auth.role_id ?= instance_id.current_stage_id.visible_to_roles)
     `,
     createRule: `
       instance_id.workflow_id.project_id.owner_id = @request.auth.id
@@ -98,14 +98,14 @@ migrate((app) => {
       || instance_id.created_by = @request.auth.id
       || (@request.auth.collectionName = "participants"
           && instance_id.workflow_id.project_id = @request.auth.project_id
-          && @request.auth.role_id ?~ stage_id.visible_to_roles)
+          && @request.auth.role_id ?= stage_id.visible_to_roles)
     `,
     viewRule: `
       instance_id.workflow_id.project_id.owner_id = @request.auth.id
       || instance_id.created_by = @request.auth.id
       || (@request.auth.collectionName = "participants"
           && instance_id.workflow_id.project_id = @request.auth.project_id
-          && @request.auth.role_id ?~ stage_id.visible_to_roles)
+          && @request.auth.role_id ?= stage_id.visible_to_roles)
     `,
     createRule: `
       instance_id.workflow_id.project_id.owner_id = @request.auth.id
@@ -116,7 +116,7 @@ migrate((app) => {
       instance_id.workflow_id.project_id.owner_id = @request.auth.id
       || (@request.auth.collectionName = "participants"
           && instance_id.workflow_id.project_id = @request.auth.project_id
-          && @request.auth.role_id ?~ stage_id.visible_to_roles)
+          && @request.auth.role_id ?= stage_id.visible_to_roles)
     `,
     deleteRule: "instance_id.workflow_id.project_id.owner_id = @request.auth.id",
     fields: [
@@ -156,8 +156,8 @@ migrate((app) => {
   // workflow_stages - participants can see stages where their role is in visible_to_roles
   collection = app.findCollectionByNameOrId("workflow_stages")
   if (collection) {
-    collection.listRule = `workflow_id.project_id.owner_id = @request.auth.id || (${participantInProject("workflow_id.project_id")} && @request.auth.role_id ?~ visible_to_roles)`
-    collection.viewRule = `workflow_id.project_id.owner_id = @request.auth.id || (${participantInProject("workflow_id.project_id")} && @request.auth.role_id ?~ visible_to_roles)`
+    collection.listRule = `workflow_id.project_id.owner_id = @request.auth.id || (${participantInProject("workflow_id.project_id")} && @request.auth.role_id ?= visible_to_roles)`
+    collection.viewRule = `workflow_id.project_id.owner_id = @request.auth.id || (${participantInProject("workflow_id.project_id")} && @request.auth.role_id ?= visible_to_roles)`
     // create/update/delete remain admin-only
     app.save(collection)
   }
@@ -165,8 +165,8 @@ migrate((app) => {
   // workflow_connections - participants can see connections where their role is in allowed_roles
   collection = app.findCollectionByNameOrId("workflow_connections")
   if (collection) {
-    collection.listRule = `workflow_id.project_id.owner_id = @request.auth.id || (${participantInProject("workflow_id.project_id")} && @request.auth.role_id ?~ allowed_roles)`
-    collection.viewRule = `workflow_id.project_id.owner_id = @request.auth.id || (${participantInProject("workflow_id.project_id")} && @request.auth.role_id ?~ allowed_roles)`
+    collection.listRule = `workflow_id.project_id.owner_id = @request.auth.id || (${participantInProject("workflow_id.project_id")} && @request.auth.role_id ?= allowed_roles)`
+    collection.viewRule = `workflow_id.project_id.owner_id = @request.auth.id || (${participantInProject("workflow_id.project_id")} && @request.auth.role_id ?= allowed_roles)`
     // create/update/delete remain admin-only
     app.save(collection)
   }
@@ -231,8 +231,8 @@ migrate((app) => {
   // custom_tables - participants can see tables where their role is in visible_to_roles
   collection = app.findCollectionByNameOrId("custom_tables")
   if (collection) {
-    collection.listRule = `project_id.owner_id = @request.auth.id || (${participantInProject("project_id")} && @request.auth.role_id ?~ visible_to_roles)`
-    collection.viewRule = `project_id.owner_id = @request.auth.id || (${participantInProject("project_id")} && @request.auth.role_id ?~ visible_to_roles)`
+    collection.listRule = `project_id.owner_id = @request.auth.id || (${participantInProject("project_id")} && @request.auth.role_id ?= visible_to_roles)`
+    collection.viewRule = `project_id.owner_id = @request.auth.id || (${participantInProject("project_id")} && @request.auth.role_id ?= visible_to_roles)`
     // create/update/delete remain admin-only
     app.save(collection)
   }
@@ -240,8 +240,8 @@ migrate((app) => {
   // custom_table_columns - participants can see columns for tables they can access
   collection = app.findCollectionByNameOrId("custom_table_columns")
   if (collection) {
-    collection.listRule = `table_id.project_id.owner_id = @request.auth.id || (${participantInProject("table_id.project_id")} && @request.auth.role_id ?~ table_id.visible_to_roles)`
-    collection.viewRule = `table_id.project_id.owner_id = @request.auth.id || (${participantInProject("table_id.project_id")} && @request.auth.role_id ?~ table_id.visible_to_roles)`
+    collection.listRule = `table_id.project_id.owner_id = @request.auth.id || (${participantInProject("table_id.project_id")} && @request.auth.role_id ?= table_id.visible_to_roles)`
+    collection.viewRule = `table_id.project_id.owner_id = @request.auth.id || (${participantInProject("table_id.project_id")} && @request.auth.role_id ?= table_id.visible_to_roles)`
     // create/update/delete remain admin-only
     app.save(collection)
   }
@@ -249,8 +249,8 @@ migrate((app) => {
   // custom_table_data - participants can see data for tables they can access
   collection = app.findCollectionByNameOrId("custom_table_data")
   if (collection) {
-    collection.listRule = `table_id.project_id.owner_id = @request.auth.id || (${participantInProject("table_id.project_id")} && @request.auth.role_id ?~ table_id.visible_to_roles)`
-    collection.viewRule = `table_id.project_id.owner_id = @request.auth.id || (${participantInProject("table_id.project_id")} && @request.auth.role_id ?~ table_id.visible_to_roles)`
+    collection.listRule = `table_id.project_id.owner_id = @request.auth.id || (${participantInProject("table_id.project_id")} && @request.auth.role_id ?= table_id.visible_to_roles)`
+    collection.viewRule = `table_id.project_id.owner_id = @request.auth.id || (${participantInProject("table_id.project_id")} && @request.auth.role_id ?= table_id.visible_to_roles)`
     // create/update/delete remain admin-only
     app.save(collection)
   }
@@ -258,8 +258,8 @@ migrate((app) => {
   // map_layers - participants can see layers where their role is in visible_to_roles
   collection = app.findCollectionByNameOrId("map_layers")
   if (collection) {
-    collection.listRule = `project_id.owner_id = @request.auth.id || (${participantInProject("project_id")} && @request.auth.role_id ?~ visible_to_roles)`
-    collection.viewRule = `project_id.owner_id = @request.auth.id || (${participantInProject("project_id")} && @request.auth.role_id ?~ visible_to_roles)`
+    collection.listRule = `project_id.owner_id = @request.auth.id || (${participantInProject("project_id")} && @request.auth.role_id ?= visible_to_roles)`
+    collection.viewRule = `project_id.owner_id = @request.auth.id || (${participantInProject("project_id")} && @request.auth.role_id ?= visible_to_roles)`
     // create/update/delete remain admin-only
     app.save(collection)
   }

@@ -342,14 +342,13 @@ export const actions: Actions = {
 		}
 
 		try {
-			// Create new marker with a dummy location (required field)
-			// In a real scenario, you'd want to collect this from the user
+			// Create new marker without location (can be set later via map)
 			await pb.collection('markers').create({
 				project_id: projectId,
 				category_id: categoryId,
 				title,
 				description: description || null,
-				location: { type: 'Point', coordinates: [0, 0] }, // Dummy location - should be set properly
+				location: null,
 				properties: properties || {},
 				visible_to_roles: []
 			});
@@ -443,8 +442,8 @@ export const actions: Actions = {
 						`Imported Marker ${i + 1}`,
 					description: markerData.properties.description || '',
 					location: {
-						type: 'Point',
-						coordinates: [markerData.longitude, markerData.latitude] // [lng, lat] order
+						lat: markerData.latitude,
+						lon: markerData.longitude
 					},
 					properties: markerData.properties || {},
 					visible_to_roles: []

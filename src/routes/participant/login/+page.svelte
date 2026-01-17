@@ -11,7 +11,7 @@
 	import { AlertCircle, MapPin, QrCode, KeyRound, Camera, Upload, Loader2 } from 'lucide-svelte';
 	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
 	import ThemeToggle from '$lib/components/theme-toggle.svelte';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { browser } from '$app/environment';
 
 	let { data } = $props();
@@ -96,12 +96,14 @@
 		input.value = '';
 	}
 
-	function onQrCodeScanned(decodedText: string) {
+	async function onQrCodeScanned(decodedText: string) {
 		// Stop camera if running
 		stopCameraScanning();
 
-		// Set the token and submit immediately
+		// Set the token, switch to token tab, and submit
 		$formData.token = decodedText.trim();
+		activeTab = 'token';
+		await tick();
 		formElement?.requestSubmit();
 	}
 

@@ -1,249 +1,163 @@
 /**
- * IndexedDB Persistence via $effect
+ * Persistence utilities for Participant Gateway
  *
- * Automatically syncs ParticipantState to IndexedDB when state changes.
+ * With the generic gateway, persistence is handled automatically by the gateway itself.
+ * This file provides utilities for reference data (read-only data from server).
  */
 
-import { getDB } from './db';
-import type { ParticipantState } from './state.svelte';
+import { getDB, type CachedRecord } from './db';
+import type { ParticipantGateway } from './gateway.svelte';
 import type {
-	Marker,
-	Survey,
-	Photo,
-	WorkflowProgress,
-	TrackedMarker,
-	TrackedSurvey,
-	TrackedPhoto,
-	TrackedWorkflowProgress
+	Workflow,
+	WorkflowStage,
+	WorkflowConnection,
+	ToolForm,
+	ToolFormField,
+	ToolEdit,
+	MarkerCategory,
+	Role
 } from './types';
 
 // =============================================================================
-// Persistence Setup
+// Automatic Persistence via $effect
 // =============================================================================
 
 /**
- * Set up $effect-based persistence for a ParticipantState instance.
- * Call this once after creating the state, typically in a component's script.
- *
- * Usage in a Svelte component:
- * ```svelte
- * <script>
- *   import { createParticipantState } from '$lib/participant-state';
- *   import { setupPersistence } from '$lib/participant-state/persistence.svelte';
- *
- *   const state = createParticipantState();
- *   setupPersistence(state);
- * </script>
- * ```
+ * Set up automatic persistence for a gateway.
+ * With the generic gateway, persistence is handled automatically per-operation.
+ * This function is kept for compatibility but does nothing.
  */
-export function setupPersistence(state: ParticipantState) {
-	// Persist markers when they change
-	$effect(() => {
-		const markers = state.markers;
-		if (markers.length > 0 || hasExistingData('pending_markers')) {
-			persistMarkers(markers);
-		}
-	});
-
-	// Persist surveys when they change
-	$effect(() => {
-		const surveys = state.surveys;
-		if (surveys.length > 0 || hasExistingData('pending_surveys')) {
-			persistSurveys(surveys);
-		}
-	});
-
-	// Persist photos when they change
-	$effect(() => {
-		const photos = state.photos;
-		if (photos.length > 0 || hasExistingData('pending_photos')) {
-			persistPhotos(photos);
-		}
-	});
-
-	// Persist workflow progress when it changes
-	$effect(() => {
-		const progress = state.workflowProgress;
-		if (progress.length > 0 || hasExistingData('workflow_progress')) {
-			persistWorkflowProgress(progress);
-		}
-	});
-}
-
-// Track which stores have existing data (to handle deletions)
-const storesWithData = new Set<string>();
-
-function hasExistingData(store: string): boolean {
-	return storesWithData.has(store);
+export function setupPersistence(_gateway: ParticipantGateway) {
+	// Gateway now handles persistence automatically in each operation.
+	// This function is kept for backward compatibility.
 }
 
 // =============================================================================
-// Persist Functions
-// =============================================================================
-
-async function persistMarkers(markers: TrackedMarker[]) {
-	try {
-		const db = await getDB();
-		const tx = db.transaction('pending_markers', 'readwrite');
-
-		// Clear existing and add all current
-		await tx.store.clear();
-
-		for (const tracked of markers) {
-			await tx.store.put({
-				...tracked.data,
-				_status: tracked.status,
-				_error: tracked.error,
-				_retryCount: tracked.retryCount
-			});
-		}
-
-		await tx.done;
-
-		if (markers.length > 0) {
-			storesWithData.add('pending_markers');
-		} else {
-			storesWithData.delete('pending_markers');
-		}
-	} catch (error) {
-		console.error('Failed to persist markers:', error);
-	}
-}
-
-async function persistSurveys(surveys: TrackedSurvey[]) {
-	try {
-		const db = await getDB();
-		const tx = db.transaction('pending_surveys', 'readwrite');
-
-		await tx.store.clear();
-
-		for (const tracked of surveys) {
-			await tx.store.put({
-				...tracked.data,
-				_status: tracked.status,
-				_error: tracked.error,
-				_retryCount: tracked.retryCount
-			});
-		}
-
-		await tx.done;
-
-		if (surveys.length > 0) {
-			storesWithData.add('pending_surveys');
-		} else {
-			storesWithData.delete('pending_surveys');
-		}
-	} catch (error) {
-		console.error('Failed to persist surveys:', error);
-	}
-}
-
-async function persistPhotos(photos: TrackedPhoto[]) {
-	try {
-		const db = await getDB();
-		const tx = db.transaction('pending_photos', 'readwrite');
-
-		await tx.store.clear();
-
-		for (const tracked of photos) {
-			await tx.store.put({
-				...tracked.data,
-				_status: tracked.status,
-				_error: tracked.error,
-				_retryCount: tracked.retryCount
-			});
-		}
-
-		await tx.done;
-
-		if (photos.length > 0) {
-			storesWithData.add('pending_photos');
-		} else {
-			storesWithData.delete('pending_photos');
-		}
-	} catch (error) {
-		console.error('Failed to persist photos:', error);
-	}
-}
-
-async function persistWorkflowProgress(progress: TrackedWorkflowProgress[]) {
-	try {
-		const db = await getDB();
-		const tx = db.transaction('workflow_progress', 'readwrite');
-
-		await tx.store.clear();
-
-		for (const tracked of progress) {
-			await tx.store.put({
-				...tracked.data,
-				_status: tracked.status,
-				_error: tracked.error,
-				_retryCount: tracked.retryCount
-			});
-		}
-
-		await tx.done;
-
-		if (progress.length > 0) {
-			storesWithData.add('workflow_progress');
-		} else {
-			storesWithData.delete('workflow_progress');
-		}
-	} catch (error) {
-		console.error('Failed to persist workflow progress:', error);
-	}
-}
-
-// =============================================================================
-// Load Functions
+// Reference Data Persistence (read-only data downloaded from server)
+// Using the generic 'records' store
 // =============================================================================
 
 /**
- * Load all state from IndexedDB on startup
+ * Save reference data to IndexedDB using the generic records store
  */
-export async function loadFromDB(): Promise<{
-	markers: Array<Marker & { _status?: string; _error?: string; _retryCount?: number }>;
-	surveys: Array<Survey & { _status?: string; _error?: string; _retryCount?: number }>;
-	photos: Array<Photo & { _status?: string; _error?: string; _retryCount?: number }>;
-	workflowProgress: Array<
-		WorkflowProgress & { _status?: string; _error?: string; _retryCount?: number }
-	>;
+export async function saveReferenceData(data: {
+	workflows?: Workflow[];
+	workflowStages?: WorkflowStage[];
+	workflowConnections?: WorkflowConnection[];
+	toolsForms?: ToolForm[];
+	toolsFormFields?: ToolFormField[];
+	toolsEdit?: ToolEdit[];
+	markerCategories?: MarkerCategory[];
+	roles?: Role[];
+}): Promise<void> {
+	const db = await getDB();
+
+	// Helper to save items to the generic records store
+	async function saveItems(collection: string, items: { id: string }[] | undefined) {
+		if (!items?.length) return;
+
+		for (const item of items) {
+			const record: CachedRecord = {
+				...item,
+				_key: `${collection}/${item.id}`,
+				_collection: collection,
+				_status: 'unchanged'
+			};
+			await db.put('records', record);
+		}
+	}
+
+	await saveItems('workflows', data.workflows);
+	await saveItems('workflow_stages', data.workflowStages);
+	await saveItems('workflow_connections', data.workflowConnections);
+	await saveItems('tools_forms', data.toolsForms);
+	await saveItems('tools_form_fields', data.toolsFormFields);
+	await saveItems('tools_edit', data.toolsEdit);
+	await saveItems('marker_categories', data.markerCategories);
+	await saveItems('roles', data.roles);
+}
+
+/**
+ * Load reference data from IndexedDB using the generic records store
+ */
+export async function loadReferenceData(): Promise<{
+	workflows: Workflow[];
+	workflowStages: WorkflowStage[];
+	workflowConnections: WorkflowConnection[];
+	toolsForms: ToolForm[];
+	toolsFormFields: ToolFormField[];
+	toolsEdit: ToolEdit[];
+	markerCategories: MarkerCategory[];
+	roles: Role[];
 }> {
 	const db = await getDB();
 
-	const [markers, surveys, photos, progress] = await Promise.all([
-		db.getAll('pending_markers'),
-		db.getAll('pending_surveys'),
-		db.getAll('pending_photos'),
-		db.getAll('workflow_progress')
+	// Helper to load items from the generic records store
+	async function loadItems<T>(collection: string): Promise<T[]> {
+		const all = await db.getAllFromIndex('records', 'by_collection', collection);
+		return all.filter((r) => r._status !== 'deleted') as unknown as T[];
+	}
+
+	const [
+		workflows,
+		workflowStages,
+		workflowConnections,
+		toolsForms,
+		toolsFormFields,
+		toolsEdit,
+		markerCategories,
+		roles
+	] = await Promise.all([
+		loadItems<Workflow>('workflows'),
+		loadItems<WorkflowStage>('workflow_stages'),
+		loadItems<WorkflowConnection>('workflow_connections'),
+		loadItems<ToolForm>('tools_forms'),
+		loadItems<ToolFormField>('tools_form_fields'),
+		loadItems<ToolEdit>('tools_edit'),
+		loadItems<MarkerCategory>('marker_categories'),
+		loadItems<Role>('roles')
 	]);
 
-	// Track which stores have data
-	if (markers.length > 0) storesWithData.add('pending_markers');
-	if (surveys.length > 0) storesWithData.add('pending_surveys');
-	if (photos.length > 0) storesWithData.add('pending_photos');
-	if (progress.length > 0) storesWithData.add('workflow_progress');
-
 	return {
-		markers,
-		surveys,
-		photos,
-		workflowProgress: progress
+		workflows,
+		workflowStages,
+		workflowConnections,
+		toolsForms,
+		toolsFormFields,
+		toolsEdit,
+		markerCategories,
+		roles
 	};
 }
 
+// =============================================================================
+// Clear Functions
+// =============================================================================
+
 /**
- * Clear all pending data from IndexedDB
+ * Clear all records from IndexedDB
  */
-export async function clearAllPendingData(): Promise<void> {
+export async function clearAllRecords(): Promise<void> {
 	const db = await getDB();
+	await db.clear('records');
+}
 
-	await Promise.all([
-		db.clear('pending_markers'),
-		db.clear('pending_surveys'),
-		db.clear('pending_photos'),
-		db.clear('workflow_progress')
-	]);
+/**
+ * Clear records for a specific collection
+ */
+export async function clearCollection(collection: string): Promise<void> {
+	const db = await getDB();
+	const records = await db.getAllFromIndex('records', 'by_collection', collection);
 
-	storesWithData.clear();
+	for (const record of records) {
+		await db.delete('records', record._key);
+	}
+}
+
+/**
+ * Clear all data (records and operation log)
+ */
+export async function clearAllData(): Promise<void> {
+	const db = await getDB();
+	await Promise.all([db.clear('records'), db.clear('operation_log')]);
 }

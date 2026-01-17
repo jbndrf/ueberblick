@@ -2,20 +2,20 @@
  * Offline pack downloader
  *
  * Downloads all necessary data for a geographic area to work offline.
- * Updated to use Svelte 5 runes for progress tracking.
+ * Uses the generic 'records' store.
  */
 
-import { getDB } from './db';
+import { getDB, type CachedRecord } from './db';
 import { getPocketBase } from '$lib/pocketbase';
 import { generateId } from './utils';
 import type {
 	BoundingBox,
 	OfflinePackMetadata,
 	DownloadProgress,
-	OfflineMarker,
-	OfflineWorkflow,
-	OfflineForm,
-	OfflineMarkerCategory
+	Marker,
+	Workflow,
+	ToolForm,
+	MarkerCategory
 } from './types';
 
 // =============================================================================
@@ -39,6 +39,54 @@ export function resetDownloadProgress(): void {
 }
 
 // =============================================================================
+// Helper to store records in generic store
+// =============================================================================
+
+async function storeRecords<T extends { id: string }>(
+	collection: string,
+	records: T[],
+	packId?: string
+): Promise<void> {
+	const db = await getDB();
+
+	for (const record of records) {
+		const cached: CachedRecord = {
+			...(record as unknown as Record<string, unknown>),
+			id: record.id,
+			_key: `${collection}/${record.id}`,
+			_collection: collection,
+			_status: 'unchanged',
+			...(packId ? { pack_id: packId } : {})
+		};
+		await db.put('records', cached);
+	}
+}
+
+async function getRecordsByCollection<T>(collection: string): Promise<T[]> {
+	const db = await getDB();
+	const all = await db.getAllFromIndex('records', 'by_collection', collection);
+	return all.filter((r) => r._status !== 'deleted') as unknown as T[];
+}
+
+async function getRecordsByPack<T>(collection: string, packId: string): Promise<T[]> {
+	const db = await getDB();
+	const all = await db.getAllFromIndex('records', 'by_collection', collection);
+	return all.filter(
+		(r) => r._status !== 'deleted' && r.pack_id === packId
+	) as unknown as T[];
+}
+
+async function deleteRecordsByPack(collection: string, packId: string): Promise<void> {
+	const db = await getDB();
+	const all = await db.getAllFromIndex('records', 'by_collection', collection);
+	const toDelete = all.filter((r) => r.pack_id === packId);
+
+	for (const record of toDelete) {
+		await db.delete('records', record._key);
+	}
+}
+
+// =============================================================================
 // Main Download Function
 // =============================================================================
 
@@ -54,7 +102,6 @@ export async function downloadPack(params: {
 	const { projectId, packName, bbox, zoomLevels = [12, 13, 14, 15, 16] } = params;
 
 	const packId = generateId();
-	const db = await getDB();
 	const pb = getPocketBase();
 
 	// Initialize progress
@@ -71,58 +118,38 @@ export async function downloadPack(params: {
 		updateProgress('Downloading marker categories...');
 		const categories = await pb
 			.collection('marker_categories')
-			.getFullList<OfflineMarkerCategory>({
+			.getFullList<MarkerCategory>({
 				filter: `project_id = "${projectId}"`
 			});
 
-		for (const category of categories) {
-			await db.put('marker_categories', {
-				...category,
-				pack_id: packId
-			} as OfflineMarkerCategory & { pack_id: string });
-		}
+		await storeRecords('marker_categories', categories, packId);
 		incrementCompleted(categories.length);
 
 		// Step 2: Download markers in bounding box
 		updateProgress('Downloading markers...');
-		const markers = await pb.collection('markers').getFullList<OfflineMarker>({
-			filter: `project_id = "${projectId}" && latitude >= ${bbox.south} && latitude <= ${bbox.north} && longitude >= ${bbox.west} && longitude <= ${bbox.east}`
+		const markers = await pb.collection('markers').getFullList<Marker>({
+			filter: `project_id = "${projectId}"`
 		});
 
-		for (const marker of markers) {
-			await db.put('markers', {
-				...marker,
-				pack_id: packId
-			} as OfflineMarker & { pack_id: string });
-		}
+		await storeRecords('markers', markers, packId);
 		incrementCompleted(markers.length);
 
 		// Step 3: Download workflows
 		updateProgress('Downloading workflows...');
-		const workflows = await pb.collection('workflows').getFullList<OfflineWorkflow>({
+		const workflows = await pb.collection('workflows').getFullList<Workflow>({
 			filter: `project_id = "${projectId}"`
 		});
 
-		for (const workflow of workflows) {
-			await db.put('workflows', {
-				...workflow,
-				pack_id: packId
-			} as OfflineWorkflow & { pack_id: string });
-		}
+		await storeRecords('workflows', workflows, packId);
 		incrementCompleted(workflows.length);
 
-		// Step 4: Download forms
+		// Step 4: Download forms (tools_forms)
 		updateProgress('Downloading forms...');
-		const forms = await pb.collection('forms').getFullList<OfflineForm>({
-			filter: `project_id = "${projectId}"`
+		const forms = await pb.collection('tools_forms').getFullList<ToolForm>({
+			filter: `workflow_id ?~ "${workflows.map((w) => w.id).join('||')}"`
 		});
 
-		for (const form of forms) {
-			await db.put('forms', {
-				...form,
-				pack_id: packId
-			} as OfflineForm & { pack_id: string });
-		}
+		await storeRecords('tools_forms', forms, packId);
 		incrementCompleted(forms.length);
 
 		// Step 5: Create pack metadata
@@ -135,12 +162,12 @@ export async function downloadPack(params: {
 			zoom_levels: zoomLevels,
 			created_at: new Date().toISOString(),
 			updated_at: new Date().toISOString(),
-			tile_count: 0, // Will be updated by tile downloader
-			estimated_size_mb: 0, // Will be updated by tile downloader
+			tile_count: 0,
+			estimated_size_mb: 0,
 			download_completed: true
 		};
 
-		await db.put('pack_metadata', metadata);
+		await storeRecords('pack_metadata', [metadata]);
 
 		// Mark as completed
 		if (downloadProgressState) {
@@ -195,8 +222,7 @@ function incrementCompleted(count: number): void {
  * Get all downloaded packs
  */
 export async function getDownloadedPacks(): Promise<OfflinePackMetadata[]> {
-	const db = await getDB();
-	return await db.getAll('pack_metadata');
+	return getRecordsByCollection<OfflinePackMetadata>('pack_metadata');
 }
 
 /**
@@ -204,7 +230,9 @@ export async function getDownloadedPacks(): Promise<OfflinePackMetadata[]> {
  */
 export async function getPack(packId: string): Promise<OfflinePackMetadata | undefined> {
 	const db = await getDB();
-	return await db.get('pack_metadata', packId);
+	const record = await db.get('records', `pack_metadata/${packId}`);
+	if (!record || record._status === 'deleted') return undefined;
+	return record as unknown as OfflinePackMetadata;
 }
 
 /**
@@ -214,65 +242,41 @@ export async function deletePack(packId: string): Promise<void> {
 	const db = await getDB();
 
 	// Delete pack metadata
-	await db.delete('pack_metadata', packId);
+	await db.delete('records', `pack_metadata/${packId}`);
 
-	// Delete all markers in this pack
-	const markers = await db.getAllFromIndex('markers', 'by-pack', packId);
-	for (const marker of markers) {
-		await db.delete('markers', marker.id);
-	}
-
-	// Delete all workflows in this pack
-	const workflows = await db.getAllFromIndex('workflows', 'by-pack', packId);
-	for (const workflow of workflows) {
-		await db.delete('workflows', workflow.id);
-	}
-
-	// Delete all forms in this pack
-	const forms = await db.getAllFromIndex('forms', 'by-pack', packId);
-	for (const form of forms) {
-		await db.delete('forms', form.id);
-	}
-
-	// Delete all categories in this pack
-	const categories = await db.getAllFromIndex('marker_categories', 'by-pack', packId);
-	for (const category of categories) {
-		await db.delete('marker_categories', category.id);
-	}
-
-	// Note: Tiles will be handled by tile-cache.ts
+	// Delete all data in this pack
+	await deleteRecordsByPack('markers', packId);
+	await deleteRecordsByPack('workflows', packId);
+	await deleteRecordsByPack('tools_forms', packId);
+	await deleteRecordsByPack('marker_categories', packId);
 }
 
 /**
  * Get markers from a pack
  */
-export async function getPackMarkers(packId: string): Promise<OfflineMarker[]> {
-	const db = await getDB();
-	return await db.getAllFromIndex('markers', 'by-pack', packId);
+export async function getPackMarkers(packId: string): Promise<Marker[]> {
+	return getRecordsByPack<Marker>('markers', packId);
 }
 
 /**
  * Get workflows from a pack
  */
-export async function getPackWorkflows(packId: string): Promise<OfflineWorkflow[]> {
-	const db = await getDB();
-	return await db.getAllFromIndex('workflows', 'by-pack', packId);
+export async function getPackWorkflows(packId: string): Promise<Workflow[]> {
+	return getRecordsByPack<Workflow>('workflows', packId);
 }
 
 /**
  * Get forms from a pack
  */
-export async function getPackForms(packId: string): Promise<OfflineForm[]> {
-	const db = await getDB();
-	return await db.getAllFromIndex('forms', 'by-pack', packId);
+export async function getPackForms(packId: string): Promise<ToolForm[]> {
+	return getRecordsByPack<ToolForm>('tools_forms', packId);
 }
 
 /**
  * Get marker categories from a pack
  */
-export async function getPackCategories(packId: string): Promise<OfflineMarkerCategory[]> {
-	const db = await getDB();
-	return await db.getAllFromIndex('marker_categories', 'by-pack', packId);
+export async function getPackCategories(packId: string): Promise<MarkerCategory[]> {
+	return getRecordsByPack<MarkerCategory>('marker_categories', packId);
 }
 
 /**
@@ -310,24 +314,21 @@ export async function estimatePackSize(params: {
 	categoryCount: number;
 	estimatedDataSize: number;
 }> {
-	const { projectId, bbox } = params;
+	const { projectId } = params;
 	const pb = getPocketBase();
 
-	// Count items in parallel
 	const [markerCount, workflowCount, formCount, categoryCount] = await Promise.all([
 		pb
 			.collection('markers')
-			.getList(1, 1, {
-				filter: `project_id = "${projectId}" && latitude >= ${bbox.south} && latitude <= ${bbox.north} && longitude >= ${bbox.west} && longitude <= ${bbox.east}`
-			})
+			.getList(1, 1, { filter: `project_id = "${projectId}"` })
 			.then((r) => r.totalItems),
 		pb
 			.collection('workflows')
 			.getList(1, 1, { filter: `project_id = "${projectId}"` })
 			.then((r) => r.totalItems),
 		pb
-			.collection('forms')
-			.getList(1, 1, { filter: `project_id = "${projectId}"` })
+			.collection('tools_forms')
+			.getList(1, 1, {})
 			.then((r) => r.totalItems),
 		pb
 			.collection('marker_categories')
@@ -335,8 +336,6 @@ export async function estimatePackSize(params: {
 			.then((r) => r.totalItems)
 	]);
 
-	// Estimate data size (rough estimate)
-	// Assume average 1KB per marker, 5KB per workflow, 3KB per form, 0.5KB per category
 	const estimatedDataSize =
 		markerCount * 1024 + workflowCount * 5120 + formCount * 3072 + categoryCount * 512;
 

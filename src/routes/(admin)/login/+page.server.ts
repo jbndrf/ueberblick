@@ -5,8 +5,9 @@ import { loginSchema } from '$lib/schemas/auth';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
-	// If already logged in, redirect to admin dashboard
-	if (locals.user) {
+	// If already logged in as admin user, redirect to admin dashboard
+	// Only redirect for 'users' collection, not 'participants'
+	if (locals.user && locals.pb.authStore.record?.collectionName === 'users') {
 		redirect(303, '/admin');
 	}
 
@@ -15,7 +16,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 };
 
 export const actions: Actions = {
-	default: async ({ request, locals, url, cookies }) => {
+	default: async ({ request, locals, url }) => {
 		console.log('[LOGIN] Form action triggered');
 		const form = await superValidate(request, zod(loginSchema));
 
@@ -40,20 +41,7 @@ export const actions: Actions = {
 			});
 		}
 
-		// Set the auth cookie before redirecting
-		const cookieValue = locals.pb.authStore.exportToCookie();
-		const [cookieString] = cookieValue.split(';');
-		const [, value] = cookieString.split('=');
-
-		cookies.set('pb_auth', value, {
-			path: '/',
-			httpOnly: false,
-			secure: false,
-			sameSite: 'lax',
-			maxAge: 60 * 60 * 24 * 7 // 1 week
-		});
-
-		console.log('[LOGIN] Cookie set, redirecting...');
+		console.log('[LOGIN] Auth successful, redirecting...');
 
 		// Get redirect destination (default to admin dashboard)
 		const redirectTo = url.searchParams.get('redirectTo') ?? '/admin';

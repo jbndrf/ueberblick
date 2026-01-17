@@ -2,6 +2,8 @@
  * Workflow Builder Save Logic
  *
  * Uses PocketBase batch API for atomic saves.
+ * Also syncs entry connection's allowed_roles to workflow.entry_allowed_roles
+ * for efficient PocketBase rule enforcement on instance creation.
  */
 
 import type PocketBase from 'pocketbase';
@@ -45,7 +47,16 @@ export async function saveWorkflow(
 		changes.editTools.modified.length > 0 ||
 		changes.editTools.deleted.length > 0;
 
+	console.log('[saveWorkflow] Changes detected:', {
+		stages: { new: changes.stages.new.length, modified: changes.stages.modified.length, deleted: changes.stages.deleted.length },
+		connections: { new: changes.connections.new.length, modified: changes.connections.modified.length, deleted: changes.connections.deleted.length },
+		forms: { new: changes.forms.new.length, modified: changes.forms.modified.length, deleted: changes.forms.deleted.length },
+		formFields: { new: changes.formFields.new.length, modified: changes.formFields.modified.length, deleted: changes.formFields.deleted.length },
+		editTools: { new: changes.editTools.new.length, modified: changes.editTools.modified.length, deleted: changes.editTools.deleted.length }
+	});
+
 	if (!hasChanges) {
+		console.log('[saveWorkflow] No changes detected, skipping save');
 		return { success: true };
 	}
 
@@ -120,6 +131,10 @@ export async function saveWorkflow(
 		// Execute batch
 		await batch.send();
 
+		// Sync entry connection's allowed_roles to workflow.entry_allowed_roles
+		// This enables efficient PocketBase rule enforcement for instance creation
+		await syncEntryAllowedRoles(pb, state);
+
 		// Mark state as saved
 		state.markAsSaved();
 
@@ -130,6 +145,40 @@ export async function saveWorkflow(
 			success: false,
 			error: error instanceof Error ? error.message : 'Unknown error'
 		};
+	}
+}
+
+/**
+ * Sync entry connection's allowed_roles to workflow.entry_allowed_roles.
+ * Entry connection is the connection where from_stage_id is null (workflow start point).
+ * This field is used by PocketBase rules to control who can create new instances.
+ */
+async function syncEntryAllowedRoles(
+	pb: PocketBase,
+	state: WorkflowBuilderState
+): Promise<void> {
+	// Find the entry connection (from_stage_id is null or empty string)
+	const entryConnection = state.visibleConnections.find(
+		(c) => !c.data.from_stage_id
+	);
+
+	console.log('[syncEntryAllowedRoles] Entry connection found:', entryConnection?.data.id);
+	console.log('[syncEntryAllowedRoles] Entry connection allowed_roles:', entryConnection?.data.allowed_roles);
+
+	// Get the allowed_roles from entry connection (empty array if none or not found)
+	const entryAllowedRoles = entryConnection?.data.allowed_roles ?? [];
+
+	console.log('[syncEntryAllowedRoles] Syncing to workflow:', state.workflowId, 'roles:', entryAllowedRoles);
+
+	// Update the workflow with the entry_allowed_roles
+	try {
+		await pb.collection('workflows').update(state.workflowId, {
+			entry_allowed_roles: entryAllowedRoles
+		});
+		console.log('[syncEntryAllowedRoles] Sync successful');
+	} catch (error) {
+		console.error('[syncEntryAllowedRoles] Sync failed:', error);
+		throw error;
 	}
 }
 

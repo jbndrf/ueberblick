@@ -179,8 +179,8 @@
 		return data.mapDefaults;
 	});
 
-	// Layer table columns
-	const layerColumns: BaseColumnConfig<MapLayerWithSource>[] = [
+	// Layer table columns (reactive to update entityConfig when data changes)
+	const layerColumns = $derived.by((): BaseColumnConfig<MapLayerWithSource>[] => [
 		{
 			id: 'name',
 			header: m.mapLayerName(),
@@ -216,11 +216,9 @@
 			id: 'visible_to_roles',
 			header: 'Visible to Roles',
 			accessorFn: (row) => {
+				// Return IDs - the entityConfig handles displaying names
 				if (!row.visible_to_roles || row.visible_to_roles.length === 0) return [];
-				return row.visible_to_roles.map((roleId: string) => {
-					const role = data.roles.find((r) => r.id === roleId);
-					return role?.name || roleId;
-				});
+				return row.visible_to_roles;
 			},
 			fieldType: 'array',
 			capabilities: { editable: true, sortable: false, filterable: true },
@@ -256,7 +254,7 @@
 			fieldType: 'boolean',
 			capabilities: { sortable: true, filterable: true }
 		}
-	];
+	]);
 </script>
 
 <div class="flex flex-col gap-6 min-w-0 w-full">
