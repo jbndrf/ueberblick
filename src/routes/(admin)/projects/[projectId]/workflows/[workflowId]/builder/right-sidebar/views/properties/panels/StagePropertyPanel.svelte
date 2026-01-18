@@ -11,7 +11,6 @@
 
 	import PropertySection from '../shared/PropertySection.svelte';
 	import ConnectedToolItem from '../shared/ConnectedToolItem.svelte';
-	import FieldList from '../shared/FieldList.svelte';
 
 	import { toolRegistry } from '$lib/workflow-builder/tools';
 	import type { ToolsEdit, VisualConfig } from '$lib/workflow-builder';
@@ -39,6 +38,8 @@
 		onToolVisualConfigChange?: (toolId: string, config: VisualConfig) => void;
 		/** Callback when a tool is selected */
 		onSelectTool?: (toolType: string, toolId: string) => void;
+		/** Callback when a tool is deleted */
+		onDeleteTool?: (toolType: string, toolId: string) => void;
 		/** Callback to create a new role via server action */
 		onCreateRole?: (name: string) => Promise<Role>;
 	};
@@ -56,6 +57,7 @@
 		onToolRolesChange,
 		onToolVisualConfigChange,
 		onSelectTool,
+		onDeleteTool,
 		onCreateRole
 	}: Props = $props();
 
@@ -222,7 +224,6 @@
 		<Tabs.List class="panel-tabs">
 			<Tabs.Trigger value="permissions">Permissions</Tabs.Trigger>
 			<Tabs.Trigger value="tools">Tools</Tabs.Trigger>
-			<Tabs.Trigger value="fields">Fields</Tabs.Trigger>
 		</Tabs.List>
 
 		<div class="panel-content">
@@ -302,6 +303,7 @@
 									visualConfig={tool.visual_config || {}}
 									onVisualConfigChange={(config) => onToolVisualConfigChange?.(tool.id, config)}
 									onSelect={() => onSelectTool?.('edit', tool.id)}
+									onDelete={() => onDeleteTool?.('edit', tool.id)}
 									defaultButtonLabel="Edit"
 									defaultButtonColor="#6366F1"
 								/>
@@ -309,11 +311,6 @@
 						</div>
 					{/if}
 				</PropertySection>
-			</Tabs.Content>
-
-			<!-- Fields Tab -->
-			<Tabs.Content value="fields" class="tab-content">
-				<FieldList stageId={stage.id} {nodes} {ancestors} />
 			</Tabs.Content>
 		</div>
 	</Tabs.Root>

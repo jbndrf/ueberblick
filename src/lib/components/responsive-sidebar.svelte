@@ -65,7 +65,7 @@
 	}: Props = $props();
 
 	// State
-	let isMobile = $state(false);
+	let isMobile = $state(true); // Mobile-first to prevent flash on open
 	let isExpanded = $state(false);
 	let isDragging = $state(false);
 	let activeTab = $state<'overview' | 'details' | 'photos' | 'history'>('overview');

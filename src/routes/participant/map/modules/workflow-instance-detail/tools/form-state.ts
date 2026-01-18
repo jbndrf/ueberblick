@@ -1,5 +1,16 @@
-import type { Form, FormField, FormValues, FieldError, DateFieldOptions } from './types';
+/**
+ * Form Fill State Management
+ *
+ * State management and data loading for form filling tools.
+ * Handles loading forms from connections, validation, and pagination.
+ */
+
 import type { ParticipantGateway } from '$lib/participant-state/gateway.svelte';
+import type { Form, FormField, FormValues, FieldError, DateFieldOptions } from '$lib/components/form-renderer/types';
+
+// ==========================================================================
+// Types
+// ==========================================================================
 
 export interface FormFillState {
 	form: Form | null;
@@ -13,6 +24,21 @@ export interface FormFillState {
 	workflowId: string;
 	connectionId: string;
 }
+
+export interface MultiFormState {
+	forms: Form[];
+	allFields: FormField[];
+	currentFormIndex: number;
+	collectedValues: FormValues;
+	isLoading: boolean;
+	loadError: string | null;
+	workflowId: string;
+	connectionId: string;
+}
+
+// ==========================================================================
+// State Creation
+// ==========================================================================
 
 function createInitialState(): FormFillState {
 	return {
@@ -29,7 +55,9 @@ function createInitialState(): FormFillState {
 	};
 }
 
-// Helper functions that work on the state object
+// ==========================================================================
+// Pagination Helpers
+// ==========================================================================
 
 export function getTotalPages(state: FormFillState): number {
 	if (state.fields.length === 0) return 1;
@@ -88,6 +116,10 @@ export function canGoPrevious(state: FormFillState): boolean {
 export function getFieldError(state: FormFillState, fieldId: string): string | undefined {
 	return state.errors.find(e => e.fieldId === fieldId)?.message;
 }
+
+// ==========================================================================
+// Validation
+// ==========================================================================
 
 function validateField(field: FormField, value: unknown): string | null {
 	// Required check
@@ -179,6 +211,10 @@ export function validateAll(state: FormFillState): FieldError[] {
 	return newErrors;
 }
 
+// ==========================================================================
+// Value Initialization
+// ==========================================================================
+
 function initializeValues(fields: FormField[]): FormValues {
 	const initialValues: FormValues = {};
 
@@ -203,8 +239,13 @@ function initializeValues(fields: FormField[]): FormValues {
 	return initialValues;
 }
 
+// ==========================================================================
+// Data Loading - Single Form (legacy, for backward compat)
+// ==========================================================================
+
 /**
  * Load entry form for a workflow (entry = connection with empty from_stage_id)
+ * Note: This loads only the first form. Use loadConnectionForms for multi-form support.
  */
 export async function loadEntryForm(
 	gateway: ParticipantGateway,
@@ -231,7 +272,8 @@ export async function loadEntryForm(
 
 		// Find the form attached to this connection
 		const forms = await gateway.collection('tools_forms').getFullList({
-			filter: `connection_id = "${entryConnection.id}"`
+			filter: `connection_id = "${entryConnection.id}"`,
+			sort: 'created'
 		});
 
 		if (forms.length === 0) {
@@ -263,6 +305,7 @@ export async function loadEntryForm(
 
 /**
  * Load form for a specific connection (for tool flow from existing instance)
+ * Note: This loads only the first form. Use loadConnectionForms for multi-form support.
  */
 export async function loadConnectionForm(
 	gateway: ParticipantGateway,
@@ -277,7 +320,8 @@ export async function loadConnectionForm(
 	try {
 		// Find the form attached to this connection
 		const forms = await gateway.collection('tools_forms').getFullList({
-			filter: `connection_id = "${connectionId}"`
+			filter: `connection_id = "${connectionId}"`,
+			sort: 'created'
 		});
 
 		if (forms.length === 0) {
@@ -305,4 +349,80 @@ export async function loadConnectionForm(
 		state.isLoading = false;
 		return state;
 	}
+}
+
+// ==========================================================================
+// Data Loading - Multi-Form Support
+// ==========================================================================
+
+export interface LoadedFormsData {
+	forms: Form[];
+	fields: FormField[];
+	connectionId: string;
+}
+
+/**
+ * Load all forms for a connection (supports multiple forms)
+ * Returns forms ordered by created date
+ */
+export async function loadConnectionForms(
+	gateway: ParticipantGateway,
+	connectionId: string
+): Promise<LoadedFormsData> {
+	// Load all forms for this connection, ordered by created
+	const forms = await gateway.collection('tools_forms').getFullList({
+		filter: `connection_id = "${connectionId}"`,
+		sort: 'created'
+	}) as unknown as Form[];
+
+	if (forms.length === 0) {
+		return { forms: [], fields: [], connectionId };
+	}
+
+	// Load fields for all forms
+	const formIds = forms.map(f => f.id);
+	const filterQuery = formIds.map(id => `form_id = "${id}"`).join(' || ');
+
+	const fields = await gateway.collection('tools_form_fields').getFullList({
+		filter: filterQuery,
+		sort: 'field_order'
+	}) as unknown as FormField[];
+
+	return { forms, fields, connectionId };
+}
+
+/**
+ * Load entry connection and its forms for a workflow
+ */
+export async function loadEntryForms(
+	gateway: ParticipantGateway,
+	workflowId: string
+): Promise<LoadedFormsData & { toStageId: string }> {
+	// Find the entry connection (from_stage_id is empty)
+	const connections = await gateway.collection('workflow_connections').getFullList({
+		filter: `workflow_id = "${workflowId}" && from_stage_id = ""`
+	});
+
+	if (connections.length === 0) {
+		throw new Error('No entry connection found for this workflow');
+	}
+
+	const entryConnection = connections[0] as { id: string; to_stage_id: string };
+	const data = await loadConnectionForms(gateway, entryConnection.id);
+
+	return { ...data, toStageId: entryConnection.to_stage_id };
+}
+
+/**
+ * Get fields for a specific form
+ */
+export function getFieldsForForm(allFields: FormField[], formId: string): FormField[] {
+	return allFields.filter(f => f.form_id === formId);
+}
+
+/**
+ * Initialize values for a set of fields
+ */
+export function initializeFieldValues(fields: FormField[]): FormValues {
+	return initializeValues(fields);
 }

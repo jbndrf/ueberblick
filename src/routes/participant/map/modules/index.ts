@@ -16,7 +16,6 @@ export {
 } from './context.svelte';
 
 // Modules
-export { MarkerDetailModule, MarkerDetailState, createMarkerDetailState } from './marker-detail';
 export {
 	WorkflowInstanceDetailModule,
 	createWorkflowInstanceDetailState,
@@ -25,5 +24,6 @@ export {
 	type ToolQueueItem,
 	type ToolEdit
 } from './workflow-instance-detail';
-export { FormFillModule } from './form-fill';
-export type { FormFillState } from './form-fill';
+
+// FormFillState is now exported from the tools/form-state.ts
+export type { FormFillState } from './workflow-instance-detail/tools/form-state';

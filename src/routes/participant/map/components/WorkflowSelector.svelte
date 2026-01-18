@@ -233,14 +233,22 @@
 		></button>
 
 		<!-- Popover - Mobile: bottom, Desktop: top below header -->
-		<div class="fixed z-[1100] flex flex-col items-center gap-2 bottom-20 left-1/2 -translate-x-1/2 md:bottom-auto md:top-16 md:left-1/2 md:-translate-x-1/2">
+		<div class="fixed z-[1100] flex flex-col items-center gap-2.5 bottom-20 left-1/2 -translate-x-1/2 md:bottom-auto md:top-16 md:left-1/2 md:-translate-x-1/2">
 			{#each workflows as workflow, i}
 				<button
 					onclick={() => selectWorkflow(workflow)}
-					class="workflow-item w-fit whitespace-nowrap rounded-md bg-muted/60 px-3 py-1.5 text-sm font-medium shadow-sm backdrop-blur-sm transition-all hover:bg-muted/80"
+					class="workflow-item min-w-[100px] max-w-[200px] rounded-xl
+						bg-background/95 dark:bg-muted/90
+						border border-border/50 dark:border-border/30
+						px-4 py-2.5 text-sm font-medium text-foreground
+						shadow-lg shadow-black/5 dark:shadow-black/20
+						backdrop-blur-md
+						transition-all duration-200 ease-out
+						hover:bg-accent hover:border-accent-foreground/20 hover:scale-[1.02]
+						active:scale-[0.98]"
 					style="animation-delay: {i * 0.03}s"
 				>
-					{workflow.name}
+					<span class="line-clamp-2 text-center leading-snug">{workflow.name}</span>
 				</button>
 			{/each}
 		</div>
@@ -261,6 +269,14 @@
 			opacity: 1;
 			transform: translateY(0);
 		}
+	}
+
+	/* Line clamp for button text */
+	.line-clamp-2 {
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
 	}
 
 	/* Temporary Marker Styles */

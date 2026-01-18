@@ -11,8 +11,8 @@
 	import { ArrowRight, LogIn, RotateCcw, Trash2 } from 'lucide-svelte';
 
 	import PropertySection from '../shared/PropertySection.svelte';
-	import ConnectedToolItem from '../shared/ConnectedToolItem.svelte';
 
+	import { toolRegistry } from '$lib/workflow-builder/tools';
 	import type { ToolsForm, ToolsEdit, VisualConfig } from '$lib/workflow-builder';
 
 	type Role = {
@@ -35,6 +35,8 @@
 		onSettingsChange?: (edgeId: string, settings: Record<string, any>) => void;
 		/** Callback when a tool is selected */
 		onSelectTool?: (toolType: string, toolId: string) => void;
+		/** Callback when a tool is deleted */
+		onDeleteTool?: (toolType: string, toolId: string) => void;
 		/** Callback to create a new role via server action */
 		onCreateRole?: (name: string) => Promise<Role>;
 	};
@@ -50,6 +52,7 @@
 		onRolesChange,
 		onSettingsChange,
 		onSelectTool,
+		onDeleteTool,
 		onCreateRole
 	}: Props = $props();
 
@@ -88,49 +91,25 @@
 		}
 	});
 
-	// Watch for role changes and notify parent
-	$effect(() => {
-		const propRoles = edge.data.allowed_roles || [];
-		const rolesChanged =
-			selectedRoleIds.length !== propRoles.length ||
-			selectedRoleIds.some((id, i) => id !== propRoles[i]);
+	// Sync settings to parent via event handlers (not effects - to avoid infinite loops)
+	function syncSettings() {
+		onSettingsChange?.(edge.id, {
+			buttonLabel,
+			buttonColor,
+			requiresConfirmation,
+			confirmationMessage
+		});
+	}
 
-		if (rolesChanged && edge.id === currentEdgeId) {
-			onRolesChange?.(edge.id, selectedRoleIds);
-		}
-	});
-
-	// Watch for settings changes and notify parent
-	$effect(() => {
-		const propConfig = edge.data.visual_config || {};
-		const settingsChanged =
-			buttonLabel !== (propConfig.button_label || '') ||
-			buttonColor !== (propConfig.button_color || '#3b82f6') ||
-			requiresConfirmation !== (propConfig.requires_confirmation || false) ||
-			confirmationMessage !==
-				(propConfig.confirmation_message || 'Are you sure you want to proceed?');
-
-		if (settingsChanged && edge.id === currentEdgeId) {
-			onSettingsChange?.(edge.id, {
-				buttonLabel,
-				buttonColor,
-				requiresConfirmation,
-				confirmationMessage
-			});
-		}
-	});
+	// Handle role changes via callback (not effects - to avoid infinite loops)
+	function handleRolesChange(ids: string[]) {
+		selectedRoleIds = ids;
+		onRolesChange?.(edge.id, ids);
+	}
 
 	// Get source and target nodes (sourceNode is undefined for entry connections)
 	const sourceNode = $derived(isEntryConnection ? null : nodes.find((n) => n.id === edge.source));
 	const targetNode = $derived(nodes.find((n) => n.id === edge.target));
-
-	// Current visual config for button preview
-	const currentVisualConfig = $derived<VisualConfig>({
-		button_label: buttonLabel || undefined,
-		button_color: buttonColor || undefined,
-		requires_confirmation: requiresConfirmation || undefined,
-		confirmation_message: requiresConfirmation ? confirmationMessage : undefined
-	});
 
 	// Handle name change
 	function handleNameBlur() {
@@ -144,12 +123,14 @@
 		onDelete?.(edge.id);
 	}
 
-	// Handle button config change from tool item
-	function handleButtonConfigChange(config: VisualConfig) {
-		buttonLabel = config.button_label || '';
-		buttonColor = config.button_color || '#3b82f6';
-		requiresConfirmation = config.requires_confirmation || false;
-		confirmationMessage = config.confirmation_message || 'Are you sure you want to proceed?';
+	// Get tool icon from registry
+	function getToolIcon(toolType: string) {
+		return toolRegistry.get(toolType)?.icon;
+	}
+
+	// Get tool color from registry
+	function getToolColor(toolType: string) {
+		return toolRegistry.get(toolType)?.defaultColor ?? '#6B7280';
 	}
 </script>
 
@@ -210,13 +191,14 @@
 			<Tabs.Content value="permissions" class="tab-content">
 				<PropertySection title="Allowed Roles">
 					<MobileMultiSelect
-						bind:selectedIds={selectedRoleIds}
+						selectedIds={selectedRoleIds}
 						options={roles}
 						getOptionId={(r) => r.id}
 						getOptionLabel={(r) => r.name}
 						getOptionDescription={(r) => r.description}
 						allowCreate={!!onCreateRole}
 						onCreateOption={onCreateRole}
+						onSelectedIdsChange={handleRolesChange}
 						placeholder="Select or search roles..."
 						class="w-full"
 					/>
@@ -234,26 +216,56 @@
 					{:else}
 						<div class="tools-list">
 							{#each connectionForms as form (form.id)}
-								<ConnectedToolItem
-									toolType="form"
-									name={form.name}
-									visualConfig={currentVisualConfig}
-									onVisualConfigChange={handleButtonConfigChange}
-									onSelect={() => onSelectTool?.('form', form.id)}
-									defaultButtonLabel="Submit"
-									defaultButtonColor="#3B82F6"
-								/>
+								{@const ToolIcon = getToolIcon('form')}
+								{@const iconColor = getToolColor('form')}
+								<div class="tool-item">
+									<button
+										class="tool-info"
+										type="button"
+										onclick={() => onSelectTool?.('form', form.id)}
+									>
+										<div class="tool-icon" style="--icon-color: {iconColor}">
+											{#if ToolIcon}
+												<ToolIcon class="icon" />
+											{/if}
+										</div>
+										<span class="tool-name">{form.name}</span>
+									</button>
+									<button
+										class="delete-btn"
+										type="button"
+										onclick={() => onDeleteTool?.('form', form.id)}
+										title="Delete tool"
+									>
+										<Trash2 class="h-3.5 w-3.5" />
+									</button>
+								</div>
 							{/each}
 							{#each connectionEditTools as tool (tool.id)}
-								<ConnectedToolItem
-									toolType="edit"
-									name={tool.name}
-									visualConfig={currentVisualConfig}
-									onVisualConfigChange={handleButtonConfigChange}
-									onSelect={() => onSelectTool?.('edit', tool.id)}
-									defaultButtonLabel="Edit"
-									defaultButtonColor="#6366F1"
-								/>
+								{@const ToolIcon = getToolIcon('edit')}
+								{@const iconColor = getToolColor('edit')}
+								<div class="tool-item">
+									<button
+										class="tool-info"
+										type="button"
+										onclick={() => onSelectTool?.('edit', tool.id)}
+									>
+										<div class="tool-icon" style="--icon-color: {iconColor}">
+											{#if ToolIcon}
+												<ToolIcon class="icon" />
+											{/if}
+										</div>
+										<span class="tool-name">{tool.name}</span>
+									</button>
+									<button
+										class="delete-btn"
+										type="button"
+										onclick={() => onDeleteTool?.('edit', tool.id)}
+										title="Delete tool"
+									>
+										<Trash2 class="h-3.5 w-3.5" />
+									</button>
+								</div>
 							{/each}
 						</div>
 					{/if}
@@ -268,6 +280,7 @@
 						<Input
 							id="button-label"
 							bind:value={buttonLabel}
+							oninput={syncSettings}
 							placeholder="e.g., Submit, Approve, Continue"
 						/>
 					</div>
@@ -279,10 +292,12 @@
 								type="color"
 								id="button-color"
 								bind:value={buttonColor}
+								oninput={syncSettings}
 								class="color-input"
 							/>
 							<Input
 								bind:value={buttonColor}
+								oninput={syncSettings}
 								placeholder="#3b82f6"
 								class="color-text"
 							/>
@@ -300,7 +315,11 @@
 						</div>
 						<Switch
 							id="requires-confirmation"
-							bind:checked={requiresConfirmation}
+							checked={requiresConfirmation}
+							onCheckedChange={(checked) => {
+								requiresConfirmation = checked;
+								syncSettings();
+							}}
 						/>
 					</div>
 
@@ -310,6 +329,7 @@
 							<Input
 								id="confirmation-message"
 								bind:value={confirmationMessage}
+								oninput={syncSettings}
 								placeholder="Are you sure you want to proceed?"
 							/>
 						</div>
@@ -463,6 +483,86 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.375rem;
+	}
+
+	.tool-item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.5rem 0.625rem;
+		border-radius: 0.375rem;
+		background: hsl(var(--accent) / 0.3);
+		border: 1px solid hsl(var(--border));
+		transition: all 0.15s ease;
+	}
+
+	.tool-item:hover {
+		background: hsl(var(--accent) / 0.5);
+	}
+
+	.tool-info {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		background: none;
+		border: none;
+		padding: 0;
+		cursor: pointer;
+		text-align: left;
+		min-width: 0;
+	}
+
+	.delete-btn {
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.75rem;
+		height: 1.75rem;
+		border-radius: 0.25rem;
+		border: none;
+		background: transparent;
+		color: hsl(var(--muted-foreground));
+		cursor: pointer;
+		transition: all 0.15s ease;
+		opacity: 0;
+	}
+
+	.tool-item:hover .delete-btn {
+		opacity: 1;
+	}
+
+	.delete-btn:hover {
+		background: hsl(var(--destructive) / 0.1);
+		color: hsl(var(--destructive));
+	}
+
+	.tool-icon {
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		background: color-mix(in srgb, var(--icon-color) 15%, transparent);
+		border-radius: 0.25rem;
+	}
+
+	.tool-icon :global(.icon) {
+		width: 14px;
+		height: 14px;
+		color: var(--icon-color);
+	}
+
+	.tool-name {
+		font-size: 0.8125rem;
+		font-weight: 500;
+		color: hsl(var(--foreground));
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.form-field {

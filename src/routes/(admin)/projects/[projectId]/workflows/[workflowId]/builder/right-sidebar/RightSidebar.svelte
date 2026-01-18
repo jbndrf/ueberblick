@@ -52,6 +52,7 @@
 		onToolRolesChange?: (toolId: string, roleIds: string[]) => void;
 		onToolVisualConfigChange?: (toolId: string, config: VisualConfig) => void;
 		onSelectTool?: (toolType: string, toolId: string) => void;
+		onDeleteTool?: (toolType: string, toolId: string) => void;
 		// Callback to create a new role via server action
 		onCreateRole?: (name: string) => Promise<Role>;
 		// Form editor handlers
@@ -99,6 +100,7 @@
 		onToolRolesChange,
 		onToolVisualConfigChange,
 		onSelectTool,
+		onDeleteTool,
 		onCreateRole,
 		onFormNameChange,
 		onAddFormField,
@@ -180,6 +182,7 @@
 			{onToolRolesChange}
 			{onToolVisualConfigChange}
 			{onSelectTool}
+			{onDeleteTool}
 			{onCreateRole}
 		/>
 	{:else}

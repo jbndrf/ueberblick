@@ -1,7 +1,6 @@
 <script lang="ts">
-	import ModuleSidebar from '$lib/components/module-sidebar.svelte';
+	import ModuleShell from '$lib/components/module-shell.svelte';
 	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
-	import { POCKETBASE_URL } from '$lib/config/pocketbase';
 	import {
 		createWorkflowInstanceDetailState,
 		type WorkflowInstanceDetailState,
@@ -10,12 +9,11 @@
 		type ToolEdit
 	} from './state.svelte';
 	import type { WorkflowInstanceSelection } from '../types';
-	import { Badge } from '$lib/components/ui/badge';
 	import { Separator } from '$lib/components/ui/separator';
-	import { Progress } from '$lib/components/ui/progress';
 	import * as Card from '$lib/components/ui/card';
 	import * as Tabs from '$lib/components/ui/tabs';
-	import { MapPin, Clock, CheckCircle2, Circle, PlayCircle, ArrowRight, FileText, Image, Pencil } from 'lucide-svelte';
+	import { MapPin, Clock } from 'lucide-svelte';
+	import { FormFillTool, EditFieldsTool, ViewFieldsTool } from './tools';
 
 	// ==========================================================================
 	// Props
@@ -23,12 +21,12 @@
 
 	interface Props {
 		selection: WorkflowInstanceSelection;
+		/** Controls expanded/peek state on mobile (bindable) */
+		isExpanded?: boolean;
 		onClose: () => void;
-		onStartToolFlow?: (instanceId: string, connection: WorkflowConnection, toolQueue: ToolQueueItem[]) => void;
-		onStartEditTool?: (instanceId: string, editTool: ToolEdit) => void;
 	}
 
-	let { selection, onClose, onStartToolFlow, onStartEditTool }: Props = $props();
+	let { selection, isExpanded = $bindable(false), onClose }: Props = $props();
 
 	// ==========================================================================
 	// State
@@ -38,6 +36,17 @@
 	let detailState = $state<WorkflowInstanceDetailState | null>(null);
 	let isOpen = $state(true);
 	let activeTab = $state<string>('overview');
+
+	// Tool flow state (managed internally now)
+	interface ActiveToolFlow {
+		instanceId: string;
+		connection: WorkflowConnection;
+		toolQueue: ToolQueueItem[];
+		currentToolIndex: number;
+	}
+
+	let activeToolFlow = $state<ActiveToolFlow | null>(null);
+	let activeEditTool = $state<ToolEdit | null>(null);
 
 	// ==========================================================================
 	// Effects
@@ -50,6 +59,8 @@
 		const newState = createWorkflowInstanceDetailState(instanceId, gateway);
 		detailState = newState;
 		activeTab = 'overview';
+		activeToolFlow = null;
+		activeEditTool = null;
 		newState.load();
 	});
 
@@ -67,19 +78,22 @@
 	// Computed Values
 	// ==========================================================================
 
-	const title = $derived(detailState?.workflow?.name as string || 'Workflow');
-
-	const subtitle = $derived.by(() => {
-		if (!detailState?.instance) return undefined;
-		return getStatusLabel(detailState.instance.status as string);
+	const title = $derived.by(() => {
+		if (activeToolFlow) {
+			const currentTool = activeToolFlow.toolQueue[activeToolFlow.currentToolIndex];
+			if (currentTool?.type === 'form') {
+				return (currentTool.tool as any).name || 'Form';
+			}
+		}
+		if (activeEditTool) {
+			return activeEditTool.name || 'Edit';
+		}
+		return detailState?.workflow?.name as string || 'Workflow';
 	});
 
-	const badge = $derived.by(() => {
-		if (!detailState) return undefined;
-		const current = detailState.currentStageIndex;
-		const total = detailState.stages.length;
-		if (current > 0 && total > 0) {
-			return `Stage ${current}/${total}`;
+	const subtitle = $derived.by(() => {
+		if (activeToolFlow) {
+			return `Step ${activeToolFlow.currentToolIndex + 1} of ${activeToolFlow.toolQueue.length}`;
 		}
 		return undefined;
 	});
@@ -92,7 +106,6 @@
 		const connectionActions = detailState.availableConnections.map(conn => ({
 			id: conn.id,
 			label: conn.visual_config?.button_label || conn.action_name,
-			icon: ArrowRight,
 			color: conn.visual_config?.button_color,
 			disabled: false,
 			onClick: () => handleConnectionClick(conn)
@@ -102,25 +115,12 @@
 		const editActions = detailState.availableStageEditTools.map(tool => ({
 			id: `edit-${tool.id}`,
 			label: tool.visual_config?.button_label || tool.name,
-			icon: Pencil,
 			color: tool.visual_config?.button_color,
 			disabled: false,
 			onClick: () => handleEditToolClick(tool)
 		}));
 
 		return [...editActions, ...connectionActions];
-	});
-
-	// Convert to the format expected by ModuleSidebar
-	const sidebarActions = $derived.by(() => {
-		return actions.map(action => ({
-			id: action.id,
-			label: action.label,
-			icon: actionIconSnippet,
-			color: action.color,
-			disabled: action.disabled,
-			onClick: action.onClick
-		}));
 	});
 
 	// ==========================================================================
@@ -138,47 +138,14 @@
 		});
 	}
 
-	function getStatusLabel(status: string): string {
-		switch (status) {
-			case 'active':
-				return 'In Progress';
-			case 'completed':
-				return 'Completed';
-			case 'archived':
-				return 'Archived';
-			case 'deleted':
-				return 'Deleted';
-			default:
-				return status;
-		}
-	}
-
-	function getStatusVariant(status: string): 'default' | 'secondary' | 'outline' | 'destructive' {
-		switch (status) {
-			case 'completed':
-				return 'default';
-			case 'active':
-				return 'secondary';
-			case 'archived':
-				return 'outline';
-			case 'deleted':
-				return 'destructive';
-			default:
-				return 'outline';
-		}
-	}
-
-	function getFileUrl(fileValue: string, collectionName: string, recordId: string): string {
-		// PocketBase file URL pattern
-		return `${POCKETBASE_URL}/api/files/${collectionName}/${recordId}/${fileValue}`;
-	}
-
 	// ==========================================================================
 	// Handlers
 	// ==========================================================================
 
 	function handleClose() {
 		isOpen = false;
+		activeToolFlow = null;
+		activeEditTool = null;
 		onClose();
 	}
 
@@ -186,15 +153,30 @@
 		activeTab = tabId;
 	}
 
+	function handleStageTabChange(stageId: string) {
+		if (detailState) {
+			detailState.setActiveStageTab(stageId);
+		}
+	}
+
+	// ==========================================================================
+	// Connection / Tool Flow Handlers
+	// ==========================================================================
+
 	async function handleConnectionClick(connection: WorkflowConnection) {
 		if (!detailState) return;
 
 		// Get tools for this connection
 		const toolQueue = detailState.getToolsForConnection(connection.id);
 
-		if (toolQueue.length > 0 && onStartToolFlow) {
-			// Has tools - let parent handle the tool flow
-			onStartToolFlow(detailState.instanceId, connection, toolQueue);
+		if (toolQueue.length > 0) {
+			// Has tools - start internal tool flow
+			activeToolFlow = {
+				instanceId: detailState.instanceId,
+				connection,
+				toolQueue,
+				currentToolIndex: 0
+			};
 		} else {
 			// No tools - execute transition directly
 			await detailState.executeTransition(connection);
@@ -202,222 +184,435 @@
 	}
 
 	function handleEditToolClick(editTool: ToolEdit) {
-		if (!detailState) return;
+		activeEditTool = editTool;
+	}
 
-		if (onStartEditTool) {
-			onStartEditTool(detailState.instanceId, editTool);
+	// ==========================================================================
+	// Tool Flow: Form Submit
+	// ==========================================================================
+
+	async function handleToolFormSubmit(formValues: Record<string, unknown>, connectionId: string) {
+		if (!activeToolFlow || !detailState || !gateway) return;
+
+		const targetStageId = activeToolFlow.connection.to_stage_id;
+
+		try {
+			// Save form field values
+			const fieldEntries = Object.entries(formValues).filter(
+				([_, value]) => value !== null && value !== undefined && value !== ''
+			);
+
+			for (const [fieldId, value] of fieldEntries) {
+				if (Array.isArray(value) && value.length > 0 && value[0] instanceof File) {
+					// File upload - create separate record for each file
+					for (const file of value as File[]) {
+						const formData = new FormData();
+						formData.append('instance_id', activeToolFlow.instanceId);
+						formData.append('field_key', fieldId);
+						formData.append('stage_id', targetStageId);
+						formData.append('value', '');
+						formData.append('file_value', file);
+
+						await gateway.collection('workflow_instance_field_values').create(formData as any);
+					}
+				} else {
+					// Regular value
+					const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+
+					await gateway.collection('workflow_instance_field_values').create({
+						instance_id: activeToolFlow.instanceId,
+						field_key: fieldId,
+						stage_id: targetStageId,
+						value: stringValue
+					});
+				}
+			}
+
+			// Advance to next tool or complete transition
+			advanceToolFlow();
+		} catch (error) {
+			console.error('Failed to submit tool flow form:', error);
+			throw error;
 		}
 	}
 
-	function handleStageTabChange(stageId: string) {
-		if (detailState) {
-			detailState.setActiveStageTab(stageId);
+	function advanceToolFlow() {
+		if (!activeToolFlow) return;
+
+		const nextIndex = activeToolFlow.currentToolIndex + 1;
+
+		if (nextIndex >= activeToolFlow.toolQueue.length) {
+			// All tools complete - execute transition
+			executeToolFlowTransition();
+		} else {
+			// More tools to run
+			activeToolFlow = { ...activeToolFlow, currentToolIndex: nextIndex };
 		}
+	}
+
+	async function executeToolFlowTransition() {
+		if (!activeToolFlow || !detailState || !gateway) return;
+
+		try {
+			// Update instance to new stage
+			await gateway.collection('workflow_instances').update(activeToolFlow.instanceId, {
+				current_stage_id: activeToolFlow.connection.to_stage_id
+			});
+
+			// Refresh state
+			await detailState.refresh();
+
+			// Clear tool flow
+			activeToolFlow = null;
+		} catch (error) {
+			console.error('Failed to execute transition:', error);
+		}
+	}
+
+	function handleToolFlowCancel() {
+		activeToolFlow = null;
+	}
+
+	// ==========================================================================
+	// Edit Tool Handlers
+	// ==========================================================================
+
+	async function handleEditSave(values: Record<string, unknown>) {
+		if (!activeEditTool || !detailState || !gateway) return;
+
+		const currentStageId = detailState.instance?.current_stage_id as string;
+
+		try {
+			// Update or create field values
+			for (const [fieldId, value] of Object.entries(values)) {
+				if (value === null || value === undefined || value === '') continue;
+
+				// Find existing field value
+				const existing = detailState.fieldValues.find(
+					fv => fv.field_key === fieldId && fv.stage_id === currentStageId
+				);
+
+				if (Array.isArray(value) && value.length > 0 && value[0] instanceof File) {
+					// File upload - create separate record for each file
+					// Note: For edits, we create new records for each file
+					for (const file of value as File[]) {
+						const formData = new FormData();
+						formData.append('instance_id', detailState.instanceId);
+						formData.append('field_key', fieldId);
+						formData.append('stage_id', currentStageId);
+						formData.append('value', '');
+						formData.append('file_value', file);
+
+						await gateway.collection('workflow_instance_field_values').create(formData as any);
+					}
+				} else {
+					// Regular value
+					const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+
+					if (existing) {
+						await gateway.collection('workflow_instance_field_values').update(existing.id, {
+							value: stringValue
+						});
+					} else {
+						await gateway.collection('workflow_instance_field_values').create({
+							instance_id: detailState.instanceId,
+							field_key: fieldId,
+							stage_id: currentStageId,
+							value: stringValue
+						});
+					}
+				}
+			}
+
+			// Refresh state and close edit
+			await detailState.refresh();
+			activeEditTool = null;
+		} catch (error) {
+			console.error('Failed to save edit:', error);
+			throw error;
+		}
+	}
+
+	function handleEditCancel() {
+		activeEditTool = null;
 	}
 </script>
 
-{#snippet actionIconSnippet()}
-	<ArrowRight class="w-4 h-4" />
-{/snippet}
-
-<ModuleSidebar
+<ModuleShell
 	bind:isOpen
+	bind:isExpanded
 	{title}
 	{subtitle}
-	{badge}
-	{tabs}
-	bind:activeTab
-	actions={sidebarActions}
 	isLoading={detailState?.isLoading ?? true}
 	error={detailState?.loadError}
 	onClose={handleClose}
-	onTabChange={handleTabChange}
 >
-	{#snippet tabContent(tabId)}
-		{#if tabId === 'overview'}
-			<!-- OVERVIEW TAB -->
-			<div class="space-y-4">
-				<!-- Status Badge -->
-				{#if detailState?.instance}
-					<Badge variant={getStatusVariant(detailState.instance.status as string)}>
-						{getStatusLabel(detailState.instance.status as string)}
-					</Badge>
+	{#snippet content()}
+		<!-- Check if we're in a tool flow or edit mode -->
+		{#if activeToolFlow}
+			{@const currentTool = activeToolFlow.toolQueue[activeToolFlow.currentToolIndex]}
+			{#if currentTool?.type === 'form'}
+				<FormFillTool
+					workflowId={activeToolFlow.connection.workflow_id}
+					connectionId={activeToolFlow.connection.id}
+					onSubmit={handleToolFormSubmit}
+					onCancel={handleToolFlowCancel}
+				/>
+			{:else if currentTool?.type === 'edit' && detailState}
+				<EditFieldsTool
+					editTool={currentTool.tool as ToolEdit}
+					instanceId={detailState.instanceId}
+					existingFieldValues={detailState.fieldValues}
+					formFields={detailState.formFields}
+					onSave={async (values) => {
+						// For edit tools in a connection flow, save and advance
+						await handleEditSave(values);
+						advanceToolFlow();
+					}}
+					onCancel={handleToolFlowCancel}
+				/>
+			{/if}
+		{:else if activeEditTool && detailState}
+			<EditFieldsTool
+				editTool={activeEditTool}
+				instanceId={detailState.instanceId}
+				existingFieldValues={detailState.fieldValues}
+				formFields={detailState.formFields}
+				onSave={handleEditSave}
+				onCancel={handleEditCancel}
+			/>
+		{:else}
+			<!-- Normal detail view with tabs -->
+			<div class="p-4">
+				<!-- Action Roll Bar -->
+				{#if actions.length > 0}
+					<div class="mb-4">
+						<div class="flex gap-2.5 overflow-x-auto pb-2 scrollbar-thin">
+							{#each actions as action}
+								<button
+									class="action-btn group relative flex flex-col items-center justify-center
+										min-w-[72px] max-w-[120px] min-h-[56px] px-3 py-2.5
+										rounded-xl flex-shrink-0
+										transition-all duration-200 ease-out
+										hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98]
+										disabled:opacity-50 disabled:pointer-events-none"
+									class:action-btn-colored={action.color}
+									class:action-btn-default={!action.color}
+									style={action.color ? `--btn-color: ${action.color}` : undefined}
+									disabled={action.disabled}
+									onclick={action.onClick}
+								>
+									<span class="text-xs font-semibold text-center leading-snug line-clamp-2">
+										{action.label}
+									</span>
+								</button>
+							{/each}
+						</div>
+					</div>
 				{/if}
 
-				<!-- Progress -->
-				<div class="space-y-2">
-					<div class="flex items-center justify-between text-sm">
-						<span class="text-muted-foreground">Progress</span>
-						<span class="font-medium">{detailState?.progressPercentage ?? 0}%</span>
-					</div>
-					<Progress value={detailState?.progressPercentage ?? 0} class="h-2" />
-				</div>
+				<!-- Tabs -->
+				<Tabs.Root
+					value={activeTab}
+					onValueChange={(v) => handleTabChange(v as string)}
+					class="flex-1 flex flex-col min-h-0"
+				>
+					<Tabs.List
+						class="grid w-full flex-shrink-0"
+						style="grid-template-columns: repeat({tabs.length}, minmax(0, 1fr))"
+					>
+						{#each tabs as tab}
+							<Tabs.Trigger value={tab.id} class="text-xs sm:text-sm">
+								{tab.label}
+							</Tabs.Trigger>
+						{/each}
+					</Tabs.List>
 
-				<Separator />
+					<Tabs.Content value="overview" class="pt-4">
+						<!-- OVERVIEW TAB -->
+						<div class="space-y-4">
+							<!-- Progress -->
+							<div class="space-y-3">
+								<h4 class="text-sm font-semibold">Progress</h4>
 
-				<!-- Stage List -->
-				<div class="space-y-3">
-					<h4 class="text-sm font-semibold">Workflow Stages</h4>
+								<div class="space-y-2">
+									{#each detailState?.stages ?? [] as stage, index}
+										<div class="flex items-start gap-3">
+											<!-- Dot -->
+											<div class="mt-1 shrink-0">
+												{#if detailState?.isStageCompleted(stage.id)}
+													<div class="h-4 w-4 rounded-full bg-green-400"></div>
+												{:else if detailState?.isCurrentStage(stage.id)}
+													<div class="h-4 w-4 rounded-full bg-muted-foreground"></div>
+												{:else}
+													<div class="h-4 w-4 rounded-full border-2 border-muted-foreground"></div>
+												{/if}
+											</div>
 
-					<div class="space-y-2">
-						{#each detailState?.stages ?? [] as stage, index}
-							<div class="flex items-start gap-3">
-								<!-- Icon -->
-								<div class="mt-0.5 shrink-0">
-									{#if detailState?.isStageCompleted(stage.id)}
-										<CheckCircle2 class="h-5 w-5 text-primary" />
-									{:else if detailState?.isCurrentStage(stage.id)}
-										<PlayCircle class="h-5 w-5 text-primary" />
-									{:else}
-										<Circle class="h-5 w-5 text-muted-foreground" />
-									{/if}
-								</div>
+											<!-- Content -->
+											<div class="min-w-0 flex-1">
+												<div
+													class="text-sm font-medium {detailState?.isStageCompleted(stage.id)
+														? 'text-foreground'
+														: detailState?.isCurrentStage(stage.id)
+															? 'text-foreground'
+															: 'text-muted-foreground'}"
+												>
+													{stage.stage_name}
+												</div>
+											</div>
+										</div>
 
-								<!-- Content -->
-								<div class="min-w-0 flex-1">
-									<div
-										class="text-sm font-medium {detailState?.isStageCompleted(stage.id)
-											? 'text-foreground'
-											: detailState?.isCurrentStage(stage.id)
-												? 'text-primary'
-												: 'text-muted-foreground'}"
-									>
-										{stage.stage_name}
-									</div>
+										<!-- Connector Line -->
+										{#if index < (detailState?.stages.length ?? 0) - 1}
+											<div class="ml-2 h-3 w-px bg-border"></div>
+										{/if}
+									{/each}
 								</div>
 							</div>
 
-							<!-- Connector Line -->
-							{#if index < (detailState?.stages.length ?? 0) - 1}
-								<div class="ml-2.5 h-3 w-px bg-border"></div>
-							{/if}
-						{/each}
-					</div>
-				</div>
+							<Separator />
 
-				<Separator />
-
-				<!-- Info Cards -->
-				<div class="grid grid-cols-2 gap-2">
-					{#if detailState?.instance?.location}
-						{@const location = detailState.instance.location as { lat: number; lon: number }}
-						<Card.Root>
-							<Card.Content class="p-3">
-								<div class="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
-									<MapPin class="w-3 h-3" />
-									Location
-								</div>
-								<div class="text-xs font-mono text-foreground">
-									{location.lat.toFixed(5)}, {location.lon.toFixed(5)}
-								</div>
-							</Card.Content>
-						</Card.Root>
-					{/if}
-					{#if detailState?.instance?.created}
-						<Card.Root>
-							<Card.Content class="p-3">
-								<div class="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
-									<Clock class="w-3 h-3" />
-									Started
-								</div>
-								<div class="text-xs text-foreground">
-									{formatDate(detailState.instance.created as string)}
-								</div>
-							</Card.Content>
-						</Card.Root>
-					{/if}
-				</div>
-			</div>
-		{:else if tabId === 'details'}
-			<!-- DETAILS TAB with Stage Sub-tabs -->
-			<div class="space-y-4">
-				{#if detailState && detailState.stages.length > 0}
-					<!-- Stage Sub-tabs -->
-					<Tabs.Root
-						value={detailState.activeStageTab}
-						onValueChange={(v) => handleStageTabChange(v as string)}
-					>
-						<Tabs.List class="w-full overflow-x-auto flex-nowrap">
-							{#each detailState.stages as stage}
-								<Tabs.Trigger value={stage.id} class="text-xs whitespace-nowrap">
-									{stage.stage_name}
-								</Tabs.Trigger>
-							{/each}
-						</Tabs.List>
-
-						{#each detailState.stages as stage}
-							<Tabs.Content value={stage.id} class="pt-4">
-								{@const fieldValues = detailState.getFieldValuesForStage(stage.id)}
-								{#if fieldValues.length > 0}
-									<div class="space-y-3">
-										{#each fieldValues as field}
-											<div class="border-b border-border pb-3 last:border-0">
-												<div class="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
-													{field.label}
-												</div>
-												{#if field.fileValue}
-													<!-- File field - show thumbnail or link -->
-													{#if field.type === 'file'}
-														{@const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(field.fileValue)}
-														{#if isImage}
-															<div class="mt-1">
-																<img
-																	src={getFileUrl(field.fileValue, 'workflow_instance_field_values', field.id)}
-																	alt={field.label}
-																	class="max-w-full h-auto rounded-md max-h-48 object-cover"
-																/>
-															</div>
-														{:else}
-															<div class="flex items-center gap-2 text-sm text-foreground">
-																<FileText class="w-4 h-4" />
-																<span>{field.fileValue}</span>
-															</div>
-														{/if}
-													{/if}
-												{:else if field.value}
-													<!-- Regular value -->
-													<div class="text-sm text-foreground">
-														{#if field.value.startsWith('[')}
-															<!-- JSON array - try to parse and display nicely -->
-															{@const parsed = (() => { try { return JSON.parse(field.value); } catch { return null; } })()}
-															{#if Array.isArray(parsed)}
-																<span>{parsed.join(', ')}</span>
-															{:else}
-																<span>{field.value}</span>
-															{/if}
-														{:else}
-															{field.value}
-														{/if}
-													</div>
-												{:else}
-													<div class="text-sm text-muted-foreground italic">No value</div>
-												{/if}
+							<!-- Info Cards -->
+							<div class="grid grid-cols-2 gap-2">
+								{#if detailState?.instance?.location}
+									{@const location = detailState.instance.location as { lat: number; lon: number }}
+									<Card.Root>
+										<Card.Content class="p-3">
+											<div class="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+												<MapPin class="w-3 h-3" />
+												Location
 											</div>
-										{/each}
-									</div>
-								{:else}
-									<div class="text-center py-8 text-muted-foreground">
-										<p class="text-sm">No data collected for this stage</p>
-									</div>
+											<div class="text-xs font-mono text-foreground">
+												{location.lat.toFixed(5)}, {location.lon.toFixed(5)}
+											</div>
+										</Card.Content>
+									</Card.Root>
 								{/if}
-							</Tabs.Content>
-						{/each}
-					</Tabs.Root>
-				{:else}
-					<div class="text-center py-8 text-muted-foreground">
-						<p class="text-sm">No stages available</p>
-					</div>
-				{/if}
-			</div>
-		{:else if tabId === 'history'}
-			<!-- HISTORY TAB -->
-			<div class="space-y-4">
-				<h3 class="font-semibold text-foreground">Activity History</h3>
-				<div class="text-center py-12 text-muted-foreground">
-					<Clock class="w-12 h-12 mx-auto mb-2 opacity-50" />
-					<p class="text-sm">Activity history coming soon</p>
-				</div>
+								{#if detailState?.instance?.created}
+									<Card.Root>
+										<Card.Content class="p-3">
+											<div class="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+												<Clock class="w-3 h-3" />
+												Started
+											</div>
+											<div class="text-xs text-foreground">
+												{formatDate(detailState.instance.created as string)}
+											</div>
+										</Card.Content>
+									</Card.Root>
+								{/if}
+							</div>
+						</div>
+					</Tabs.Content>
+
+					<Tabs.Content value="details" class="pt-4">
+						<!-- DETAILS TAB with Stage Sub-tabs -->
+						<div class="space-y-4">
+							{#if detailState && detailState.stages.length > 0}
+								<!-- Stage Sub-tabs -->
+								<Tabs.Root
+									value={detailState.activeStageTab}
+									onValueChange={(v) => handleStageTabChange(v as string)}
+								>
+									<Tabs.List class="w-full overflow-x-auto flex-nowrap">
+										{#each detailState.stages as stage}
+											<Tabs.Trigger value={stage.id} class="text-xs whitespace-nowrap">
+												{stage.stage_name}
+											</Tabs.Trigger>
+										{/each}
+									</Tabs.List>
+
+									{#each detailState.stages as stage}
+										<Tabs.Content value={stage.id} class="pt-4">
+											{@const fields = detailState.getFieldsForFormRenderer(stage.id) as import('$lib/components/form-renderer').FormFieldWithValue[]}
+											<ViewFieldsTool {fields} />
+										</Tabs.Content>
+									{/each}
+								</Tabs.Root>
+							{:else}
+								<div class="text-center py-8 text-muted-foreground">
+									<p class="text-sm">No stages available</p>
+								</div>
+							{/if}
+						</div>
+					</Tabs.Content>
+
+					<Tabs.Content value="history" class="pt-4">
+						<!-- HISTORY TAB -->
+						<div class="space-y-4">
+							<h3 class="font-semibold text-foreground">Activity History</h3>
+							<div class="text-center py-12 text-muted-foreground">
+								<Clock class="w-12 h-12 mx-auto mb-2 opacity-50" />
+								<p class="text-sm">Activity history coming soon</p>
+							</div>
+						</div>
+					</Tabs.Content>
+				</Tabs.Root>
 			</div>
 		{/if}
 	{/snippet}
-</ModuleSidebar>
+</ModuleShell>
+
+<style>
+	/* Action Button - Default (no custom color) */
+	.action-btn-default {
+		background-color: hsl(var(--secondary));
+		color: hsl(var(--secondary-foreground));
+		border: 1px solid hsl(var(--border));
+		box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.05);
+	}
+
+	.action-btn-default:hover {
+		background-color: hsl(var(--accent));
+		border-color: hsl(var(--accent));
+	}
+
+	:global(.dark) .action-btn-default {
+		background-color: hsl(var(--secondary) / 0.8);
+		border-color: hsl(var(--border) / 0.5);
+	}
+
+	:global(.dark) .action-btn-default:hover {
+		background-color: hsl(var(--accent));
+		border-color: hsl(var(--accent));
+	}
+
+	/* Action Button - With custom color */
+	.action-btn-colored {
+		background-color: var(--btn-color);
+		color: white;
+		border: 1px solid transparent;
+		box-shadow:
+			0 2px 4px -1px color-mix(in srgb, var(--btn-color) 40%, transparent),
+			0 1px 2px -1px color-mix(in srgb, var(--btn-color) 30%, transparent);
+		text-shadow: 0 1px 1px rgb(0 0 0 / 0.15);
+	}
+
+	.action-btn-colored:hover {
+		filter: brightness(1.08);
+		box-shadow:
+			0 4px 8px -2px color-mix(in srgb, var(--btn-color) 45%, transparent),
+			0 2px 4px -2px color-mix(in srgb, var(--btn-color) 35%, transparent);
+	}
+
+	:global(.dark) .action-btn-colored {
+		background-color: color-mix(in srgb, var(--btn-color) 85%, black);
+		box-shadow:
+			0 2px 6px -1px color-mix(in srgb, var(--btn-color) 35%, transparent),
+			0 0 0 1px color-mix(in srgb, var(--btn-color) 50%, transparent);
+	}
+
+	:global(.dark) .action-btn-colored:hover {
+		background-color: color-mix(in srgb, var(--btn-color) 95%, black);
+		filter: brightness(1.1);
+	}
+
+	/* Line clamp for button text */
+	.line-clamp-2 {
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+	}
+</style>

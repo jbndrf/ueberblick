@@ -2,7 +2,9 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
 	import { MapCanvas, BottomControlBar, LayerSheet, FilterSheet, WorkflowSelector } from './components';
-	import { MarkerDetailModule, WorkflowInstanceDetailModule, FormFillModule, createSelection, type Selection, type Marker, type WorkflowConnection, type ToolQueueItem, type ToolEdit } from './modules';
+	import { WorkflowInstanceDetailModule, createSelection, type Selection, type Marker } from './modules';
+	import { FormFillTool } from './modules/workflow-instance-detail/tools';
+	import ModuleShell from '$lib/components/module-shell.svelte';
 	import type { Map as LeafletMap } from 'leaflet';
 	import { mapNavCallbacks } from './nav-store.svelte';
 
@@ -16,13 +18,6 @@
 	interface PendingWorkflow {
 		workflow: Workflow;
 		coordinates?: { lat: number; lng: number };
-	}
-
-	interface ActiveToolFlow {
-		instanceId: string;
-		connection: WorkflowConnection;
-		toolQueue: ToolQueueItem[];
-		currentToolIndex: number;
 	}
 
 	interface Props {
@@ -66,12 +61,12 @@
 	// Selection state
 	let selection = $state<Selection>(createSelection.none());
 
-	// Workflow creation state
+	// Workflow creation state (for new workflows via entry form)
 	let pendingWorkflow = $state<PendingWorkflow | null>(null);
 	let formFillOpen = $state(false);
 
-	// Tool flow state (for action buttons in WorkflowInstanceDetailModule)
-	let activeToolFlow = $state<ActiveToolFlow | null>(null);
+	// Shared bottom sheet expanded state (preserves peek/expanded when switching sheets)
+	let sheetExpanded = $state(false);
 
 	// Data state - loaded via gateway
 	let mapLayers = $state<any[]>([]);
@@ -223,7 +218,7 @@
 	}
 
 	// ==========================================================================
-	// Workflow Creation
+	// Workflow Creation (new workflow via entry form)
 	// ==========================================================================
 
 	function handleWorkflowSelect(workflow: Workflow, coordinates?: { lat: number; lng: number }) {
@@ -267,15 +262,17 @@
 			for (const [fieldId, value] of fieldEntries) {
 				// Handle file values separately
 				if (Array.isArray(value) && value.length > 0 && value[0] instanceof File) {
-					// File upload - create FormData
-					const formData = new FormData();
-					formData.append('instance_id', instance.id);
-					formData.append('field_key', fieldId);
-					formData.append('stage_id', startStage.id);
-					formData.append('value', '');
-					formData.append('file_value', value[0]);
+					// File upload - create separate record for each file
+					for (const file of value as File[]) {
+						const formData = new FormData();
+						formData.append('instance_id', instance.id);
+						formData.append('field_key', fieldId);
+						formData.append('stage_id', startStage.id);
+						formData.append('value', '');
+						formData.append('file_value', file);
 
-					await gateway.collection('workflow_instance_field_values').create(formData);
+						await gateway.collection('workflow_instance_field_values').create(formData);
+					}
 				} else {
 					// Regular value - stringify if needed
 					const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
@@ -295,8 +292,10 @@
 			});
 			workflowInstances = instancesResult;
 
-			// Note: Don't clear pendingWorkflow here - let handleFormClose() do it
-			// when the form component calls onClose() after completing its cleanup
+			// Close form and show the new instance
+			formFillOpen = false;
+			pendingWorkflow = null;
+			selection = createSelection.workflowInstance(instance.id);
 		} catch (error) {
 			console.error('Failed to create workflow instance:', error);
 			throw error;
@@ -309,139 +308,8 @@
 	}
 
 	// ==========================================================================
-	// Tool Flow (from WorkflowInstanceDetailModule actions)
+	// Map Handlers
 	// ==========================================================================
-
-	function handleStartToolFlow(instanceId: string, connection: WorkflowConnection, toolQueue: ToolQueueItem[]) {
-		console.log('Starting tool flow:', { instanceId, connection, toolQueue });
-
-		activeToolFlow = {
-			instanceId,
-			connection,
-			toolQueue,
-			currentToolIndex: 0
-		};
-
-		// Start the first tool
-		startCurrentTool();
-	}
-
-	function handleStartEditTool(instanceId: string, editTool: ToolEdit) {
-		console.log('Starting edit tool:', { instanceId, editTool });
-		// TODO: Implement EditModule to handle editing fields
-		// For now, log the action - EditModule will be implemented later
-		alert(`Edit tool "${editTool.name}" not yet implemented`);
-	}
-
-	function startCurrentTool() {
-		if (!activeToolFlow) return;
-
-		const currentTool = activeToolFlow.toolQueue[activeToolFlow.currentToolIndex];
-		if (!currentTool) {
-			// No more tools - execute transition
-			executeToolFlowTransition();
-			return;
-		}
-
-		if (currentTool.type === 'form') {
-			// Open form fill module for this form
-			formFillOpen = true;
-		} else if (currentTool.type === 'edit') {
-			// Edit tools not yet implemented - skip to next
-			advanceToolFlow();
-		}
-	}
-
-	async function handleToolFlowFormSubmit(formValues: Record<string, unknown>, connectionId: string) {
-		if (!activeToolFlow) return;
-
-		const currentTool = activeToolFlow.toolQueue[activeToolFlow.currentToolIndex];
-		if (!currentTool || currentTool.type !== 'form') return;
-
-		// Find the target stage from the connection
-		const targetStageId = activeToolFlow.connection.to_stage_id;
-
-		try {
-			// Save form field values for this instance
-			const fieldEntries = Object.entries(formValues).filter(([_, value]) => value !== null && value !== undefined && value !== '');
-
-			for (const [fieldId, value] of fieldEntries) {
-				if (Array.isArray(value) && value.length > 0 && value[0] instanceof File) {
-					// File upload
-					const formData = new FormData();
-					formData.append('instance_id', activeToolFlow.instanceId);
-					formData.append('field_key', fieldId);
-					formData.append('stage_id', targetStageId);
-					formData.append('value', '');
-					formData.append('file_value', value[0]);
-
-					await gateway.collection('workflow_instance_field_values').create(formData);
-				} else {
-					// Regular value
-					const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
-
-					await gateway.collection('workflow_instance_field_values').create({
-						instance_id: activeToolFlow.instanceId,
-						field_key: fieldId,
-						stage_id: targetStageId,
-						value: stringValue
-					});
-				}
-			}
-
-			// Advance to next tool
-			advanceToolFlow();
-		} catch (error) {
-			console.error('Failed to submit tool flow form:', error);
-			throw error;
-		}
-	}
-
-	function advanceToolFlow() {
-		if (!activeToolFlow) return;
-
-		const nextIndex = activeToolFlow.currentToolIndex + 1;
-
-		if (nextIndex >= activeToolFlow.toolQueue.length) {
-			// All tools complete - execute transition
-			executeToolFlowTransition();
-		} else {
-			// More tools to run
-			activeToolFlow = { ...activeToolFlow, currentToolIndex: nextIndex };
-			startCurrentTool();
-		}
-	}
-
-	async function executeToolFlowTransition() {
-		if (!activeToolFlow) return;
-
-		try {
-			// Update instance to new stage
-			await gateway.collection('workflow_instances').update(activeToolFlow.instanceId, {
-				current_stage_id: activeToolFlow.connection.to_stage_id
-			});
-
-			console.log('Tool flow transition complete:', activeToolFlow.instanceId);
-
-			// Refresh instances
-			const instancesResult = await gateway.collection('workflow_instances').getFullList({
-				expand: 'workflow_id'
-			});
-			workflowInstances = instancesResult;
-
-			// Clear tool flow
-			activeToolFlow = null;
-			formFillOpen = false;
-		} catch (error) {
-			console.error('Failed to execute transition:', error);
-		}
-	}
-
-	function handleToolFlowFormClose() {
-		// If closing during tool flow, cancel the whole flow
-		activeToolFlow = null;
-		formFillOpen = false;
-	}
 
 	function handleMapReady(leafletMap: LeafletMap) {
 		map = leafletMap;
@@ -523,51 +391,31 @@
 		onWorkflowToggle={handleWorkflowToggle}
 	/>
 
-	<!-- Marker Detail Module -->
-	{#if selection.type === 'marker'}
-		<MarkerDetailModule
-			{selection}
-			participantRoleId={data.participant?.role_id || ''}
-			onClose={handleSelectionClose}
-			onNext={handleNavigateNext}
-			onPrevious={handleNavigatePrevious}
-			{canGoNext}
-			{canGoPrevious}
-		/>
-	{/if}
-
-	<!-- Workflow Instance Detail Module -->
+	<!-- Workflow Instance Detail Module (handles tool flows internally) -->
 	{#if selection.type === 'workflowInstance'}
 		<WorkflowInstanceDetailModule
 			{selection}
+			bind:isExpanded={sheetExpanded}
 			onClose={handleSelectionClose}
-			onStartToolFlow={handleStartToolFlow}
-			onStartEditTool={handleStartEditTool}
 		/>
 	{/if}
 
-	<!-- Form Fill Module for Workflow Creation -->
+	<!-- Form Fill for NEW Workflow Creation (uses shared ModuleShell + FormFillTool) -->
 	{#if pendingWorkflow && formFillOpen}
-		<FormFillModule
-			workflowId={pendingWorkflow.workflow.id}
+		<ModuleShell
 			bind:isOpen={formFillOpen}
-			onSubmit={handleFormSubmit}
+			bind:isExpanded={sheetExpanded}
+			title={pendingWorkflow.workflow.name}
 			onClose={handleFormClose}
-		/>
-	{/if}
-
-	<!-- Form Fill Module for Tool Flow (action from existing instance) -->
-	{#if activeToolFlow && formFillOpen}
-		{@const currentTool = activeToolFlow.toolQueue[activeToolFlow.currentToolIndex]}
-		{#if currentTool?.type === 'form'}
-			<FormFillModule
-				workflowId={activeToolFlow.connection.workflow_id}
-				connectionId={activeToolFlow.connection.id}
-				bind:isOpen={formFillOpen}
-				onSubmit={handleToolFlowFormSubmit}
-				onClose={handleToolFlowFormClose}
-			/>
-		{/if}
+		>
+			{#snippet content()}
+				<FormFillTool
+					workflowId={pendingWorkflow.workflow.id}
+					onSubmit={handleFormSubmit}
+					onCancel={handleFormClose}
+				/>
+			{/snippet}
+		</ModuleShell>
 	{/if}
 
 	{#if isLoading}

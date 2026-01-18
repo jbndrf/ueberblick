@@ -821,6 +821,15 @@
 			}
 		}
 	}
+
+	// Handle tool deletion from sidebar Tools tab
+	function handleDeleteToolFromSidebar(toolType: string, toolId: string) {
+		if (toolType === 'form') {
+			builderState.deleteForm(toolId);
+		} else if (toolType === 'edit') {
+			builderState.deleteEditTool(toolId);
+		}
+	}
 </script>
 
 <div class="workflow-builder">
@@ -972,6 +981,7 @@
 			onToolRolesChange={handleToolRolesChange}
 			onToolVisualConfigChange={handleToolVisualConfigChange}
 			onSelectTool={handleSelectToolFromSidebar}
+			onDeleteTool={handleDeleteToolFromSidebar}
 			onCreateRole={createRole}
 			onFormNameChange={handleFormNameChange}
 			onAddFormField={handleAddFormField}

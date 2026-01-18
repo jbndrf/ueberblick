@@ -182,12 +182,14 @@ migrate((app) => {
           && ${roleCheck("stage_id.visible_to_roles")})
     `
 
-    // CREATE: Check current stage visibility (allows transition form data to be saved)
-    // This enables: Reporter fills form -> data tagged for Review stage -> Reporter can't read it later
+    // CREATE: Check current stage visibility OR entry permission
+    // - Stage visibility: allows transition form data to be saved
+    // - Entry permission: allows creating instance + field values without needing stage visibility
     collection.createRule = `
       instance_id.workflow_id.project_id.owner_id = @request.auth.id
       || (${participantInProject("instance_id.workflow_id.project_id")}
-          && ${roleCheck("instance_id.current_stage_id.visible_to_roles")})
+          && (${roleCheck("instance_id.current_stage_id.visible_to_roles")}
+              || ${roleCheck("instance_id.workflow_id.entry_allowed_roles")}))
     `
 
     // UPDATE: Must have visibility to the stage where data belongs

@@ -5,6 +5,17 @@
 	import { Button } from '$lib/components/ui/button';
 	import { cn } from '$lib/utils';
 
+	// Portal action to render element in document.body
+	function portal(node: HTMLElement) {
+		const target = document.body;
+		target.appendChild(node);
+		return {
+			destroy() {
+				node.remove();
+			}
+		};
+	}
+
 	type Props = {
 		/**
 		 * Array of selected option IDs
@@ -355,6 +366,7 @@
 		};
 	});
 
+
 	// Auto-focus search on desktop
 	$effect(() => {
 		if (isOpen && !isMobile && searchInput) {
@@ -542,14 +554,14 @@
 		<ChevronDown class={cn('ml-2 h-4 w-4 shrink-0 text-muted-foreground transition-transform', isOpen && 'rotate-180')} />
 	</button>
 
-	<!-- MOBILE: Full-screen Modal -->
+	<!-- MOBILE: Full-screen Modal (portaled to body for full-screen blur) -->
 	{#if isOpen && isMobile}
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="fixed inset-0 z-[100]" onkeydown={handleKeydown}>
-				<!-- Backdrop -->
+		<div class="fixed inset-0 z-[100]" onkeydown={handleKeydown} use:portal>
+				<!-- Backdrop with blur -->
 				<!-- svelte-ignore a11y_click_events_have_key_events -->
 				<div
-					class="absolute inset-0 bg-black/50 touch-none"
+					class="absolute inset-0 bg-black/50 backdrop-blur-md touch-none"
 					onclick={close}
 					role="button"
 					tabindex="-1"

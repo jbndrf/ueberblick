@@ -65,7 +65,16 @@ export interface FormField {
 	field_type: string;
 	field_order: number;
 	is_required: boolean;
-	field_options?: Record<string, unknown>;
+	placeholder?: string;
+	help_text?: string;
+	validation_rules?: Record<string, unknown> | null;
+	field_options?: Record<string, unknown> | null;
+	conditional_logic?: Record<string, unknown> | null;
+	// Layout properties
+	page?: number;
+	page_title?: string;
+	row_index?: number;
+	column_position?: 'left' | 'right' | 'full';
 }
 
 export interface ToolEdit {
@@ -222,8 +231,14 @@ export class WorkflowInstanceDetailState {
 			this.forms = formsResult as unknown as ToolForm[];
 
 			// Filter form fields to only those belonging to this workflow's forms
+			// Also parse field_options which may be stored as JSON strings
 			const formIds = this.forms.map(f => f.id);
-			this.formFields = (formFieldsResult as unknown as FormField[]).filter(f => formIds.includes(f.form_id));
+			this.formFields = (formFieldsResult as unknown as FormField[])
+				.filter(f => formIds.includes(f.form_id))
+				.map(f => ({
+					...f,
+					field_options: this.parseFieldOptions(f.field_options)
+				}));
 
 			// Filter edit tools to those for this workflow's connections/stages
 			const connectionIds = this.connections.map(c => c.id);
@@ -268,6 +283,85 @@ export class WorkflowInstanceDetailState {
 				fieldKey: fv.field_key
 			};
 		});
+	}
+
+	/** Helper to ensure field_options is an object (in case it's a string from DB) */
+	private parseFieldOptions(options: unknown): Record<string, unknown> | null {
+		if (!options) return null;
+		if (typeof options === 'object') return options as Record<string, unknown>;
+		if (typeof options === 'string') {
+			try {
+				return JSON.parse(options);
+			} catch {
+				return null;
+			}
+		}
+		return null;
+	}
+
+	/** Helper to parse JSON string values (arrays like '["id1","id2"]' stored in DB) */
+	private parseFieldValue(value: string | undefined): unknown {
+		if (!value) return undefined;
+		// Try to parse JSON arrays/objects
+		if (value.startsWith('[') || value.startsWith('{')) {
+			try {
+				return JSON.parse(value);
+			} catch {
+				return value;
+			}
+		}
+		return value;
+	}
+
+	/** Get fields formatted for FormRenderer (with layout and values) */
+	getFieldsForFormRenderer(stageId: string): Array<FormField & { value?: unknown; fileValue?: string; fileRecordId?: string; storedFiles?: Array<{ recordId: string; fileName: string }> }> {
+		const stageFieldValues = this.fieldValues.filter(fv => fv.stage_id === stageId);
+
+		// Get unique field keys from values and find their field definitions
+		const fieldKeysWithData = new Set(stageFieldValues.map(fv => fv.field_key));
+
+		// Get form fields that have values for this stage
+		return this.formFields
+			.filter(f => fieldKeysWithData.has(f.id))
+			.map(fieldDef => {
+				// Get ALL field values for this field (supports multiple files)
+				const fieldValuesForField = stageFieldValues.filter(fv => fv.field_key === fieldDef.id);
+
+				// For file fields, aggregate all file records
+				const storedFiles = fieldValuesForField
+					.filter(fv => fv.file_value)
+					.map(fv => ({
+						recordId: fv.id,
+						fileName: fv.file_value
+					}));
+
+				// For non-file fields, get the first value (there should only be one)
+				const firstValue = fieldValuesForField.find(fv => fv.value);
+
+				return {
+					...fieldDef,
+					// Ensure field_options is properly parsed
+					field_options: this.parseFieldOptions(fieldDef.field_options),
+					// Ensure layout defaults
+					page: fieldDef.page ?? 1,
+					row_index: fieldDef.row_index ?? 0,
+					column_position: fieldDef.column_position ?? 'full',
+					// Add value data (parse JSON strings like '["id1","id2"]')
+					value: this.parseFieldValue(firstValue?.value),
+					// Legacy single file support (first file)
+					fileValue: storedFiles[0]?.fileName || undefined,
+					fileRecordId: storedFiles[0]?.recordId || undefined,
+					// Multi-file support
+					storedFiles: storedFiles.length > 0 ? storedFiles : undefined
+				};
+			})
+			.sort((a, b) => {
+				// Sort by page, then row_index, then column position
+				if ((a.page ?? 1) !== (b.page ?? 1)) return (a.page ?? 1) - (b.page ?? 1);
+				if ((a.row_index ?? 0) !== (b.row_index ?? 0)) return (a.row_index ?? 0) - (b.row_index ?? 0);
+				const posOrder = { left: 0, right: 1, full: 2 };
+				return (posOrder[a.column_position ?? 'full'] ?? 2) - (posOrder[b.column_position ?? 'full'] ?? 2);
+			});
 	}
 
 	/** Check if a stage has any data */

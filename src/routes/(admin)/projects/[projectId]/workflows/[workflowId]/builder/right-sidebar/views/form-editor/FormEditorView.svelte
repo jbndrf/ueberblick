@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { X, ChevronLeft, ChevronRight, Link, Settings2 } from 'lucide-svelte';
+	import { X, ChevronLeft, ChevronRight, Settings2 } from 'lucide-svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
@@ -199,11 +199,6 @@
 				>
 					<Settings2 class="h-4 w-4" />
 				</Button>
-			{:else}
-				<div class="inheritance-badge" title="Inherits config from connection">
-					<Link class="h-3 w-3" />
-					<span>Inherited</span>
-				</div>
 			{/if}
 			<Button variant="ghost" size="icon" onclick={onClose} class="close-btn">
 				<X class="h-4 w-4" />
@@ -468,20 +463,9 @@
 		background: oklch(0.15 0.02 260);
 	}
 
-	/* Settings button and badge */
+	/* Settings button */
 	.settings-btn {
 		flex-shrink: 0;
-	}
-
-	.inheritance-badge {
-		display: flex;
-		align-items: center;
-		gap: 0.375rem;
-		padding: 0.25rem 0.5rem;
-		background: hsl(var(--muted));
-		border-radius: 0.25rem;
-		font-size: 0.6875rem;
-		color: hsl(var(--muted-foreground));
 	}
 
 	/* Settings panel */

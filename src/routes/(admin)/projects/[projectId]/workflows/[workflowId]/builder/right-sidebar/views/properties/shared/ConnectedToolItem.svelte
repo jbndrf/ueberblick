@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Trash2 } from 'lucide-svelte';
 	import { toolRegistry } from '$lib/workflow-builder/tools';
 	import ButtonConfigPopover from './ButtonConfigPopover.svelte';
 
@@ -15,6 +16,8 @@
 		onVisualConfigChange?: (config: VisualConfig) => void;
 		/** Callback when tool is clicked (to select/open it) */
 		onSelect?: () => void;
+		/** Callback when tool is deleted */
+		onDelete?: () => void;
 		/** Default button label */
 		defaultButtonLabel?: string;
 		/** Default button color */
@@ -27,6 +30,7 @@
 		visualConfig,
 		onVisualConfigChange,
 		onSelect,
+		onDelete,
 		defaultButtonLabel = 'Action',
 		defaultButtonColor = '#3b82f6'
 	}: Props = $props();
@@ -49,13 +53,18 @@
 		<span class="tool-name">{name}</span>
 	</button>
 
-	<div class="tool-button" onclick={(e) => e.stopPropagation()}>
+	<div class="tool-actions" onclick={(e) => e.stopPropagation()}>
 		<ButtonConfigPopover
 			config={visualConfig}
 			onConfigChange={onVisualConfigChange}
 			defaultLabel={defaultButtonLabel}
 			defaultColor={defaultButtonColor}
 		/>
+		{#if onDelete}
+			<button class="delete-btn" type="button" onclick={onDelete} title="Delete tool">
+				<Trash2 class="h-3.5 w-3.5" />
+			</button>
+		{/if}
 	</div>
 </div>
 
@@ -120,7 +129,34 @@
 		white-space: nowrap;
 	}
 
-	.tool-button {
+	.tool-actions {
 		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+
+	.delete-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.75rem;
+		height: 1.75rem;
+		border-radius: 0.25rem;
+		border: none;
+		background: transparent;
+		color: hsl(var(--muted-foreground));
+		cursor: pointer;
+		transition: all 0.15s ease;
+		opacity: 0;
+	}
+
+	.connected-tool-item:hover .delete-btn {
+		opacity: 1;
+	}
+
+	.delete-btn:hover {
+		background: hsl(var(--destructive) / 0.1);
+		color: hsl(var(--destructive));
 	}
 </style>

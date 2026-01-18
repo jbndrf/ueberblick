@@ -37,6 +37,8 @@
 		onToolVisualConfigChange?: (toolId: string, config: VisualConfig) => void;
 		/** Callback when a tool is selected */
 		onSelectTool?: (toolType: string, toolId: string) => void;
+		/** Callback when a tool is deleted */
+		onDeleteTool?: (toolType: string, toolId: string) => void;
 		/** Callback to create a new role via server action */
 		onCreateRole?: (name: string) => Promise<Role>;
 	};
@@ -59,6 +61,7 @@
 		onToolRolesChange,
 		onToolVisualConfigChange,
 		onSelectTool,
+		onDeleteTool,
 		onCreateRole
 	}: Props = $props();
 
@@ -103,6 +106,7 @@
 			{onToolRolesChange}
 			{onToolVisualConfigChange}
 			{onSelectTool}
+			{onDeleteTool}
 			{onCreateRole}
 		/>
 	{:else if context.type === 'action'}
@@ -117,6 +121,7 @@
 			onRolesChange={onEdgeRolesChange}
 			onSettingsChange={onEdgeSettingsChange}
 			{onSelectTool}
+			{onDeleteTool}
 			{onCreateRole}
 		/>
 	{/if}
