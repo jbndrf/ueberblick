@@ -56,7 +56,8 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 		const connectionIds = connections.map((c: any) => c.id);
 		const stageIds = stages.map((s: any) => s.id);
 		const workflowEditTools = editTools.filter(
-			(e: any) => connectionIds.includes(e.connection_id) || stageIds.includes(e.stage_id)
+			(e: any) => connectionIds.includes(e.connection_id) ||
+				(Array.isArray(e.stage_id) && e.stage_id.some((sid: string) => stageIds.includes(sid)))
 		);
 
 		return {

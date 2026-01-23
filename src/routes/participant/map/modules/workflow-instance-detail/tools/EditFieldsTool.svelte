@@ -4,15 +4,17 @@
 	 *
 	 * Edits existing field values using FormRenderer in edit mode.
 	 * Only shows fields that are marked as editable in the tool config.
+	 * Supports tabbed UI when fields come from multiple stages.
 	 * Designed to be rendered within a ModuleShell.
 	 */
 	import { onMount } from 'svelte';
 	import { FormRenderer } from '$lib/components/form-renderer';
 	import { Button } from '$lib/components/ui/button';
+	import * as Tabs from '$lib/components/ui/tabs';
 	import { Save, X, Loader2 } from 'lucide-svelte';
 	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
 	import type { FormFieldWithValue } from '$lib/components/form-renderer';
-	import type { ToolEdit, FormField, FieldValue } from '../state.svelte';
+	import type { ToolEdit, FormField, FieldValue, EditableFieldsByStage } from '../state.svelte';
 
 	// ==========================================================================
 	// Props
@@ -27,13 +29,17 @@
 		existingFieldValues: FieldValue[];
 		/** Available form fields (from state) */
 		formFields: FormField[];
+		/** Fields grouped by stage (for tabbed UI) */
+		groupedFields?: EditableFieldsByStage[];
+		/** Initial active stage tab (to preserve selection from view mode) */
+		initialActiveStageId?: string;
 		/** Called when edit is saved successfully */
 		onSave: (values: Record<string, unknown>) => Promise<void>;
 		/** Called when user cancels */
 		onCancel: () => void;
 	}
 
-	let { editTool, instanceId, existingFieldValues, formFields, onSave, onCancel }: Props = $props();
+	let { editTool, instanceId, existingFieldValues, formFields, groupedFields, initialActiveStageId, onSave, onCancel }: Props = $props();
 
 	const gateway = getParticipantGateway();
 
@@ -46,42 +52,69 @@
 	let isSubmitting = $state(false);
 	let isLoading = $state(true);
 	let fileChanges = $state<Record<string, File[]>>({});
+	let activeStageTab = $state<string>('');
 
 	// ==========================================================================
 	// Derived
 	// ==========================================================================
 
-	// Filter to only editable fields
+	// Determine if we should use tabbed UI (multiple stages with editable fields)
+	const useTabbed = $derived(groupedFields && groupedFields.length > 1);
+
+	// Initialize active tab (run once when groupedFields changes)
+	$effect(() => {
+		if (groupedFields && groupedFields.length > 0 && !activeStageTab) {
+			// Try to use initialActiveStageId if it has editable fields
+			const initialHasFields = groupedFields.some(g => g.stageId === initialActiveStageId);
+			activeStageTab = initialHasFields && initialActiveStageId
+				? initialActiveStageId
+				: groupedFields[0].stageId;
+		}
+	});
+
+	// Helper to attach values to fields
+	function attachValuesToFields(fields: FormField[]): FormFieldWithValue[] {
+		return fields.map(field => {
+			// Get ALL existing values for this field (supports multiple files)
+			const fieldValuesForField = existingFieldValues.filter(fv => fv.field_key === field.id);
+
+			// Aggregate all file records
+			const storedFiles = fieldValuesForField
+				.filter(fv => fv.file_value)
+				.map(fv => ({
+					recordId: fv.id,
+					fileName: fv.file_value
+				}));
+
+			// For non-file fields, get the first value
+			const firstValue = fieldValuesForField.find(fv => fv.value);
+
+			return {
+				...field,
+				value: values[field.id] ?? firstValue?.value ?? undefined,
+				// Legacy single file support
+				fileValue: storedFiles[0]?.fileName || undefined,
+				fileRecordId: storedFiles[0]?.recordId || undefined,
+				// Multi-file support
+				storedFiles: storedFiles.length > 0 ? storedFiles : undefined
+			} as FormFieldWithValue;
+		});
+	}
+
+	// All editable fields (flat list for validation and backward compatibility)
 	const editableFields = $derived.by((): FormFieldWithValue[] => {
 		const editableFieldIds = editTool.editable_fields || [];
+		const filteredFields = formFields.filter(f => editableFieldIds.includes(f.id));
+		return attachValuesToFields(filteredFields);
+	});
 
-		return formFields
-			.filter(f => editableFieldIds.includes(f.id))
-			.map(field => {
-				// Get ALL existing values for this field (supports multiple files)
-				const fieldValuesForField = existingFieldValues.filter(fv => fv.field_key === field.id);
-
-				// Aggregate all file records
-				const storedFiles = fieldValuesForField
-					.filter(fv => fv.file_value)
-					.map(fv => ({
-						recordId: fv.id,
-						fileName: fv.file_value
-					}));
-
-				// For non-file fields, get the first value
-				const firstValue = fieldValuesForField.find(fv => fv.value);
-
-				return {
-					...field,
-					value: values[field.id] ?? firstValue?.value ?? undefined,
-					// Legacy single file support
-					fileValue: storedFiles[0]?.fileName || undefined,
-					fileRecordId: storedFiles[0]?.recordId || undefined,
-					// Multi-file support
-					storedFiles: storedFiles.length > 0 ? storedFiles : undefined
-				} as FormFieldWithValue;
-			});
+	// Fields grouped by stage with values attached (for tabbed UI)
+	const groupedFieldsWithValues = $derived.by(() => {
+		if (!groupedFields) return [];
+		return groupedFields.map(group => ({
+			...group,
+			fieldsWithValues: attachValuesToFields(group.fields)
+		}));
 	});
 
 	const hasFields = $derived(editableFields.length > 0);
@@ -195,17 +228,47 @@
 			</div>
 		</div>
 	{:else if hasFields}
-		<div class="p-4">
-			<FormRenderer
-				mode="edit"
-				fields={editableFields}
-				{values}
-				{errors}
-				paginated={false}
-				onValueChange={handleValueChange}
-				onFileChange={handleFileChange}
-			/>
-		</div>
+		{#if useTabbed}
+			<!-- Tabbed UI for multiple stages -->
+			<div class="p-4">
+				<Tabs.Root bind:value={activeStageTab}>
+					<Tabs.List class="w-full overflow-x-auto flex-nowrap mb-4">
+						{#each groupedFieldsWithValues as group}
+							<Tabs.Trigger value={group.stageId} class="text-xs whitespace-nowrap">
+								{group.stageName}
+							</Tabs.Trigger>
+						{/each}
+					</Tabs.List>
+
+					{#each groupedFieldsWithValues as group}
+						<Tabs.Content value={group.stageId}>
+							<FormRenderer
+								mode="edit"
+								fields={group.fieldsWithValues}
+								{values}
+								{errors}
+								paginated={false}
+								onValueChange={handleValueChange}
+								onFileChange={handleFileChange}
+							/>
+						</Tabs.Content>
+					{/each}
+				</Tabs.Root>
+			</div>
+		{:else}
+			<!-- Single stage or no grouping - flat list -->
+			<div class="p-4">
+				<FormRenderer
+					mode="edit"
+					fields={editableFields}
+					{values}
+					{errors}
+					paginated={false}
+					onValueChange={handleValueChange}
+					onFileChange={handleFileChange}
+				/>
+			</div>
+		{/if}
 	{:else}
 		<div class="flex-1 flex items-center justify-center p-4 py-12">
 			<p class="text-sm text-muted-foreground">No editable fields configured.</p>

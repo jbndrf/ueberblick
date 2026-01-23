@@ -1,8 +1,13 @@
 /**
- * Operation Log for Local Audit Trail
+ * Operation Log for OFFLINE Mode Audit Trail
  *
- * Tracks every data operation with actual timestamps (not sync time).
- * Each operation is logged independently, enabling full history even for offline changes.
+ * This module is used ONLY for offline mode to track local operations
+ * that need to be synced to the server later.
+ *
+ * When ONLINE: Audit trail is in PocketBase's `workflow_instance_tool_usage` collection
+ * When OFFLINE: Operations are logged here and synced when back online
+ *
+ * Note: This is currently reserved for future offline sync functionality.
  */
 
 import { getDB } from './db';
@@ -12,8 +17,7 @@ import type {
 	CollectionName,
 	OperationType,
 	OperationSyncStatus,
-	StoredOperationLogEntry,
-	ToolContext
+	StoredOperationLogEntry
 } from './types';
 
 // =============================================================================
@@ -21,8 +25,8 @@ import type {
 // =============================================================================
 
 /**
- * Create an operation log entry.
- * If toolCtx is provided, includes tool context for audit trail.
+ * Create an operation log entry for offline mode.
+ * Used to track local operations that need to be synced to the server later.
  */
 export function createOperationEntry(params: {
 	collection: CollectionName;
@@ -31,7 +35,8 @@ export function createOperationEntry(params: {
 	dataBefore: Record<string, unknown> | null;
 	dataAfter: Record<string, unknown> | null;
 	participantId: string;
-	toolCtx?: ToolContext;
+	instanceId?: string;
+	stageId?: string;
 }): OperationLogEntry {
 	const entry: OperationLogEntry = {
 		id: generateId(),
@@ -44,17 +49,10 @@ export function createOperationEntry(params: {
 		timestamp: new Date().toISOString(),
 		syncStatus: 'pending',
 		syncedAt: null,
-		syncError: null
+		syncError: null,
+		instanceId: params.instanceId,
+		stageId: params.stageId
 	};
-
-	// Add tool context if provided
-	if (params.toolCtx) {
-		entry.tool = params.toolCtx.tool;
-		entry.toolId = params.toolCtx.toolId;
-		entry.instanceId = params.toolCtx.instanceId;
-		entry.stageId = params.toolCtx.stageId;
-		entry.connectionId = params.toolCtx.connectionId;
-	}
 
 	return entry;
 }

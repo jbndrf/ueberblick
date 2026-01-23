@@ -7,14 +7,11 @@
  * Online mode: Routes directly to PocketBase
  * Offline mode: Routes to IndexedDB
  *
- * ALL writes are logged with before/after diff for audit trail.
- * Pass toolCtx to add tool context (which tool triggered the operation).
+ * Audit trail is handled at the tool level via workflow_instance_tool_usage collection.
  */
 
 import { getDB, type CachedRecord } from './db';
 import { getPocketBase } from '$lib/pocketbase';
-import { saveOperation, createOperationEntry } from './operation-log';
-import type { ToolContext, OperationLogEntry } from './types';
 
 // =============================================================================
 // Type Definitions
@@ -39,9 +36,9 @@ interface ListResult<T> {
 
 /** Collection proxy interface (matches PocketBase SDK) */
 export interface CollectionProxy<T = Record<string, unknown>> {
-	create(data: Partial<T>, toolCtx?: ToolContext): Promise<T>;
-	update(id: string, data: Partial<T>, toolCtx?: ToolContext): Promise<T>;
-	delete(id: string, toolCtx?: ToolContext): Promise<boolean>;
+	create(data: Partial<T>): Promise<T>;
+	update(id: string, data: Partial<T>): Promise<T>;
+	delete(id: string): Promise<boolean>;
 	getOne(id: string, options?: { expand?: string; fields?: string }): Promise<T>;
 	getList(page?: number, perPage?: number, options?: ListOptions): Promise<ListResult<T>>;
 	getFullList(options?: ListOptions): Promise<T[]>;
@@ -73,37 +70,8 @@ export function createParticipantGateway(participantId: string, projectId: strin
 	// Online/offline mode - starts online
 	let isOnline = $state(true);
 
-	// Operation log (reactive for UI)
-	let operationLog = $state<OperationLogEntry[]>([]);
-
-	// Pending count for UI
+	// Pending count for UI (offline records awaiting sync)
 	let pendingCount = $state(0);
-
-	// =========================================================================
-	// Change Logging - ALL writes are logged with before/after diff
-	// =========================================================================
-
-	async function logChange(
-		collectionName: string,
-		operation: 'create' | 'update' | 'delete',
-		recordId: string,
-		before: Record<string, unknown> | null,
-		after: Record<string, unknown> | null,
-		toolCtx?: ToolContext
-	): Promise<void> {
-		const entry = createOperationEntry({
-			collection: collectionName,
-			recordId,
-			operation,
-			dataBefore: before,
-			dataAfter: after,
-			participantId,
-			toolCtx
-		});
-
-		operationLog.push(entry);
-		await saveOperation(entry);
-	}
 
 	// =========================================================================
 	// Update Pending Count
@@ -129,14 +97,10 @@ export function createParticipantGateway(participantId: string, projectId: strin
 			// -----------------------------------------------------------------
 			// CREATE
 			// -----------------------------------------------------------------
-			async create(data: Partial<T>, toolCtx?: ToolContext): Promise<T> {
+			async create(data: Partial<T>): Promise<T> {
 				if (isOnline) {
 					// ONLINE: Write directly to PocketBase
 					const result = await pb.collection(name).create(data as Record<string, unknown>);
-
-					// Log the change with before=null, after=result
-					await logChange(name, 'create', result.id, null, result, toolCtx);
-
 					return result as T;
 				}
 
@@ -158,25 +122,17 @@ export function createParticipantGateway(participantId: string, projectId: strin
 				await db.put('records', record);
 				await updatePendingCount();
 
-				// Log the change
-				await logChange(name, 'create', id, null, record, toolCtx);
-
 				return record as unknown as T;
 			},
 
 			// -----------------------------------------------------------------
 			// UPDATE
 			// -----------------------------------------------------------------
-			async update(id: string, data: Partial<T>, toolCtx?: ToolContext): Promise<T> {
+			async update(id: string, data: Partial<T>): Promise<T> {
 				if (isOnline) {
-					// ONLINE: Get current state first for logging
-					const before = await pb.collection(name).getOne(id);
-					const after = await pb.collection(name).update(id, data as Record<string, unknown>);
-
-					// Log with before/after diff
-					await logChange(name, 'update', id, before, after, toolCtx);
-
-					return after as T;
+					// ONLINE: Write directly to PocketBase
+					const result = await pb.collection(name).update(id, data as Record<string, unknown>);
+					return result as T;
 				}
 
 				// OFFLINE: Update in IndexedDB
@@ -199,24 +155,16 @@ export function createParticipantGateway(participantId: string, projectId: strin
 				await db.put('records', updated);
 				await updatePendingCount();
 
-				// Log with before/after diff
-				await logChange(name, 'update', id, existing, updated, toolCtx);
-
 				return updated as unknown as T;
 			},
 
 			// -----------------------------------------------------------------
 			// DELETE
 			// -----------------------------------------------------------------
-			async delete(id: string, toolCtx?: ToolContext): Promise<boolean> {
+			async delete(id: string): Promise<boolean> {
 				if (isOnline) {
-					// ONLINE: Get current state first for logging
-					const before = await pb.collection(name).getOne(id);
+					// ONLINE: Delete directly from PocketBase
 					await pb.collection(name).delete(id);
-
-					// Log with before, after=null
-					await logChange(name, 'delete', id, before, null, toolCtx);
-
 					return true;
 				}
 
@@ -242,9 +190,6 @@ export function createParticipantGateway(participantId: string, projectId: strin
 				}
 
 				await updatePendingCount();
-
-				// Log with before, after=null
-				await logChange(name, 'delete', id, existing, null, toolCtx);
 
 				return true;
 			},
@@ -368,11 +313,6 @@ export function createParticipantGateway(participantId: string, projectId: strin
 		// Pending changes count (for UI)
 		get pendingCount() {
 			return pendingCount;
-		},
-
-		// Operation log access
-		get operationLog() {
-			return operationLog;
 		},
 
 		// Context

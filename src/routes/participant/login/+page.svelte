@@ -175,6 +175,7 @@
 								required
 								bind:value={$formData.token}
 								class={$errors.token ? 'border-destructive' : ''}
+								data-testid="token-input"
 							/>
 							{#if $errors.token}
 								<p class="text-sm text-destructive">{$errors.token}</p>
@@ -192,7 +193,7 @@
 						{/if}
 
 						<!-- Submit Button -->
-						<Button type="submit" class="w-full" disabled={$delayed}>
+						<Button type="submit" class="w-full" disabled={$delayed} data-testid="login-button">
 							{#if $delayed}
 								{m.participantLoginSubmitting()}
 							{:else}

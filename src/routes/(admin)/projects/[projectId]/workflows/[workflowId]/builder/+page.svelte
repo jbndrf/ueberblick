@@ -50,6 +50,7 @@
 		type VisualConfig
 	} from '$lib/workflow-builder';
 	import type { ToolInstance, FormToolConfig, EditToolConfig } from '$lib/workflow-builder/tools';
+	import { ToolBar } from '$lib/workflow-builder/components';
 	import type { ColumnPosition } from '$lib/workflow-builder';
 	import { deserialize } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
@@ -89,6 +90,9 @@
 				position_y: node.position.y
 			});
 		}
+
+		// Sync global tools to have all stage IDs
+		builderState.syncGlobalToolStages();
 
 		// Use server action for saving
 		const changes = builderState.getChanges();
@@ -182,7 +186,7 @@
 	 */
 	function getToolsForStage(stageId: string): ToolInstance[] {
 		const forms = builderState.getFormsForStage(stageId);
-		const editTools = builderState.getEditToolsForStage(stageId);
+		const editTools = builderState.getNonGlobalEditToolsForStage(stageId);
 		return [...formsToToolInstances(forms), ...editToolsToToolInstances(editTools)];
 	}
 
@@ -393,6 +397,9 @@
 			return builderState.getAncestorFormFields(selectionContext.attachedTo.connectionId);
 		} else if (selectionContext.attachedTo.type === 'stage') {
 			return builderState.getAncestorFormFieldsForStage(selectionContext.attachedTo.stageId);
+		} else if (selectionContext.attachedTo.type === 'global') {
+			// For global tools, get all form fields from all stages
+			return builderState.getAllFormFields();
 		}
 		return [];
 	});
@@ -400,7 +407,7 @@
 	// Stage edit tools for property view (when a stage is selected)
 	const stageEditTools = $derived.by((): ToolsEdit[] => {
 		if (selectionContext.type !== 'stage') return [];
-		const tools = builderState.getEditToolsForStage(selectionContext.stageId);
+		const tools = builderState.getNonGlobalEditToolsForStage(selectionContext.stageId);
 		return tools.map(t => t.data);
 	});
 
@@ -416,6 +423,25 @@
 		if (selectionContext.type !== 'action') return [];
 		const tools = builderState.getEditToolsForConnection(selectionContext.actionId);
 		return tools.map(t => t.data);
+	});
+
+	// Global edit tools (is_global=true, available on all stages)
+	const globalEditTools = $derived.by(() => {
+		return builderState.getGlobalEditTools();
+	});
+
+	// Convert global edit tools to ToolInstances for ToolBar display
+	const globalToolInstances = $derived.by((): ToolInstance[] => {
+		return globalEditTools.map((tool, index) => ({
+			id: tool.data.id,
+			toolType: 'edit',
+			config: {
+				toolType: 'edit' as const,
+				editableFields: tool.data.editable_fields || [],
+				buttonLabel: tool.data.name
+			} satisfies EditToolConfig,
+			order: index
+		}));
 	});
 
 	// Callback when a new node is added via drag-drop (from DefaultPanel)
@@ -777,12 +803,8 @@
 		builderState.updateEditTool(editToolId, { editable_fields: fieldIds });
 	}
 
-	function handleEditToolRolesChange(editToolId: string, roleIds: string[]) {
-		builderState.updateEditTool(editToolId, { allowed_roles: roleIds });
-	}
-
-	function handleEditToolVisualConfigChange(editToolId: string, config: VisualConfig) {
-		builderState.updateEditTool(editToolId, { visual_config: config });
+	function handleEditToolEditModeChange(editToolId: string, editMode: 'form_fields' | 'location') {
+		builderState.updateEditTool(editToolId, { edit_mode: editMode });
 	}
 
 	function handleEditToolClose() {
@@ -830,6 +852,47 @@
 			builderState.deleteEditTool(toolId);
 		}
 	}
+
+	// Global tool handlers
+	function handleOpenGlobalToolPicker() {
+		// Open context sidebar with tool picker for global tools
+		selectionContext = createContext.addTool({ type: 'global' });
+	}
+
+	function handleAddGlobalTool(toolType: string) {
+		// Currently only 'edit' tool type is supported for global tools
+		if (toolType === 'edit') {
+			const tool = builderState.addGlobalEditTool('form_fields');
+			// Select the newly created tool
+			selectionContext = createContext.editTool(tool.id, { type: 'global' });
+		}
+	}
+
+	function handleSelectGlobalTool(toolId: string) {
+		selectionContext = createContext.editTool(toolId, { type: 'global' });
+	}
+
+	function handleGlobalToolsLabelClick() {
+		selectionContext = createContext.globalTools();
+	}
+
+	function handleDeleteGlobalTool(toolType: string, toolId: string) {
+		if (toolType === 'edit') {
+			builderState.deleteEditTool(toolId);
+		}
+		// If we were viewing this tool, go back to global tools panel
+		if (selectionContext.type === 'editTool' && selectionContext.editToolId === toolId) {
+			selectionContext = createContext.globalTools();
+		}
+	}
+
+	// Currently selected global tool ID (for ToolBar highlighting)
+	const selectedGlobalToolId = $derived.by(() => {
+		if (selectionContext.type === 'editTool' && selectionContext.attachedTo.type === 'global') {
+			return selectionContext.editToolId;
+		}
+		return undefined;
+	});
 </script>
 
 <div class="workflow-builder">
@@ -930,6 +993,7 @@
 			onDuplicateField={handleDuplicateField}
 			onEditField={handleEditField}
 			onDeleteField={handleDeleteField}
+			onAddGlobalTool={handleAddGlobalTool}
 		/>
 
 		<!-- Canvas (main area) -->
@@ -952,6 +1016,17 @@
 					onConnect={handleConnect}
 				/>
 			</SvelteFlowProvider>
+
+			<!-- Global Tools - same style as stage/edge toolbars -->
+			<div class="global-tools-bar">
+				<button class="global-tools-label" onclick={handleGlobalToolsLabelClick}>Global Tools</button>
+				<ToolBar
+					tools={globalToolInstances}
+					selectedToolId={selectedGlobalToolId}
+					onSelectTool={handleSelectGlobalTool}
+					onAddTool={handleOpenGlobalToolPicker}
+				/>
+			</div>
 		</div>
 
 		<!-- Right Sidebar (context-aware: PropertyView when selected, PreviewView otherwise) -->
@@ -969,6 +1044,7 @@
 			{stageEditTools}
 			{connectionForms}
 			{connectionEditTools}
+			globalEditTools={globalEditTools.map(t => t.data)}
 			onStageRename={handleStageRename}
 			onStageDelete={handleDeleteStage}
 			onStageRolesChange={handleStageRolesChange}
@@ -996,8 +1072,10 @@
 			onFormVisualConfigChange={handleFormVisualConfigChange}
 			onEditToolNameChange={handleEditToolNameChange}
 			onEditToolFieldsChange={handleEditToolFieldsChange}
+			onEditToolEditModeChange={handleEditToolEditModeChange}
 			onEditToolDelete={handleEditToolDelete}
 			onEditToolClose={handleEditToolClose}
+			onGlobalToolDelete={handleDeleteGlobalTool}
 		/>
 	</div>
 </div>
@@ -1051,6 +1129,38 @@
 		flex: 1;
 		position: relative;
 		background: hsl(var(--card));
+	}
+
+	/* Global Tools Bar - positioned top-left of canvas */
+	.global-tools-bar {
+		position: absolute;
+		top: 1rem;
+		left: 1rem;
+		z-index: 10;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.global-tools-label {
+		font-size: 0.6875rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: hsl(var(--muted-foreground));
+		padding: 0.25rem 0.5rem;
+		background: oklch(from var(--card) l c h / 0.9);
+		border: 1px solid transparent;
+		border-radius: 0.25rem;
+		backdrop-filter: blur(4px);
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.global-tools-label:hover {
+		color: hsl(var(--foreground));
+		background: hsl(var(--accent));
+		border-color: hsl(var(--border));
 	}
 
 	/* XYFlow overrides */

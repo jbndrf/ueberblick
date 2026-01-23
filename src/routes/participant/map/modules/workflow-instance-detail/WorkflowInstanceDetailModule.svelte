@@ -6,14 +6,16 @@
 		type WorkflowInstanceDetailState,
 		type WorkflowConnection,
 		type ToolQueueItem,
-		type ToolEdit
+		type ToolEdit,
+		type ToolUsageRecord
 	} from './state.svelte';
 	import type { WorkflowInstanceSelection } from '../types';
 	import { Separator } from '$lib/components/ui/separator';
 	import * as Card from '$lib/components/ui/card';
 	import * as Tabs from '$lib/components/ui/tabs';
-	import { MapPin, Clock } from 'lucide-svelte';
-	import { FormFillTool, EditFieldsTool, ViewFieldsTool } from './tools';
+	import { MapPin, Clock, ChevronDown } from 'lucide-svelte';
+	import { FormFillTool, EditFieldsTool, ViewFieldsTool, LocationEditTool } from './tools';
+	import type { Map as LeafletMap } from 'leaflet';
 
 	// ==========================================================================
 	// Props
@@ -23,10 +25,16 @@
 		selection: WorkflowInstanceSelection;
 		/** Controls expanded/peek state on mobile (bindable) */
 		isExpanded?: boolean;
+		/** Reference to the Leaflet map (needed for location editing) */
+		map?: LeafletMap | null;
+		/** Exposes whether location editing is active (bindable) */
+		isEditingLocation?: boolean;
 		onClose: () => void;
+		/** Called when instance data is updated (e.g., location changed) so parent can refresh */
+		onInstanceUpdated?: () => void;
 	}
 
-	let { selection, isExpanded = $bindable(false), onClose }: Props = $props();
+	let { selection, isExpanded = $bindable(false), map = null, isEditingLocation = $bindable(false), onClose, onInstanceUpdated }: Props = $props();
 
 	// ==========================================================================
 	// State
@@ -47,6 +55,8 @@
 
 	let activeToolFlow = $state<ActiveToolFlow | null>(null);
 	let activeEditTool = $state<ToolEdit | null>(null);
+	let isLocationPickerActive = $state(false);
+	let activeLocationEditTool = $state<ToolEdit | null>(null);
 
 	// ==========================================================================
 	// Effects
@@ -61,7 +71,14 @@
 		activeTab = 'overview';
 		activeToolFlow = null;
 		activeEditTool = null;
+		isLocationPickerActive = false;
+		activeLocationEditTool = null;
 		newState.load();
+	});
+
+	// Sync internal location picker state with bindable prop
+	$effect(() => {
+		isEditingLocation = isLocationPickerActive;
 	});
 
 	// ==========================================================================
@@ -87,6 +104,9 @@
 		}
 		if (activeEditTool) {
 			return activeEditTool.name || 'Edit';
+		}
+		if (activeLocationEditTool) {
+			return activeLocationEditTool.name || 'Edit Location';
 		}
 		return detailState?.workflow?.name as string || 'Workflow';
 	});
@@ -184,7 +204,16 @@
 	}
 
 	function handleEditToolClick(editTool: ToolEdit) {
-		activeEditTool = editTool;
+		if (editTool.edit_mode === 'location') {
+			// Location edit mode - show map picker
+			activeLocationEditTool = editTool;
+			isLocationPickerActive = true;
+			// Close sheet so user has full map view for location editing
+			isOpen = false;
+		} else {
+			// Form fields edit mode
+			activeEditTool = editTool;
+		}
 	}
 
 	// ==========================================================================
@@ -197,10 +226,31 @@
 		const targetStageId = activeToolFlow.connection.to_stage_id;
 
 		try {
-			// Save form field values
+			// Build list of field values for audit log
 			const fieldEntries = Object.entries(formValues).filter(
 				([_, value]) => value !== null && value !== undefined && value !== ''
 			);
+
+			const createdFields = fieldEntries.map(([fieldId, value]) => ({
+				field_key: fieldId,
+				value: Array.isArray(value) && value[0] instanceof File
+					? `[${(value as File[]).length} file(s)]`
+					: typeof value === 'object' ? JSON.stringify(value) : String(value)
+			}));
+
+			// 1. Create tool_usage record with actual data (audit trail)
+			const toolUsage = await gateway.collection('workflow_instance_tool_usage').create({
+				instance_id: activeToolFlow.instanceId,
+				stage_id: targetStageId,
+				executed_by: gateway.participantId,
+				executed_at: new Date().toISOString(),
+				metadata: {
+					action: 'form_fill',
+					created_fields: createdFields
+				}
+			}) as { id: string };
+
+			// 2. Save form field values with link to tool_usage
 
 			for (const [fieldId, value] of fieldEntries) {
 				if (Array.isArray(value) && value.length > 0 && value[0] instanceof File) {
@@ -212,6 +262,7 @@
 						formData.append('stage_id', targetStageId);
 						formData.append('value', '');
 						formData.append('file_value', file);
+						formData.append('created_by_action', toolUsage.id);
 
 						await gateway.collection('workflow_instance_field_values').create(formData as any);
 					}
@@ -223,7 +274,8 @@
 						instance_id: activeToolFlow.instanceId,
 						field_key: fieldId,
 						stage_id: targetStageId,
-						value: stringValue
+						value: stringValue,
+						created_by_action: toolUsage.id
 					});
 				}
 			}
@@ -253,10 +305,27 @@
 	async function executeToolFlowTransition() {
 		if (!activeToolFlow || !detailState || !gateway) return;
 
+		const fromStageId = detailState.instance?.current_stage_id as string;
+		const toStageId = activeToolFlow.connection.to_stage_id;
+
 		try {
+			// Log stage transition (audit trail)
+			await gateway.collection('workflow_instance_tool_usage').create({
+				instance_id: activeToolFlow.instanceId,
+				stage_id: fromStageId,
+				executed_by: gateway.participantId,
+				executed_at: new Date().toISOString(),
+				metadata: {
+					action: 'stage_transition',
+					from_stage_id: fromStageId,
+					to_stage_id: toStageId,
+					connection_id: activeToolFlow.connection.id
+				}
+			});
+
 			// Update instance to new stage
 			await gateway.collection('workflow_instances').update(activeToolFlow.instanceId, {
-				current_stage_id: activeToolFlow.connection.to_stage_id
+				current_stage_id: toStageId
 			});
 
 			// Refresh state
@@ -277,31 +346,95 @@
 	// Edit Tool Handlers
 	// ==========================================================================
 
+	/**
+	 * Determine the correct stage_id for a field based on which form it belongs to.
+	 * This ensures field values are stored with the stage where the form is defined,
+	 * not the current stage when editing via global edit tools.
+	 */
+	function getStageIdForField(fieldId: string): string | null {
+		if (!detailState) return null;
+
+		// Find the field definition
+		const field = detailState.formFields.find(f => f.id === fieldId);
+		if (!field) return null;
+
+		// Find the form this field belongs to
+		const form = detailState.forms.find(f => f.id === field.form_id);
+		if (!form) return null;
+
+		// If form is directly attached to a stage, use that
+		if (form.stage_id) {
+			return form.stage_id;
+		}
+
+		// If form is attached to a connection, use the connection's target stage
+		if (form.connection_id) {
+			const connection = detailState.connections.find(c => c.id === form.connection_id);
+			if (connection) {
+				return connection.to_stage_id;
+			}
+		}
+
+		return null;
+	}
+
 	async function handleEditSave(values: Record<string, unknown>) {
 		if (!activeEditTool || !detailState || !gateway) return;
 
 		const currentStageId = detailState.instance?.current_stage_id as string;
 
 		try {
-			// Update or create field values
+			// Build changes array for audit log (before/after values)
+			const changes: Array<{ field_key: string; before: string | null; after: string }> = [];
+			for (const [fieldId, newValue] of Object.entries(values)) {
+				if (newValue === null || newValue === undefined || newValue === '') continue;
+
+				const existing = detailState.fieldValues.find(fv => fv.field_key === fieldId);
+				const oldValue = existing?.value || null;
+				const newValueStr = Array.isArray(newValue) && newValue[0] instanceof File
+					? `[${(newValue as File[]).length} file(s)]`
+					: typeof newValue === 'object' ? JSON.stringify(newValue) : String(newValue);
+
+				// Only log if actually changed (or new)
+				if (oldValue !== newValueStr) {
+					changes.push({ field_key: fieldId, before: oldValue, after: newValueStr });
+				}
+			}
+
+			// 1. Create tool_usage record with actual changes (audit trail)
+			const toolUsage = await gateway.collection('workflow_instance_tool_usage').create({
+				instance_id: detailState.instanceId,
+				stage_id: currentStageId,
+				executed_by: gateway.participantId,
+				executed_at: new Date().toISOString(),
+				metadata: {
+					action: 'edit',
+					changes: changes
+				}
+			}) as { id: string };
+
+			// 2. Update or create field values with link to tool_usage
 			for (const [fieldId, value] of Object.entries(values)) {
 				if (value === null || value === undefined || value === '') continue;
 
-				// Find existing field value
+				// Find existing field value (by field_key only - the value may have been created in an earlier stage)
 				const existing = detailState.fieldValues.find(
-					fv => fv.field_key === fieldId && fv.stage_id === currentStageId
+					fv => fv.field_key === fieldId
 				);
+
+				// Determine the correct stage_id for this field (based on its form, not current stage)
+				const fieldStageId = getStageIdForField(fieldId) || currentStageId;
 
 				if (Array.isArray(value) && value.length > 0 && value[0] instanceof File) {
 					// File upload - create separate record for each file
-					// Note: For edits, we create new records for each file
 					for (const file of value as File[]) {
 						const formData = new FormData();
 						formData.append('instance_id', detailState.instanceId);
 						formData.append('field_key', fieldId);
-						formData.append('stage_id', currentStageId);
+						formData.append('stage_id', fieldStageId);
 						formData.append('value', '');
 						formData.append('file_value', file);
+						formData.append('created_by_action', toolUsage.id);
 
 						await gateway.collection('workflow_instance_field_values').create(formData as any);
 					}
@@ -310,15 +443,20 @@
 					const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
 
 					if (existing) {
+						// Update existing - link with last_modified_by_action
 						await gateway.collection('workflow_instance_field_values').update(existing.id, {
-							value: stringValue
+							value: stringValue,
+							last_modified_by_action: toolUsage.id,
+							last_modified_at: new Date().toISOString()
 						});
 					} else {
+						// Create new - use the field's original stage, not current stage
 						await gateway.collection('workflow_instance_field_values').create({
 							instance_id: detailState.instanceId,
 							field_key: fieldId,
-							stage_id: currentStageId,
-							value: stringValue
+							stage_id: fieldStageId,
+							value: stringValue,
+							created_by_action: toolUsage.id
 						});
 					}
 				}
@@ -335,6 +473,49 @@
 
 	function handleEditCancel() {
 		activeEditTool = null;
+	}
+
+	// ==========================================================================
+	// Location Edit Handlers
+	// ==========================================================================
+
+	async function handleLocationConfirm(coordinates: { lat: number; lng: number }) {
+		if (!detailState || !gateway) return;
+
+		try {
+			// 1. Create tool_usage record with location change (audit trail)
+			await gateway.collection('workflow_instance_tool_usage').create({
+				instance_id: detailState.instanceId,
+				stage_id: detailState.instance?.current_stage_id,
+				executed_by: gateway.participantId,
+				executed_at: new Date().toISOString(),
+				metadata: {
+					action: 'location_edit',
+					before: detailState.instance?.location,
+					after: { lat: coordinates.lat, lon: coordinates.lng }
+				}
+			});
+
+			// 2. Update instance location
+			await gateway.collection('workflow_instances').update(detailState.instanceId, {
+				location: { lat: coordinates.lat, lon: coordinates.lng }
+			});
+
+			// Close location picker (this triggers cleanup)
+			isLocationPickerActive = false;
+			activeLocationEditTool = null;
+
+			// Refresh state and notify parent
+			await detailState.refresh();
+			onInstanceUpdated?.();
+		} catch (error) {
+			console.error('Failed to update location:', error);
+		}
+	}
+
+	function handleLocationCancel() {
+		isLocationPickerActive = false;
+		activeLocationEditTool = null;
 	}
 </script>
 
@@ -359,11 +540,14 @@
 					onCancel={handleToolFlowCancel}
 				/>
 			{:else if currentTool?.type === 'edit' && detailState}
+				{@const editToolInFlow = currentTool.tool as ToolEdit}
 				<EditFieldsTool
-					editTool={currentTool.tool as ToolEdit}
+					editTool={editToolInFlow}
 					instanceId={detailState.instanceId}
 					existingFieldValues={detailState.fieldValues}
-					formFields={detailState.formFields}
+					formFields={detailState.getFormFieldsForReachedStages()}
+					groupedFields={detailState.getEditableFieldsGroupedByStage(editToolInFlow.editable_fields || [])}
+					initialActiveStageId={detailState.activeStageTab}
 					onSave={async (values) => {
 						// For edit tools in a connection flow, save and advance
 						await handleEditSave(values);
@@ -377,7 +561,9 @@
 				editTool={activeEditTool}
 				instanceId={detailState.instanceId}
 				existingFieldValues={detailState.fieldValues}
-				formFields={detailState.formFields}
+				formFields={detailState.getFormFieldsForReachedStages()}
+				groupedFields={detailState.getEditableFieldsGroupedByStage(activeEditTool.editable_fields || [])}
+				initialActiveStageId={detailState.activeStageTab}
 				onSave={handleEditSave}
 				onCancel={handleEditCancel}
 			/>
@@ -422,7 +608,7 @@
 						style="grid-template-columns: repeat({tabs.length}, minmax(0, 1fr))"
 					>
 						{#each tabs as tab}
-							<Tabs.Trigger value={tab.id} class="text-xs sm:text-sm">
+							<Tabs.Trigger value={tab.id} class="text-xs sm:text-sm" data-testid="tab-{tab.id}">
 								{tab.label}
 							</Tabs.Trigger>
 						{/each}
@@ -540,12 +726,129 @@
 
 					<Tabs.Content value="history" class="pt-4">
 						<!-- HISTORY TAB -->
-						<div class="space-y-4">
-							<h3 class="font-semibold text-foreground">Activity History</h3>
-							<div class="text-center py-12 text-muted-foreground">
-								<Clock class="w-12 h-12 mx-auto mb-2 opacity-50" />
-								<p class="text-sm">Activity history coming soon</p>
-							</div>
+						<div class="space-y-2">
+							{#if !detailState || detailState.toolUsageHistory.length === 0}
+								<div class="text-center py-12 text-muted-foreground">
+									<Clock class="w-12 h-12 mx-auto mb-2 opacity-50" />
+									<p class="text-sm">No activity yet</p>
+								</div>
+							{:else}
+								{#each detailState.toolUsageHistory as entry, index (entry.id)}
+									{@const metadata = entry.metadata}
+									{@const executedBy = entry.expand?.executed_by?.name || entry.expand?.executed_by?.email || 'Unknown'}
+									{@const executedAt = new Date(entry.executed_at).toLocaleString()}
+									{@const itemCount = (metadata.action === 'form_fill' || metadata.action === 'instance_created') ? metadata.created_fields?.length : metadata.action === 'edit' ? metadata.changes?.length : 1}
+									<details class="group border rounded-lg overflow-hidden" data-testid="history-entry">
+										<summary class="flex items-center justify-between p-3 cursor-pointer hover:bg-muted/50 select-none">
+											<div class="flex items-center gap-2">
+												<span class="text-xs font-medium px-2 py-0.5 rounded-full {metadata.action === 'instance_created' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : metadata.action === 'stage_transition' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' : 'bg-muted'}">
+													{#if metadata.action === 'instance_created'}
+														Instance Created
+													{:else if metadata.action === 'form_fill'}
+														Form Submitted
+													{:else if metadata.action === 'edit'}
+														Fields Edited
+													{:else if metadata.action === 'location_edit'}
+														Location Changed
+													{:else if metadata.action === 'stage_transition'}
+														Stage Advanced
+													{:else}
+														Action
+													{/if}
+												</span>
+												{#if itemCount && itemCount > 0}
+													<span class="text-xs text-muted-foreground">({itemCount} {itemCount === 1 ? 'field' : 'fields'})</span>
+												{/if}
+											</div>
+											<div class="flex items-center gap-2">
+												<span class="text-xs text-muted-foreground">{executedAt}</span>
+												<ChevronDown class="w-4 h-4 text-muted-foreground transition-transform group-open:rotate-180" />
+											</div>
+										</summary>
+										<div class="px-3 pb-3 pt-1 border-t bg-muted/20">
+											<p class="text-xs text-muted-foreground mb-2">by {executedBy}</p>
+
+											{#if metadata.action === 'instance_created' && metadata.created_fields}
+												<div class="text-sm space-y-1">
+													{#if metadata.location}
+														<div class="flex gap-2 mb-2">
+															<span class="text-muted-foreground">Location:</span>
+															<span class="font-medium">{metadata.location.lat.toFixed(5)}, {metadata.location.lon.toFixed(5)}</span>
+														</div>
+													{/if}
+													{#each metadata.created_fields as field}
+														{@const fieldDef = detailState.formFields.find(f => f.id === field.field_key)}
+														<div class="flex gap-2">
+															<span class="text-muted-foreground">{fieldDef?.field_label || field.field_key}:</span>
+															<span class="font-medium truncate">{field.value}</span>
+														</div>
+													{/each}
+												</div>
+											{/if}
+
+											{#if metadata.action === 'form_fill' && metadata.created_fields}
+												<div class="text-sm space-y-1">
+													{#each metadata.created_fields as field}
+														{@const fieldDef = detailState.formFields.find(f => f.id === field.field_key)}
+														<div class="flex gap-2">
+															<span class="text-muted-foreground">{fieldDef?.field_label || field.field_key}:</span>
+															<span class="font-medium truncate">{field.value}</span>
+														</div>
+													{/each}
+												</div>
+											{/if}
+
+											{#if metadata.action === 'edit' && metadata.changes}
+												<div class="text-sm space-y-1">
+													{#each metadata.changes as change}
+														{@const fieldDef = detailState.formFields.find(f => f.id === change.field_key)}
+														<div class="space-y-0.5">
+															<span class="text-muted-foreground">{fieldDef?.field_label || change.field_key}:</span>
+															<div class="flex items-center gap-2 text-xs">
+																<span class="line-through text-muted-foreground">{change.before || '(empty)'}</span>
+																<span class="text-muted-foreground">-></span>
+																<span class="font-medium">{change.after}</span>
+															</div>
+														</div>
+													{/each}
+												</div>
+											{/if}
+
+											{#if metadata.action === 'location_edit'}
+												<div class="text-sm">
+													<div class="flex items-center gap-2 text-xs">
+														{#if metadata.before}
+															<span class="text-muted-foreground">
+																{metadata.before.lat.toFixed(5)}, {metadata.before.lon.toFixed(5)}
+															</span>
+														{:else}
+															<span class="text-muted-foreground">(no location)</span>
+														{/if}
+														<span class="text-muted-foreground">-></span>
+														{#if metadata.after}
+															<span class="font-medium">
+																{metadata.after.lat.toFixed(5)}, {metadata.after.lon.toFixed(5)}
+															</span>
+														{/if}
+													</div>
+												</div>
+											{/if}
+
+											{#if metadata.action === 'stage_transition'}
+												{@const fromStage = detailState.stages.find(s => s.id === metadata.from_stage_id)}
+												{@const toStage = detailState.stages.find(s => s.id === metadata.to_stage_id)}
+												<div class="text-sm">
+													<div class="flex items-center gap-2 text-xs">
+														<span class="text-muted-foreground">{fromStage?.stage_name || 'Unknown'}</span>
+														<span class="text-muted-foreground">-></span>
+														<span class="font-medium">{toStage?.stage_name || 'Unknown'}</span>
+													</div>
+												</div>
+											{/if}
+										</div>
+									</details>
+								{/each}
+							{/if}
 						</div>
 					</Tabs.Content>
 				</Tabs.Root>
@@ -553,6 +856,20 @@
 		{/if}
 	{/snippet}
 </ModuleShell>
+
+<!-- Location Edit Tool (rendered as map overlay) -->
+{#if isLocationPickerActive && map && detailState}
+	{@const location = detailState.instance?.location as { lat: number; lon: number } | null}
+	{@const buttonLabel = (activeLocationEditTool?.visual_config?.button_label as string) || 'Update Location'}
+	<LocationEditTool
+		{map}
+		initialCoordinates={location ? { lat: location.lat, lng: location.lon } : null}
+		confirmLabel={buttonLabel}
+		bind:isActive={isLocationPickerActive}
+		onConfirm={handleLocationConfirm}
+		onCancel={handleLocationCancel}
+	/>
+{/if}
 
 <style>
 	/* Action Button - Default (no custom color) */

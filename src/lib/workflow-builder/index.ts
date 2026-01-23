@@ -28,6 +28,7 @@ export type {
 	ColumnPosition,
 	ItemStatus,
 	TrackedItem,
+	EditMode,
 	// Field option types
 	FieldOption,
 	TextValidation,

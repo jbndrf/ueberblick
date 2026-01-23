@@ -120,12 +120,13 @@ export type TrackedFieldValue = TrackedItem<FieldValue>;
 export type TrackedToolUsage = TrackedItem<ToolUsage>;
 
 // =============================================================================
-// Tool Context (for audit logging)
+// Tool Context (DEPRECATED - for reference only)
 // =============================================================================
 
 /**
- * Context provided by tools when calling gateway methods.
- * If provided, the operation is logged to workflow_instance_tool_usage.
+ * @deprecated No longer used by gateway. Audit trail is now handled by:
+ * - ONLINE: Tools create `workflow_instance_tool_usage` records directly
+ * - OFFLINE: Reserved for future offline sync functionality
  */
 export interface ToolContext {
 	/** Tool type identifier ('edit' | 'form' | future tools) */
@@ -143,7 +144,7 @@ export interface ToolContext {
 }
 
 // =============================================================================
-// Operation Log Types (for offline audit tracking)
+// Operation Log Types (for OFFLINE mode only)
 // =============================================================================
 
 export type OperationType = 'create' | 'update' | 'delete';
@@ -154,9 +155,12 @@ export type CollectionName = string;
 export type OperationSyncStatus = 'pending' | 'synced' | 'failed';
 
 /**
- * Operation log entry for local audit trail.
- * Tracks every change with actual timestamp (not sync time).
- * Synced to workflow_instance_tool_usage when online.
+ * Operation log entry for OFFLINE mode local audit trail.
+ *
+ * When ONLINE: Audit is in PocketBase `workflow_instance_tool_usage` collection
+ * When OFFLINE: Operations are tracked here for later sync
+ *
+ * Reserved for future offline sync functionality.
  */
 export interface OperationLogEntry {
 	id: string;
@@ -172,7 +176,7 @@ export interface OperationLogEntry {
 	syncedAt: string | null;
 	syncError: string | null;
 
-	// Tool context fields (from ToolContext when provided)
+	// Context fields for linking to workflow instances
 	/** Tool type that triggered this operation */
 	tool?: string;
 	/** ID of the tool definition record */

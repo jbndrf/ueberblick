@@ -360,13 +360,21 @@
 	}
 
 	// Create Leaflet icon for workflow instance using workflow's icon_config or marker_color
-	function createWorkflowInstanceIcon(L: typeof import('leaflet'), workflow: WorkflowDef | undefined) {
+	function createWorkflowInstanceIcon(L: typeof import('leaflet'), workflow: WorkflowDef | undefined, instanceId: string) {
 		const iconConfig = workflow?.icon_config;
 		const markerColor = workflow?.marker_color || '#6366f1'; // Default to indigo
 
-		// If workflow has icon_config with SVG, use it
+		// If workflow has icon_config with SVG, use it (but still add instance id)
 		if (iconConfig?.svgContent) {
-			return createMarkerIcon(L, { icon_config: iconConfig } as MarkerCategory);
+			const baseIcon = createMarkerIcon(L, { icon_config: iconConfig } as MarkerCategory);
+			// Wrap in container with data-instance-id for testing
+			return L.divIcon({
+				html: `<div data-instance-id="${instanceId}">${baseIcon.options.html || ''}</div>`,
+				className: baseIcon.options.className || 'custom-marker-icon',
+				iconSize: baseIcon.options.iconSize,
+				iconAnchor: baseIcon.options.iconAnchor,
+				popupAnchor: baseIcon.options.popupAnchor
+			});
 		}
 
 		// Otherwise create a simple colored circle marker
@@ -379,7 +387,7 @@
 		`;
 
 		return L.divIcon({
-			html: `<div class="workflow-instance-icon">${svgContent}</div>`,
+			html: `<div class="workflow-instance-icon" data-instance-id="${instanceId}">${svgContent}</div>`,
 			className: 'custom-marker-icon',
 			iconSize: [size, size],
 			iconAnchor: [size / 2, size / 2],
@@ -403,16 +411,22 @@
 			workflowInstanceLayers.delete(id);
 		}
 
-		// Add visible instances that aren't on the map yet
+		// Add or update visible instances
 		for (const instance of instancesToShow) {
 			if (!instance.location) continue;
 
 			const existingMarker = workflowInstanceLayers.get(instance.id);
 
-			if (!existingMarker) {
+			if (existingMarker) {
+				// Update existing marker position if it changed
+				const currentLatLng = existingMarker.getLatLng();
+				if (currentLatLng.lat !== instance.location.lat || currentLatLng.lng !== instance.location.lon) {
+					existingMarker.setLatLng([instance.location.lat, instance.location.lon]);
+				}
+			} else {
 				// Create new marker
 				const workflow = instance.expand?.workflow_id;
-				const icon = createWorkflowInstanceIcon(L, workflow);
+				const icon = createWorkflowInstanceIcon(L, workflow, instance.id);
 
 				const leafletMarker = L.marker([instance.location.lat, instance.location.lon], { icon })
 					.addTo(map);
@@ -525,7 +539,7 @@
 	});
 </script>
 
-<div bind:this={mapContainer} class="pointer-events-auto h-full w-full"></div>
+<div bind:this={mapContainer} class="pointer-events-auto h-full w-full" data-testid="map-canvas"></div>
 
 <style>
 	:global(.custom-marker-icon) {

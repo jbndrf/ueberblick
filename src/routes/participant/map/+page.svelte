@@ -68,6 +68,9 @@
 	// Shared bottom sheet expanded state (preserves peek/expanded when switching sheets)
 	let sheetExpanded = $state(false);
 
+	// Track if location editing is active (from WorkflowInstanceDetailModule)
+	let isEditingLocation = $state(false);
+
 	// Data state - loaded via gateway
 	let mapLayers = $state<any[]>([]);
 	let markers = $state<any[]>([]);
@@ -256,9 +259,30 @@
 
 			console.log('Workflow instance created:', instance.id);
 
-			// Save form field values
+			// Build list of field values for audit log
 			const fieldEntries = Object.entries(formValues).filter(([_, value]) => value !== null && value !== undefined && value !== '');
 
+			const createdFields = fieldEntries.map(([fieldId, value]) => ({
+				field_key: fieldId,
+				value: Array.isArray(value) && value[0] instanceof File
+					? `[${(value as File[]).length} file(s)]`
+					: typeof value === 'object' ? JSON.stringify(value) : String(value)
+			}));
+
+			// Create tool_usage record for audit trail (instance creation)
+			const toolUsage = await gateway.collection('workflow_instance_tool_usage').create({
+				instance_id: instance.id,
+				stage_id: startStage.id,
+				executed_by: gateway.participantId,
+				executed_at: new Date().toISOString(),
+				metadata: {
+					action: 'instance_created',
+					location: coordinates ? { lat: coordinates.lat, lon: coordinates.lng } : null,
+					created_fields: createdFields
+				}
+			}) as { id: string };
+
+			// Save form field values with link to tool_usage
 			for (const [fieldId, value] of fieldEntries) {
 				// Handle file values separately
 				if (Array.isArray(value) && value.length > 0 && value[0] instanceof File) {
@@ -270,6 +294,7 @@
 						formData.append('stage_id', startStage.id);
 						formData.append('value', '');
 						formData.append('file_value', file);
+						formData.append('created_by_action', toolUsage.id);
 
 						await gateway.collection('workflow_instance_field_values').create(formData);
 					}
@@ -281,16 +306,19 @@
 						instance_id: instance.id,
 						field_key: fieldId,
 						stage_id: startStage.id,
-						value: stringValue
+						value: stringValue,
+						created_by_action: toolUsage.id
 					});
 				}
 			}
 
-			// Refresh instances
-			const instancesResult = await gateway.collection('workflow_instances').getFullList({
-				expand: 'workflow_id'
-			});
-			workflowInstances = instancesResult;
+			// Refresh instances and update visibility filter
+			await refreshWorkflowInstances();
+
+			// Ensure the new workflow type is visible
+			if (!visibleWorkflowIds.includes(workflow.id)) {
+				visibleWorkflowIds = [...visibleWorkflowIds, workflow.id];
+			}
 
 			// Close form and show the new instance
 			formFillOpen = false;
@@ -308,6 +336,17 @@
 	}
 
 	// ==========================================================================
+	// Refresh Helpers
+	// ==========================================================================
+
+	async function refreshWorkflowInstances() {
+		const instancesResult = await gateway.collection('workflow_instances').getFullList({
+			expand: 'workflow_id'
+		});
+		workflowInstances = instancesResult;
+	}
+
+	// ==========================================================================
 	// Map Handlers
 	// ==========================================================================
 
@@ -316,6 +355,9 @@
 	}
 
 	function handleMapClick() {
+		// Don't close if location editing is active (let LocationEditTool handle clicks)
+		if (isEditingLocation) return;
+
 		// Close sidebar when clicking on empty map area (not dragging)
 		if (selection.type !== 'none') {
 			selection = createSelection.none();
@@ -359,6 +401,7 @@
 		{workflows}
 		{map}
 		onWorkflowSelect={handleWorkflowSelect}
+		{isEditingLocation}
 	/>
 
 	<!-- Desktop Workflow Selector (mobile handled by BottomControlBar) -->
@@ -395,8 +438,11 @@
 	{#if selection.type === 'workflowInstance'}
 		<WorkflowInstanceDetailModule
 			{selection}
+			{map}
 			bind:isExpanded={sheetExpanded}
+			bind:isEditingLocation
 			onClose={handleSelectionClose}
+			onInstanceUpdated={refreshWorkflowInstances}
 		/>
 	{/if}
 

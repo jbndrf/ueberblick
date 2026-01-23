@@ -163,6 +163,19 @@ export class WorkflowBuilderState {
 			this.addEntryConnection(newStage.id);
 		}
 
+		// Add new stage to all global tools
+		for (const tool of this.editTools) {
+			if (tool.data.is_global && tool.status !== 'deleted') {
+				if (!tool.data.stage_id) {
+					tool.data.stage_id = [];
+				}
+				tool.data.stage_id.push(newStage.id);
+				if (tool.status === 'unchanged') {
+					tool.status = 'modified';
+				}
+			}
+		}
+
 		return newStage;
 	}
 
@@ -231,10 +244,28 @@ export class WorkflowBuilderState {
 			this.deleteForm(form.data.id);
 		}
 
-		// Delete edit tools attached directly to this stage
-		const relatedEditTools = this.editTools.filter((e) => e.data.stage_id === id);
-		for (const tool of relatedEditTools) {
-			this.deleteEditTool(tool.data.id);
+		// Handle edit tools with array-based stage_id
+		for (const tool of this.editTools) {
+			if (tool.status === 'deleted') continue;
+			const stageIds = tool.data.stage_id;
+			if (!stageIds || !stageIds.includes(id)) continue;
+
+			if (tool.data.is_global) {
+				// Global tools: just remove this stage from the array
+				tool.data.stage_id = stageIds.filter((sid) => sid !== id);
+				if (tool.status === 'unchanged') {
+					tool.status = 'modified';
+				}
+			} else if (stageIds.length === 1) {
+				// Non-global with only this stage: delete the tool
+				this.deleteEditTool(tool.data.id);
+			} else {
+				// Non-global with multiple stages: remove this stage
+				tool.data.stage_id = stageIds.filter((sid) => sid !== id);
+				if (tool.status === 'unchanged') {
+					tool.status = 'modified';
+				}
+			}
 		}
 
 		if (stage.status === 'new') {
@@ -473,9 +504,11 @@ export class WorkflowBuilderState {
 		const newEditTool: ToolsEdit = {
 			id: generateId(),
 			connection_id: 'connectionId' in target ? target.connectionId : undefined,
-			stage_id: isStageAttached ? target.stageId : undefined,
+			stage_id: isStageAttached ? [target.stageId] : undefined,
 			name: 'Edit Fields',
 			editable_fields: [],
+			edit_mode: 'form_fields',
+			is_global: false,
 			// Stage-attached edit tools need their own config; connection-attached tools inherit
 			...(isStageAttached && {
 				allowed_roles: [],
@@ -492,6 +525,52 @@ export class WorkflowBuilderState {
 		});
 
 		return newEditTool;
+	}
+
+	/**
+	 * Add a global edit tool (available on all stages).
+	 * The stage_id array will be synced with all stages on save.
+	 */
+	addGlobalEditTool(editMode: 'form_fields' | 'location' = 'form_fields'): ToolsEdit {
+		const allStageIds = this.visibleStages.map((s) => s.data.id);
+
+		const newEditTool: ToolsEdit = {
+			id: generateId(),
+			connection_id: undefined,
+			stage_id: allStageIds,
+			name: editMode === 'location' ? 'Edit Location' : 'Edit Fields',
+			editable_fields: [],
+			edit_mode: editMode,
+			is_global: true,
+			allowed_roles: [],
+			visual_config: {
+				button_label: editMode === 'location' ? 'Location' : 'Edit',
+				button_color: editMode === 'location' ? '#10b981' : '#f97316'
+			}
+		};
+
+		this.editTools.push({
+			data: newEditTool,
+			status: 'new'
+		});
+
+		return newEditTool;
+	}
+
+	/**
+	 * Sync global tools to include all current stages.
+	 * Call this before saving the workflow.
+	 */
+	syncGlobalToolStages() {
+		const allStageIds = this.visibleStages.map((s) => s.data.id);
+		for (const tool of this.editTools) {
+			if (tool.data.is_global && tool.status !== 'deleted') {
+				tool.data.stage_id = allStageIds;
+				if (tool.status === 'unchanged') {
+					tool.status = 'modified';
+				}
+			}
+		}
 	}
 
 	updateEditTool(id: string, updates: Partial<ToolsEdit>) {
@@ -526,8 +605,36 @@ export class WorkflowBuilderState {
 		return this.visibleEditTools.filter((e) => e.data.connection_id === connectionId);
 	}
 
+	/**
+	 * Get edit tools for a specific stage (includes global tools).
+	 * Filters by checking if stageId is in the stage_id array.
+	 */
 	getEditToolsForStage(stageId: string): TrackedEditTool[] {
-		return this.visibleEditTools.filter((e) => e.data.stage_id === stageId);
+		return this.visibleEditTools.filter((e) => {
+			const stageIds = e.data.stage_id;
+			if (!stageIds || stageIds.length === 0) return false;
+			return stageIds.includes(stageId);
+		});
+	}
+
+	/**
+	 * Get only non-global edit tools for a specific stage.
+	 * Used by property panels to show stage-specific tools.
+	 */
+	getNonGlobalEditToolsForStage(stageId: string): TrackedEditTool[] {
+		return this.visibleEditTools.filter((e) => {
+			if (e.data.is_global) return false;
+			const stageIds = e.data.stage_id;
+			if (!stageIds || stageIds.length === 0) return false;
+			return stageIds.includes(stageId);
+		});
+	}
+
+	/**
+	 * Get all global edit tools.
+	 */
+	getGlobalEditTools(): TrackedEditTool[] {
+		return this.visibleEditTools.filter((e) => e.data.is_global);
 	}
 
 	// =========================================================================
@@ -706,6 +813,67 @@ export class WorkflowBuilderState {
 					if (fields.length > 0) {
 						result.push({
 							stage: trackedStage.data,
+							form: trackedForm.data,
+							fields: fields.map((f) => f.data)
+						});
+					}
+				}
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * Get all form fields from all forms across all stages and connections.
+	 * Used for global edit tools to show all available fields.
+	 */
+	getAllFormFields(): Array<{
+		stage: WorkflowStage;
+		form: ToolsForm;
+		fields: ToolsFormField[];
+	}> {
+		const result: Array<{
+			stage: WorkflowStage;
+			form: ToolsForm;
+			fields: ToolsFormField[];
+		}> = [];
+
+		// Get all stages in order
+		for (const trackedStage of this.visibleStages) {
+			// Get forms attached directly to this stage
+			const stageForms = this.getFormsForStage(trackedStage.data.id);
+			for (const trackedForm of stageForms) {
+				const fields = this.getFieldsForForm(trackedForm.data.id);
+				if (fields.length > 0) {
+					result.push({
+						stage: trackedStage.data,
+						form: trackedForm.data,
+						fields: fields.map((f) => f.data)
+					});
+				}
+			}
+
+			// Get forms from connections leading INTO this stage
+			const incomingConnections = this.visibleConnections.filter(
+				(c) => c.data.to_stage_id === trackedStage.data.id
+			);
+			for (const conn of incomingConnections) {
+				const connForms = this.getFormsForConnection(conn.data.id);
+				for (const trackedForm of connForms) {
+					const fields = this.getFieldsForForm(trackedForm.data.id);
+					if (fields.length > 0) {
+						// Use the source stage if available, otherwise create a placeholder
+						const sourceStage = conn.data.from_stage_id
+							? this.visibleStages.find((s) => s.data.id === conn.data.from_stage_id)
+							: null;
+						result.push({
+							stage: sourceStage?.data ?? {
+								id: 'entry',
+								workflow_id: this.workflowId,
+								stage_name: 'Entry',
+								stage_type: 'start'
+							},
 							form: trackedForm.data,
 							fields: fields.map((f) => f.data)
 						});

@@ -371,7 +371,7 @@
 	});
 </script>
 
-<div class="space-y-1.5">
+<div class="space-y-1.5" data-testid="field-value" data-field-id={field.id}>
 	<!-- Label (shown in all modes) -->
 	<Label for={field.id} class="flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wide">
 		{field.field_label}

@@ -18,6 +18,8 @@
 		workflows?: Workflow[];
 		map?: LeafletMap | null;
 		onWorkflowSelect?: (workflow: Workflow, coordinates?: { lat: number; lng: number }) => void;
+		/** Whether location editing is active (hides nav bar) */
+		isEditingLocation?: boolean;
 	}
 
 	let {
@@ -27,7 +29,8 @@
 		onLocationClick,
 		workflows = [],
 		map = null,
-		onWorkflowSelect
+		onWorkflowSelect,
+		isEditingLocation = false
 	}: Props = $props();
 
 	let workflowSelectorOpen = $state(false);
@@ -43,7 +46,7 @@
 </script>
 
 <!-- Bottom bar with raised center button (mobile only) -->
-{#if !isSelectingCoordinates}
+{#if !isSelectingCoordinates && !isEditingLocation}
 	<div
 		class="fixed bottom-0 left-0 right-0 z-[1000] flex md:hidden items-end justify-around border-t bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:bg-background/80"
 	>

@@ -220,12 +220,34 @@ export interface ToolsFormField {
 // Edit Tool Types
 // =============================================================================
 
+export type EditMode = 'form_fields' | 'location';
+
 export interface ToolsEdit {
 	id: string;
 	connection_id?: string;
-	stage_id?: string;
+	/**
+	 * Stage IDs this tool is attached to.
+	 * - Single stage: normal stage-attached tool
+	 * - Multiple stages: global tool (is_global=true)
+	 */
+	stage_id?: string[];
 	name: string;
+	/**
+	 * Fields that can be edited by this tool.
+	 * Only used when edit_mode='form_fields'.
+	 */
 	editable_fields: string[];
+	/**
+	 * What this tool edits:
+	 * - 'form_fields': Edit existing form field values
+	 * - 'location': Edit the workflow instance location
+	 */
+	edit_mode: EditMode;
+	/**
+	 * Whether this tool is available on all stages.
+	 * When true, stage_id contains all stage IDs (synced on save).
+	 */
+	is_global: boolean;
 	/**
 	 * Allowed roles for this edit tool.
 	 * - If connection_id is set: IGNORED (inherited from connection.allowed_roles)

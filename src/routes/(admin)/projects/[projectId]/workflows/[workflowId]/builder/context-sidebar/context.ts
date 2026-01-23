@@ -35,8 +35,14 @@ export type FormContextData = {
 // Edit tool context data
 export type EditToolContextData = {
 	editToolId: string;
-	/** Connection or stage this edit tool is attached to */
-	attachedTo: { type: 'connection'; connectionId: string } | { type: 'stage'; stageId: string };
+	/** Connection, stage, or global (all stages) this edit tool is attached to */
+	attachedTo: { type: 'connection'; connectionId: string } | { type: 'stage'; stageId: string } | { type: 'global' };
+};
+
+// Add tool picker context (shows tool picker in context sidebar)
+export type AddToolContextData = {
+	/** Where to attach the new tool */
+	attachedTo: { type: 'connection'; connectionId: string } | { type: 'stage'; stageId: string } | { type: 'global' };
 };
 
 // Selection context union type
@@ -46,7 +52,9 @@ export type SelectionContext =
 	| { type: 'action'; actionId: string; action: Edge }
 	| { type: 'field'; fieldId: string; field: FormFieldData; stageId: string }
 	| { type: 'form'; formId: string; attachedTo: FormContextData['attachedTo'] }
-	| { type: 'editTool'; editToolId: string; attachedTo: EditToolContextData['attachedTo'] };
+	| { type: 'editTool'; editToolId: string; attachedTo: EditToolContextData['attachedTo'] }
+	| { type: 'addTool'; attachedTo: AddToolContextData['attachedTo'] }
+	| { type: 'globalTools' };
 
 // Helper to create contexts
 export const createContext = {
@@ -84,7 +92,14 @@ export const createContext = {
 		type: 'editTool',
 		editToolId,
 		attachedTo
-	})
+	}),
+
+	addTool: (attachedTo: AddToolContextData['attachedTo']): SelectionContext => ({
+		type: 'addTool',
+		attachedTo
+	}),
+
+	globalTools: (): SelectionContext => ({ type: 'globalTools' })
 };
 
 // Type guards for narrowing
@@ -108,4 +123,16 @@ export function isEditToolContext(
 	ctx: SelectionContext
 ): ctx is Extract<SelectionContext, { type: 'editTool' }> {
 	return ctx.type === 'editTool';
+}
+
+export function isAddToolContext(
+	ctx: SelectionContext
+): ctx is Extract<SelectionContext, { type: 'addTool' }> {
+	return ctx.type === 'addTool';
+}
+
+export function isGlobalToolsContext(
+	ctx: SelectionContext
+): ctx is Extract<SelectionContext, { type: 'globalTools' }> {
+	return ctx.type === 'globalTools';
 }

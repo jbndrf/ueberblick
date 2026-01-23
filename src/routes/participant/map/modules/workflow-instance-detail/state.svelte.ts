@@ -80,9 +80,11 @@ export interface FormField {
 export interface ToolEdit {
 	id: string;
 	connection_id: string;
-	stage_id: string;
+	stage_id: string[];
 	name: string;
 	editable_fields: string[];
+	edit_mode: 'form_fields' | 'location';
+	is_global: boolean;
 	allowed_roles: string[];
 	visual_config?: Record<string, unknown>;
 }
@@ -110,6 +112,37 @@ export interface ActionButton {
 	onClick: () => void;
 }
 
+export interface EditableFieldsByStage {
+	stageId: string;
+	stageName: string;
+	fields: FormField[];
+}
+
+export interface ToolUsageRecord {
+	id: string;
+	instance_id: string;
+	stage_id?: string;
+	executed_by: string;
+	executed_at: string;
+	metadata: {
+		action: 'instance_created' | 'form_fill' | 'edit' | 'location_edit' | 'stage_transition';
+		location?: { lat: number; lon: number } | null;
+		created_fields?: Array<{ field_key: string; value: string }>;
+		changes?: Array<{ field_key: string; before: string | null; after: string }>;
+		before?: { lat: number; lon: number } | null;
+		after?: { lat: number; lon: number };
+		// Stage transition specific
+		from_stage_id?: string;
+		to_stage_id?: string;
+		connection_id?: string;
+	};
+	created: string;
+	// Expanded relations
+	expand?: {
+		executed_by?: { name?: string; email?: string };
+	};
+}
+
 // =============================================================================
 // State Class
 // =============================================================================
@@ -129,6 +162,7 @@ export class WorkflowInstanceDetailState {
 	forms = $state<ToolForm[]>([]);
 	formFields = $state<FormField[]>([]);
 	editTools = $state<ToolEdit[]>([]);
+	toolUsageHistory = $state<ToolUsageRecord[]>([]);
 
 	// UI state
 	isLoading = $state(true);
@@ -157,7 +191,11 @@ export class WorkflowInstanceDetailState {
 	availableStageEditTools = $derived.by((): ToolEdit[] => {
 		if (!this.instance) return [];
 		const currentStageId = this.instance.current_stage_id as string;
-		return this.editTools.filter(e => e.stage_id === currentStageId && !e.connection_id);
+		return this.editTools.filter(e => {
+			if (e.connection_id) return false;
+			if (!e.stage_id || e.stage_id.length === 0) return false;
+			return e.stage_id.includes(currentStageId);
+		});
 	});
 
 	/** Progress percentage */
@@ -207,7 +245,7 @@ export class WorkflowInstanceDetailState {
 			const workflowId = instanceResult.workflow_id as string;
 
 			// Now load all related data in parallel
-			const [stagesResult, connectionsResult, fieldValuesResult, formsResult, formFieldsResult, editToolsResult] = await Promise.all([
+			const [stagesResult, connectionsResult, fieldValuesResult, formsResult, formFieldsResult, editToolsResult, toolUsageResult] = await Promise.all([
 				this.gateway.collection('workflow_stages').getFullList({
 					filter: `workflow_id = "${workflowId}"`,
 					sort: 'stage_order'
@@ -222,13 +260,19 @@ export class WorkflowInstanceDetailState {
 					filter: `workflow_id = "${workflowId}"`
 				}),
 				this.gateway.collection('tools_form_fields').getFullList(),
-				this.gateway.collection('tools_edit').getFullList()
+				this.gateway.collection('tools_edit').getFullList(),
+				this.gateway.collection('workflow_instance_tool_usage').getFullList({
+					filter: `instance_id = "${this.instanceId}"`,
+					sort: '-executed_at',
+					expand: 'executed_by'
+				})
 			]);
 
 			this.stages = stagesResult as unknown as WorkflowStage[];
 			this.connections = connectionsResult as unknown as WorkflowConnection[];
 			this.fieldValues = fieldValuesResult as unknown as FieldValue[];
 			this.forms = formsResult as unknown as ToolForm[];
+			this.toolUsageHistory = toolUsageResult as unknown as ToolUsageRecord[];
 
 			// Filter form fields to only those belonging to this workflow's forms
 			// Also parse field_options which may be stored as JSON strings
@@ -243,9 +287,13 @@ export class WorkflowInstanceDetailState {
 			// Filter edit tools to those for this workflow's connections/stages
 			const connectionIds = this.connections.map(c => c.id);
 			const stageIds = this.stages.map(s => s.id);
-			this.editTools = (editToolsResult as unknown as ToolEdit[]).filter(
-				e => connectionIds.includes(e.connection_id) || stageIds.includes(e.stage_id)
-			);
+			this.editTools = (editToolsResult as unknown as ToolEdit[]).filter(e => {
+				// Include if attached to a connection in this workflow
+				if (connectionIds.includes(e.connection_id)) return true;
+				// Include if attached to any stage in this workflow (stage_id is now an array)
+				if (e.stage_id && e.stage_id.some(sid => stageIds.includes(sid))) return true;
+				return false;
+			});
 
 			// Set initial active stage tab to first visible stage with data
 			if (this.stages.length > 0 && !this.activeStageTab) {
@@ -367,6 +415,99 @@ export class WorkflowInstanceDetailState {
 	/** Check if a stage has any data */
 	stageHasData(stageId: string): boolean {
 		return this.fieldValues.some(fv => fv.stage_id === stageId);
+	}
+
+	/**
+	 * Get form fields only from stages that have been reached (current or earlier).
+	 * This prevents editing fields from future stages when using global edit tools.
+	 */
+	getFormFieldsForReachedStages(): FormField[] {
+		if (!this.instance) return [];
+
+		const currentStageId = this.instance.current_stage_id as string;
+		const currentStageIndex = this.stages.findIndex(s => s.id === currentStageId);
+		if (currentStageIndex < 0) return [];
+
+		// Get IDs of all reached stages (current and earlier, based on stage_order)
+		const reachedStageIds = new Set(
+			this.stages
+				.filter((_, index) => index <= currentStageIndex)
+				.map(s => s.id)
+		);
+
+		// Get forms that belong to reached stages
+		const reachedFormIds = new Set<string>();
+
+		for (const form of this.forms) {
+			// Form directly attached to a reached stage
+			if (form.stage_id && reachedStageIds.has(form.stage_id)) {
+				reachedFormIds.add(form.id);
+				continue;
+			}
+
+			// Form attached to a connection - check if connection's target is a reached stage
+			if (form.connection_id) {
+				const connection = this.connections.find(c => c.id === form.connection_id);
+				if (connection && reachedStageIds.has(connection.to_stage_id)) {
+					reachedFormIds.add(form.id);
+				}
+			}
+		}
+
+		// Return only form fields from reached forms
+		return this.formFields.filter(f => reachedFormIds.has(f.form_id));
+	}
+
+	/**
+	 * Get editable fields grouped by their source stage.
+	 * Used by EditFieldsTool to render tabbed UI when fields come from multiple stages.
+	 */
+	getEditableFieldsGroupedByStage(editableFieldIds: string[]): EditableFieldsByStage[] {
+		if (!this.instance || editableFieldIds.length === 0) return [];
+
+		// Filter to only editable fields from reached stages
+		const reachedFields = this.getFormFieldsForReachedStages();
+		const editableFields = reachedFields.filter(f => editableFieldIds.includes(f.id));
+
+		// Build a map of form_id -> stage_id
+		const formToStage = new Map<string, string>();
+		for (const form of this.forms) {
+			if (form.stage_id) {
+				formToStage.set(form.id, form.stage_id);
+			} else if (form.connection_id) {
+				const connection = this.connections.find(c => c.id === form.connection_id);
+				if (connection) {
+					formToStage.set(form.id, connection.to_stage_id);
+				}
+			}
+		}
+
+		// Group fields by stage
+		const stageFieldsMap = new Map<string, FormField[]>();
+		for (const field of editableFields) {
+			const stageId = formToStage.get(field.form_id);
+			if (stageId) {
+				if (!stageFieldsMap.has(stageId)) {
+					stageFieldsMap.set(stageId, []);
+				}
+				stageFieldsMap.get(stageId)!.push(field);
+			}
+		}
+
+		// Build result array sorted by stage order
+		const result: EditableFieldsByStage[] = [];
+		for (const stage of this.stages) {
+			const fields = stageFieldsMap.get(stage.id);
+			if (fields && fields.length > 0) {
+				result.push({
+					stageId: stage.id,
+					stageName: stage.stage_name,
+					fields
+				});
+			}
+		}
+
+		return result;
 	}
 
 	// ==========================================================================

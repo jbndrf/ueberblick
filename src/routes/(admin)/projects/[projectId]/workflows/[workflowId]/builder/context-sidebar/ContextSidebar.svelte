@@ -4,6 +4,7 @@
 	import StagePanel from './panels/StagePanel.svelte';
 	import ActionPanel from './panels/ActionPanel.svelte';
 	import FieldPanel from './panels/FieldPanel.svelte';
+	import AddToolPanel from './panels/AddToolPanel.svelte';
 
 	type Props = {
 		context: SelectionContext;
@@ -25,6 +26,8 @@
 		onDuplicateField: () => void;
 		onEditField: () => void;
 		onDeleteField: () => void;
+		// Callbacks for AddToolPanel
+		onAddGlobalTool: (toolType: string) => void;
 	};
 
 	let {
@@ -43,7 +46,8 @@
 		onMoveFieldDown,
 		onDuplicateField,
 		onEditField,
-		onDeleteField
+		onDeleteField,
+		onAddGlobalTool
 	}: Props = $props();
 </script>
 
@@ -74,6 +78,8 @@
 			{onEditField}
 			{onDeleteField}
 		/>
+	{:else if context.type === 'addTool'}
+		<AddToolPanel {context} onAddTool={onAddGlobalTool} />
 	{:else}
 		<DefaultPanel {hasStartStage} />
 	{/if}

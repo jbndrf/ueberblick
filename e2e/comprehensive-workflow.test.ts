@@ -527,7 +527,9 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 
 		// Edit tool at Report stage - allows editing Title and Description
 		const editReportTool = await adminPb.collection('tools_edit').create({
-			stage_id: workflow.stages.get('Report'),
+			stage_id: [workflow.stages.get('Report')],
+			edit_mode: 'form_fields',
+			is_global: false,
 			name: 'Edit Report Details',
 			editable_fields: [workflow.fields.get('Title')!, workflow.fields.get('Description')!],
 			allowed_roles: [roles.get('Field Worker')!, roles.get('Supervisor')!],
@@ -543,7 +545,9 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 
 		// Edit tool at Review stage - allows editing Priority
 		const editReviewTool = await adminPb.collection('tools_edit').create({
-			stage_id: workflow.stages.get('Review'),
+			stage_id: [workflow.stages.get('Review')],
+			edit_mode: 'form_fields',
+			is_global: false,
 			name: 'Update Priority',
 			editable_fields: [workflow.fields.get('Priority')!],
 			allowed_roles: [roles.get('Supervisor')!, roles.get('Analyst')!],
@@ -556,6 +560,49 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 		console.log(`Created edit tool: "Update Priority" at Review stage (Supervisor, Analyst)`);
 		console.log(`  - Editable fields: Priority`);
 		console.log(`  - Button: "Change Priority" (orange)`);
+
+		// Global location edit tool - available at all stages
+		const allStages = [
+			workflow.stages.get('Report')!,
+			workflow.stages.get('Review')!,
+			workflow.stages.get('Resolved')!
+		];
+
+		const globalLocationTool = await adminPb.collection('tools_edit').create({
+			stage_id: allStages,
+			edit_mode: 'location',
+			is_global: true,
+			name: 'Update Location',
+			editable_fields: [],
+			allowed_roles: [roles.get('Field Worker')!, roles.get('Supervisor')!],
+			visual_config: {
+				button_label: 'Move Pin',
+				button_color: '#10b981'
+			}
+		});
+		workflow.editTools.set('globalLocation', globalLocationTool.id);
+		console.log(`Created global edit tool: "Update Location" (location mode)`);
+		console.log(`  - Available at all stages`);
+		console.log(`  - Allowed roles: Field Worker, Supervisor`);
+
+		// Global form fields edit tool - category can be edited at any stage
+		const globalFormTool = await adminPb.collection('tools_edit').create({
+			stage_id: allStages,
+			edit_mode: 'form_fields',
+			is_global: true,
+			name: 'Edit Category',
+			editable_fields: [workflow.fields.get('Damage Type')!],
+			allowed_roles: [roles.get('Supervisor')!, roles.get('Analyst')!],
+			visual_config: {
+				button_label: 'Change Category',
+				button_color: '#8b5cf6'
+			}
+		});
+		workflow.editTools.set('globalForm', globalFormTool.id);
+		console.log(`Created global edit tool: "Edit Category" (form_fields mode)`);
+		console.log(`  - Available at all stages`);
+		console.log(`  - Editable fields: Damage Type`);
+		console.log(`  - Allowed roles: Supervisor, Analyst`);
 	});
 
 	test('1. NEGATIVE: Bob (Supervisor) CANNOT create instance - entry is Field Worker only', async () => {
@@ -902,31 +949,54 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 	test('7. EDIT TOOLS: Verify edit tool access', async () => {
 		console.log(`\n=== TEST 7: Edit Tool Access Check ===`);
 
-		// Verify edit tools were created
-		const editTools = await adminPb.collection('tools_edit').getFullList({
-			filter: `stage_id = "${workflow.stages.get('Report')}" || stage_id = "${workflow.stages.get('Review')}"`
-		});
-		expect(editTools.length).toBe(2);
+		// Verify edit tools were created by fetching by their stored IDs
+		const reportEditTool = await adminPb.collection('tools_edit').getOne(workflow.editTools.get('editReport')!);
+		const reviewEditTool = await adminPb.collection('tools_edit').getOne(workflow.editTools.get('editReview')!);
 
-		const reportEditTool = editTools.find((t) => t.stage_id === workflow.stages.get('Report'));
-		const reviewEditTool = editTools.find((t) => t.stage_id === workflow.stages.get('Review'));
+		// Verify stage_id arrays contain the correct stages
+		expect(reportEditTool.stage_id).toContain(workflow.stages.get('Report'));
+		expect(reviewEditTool.stage_id).toContain(workflow.stages.get('Review'));
 
-		expect(reportEditTool).toBeDefined();
-		expect(reviewEditTool).toBeDefined();
-
-		console.log(`Report stage edit tool: ${reportEditTool?.name}`);
+		console.log(`Report stage edit tool: ${reportEditTool.name}`);
 		console.log(`  - Allowed roles: Field Worker, Supervisor`);
-		console.log(`  - Editable fields: ${reportEditTool?.editable_fields.length}`);
+		console.log(`  - Editable fields: ${reportEditTool.editable_fields.length}`);
 
-		console.log(`Review stage edit tool: ${reviewEditTool?.name}`);
+		console.log(`Review stage edit tool: ${reviewEditTool.name}`);
 		console.log(`  - Allowed roles: Supervisor, Analyst`);
-		console.log(`  - Editable fields: ${reviewEditTool?.editable_fields.length}`);
+		console.log(`  - Editable fields: ${reviewEditTool.editable_fields.length}`);
 
 		// Verify role assignments
-		expect(reportEditTool?.allowed_roles).toContain(roles.get('Field Worker'));
-		expect(reportEditTool?.allowed_roles).toContain(roles.get('Supervisor'));
-		expect(reviewEditTool?.allowed_roles).toContain(roles.get('Supervisor'));
-		expect(reviewEditTool?.allowed_roles).toContain(roles.get('Analyst'));
+		expect(reportEditTool.allowed_roles).toContain(roles.get('Field Worker'));
+		expect(reportEditTool.allowed_roles).toContain(roles.get('Supervisor'));
+		expect(reviewEditTool.allowed_roles).toContain(roles.get('Supervisor'));
+		expect(reviewEditTool.allowed_roles).toContain(roles.get('Analyst'));
+
+		// Verify global tools
+		const globalLocationTool = await adminPb.collection('tools_edit').getOne(workflow.editTools.get('globalLocation')!);
+		const globalFormTool = await adminPb.collection('tools_edit').getOne(workflow.editTools.get('globalForm')!);
+
+		// Global tools should have is_global: true and be available at all stages
+		expect(globalLocationTool.is_global).toBe(true);
+		expect(globalLocationTool.edit_mode).toBe('location');
+		expect(globalLocationTool.stage_id).toContain(workflow.stages.get('Report'));
+		expect(globalLocationTool.stage_id).toContain(workflow.stages.get('Review'));
+		expect(globalLocationTool.stage_id).toContain(workflow.stages.get('Resolved'));
+
+		expect(globalFormTool.is_global).toBe(true);
+		expect(globalFormTool.edit_mode).toBe('form_fields');
+		expect(globalFormTool.stage_id).toContain(workflow.stages.get('Report'));
+		expect(globalFormTool.stage_id).toContain(workflow.stages.get('Review'));
+		expect(globalFormTool.stage_id).toContain(workflow.stages.get('Resolved'));
+
+		console.log(`Global location edit tool: ${globalLocationTool.name}`);
+		console.log(`  - edit_mode: ${globalLocationTool.edit_mode}`);
+		console.log(`  - is_global: ${globalLocationTool.is_global}`);
+		console.log(`  - Available at ${globalLocationTool.stage_id.length} stages`);
+
+		console.log(`Global form edit tool: ${globalFormTool.name}`);
+		console.log(`  - edit_mode: ${globalFormTool.edit_mode}`);
+		console.log(`  - is_global: ${globalFormTool.is_global}`);
+		console.log(`  - Editable fields: ${globalFormTool.editable_fields.length}`);
 
 		console.log(`PASS: Edit tools created with correct permissions`);
 	});

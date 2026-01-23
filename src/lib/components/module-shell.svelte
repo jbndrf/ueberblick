@@ -412,6 +412,7 @@
 	class={containerClasses}
 	style:transform={gestureTransform}
 	style:height={isMobile ? `${mobileHeight}vh` : undefined}
+	data-testid="workflow-detail-sidebar"
 >
 	<!-- Background extension to fill gap when sheet moves up during expand preview -->
 	{#if isMobile}

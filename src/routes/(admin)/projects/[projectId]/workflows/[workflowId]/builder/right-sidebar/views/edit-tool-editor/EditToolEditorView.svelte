@@ -1,13 +1,14 @@
 <script lang="ts">
-	import { X, Edit3, Trash2, Link } from 'lucide-svelte';
+	import { X, Edit3, Trash2, Link, MapPin, ChevronDown } from 'lucide-svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 
 	import AncestorFieldsPanel from './AncestorFieldsPanel.svelte';
 	import FieldSelectionPreview from './FieldSelectionPreview.svelte';
 
-	import type { ToolsEdit, ToolsForm, ToolsFormField, WorkflowStage } from '$lib/workflow-builder';
+	import type { ToolsEdit, ToolsForm, ToolsFormField, WorkflowStage, EditMode } from '$lib/workflow-builder';
 
 	type AncestorFieldGroup = {
 		stage: WorkflowStage;
@@ -24,6 +25,8 @@
 		onNameChange?: (name: string) => void;
 		/** Callback when editable fields change */
 		onFieldsChange?: (fieldIds: string[]) => void;
+		/** Callback when edit_mode changes */
+		onEditModeChange?: (editMode: EditMode) => void;
 		/** Callback to delete the edit tool */
 		onDelete?: () => void;
 		/** Callback to close the editor */
@@ -35,13 +38,13 @@
 		ancestorFields,
 		onNameChange,
 		onFieldsChange,
+		onEditModeChange,
 		onDelete,
 		onClose
 	}: Props = $props();
 
-	// Determine if this is a stage-attached tool (has its own config)
-	// vs connection-attached tool (inherits from connection)
-	const isStageAttached = $derived(!!editTool.stage_id && !editTool.connection_id);
+	// Connection-attached tools inherit config from the connection
+	const isConnectionAttached = $derived(!!editTool.connection_id);
 
 	// Local state
 	let editToolName = $state(editTool.name);
@@ -133,7 +136,7 @@
 					placeholder="Edit tool name..."
 				/>
 			</div>
-			<Button variant="ghost" size="icon" onclick={onClose} class="close-btn">
+			<Button variant="ghost" size="icon" onclick={onClose}>
 				<X class="h-4 w-4" />
 			</Button>
 		</div>
@@ -141,26 +144,76 @@
 
 	<!-- Main content area -->
 	<div class="editor-content">
-		<!-- Left Panel: Available fields -->
+		<!-- Left Panel: Mode selection + content -->
 		<div class="left-panel">
-			<AncestorFieldsPanel
-				{ancestorFields}
-				{selectedFieldIds}
-				onToggleField={handleToggleField}
-			/>
-		</div>
-
-		<!-- Center Panel: Selected fields preview -->
-		<div class="center-panel">
-			<div class="preview-section">
-				<FieldSelectionPreview
-					selectedFields={selectedFieldsWithMeta}
-					onRemoveField={handleRemoveField}
-				/>
+			<div class="mode-header">
+				<span class="mode-label">Edit Mode</span>
+				<DropdownMenu.Root>
+					<DropdownMenu.Trigger class="mode-dropdown-trigger">
+						{#if editTool.edit_mode === 'form_fields'}
+							<span>Form Fields</span>
+						{:else}
+							<span>Location</span>
+						{/if}
+						<ChevronDown class="h-3.5 w-3.5" />
+					</DropdownMenu.Trigger>
+					<DropdownMenu.Content align="end">
+						<DropdownMenu.Item
+							onclick={() => onEditModeChange?.('form_fields')}
+							class={editTool.edit_mode === 'form_fields' ? 'bg-accent' : ''}
+						>
+							Form Fields
+						</DropdownMenu.Item>
+						<DropdownMenu.Item
+							onclick={() => onEditModeChange?.('location')}
+							class={editTool.edit_mode === 'location' ? 'bg-accent' : ''}
+						>
+							Location
+						</DropdownMenu.Item>
+					</DropdownMenu.Content>
+				</DropdownMenu.Root>
 			</div>
 
-			{#if !isStageAttached}
-				<!-- Connection-attached tool: show inheritance notice -->
+			{#if editTool.edit_mode === 'form_fields'}
+				<AncestorFieldsPanel
+					{ancestorFields}
+					{selectedFieldIds}
+					onToggleField={handleToggleField}
+				/>
+			{:else}
+				<div class="location-panel">
+					<MapPin class="h-6 w-6 location-icon" />
+					<p class="location-text">
+						Participants can update the instance location on the map.
+					</p>
+				</div>
+			{/if}
+		</div>
+
+		<!-- Right Panel: Preview + actions -->
+		<div class="center-panel">
+			{#if editTool.edit_mode === 'form_fields'}
+				<div class="preview-section">
+					<FieldSelectionPreview
+						selectedFields={selectedFieldsWithMeta}
+						onRemoveField={handleRemoveField}
+					/>
+				</div>
+			{:else}
+				<div class="preview-section location-preview">
+					<div class="location-notice">
+						<MapPin class="h-8 w-8 location-icon" />
+						<div class="location-notice-content">
+							<span class="location-notice-title">Location Edit</span>
+							<p class="location-notice-text">
+								Participants will see a map picker to update the workflow instance location.
+							</p>
+						</div>
+					</div>
+				</div>
+			{/if}
+
+			{#if isConnectionAttached}
 				<div class="inheritance-notice">
 					<div class="notice-icon">
 						<Link class="h-4 w-4" />
@@ -168,13 +221,12 @@
 					<div class="notice-content">
 						<span class="notice-title">Inherits from Connection</span>
 						<p class="notice-text">
-							This edit tool is attached to a connection. Button appearance and allowed roles are configured on the connection's Tools tab.
+							Button appearance and allowed roles are configured on the connection's Tools tab.
 						</p>
 					</div>
 				</div>
 			{/if}
 
-			<!-- Footer with delete button -->
 			<div class="editor-footer">
 				<Button variant="destructive" size="sm" onclick={onDelete} class="w-full">
 					<Trash2 class="h-4 w-4 mr-2" />
@@ -230,10 +282,6 @@
 		font-size: 1rem;
 	}
 
-	.close-btn {
-		flex-shrink: 0;
-	}
-
 	.editor-content {
 		display: flex;
 		flex: 1;
@@ -249,6 +297,74 @@
 
 	:global(.dark) .left-panel {
 		border-right-color: oklch(1 0 0 / 20%);
+	}
+
+	/* Mode header with dropdown */
+	.mode-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.5rem 0.75rem;
+		border-bottom: 1px solid hsl(var(--border));
+		background: hsl(var(--muted) / 0.5);
+	}
+
+	.mode-label {
+		font-size: 0.6875rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: hsl(var(--muted-foreground));
+	}
+
+	.mode-header :global(.mode-dropdown-trigger) {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.25rem 0.5rem;
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: hsl(var(--foreground));
+		background: hsl(var(--background));
+		border: 1px solid hsl(var(--border));
+		border-radius: 0.25rem;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.mode-header :global(.mode-dropdown-trigger:hover) {
+		background: hsl(var(--accent));
+		border-color: hsl(var(--primary) / 0.3);
+	}
+
+	/* Location panel in left sidebar */
+	.location-panel {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.75rem;
+		padding: 2rem 1rem;
+		text-align: center;
+		flex: 1;
+	}
+
+	.location-panel :global(.location-icon) {
+		color: hsl(142 76% 36%);
+	}
+
+	.location-text {
+		font-size: 0.75rem;
+		color: hsl(var(--muted-foreground));
+		max-width: 180px;
+		line-height: 1.4;
+	}
+
+	/* Location preview in right panel */
+	.location-preview {
+		display: flex;
+		align-items: center;
+		justify-content: center;
 	}
 
 	.center-panel {
@@ -281,8 +397,7 @@
 	}
 
 	/* Notice styles */
-	.inheritance-notice,
-	.config-notice {
+	.inheritance-notice {
 		display: flex;
 		align-items: flex-start;
 		gap: 0.75rem;
@@ -322,4 +437,43 @@
 		color: hsl(var(--muted-foreground));
 		line-height: 1.4;
 	}
+
+	.location-notice {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 1rem;
+		padding: 2rem;
+		background: oklch(0.95 0.005 250);
+		text-align: center;
+	}
+
+	:global(.dark) .location-notice {
+		background: oklch(0.15 0.02 260);
+	}
+
+	.location-notice :global(.location-icon) {
+		color: hsl(142 76% 36%);
+	}
+
+	.location-notice-content {
+		max-width: 280px;
+	}
+
+	.location-notice-title {
+		display: block;
+		font-size: 1rem;
+		font-weight: 600;
+		color: hsl(var(--foreground));
+		margin-bottom: 0.5rem;
+	}
+
+	.location-notice-text {
+		font-size: 0.8125rem;
+		color: hsl(var(--muted-foreground));
+		line-height: 1.5;
+	}
+
 </style>

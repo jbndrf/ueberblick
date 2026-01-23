@@ -4,6 +4,7 @@
 
 	import PreviewView from './views/preview/PreviewView.svelte';
 	import PropertyView from './views/properties/PropertyView.svelte';
+	import GlobalToolsPanel from './views/properties/panels/GlobalToolsPanel.svelte';
 	import { FormEditorView } from './views/form-editor';
 	import { EditToolEditorView } from './views/edit-tool-editor';
 
@@ -34,10 +35,11 @@
 		// Edit tool editor props
 		selectedEditTool?: ToolsEdit | null;
 		editToolAncestorFields?: AncestorFieldGroup[];
-		// Stage/Connection tools for property view
+		// Stage/Connection/Global tools for property views
 		stageEditTools?: ToolsEdit[];
 		connectionForms?: ToolsForm[];
 		connectionEditTools?: ToolsEdit[];
+		globalEditTools?: ToolsEdit[];
 		// Handlers for property updates
 		onStageRename?: (stageId: string, newName: string) => void;
 		onStageDelete?: (stageId: string) => void;
@@ -70,8 +72,11 @@
 		// Edit tool editor handlers
 		onEditToolNameChange?: (editToolId: string, name: string) => void;
 		onEditToolFieldsChange?: (editToolId: string, fieldIds: string[]) => void;
+		onEditToolEditModeChange?: (editToolId: string, editMode: 'form_fields' | 'location') => void;
 		onEditToolDelete?: (editToolId: string) => void;
 		onEditToolClose?: () => void;
+		// Global tools handlers (for GlobalToolsPanel - reuses onToolRolesChange/onToolVisualConfigChange)
+		onGlobalToolDelete?: (toolType: string, toolId: string) => void;
 	};
 
 	let {
@@ -88,6 +93,7 @@
 		stageEditTools = [],
 		connectionForms = [],
 		connectionEditTools = [],
+		globalEditTools = [],
 		onStageRename,
 		onStageDelete,
 		onStageRolesChange,
@@ -115,8 +121,10 @@
 		onFormVisualConfigChange,
 		onEditToolNameChange,
 		onEditToolFieldsChange,
+		onEditToolEditModeChange,
 		onEditToolDelete,
-		onEditToolClose
+		onEditToolClose,
+		onGlobalToolDelete
 	}: Props = $props();
 
 	// Track palette expanded state for sidebar width
@@ -128,9 +136,12 @@
 	// Edit tool editor mode
 	const isEditToolEditor = $derived(context.type === 'editTool');
 
-	// Auto-switch logic: show PropertyView when something is selected (not form or editTool)
+	// Global tools panel mode
+	const isGlobalToolsPanel = $derived(context.type === 'globalTools');
+
+	// Auto-switch logic: show PropertyView when something is selected (not form, editTool, or globalTools)
 	const hasSelection = $derived(
-		context.type !== 'none' && context.type !== 'form' && context.type !== 'editTool'
+		context.type !== 'none' && context.type !== 'form' && context.type !== 'editTool' && context.type !== 'globalTools'
 	);
 </script>
 
@@ -160,8 +171,19 @@
 			ancestorFields={editToolAncestorFields}
 			onNameChange={(name) => onEditToolNameChange?.(selectedEditTool.id, name)}
 			onFieldsChange={(fieldIds) => onEditToolFieldsChange?.(selectedEditTool.id, fieldIds)}
+			onEditModeChange={(editMode) => onEditToolEditModeChange?.(selectedEditTool.id, editMode)}
 			onDelete={() => onEditToolDelete?.(selectedEditTool.id)}
 			onClose={onEditToolClose}
+		/>
+	{:else if isGlobalToolsPanel}
+		<GlobalToolsPanel
+			{globalEditTools}
+			{roles}
+			onToolRolesChange={onToolRolesChange}
+			onToolVisualConfigChange={onToolVisualConfigChange}
+			onSelectTool={onSelectTool}
+			onDeleteTool={onGlobalToolDelete}
+			{onCreateRole}
 		/>
 	{:else if hasSelection}
 		<PropertyView
