@@ -2,6 +2,7 @@ import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { defineConfig } from 'vitest/config';
 import tailwindcss from '@tailwindcss/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
+import { SvelteKitPWA } from '@vite-pwa/sveltekit';
 import basicSsl from '@vitejs/plugin-basic-ssl';
 
 export default defineConfig({
@@ -9,6 +10,59 @@ export default defineConfig({
 		basicSsl(),
 		tailwindcss(),
 		sveltekit(),
+		SvelteKitPWA({
+			strategies: 'generateSW',
+			registerType: 'autoUpdate',
+			includeAssets: ['icons/*.png', 'icons/*.svg'],
+			manifest: {
+				name: 'Karte',
+				short_name: 'Karte',
+				description: 'Geographic data collection with offline-first capabilities',
+				start_url: '/participant/map',
+				scope: '/',
+				display: 'standalone',
+				background_color: '#ffffff',
+				theme_color: '#000000',
+				orientation: 'portrait-primary',
+				icons: [
+					{
+						src: '/icons/icon-192.png',
+						sizes: '192x192',
+						type: 'image/png',
+						purpose: 'any maskable'
+					},
+					{
+						src: '/icons/icon-512.png',
+						sizes: '512x512',
+						type: 'image/png',
+						purpose: 'any maskable'
+					}
+				]
+			},
+			workbox: {
+				globPatterns: [],
+				navigateFallback: null,
+				navigateFallbackDenylist: [/^\/api\//, /^\/_\//],
+				runtimeCaching: [
+					{
+						urlPattern: /^https:\/\/.*\/participant\/.*/,
+						handler: 'NetworkFirst',
+						options: {
+							cacheName: 'pages-cache',
+							expiration: {
+								maxEntries: 50,
+								maxAgeSeconds: 60 * 60 * 24 * 7
+							}
+						}
+					}
+				]
+			},
+			devOptions: {
+				enabled: true,
+				type: 'classic',
+				navigateFallbackAllowlist: [/^\/$/]
+			}
+		}),
 		paraglideVitePlugin({
 			project: './project.inlang',
 			outdir: './src/lib/paraglide'

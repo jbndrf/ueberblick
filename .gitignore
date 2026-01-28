@@ -67,3 +67,6 @@ git_login.md
 
 # Data directory (Docker volumes, local data)
 /data
+
+# Cached map tiles
+static/tiles

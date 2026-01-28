@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import type { Map as LeafletMap, TileLayer, Marker as LeafletMarker } from 'leaflet';
+	import { createCachedTileLayer } from '$lib/components/map/cached-tile-layer';
+	import type { ParticipantGateway } from '$lib/participant-state/gateway.svelte';
 
 	interface MapSource {
 		id: string;
@@ -90,6 +92,7 @@
 		visibleCategoryIds?: string[];
 		workflowInstances?: WorkflowInstance[];
 		visibleWorkflowIds?: string[];
+		gateway?: ParticipantGateway | null;
 		onMarkerClick?: (marker: MapMarker) => void;
 		onWorkflowInstanceClick?: (instance: WorkflowInstance) => void;
 		onMapReady?: (map: LeafletMap) => void;
@@ -105,6 +108,7 @@
 		visibleCategoryIds = [],
 		workflowInstances = [],
 		visibleWorkflowIds = [],
+		gateway,
 		onMarkerClick,
 		onWorkflowInstanceClick,
 		onMapReady,
@@ -171,13 +175,24 @@
 		return layer.expand?.source_id ?? null;
 	}
 
-	// Create tile layer from source
+	// Create tile layer from source (uses cached tile layer for offline support)
 	function createTileLayer(L: typeof import('leaflet'), source: MapSource): TileLayer {
-		return L.tileLayer(source.url || defaultTileUrl, {
+		const options = {
 			attribution: source.config?.attribution || defaultAttribution,
-			minZoom: source.config?.minZoom ?? mapSettings?.min_zoom ?? 1,
-			maxZoom: source.config?.maxZoom ?? mapSettings?.max_zoom ?? 19
-		});
+			// Use detected_min/max_zoom (from tile processor) or minZoom/maxZoom (from presets)
+			minZoom: source.config?.detected_min_zoom ?? source.config?.minZoom ?? mapSettings?.min_zoom ?? 1,
+			maxZoom: source.config?.detected_max_zoom ?? source.config?.maxZoom ?? mapSettings?.max_zoom ?? 19
+		};
+
+		// Use cached tile layer which checks IndexedDB first
+		// Pass gateway to respect online/offline state
+		return createCachedTileLayer(
+			source.id,
+			source.url || defaultTileUrl,
+			options,
+			L,
+			gateway
+		);
 	}
 
 	// Update base layer
@@ -202,11 +217,15 @@
 			}
 		}
 
-		// Fallback: if no base layer, add default OSM
+		// Fallback: if no base layer, add default OSM (also cached)
 		if (!currentBaseTileLayer) {
-			currentBaseTileLayer = L.tileLayer(defaultTileUrl, {
-				attribution: defaultAttribution
-			});
+			currentBaseTileLayer = createCachedTileLayer(
+				'default-osm',
+				defaultTileUrl,
+				{ attribution: defaultAttribution },
+				L,
+				gateway
+			);
 			currentBaseTileLayer.addTo(map);
 		}
 	}
@@ -214,6 +233,8 @@
 	// Update overlay layers
 	function updateOverlayLayers(L: typeof import('leaflet')) {
 		if (!map) return;
+
+		console.log('[MapCanvas] updateOverlayLayers called, activeOverlayIds:', activeOverlayIds);
 
 		// Remove layers that are no longer active
 		for (const [id, tileLayer] of overlayTileLayers) {
@@ -227,13 +248,21 @@
 		for (const id of activeOverlayIds) {
 			if (!overlayTileLayers.has(id)) {
 				const layer = getLayerById(id);
+				console.log('[MapCanvas] Processing overlay id:', id, 'layer:', layer);
 				if (layer) {
 					const source = getSourceFromLayer(layer);
+					console.log('[MapCanvas] Source from layer:', source);
 					if (source) {
+						console.log('[MapCanvas] Creating tile layer with URL:', source.url, 'config:', source.config);
 						const tileLayer = createTileLayer(L, source);
 						tileLayer.addTo(map);
 						overlayTileLayers.set(id, tileLayer);
+						console.log('[MapCanvas] Tile layer added to map');
+					} else {
+						console.warn('[MapCanvas] No source found for layer:', layer);
 					}
+				} else {
+					console.warn('[MapCanvas] Layer not found for id:', id);
 				}
 			}
 		}

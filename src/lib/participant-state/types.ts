@@ -360,6 +360,51 @@ export interface Role {
 	updated: string;
 }
 
+/**
+ * Map source - matches `map_sources` collection
+ */
+export interface MapSource {
+	id: string;
+	owner_id: string;
+	name: string;
+	source_type: 'tile' | 'wms' | 'uploaded' | 'preset' | 'geojson';
+	url: string;
+	config: {
+		subdomains?: string[];
+		attribution?: string;
+		maxZoom?: number;
+		minZoom?: number;
+		[key: string]: unknown;
+	} | null;
+	status: 'pending' | 'processing' | 'completed' | 'failed' | null;
+	progress: number | null;
+	error_message: string | null;
+	tile_count: number | null;
+	created: string;
+	updated: string;
+}
+
+/**
+ * Map layer - matches `map_layers` collection
+ */
+export interface MapLayer {
+	id: string;
+	project_id: string;
+	source_id: string;
+	name: string;
+	display_order: number;
+	visible_to_roles: string[];
+	is_base_layer: boolean;
+	is_active: boolean;
+	config: Record<string, unknown> | null;
+	created: string;
+	updated: string;
+	// Expanded relation (when requested)
+	expand?: {
+		source_id?: MapSource;
+	};
+}
+
 // =============================================================================
 // Offline Pack Types
 // =============================================================================
@@ -373,14 +418,15 @@ export interface BoundingBox {
 
 export interface OfflinePackMetadata {
 	id: string;
-	name: string;
 	project_id: string;
-	bbox: BoundingBox;
+	center: GeoPoint;
+	radius_km: number;
 	zoom_levels: number[];
 	created_at: string;
 	updated_at: string;
+	marker_count: number;
+	instance_count: number;
 	tile_count: number;
-	estimated_size_mb: number;
 	download_completed: boolean;
 }
 
@@ -472,4 +518,20 @@ export interface BatchResult {
 	success: boolean;
 	results: GatewayResult<unknown>[];
 	failedCount: number;
+}
+
+// =============================================================================
+// Cached Session (for offline authentication)
+// =============================================================================
+
+/**
+ * Cached participant session for offline mode.
+ * Stored in IndexedDB when user toggles to offline mode.
+ */
+export interface CachedSession {
+	participantId: string;
+	projectId: string;
+	email: string;
+	cachedAt: string;
+	expiresAt: string;
 }

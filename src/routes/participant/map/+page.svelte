@@ -1,10 +1,20 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
+	import {
+		downloadPack,
+		deletePack,
+		getDownloadedPacks,
+		getDownloadProgress,
+		getDownloadCompleteSignal,
+		getOfflineModeChangeSignal
+	} from '$lib/participant-state';
+	import { Loader2 } from 'lucide-svelte';
 	import { MapCanvas, BottomControlBar, LayerSheet, FilterSheet, WorkflowSelector } from './components';
 	import { WorkflowInstanceDetailModule, createSelection, type Selection, type Marker } from './modules';
 	import { FormFillTool } from './modules/workflow-instance-detail/tools';
 	import ModuleShell from '$lib/components/module-shell.svelte';
+	import { ToolsMenu, AreaSelector } from '$lib/components/map';
 	import type { Map as LeafletMap } from 'leaflet';
 	import { mapNavCallbacks } from './nav-store.svelte';
 
@@ -42,6 +52,9 @@
 	let filterSheetOpen = $state(false);
 	let workflowSelectorOpen = $state(false);
 	let isSelectingCoordinates = $state(false);
+	let toolsMenuOpen = $state(false);
+	let areaSelectorActive = $state(false);
+	let isDownloading = $state(false);
 
 	// Set up navigation callbacks for header (desktop) navigation
 	onMount(() => {
@@ -49,7 +62,7 @@
 			onLayersClick: () => (layerSheetOpen = true),
 			onFiltersClick: () => (filterSheetOpen = true),
 			onLocationClick: centerOnLocation,
-			onToolsClick: () => {},
+			onToolsClick: () => (toolsMenuOpen = true),
 			onWorkflowClick: () => (workflowSelectorOpen = !workflowSelectorOpen)
 		});
 	});
@@ -87,14 +100,50 @@
 	let visibleCategoryIds = $state<string[]>([]);
 	let visibleWorkflowIds = $state<string[]>([]);
 
-	// Load all data via gateway
+	// ==========================================================================
+	// Download Progress & Event Signals
+	// ==========================================================================
+
+	// Reactive download progress (always visible when downloading)
+	const downloadProgress = $derived(getDownloadProgress());
+
+	// Event signals for reactive data reload
+	const downloadCompleteSignal = $derived(getDownloadCompleteSignal());
+	const offlineModeSignal = $derived(getOfflineModeChangeSignal());
+
+	// Track previous signal values to detect changes
+	let prevDownloadSignal = 0;
+	let prevOfflineSignal = 0;
+
+	// Load data on mount
 	$effect(() => {
 		loadData();
+	});
+
+	// Reload on download complete
+	$effect(() => {
+		const signal = downloadCompleteSignal;
+		if (signal > prevDownloadSignal) {
+			prevDownloadSignal = signal;
+			console.log('[map page] Download complete signal received, reloading data...');
+			loadData();
+		}
+	});
+
+	// Reload on offline mode change
+	$effect(() => {
+		const signal = offlineModeSignal;
+		if (signal > prevOfflineSignal) {
+			prevOfflineSignal = signal;
+			console.log('[map page] Offline mode change signal received, reloading data...');
+			loadData();
+		}
 	});
 
 	async function loadData() {
 		try {
 			isLoading = true;
+			console.log('[loadData] Gateway online status:', gateway.isOnline);
 
 			// Load all in parallel
 			const [layersResult, markersResult, instancesResult, workflowsResult, stagesResult] = await Promise.all([
@@ -121,6 +170,8 @@
 			workflows = workflowsResult as Workflow[];
 			workflowStages = stagesResult;
 
+			console.log('[loadData] Loaded map layers:', mapLayers);
+			console.log('[loadData] First layer expand:', mapLayers[0]?.expand);
 			console.log('Loaded markers:', markers.length);
 			console.log('Loaded workflow instances:', workflowInstances.length);
 			console.log('Loaded workflows:', workflows.length);
@@ -377,6 +428,76 @@
 			);
 		}
 	}
+
+	// ==========================================================================
+	// Area Selection & Offline Download
+	// ==========================================================================
+
+	function handleSelectArea() {
+		areaSelectorActive = true;
+	}
+
+	async function handleAreaConfirm(center: { lat: number; lon: number }, radiusKm: number, zoomLevels: number[]) {
+		const projectId = data.participant?.project_id;
+		if (!projectId || typeof projectId !== 'string') {
+			console.error('No project ID available');
+			return;
+		}
+
+		isDownloading = true;
+		areaSelectorActive = false;
+
+		try {
+			// Delete existing pack if any
+			const existingPacks = await getDownloadedPacks();
+			for (const pack of existingPacks) {
+				await deletePack(pack.id);
+			}
+
+			// Download new pack
+			await downloadPack({
+				projectId,
+				center,
+				radiusKm,
+				zoomLevels
+			});
+
+			console.log('Offline pack downloaded successfully');
+		} catch (error) {
+			console.error('Failed to download offline pack:', error);
+		} finally {
+			isDownloading = false;
+		}
+	}
+
+	function handleAreaCancel() {
+		areaSelectorActive = false;
+	}
+
+	async function handleLogout() {
+		try {
+			await fetch('/participant/logout', {
+				method: 'POST',
+				redirect: 'manual'
+			});
+		} catch (error) {
+			console.error('Logout error:', error);
+		}
+		window.location.href = '/participant/login';
+	}
+
+	// Count of tile sources for area selector estimate
+	// Include: tile, uploaded (completed), preset
+	const TILE_SOURCE_TYPES = ['tile', 'uploaded', 'preset'];
+	const tileSourceCount = $derived(
+		mapLayers.filter((l) => {
+			const source = l.expand?.source_id;
+			if (!source) return false;
+			if (!TILE_SOURCE_TYPES.includes(source.source_type)) return false;
+			if (source.source_type === 'uploaded' && source.status !== 'completed') return false;
+			return source.url; // Must have a URL
+		}).length
+	);
 </script>
 
 <div class="relative h-full w-full">
@@ -388,6 +509,7 @@
 		{visibleCategoryIds}
 		{workflowInstances}
 		{visibleWorkflowIds}
+		{gateway}
 		onMarkerClick={handleMarkerClick}
 		onWorkflowInstanceClick={handleWorkflowInstanceClick}
 		onMapReady={handleMapReady}
@@ -397,6 +519,7 @@
 	<BottomControlBar
 		onLayersClick={() => (layerSheetOpen = true)}
 		onFiltersClick={() => (filterSheetOpen = true)}
+		onToolsClick={() => (toolsMenuOpen = true)}
 		onLocationClick={centerOnLocation}
 		{workflows}
 		{map}
@@ -462,6 +585,45 @@
 				/>
 			{/snippet}
 		</ModuleShell>
+	{/if}
+
+	<!-- Tools Menu -->
+	<ToolsMenu
+		bind:open={toolsMenuOpen}
+		participant={data.participant ? {
+			id: data.participant.id,
+			name: String(data.participant.name || data.participant.email || 'Participant'),
+			email: data.participant.email ? String(data.participant.email) : undefined,
+			project_id: data.participant.project_id ? String(data.participant.project_id) : undefined
+		} : undefined}
+		roles={[]}
+		onLogout={handleLogout}
+		onSelectArea={handleSelectArea}
+	/>
+
+	<!-- Area Selector for offline download -->
+	{#if areaSelectorActive}
+		<AreaSelector
+			{map}
+			initialCenter={map ? { lat: map.getCenter().lat, lon: map.getCenter().lng } : null}
+			sourceCount={Math.max(1, tileSourceCount)}
+			onConfirm={handleAreaConfirm}
+			onCancel={handleAreaCancel}
+			bind:isActive={areaSelectorActive}
+		/>
+	{/if}
+
+	<!-- Floating download progress (always visible outside modal) -->
+	{#if downloadProgress && downloadProgress.status === 'downloading'}
+		<div class="fixed bottom-20 left-4 right-4 z-[1200] md:left-auto md:right-4 md:w-80">
+			<div class="rounded-lg bg-background/95 p-3 shadow-lg backdrop-blur-sm border">
+				<div class="flex items-center gap-2 mb-2">
+					<Loader2 class="h-4 w-4 animate-spin text-blue-600" />
+					<span class="text-sm font-medium">Downloading offline data...</span>
+				</div>
+				<p class="text-xs text-muted-foreground">{downloadProgress.current_operation}</p>
+			</div>
+		</div>
 	{/if}
 
 	{#if isLoading}

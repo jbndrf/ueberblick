@@ -21,6 +21,10 @@ export {
 	getReferenceData,
 	setReferenceData,
 	initializeParticipantState,
+	// Session caching for offline mode
+	cacheSession,
+	getCachedSession,
+	clearCachedSession,
 	type ReferenceData
 } from './context.svelte';
 
@@ -92,7 +96,8 @@ export {
 	deleteDatabase,
 	checkStorageQuota,
 	requestPersistentStorage,
-	isStoragePersistent
+	isStoragePersistent,
+	type CachedTile
 } from './db';
 
 // =============================================================================
@@ -112,25 +117,47 @@ export {
 	getPackCategories,
 	refreshPack,
 	estimatePackSize
-} from './pack-downloader';
+} from './pack-downloader.svelte';
+
+// =============================================================================
+// Download Events (reactive signaling)
+// =============================================================================
+
+export {
+	signalDownloadComplete,
+	signalOfflineModeChange,
+	getDownloadCompleteSignal,
+	getOfflineModeChangeSignal
+} from './download-events.svelte';
 
 // =============================================================================
 // Tile Cache
 // =============================================================================
 
 export {
+	// Progress tracking
 	getTileProgress,
 	resetTileProgress,
-	updateTileProgress,
+	// Tile calculations
 	calculateTileCount,
 	estimateTileSize,
 	getTileCoordinates,
-	downloadTilesForPack,
-	areTilesAvailable,
-	clearPackTiles,
+	radiusToBbox,
+	// Tile storage
+	storeTile,
+	getTile,
+	hasTile,
+	getTilesForSource,
+	deleteTilesForSource,
+	clearAllTiles,
 	getTileCacheStats,
-	type TileDownloadProgress
-} from './tile-cache';
+	// Download
+	downloadTilesForArea,
+	// Types
+	type TileSource,
+	type TileDownloadProgress,
+	type DownloadOptions
+} from './tile-cache.svelte';
 
 // =============================================================================
 // Utilities
@@ -179,6 +206,8 @@ export type {
 	ToolEdit,
 	MarkerCategory,
 	Role,
+	MapSource,
+	MapLayer,
 
 	// Network
 	NetworkStatus,
@@ -204,5 +233,8 @@ export type {
 
 	// Gateway result types
 	GatewayResult,
-	BatchResult
+	BatchResult,
+
+	// Session caching
+	CachedSession
 } from './types';

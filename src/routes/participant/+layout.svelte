@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
+	import { onMount } from 'svelte';
+	import { browser } from '$app/environment';
 	import * as m from '$lib/paraglide/messages';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { Button } from '$lib/components/ui/button';
@@ -15,8 +17,29 @@
 	import { setupPersistence } from '$lib/participant-state/persistence.svelte';
 	import {
 		setParticipantGateway,
-		setReferenceData
+		setReferenceData,
+		getCachedSession,
+		clearCachedSession
 	} from '$lib/participant-state/context.svelte';
+
+	// Register service worker for PWA
+	onMount(async () => {
+		if (browser && 'serviceWorker' in navigator) {
+			try {
+				const { registerSW } = await import('virtual:pwa-register');
+				const updateSW = registerSW({
+					onRegisteredSW(swScriptUrl, registration) {
+						console.log('Service worker registered:', swScriptUrl);
+					},
+					onRegisterError(error) {
+						console.error('Service worker registration error:', error);
+					}
+				});
+			} catch (e) {
+				console.log('PWA registration not available:', e);
+			}
+		}
+	});
 
 	let { data, children } = $props();
 
@@ -26,6 +49,9 @@
 	// Gateway state
 	let gateway: ParticipantGateway | null = $state(null);
 	let gatewayInitialized = $state(false);
+
+	// Offline session state (for when server is unreachable)
+	let offlineSession = $state<{ participantId: string; projectId: string; email: string } | null>(null);
 
 	// Create gateway synchronously if participant is available
 	// This allows $effect in setupPersistence to work during component init
@@ -44,6 +70,24 @@
 		}
 	});
 
+	// Check for cached offline session if server didn't provide participant
+	$effect(() => {
+		if (!data.participant && !gateway && !offlineSession && browser) {
+			checkOfflineSession();
+		}
+	});
+
+	async function checkOfflineSession() {
+		const cached = await getCachedSession();
+		if (cached) {
+			offlineSession = cached;
+			gateway = createParticipantGateway(cached.participantId, cached.projectId);
+			gateway.setOfflineMode(true); // Start in offline mode
+			setParticipantGateway(gateway);
+			setupPersistence(gateway);
+		}
+	}
+
 	async function initGatewayData() {
 		if (!gateway) return;
 
@@ -59,6 +103,8 @@
 
 	async function handleSignOut() {
 		try {
+			// Clear cached offline session
+			await clearCachedSession();
 			// Call logout endpoint to clear cookie
 			await fetch('/participant/logout', {
 				method: 'POST',
@@ -109,7 +155,7 @@
 				</Button>
 			</div>
 
-			{#if data.participant}
+			{#if data.participant || offlineSession}
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger>
 						{#snippet child({ props })}
@@ -123,9 +169,9 @@
 						<DropdownMenu.Label>
 							<div class="flex flex-col space-y-1">
 								<p class="text-sm font-medium leading-none">{m.profileAccount()}</p>
-								{#if data.participant.email}
+								{#if data.participant?.email || offlineSession?.email}
 									<p class="text-xs leading-none text-muted-foreground">
-										{data.participant.email}
+										{data.participant?.email || offlineSession?.email}
 									</p>
 								{/if}
 							</div>

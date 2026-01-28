@@ -8,12 +8,14 @@
 import { getContext, setContext } from 'svelte';
 import { createParticipantGateway, type ParticipantGateway } from './gateway.svelte';
 import { setupPersistence, saveReferenceData, loadReferenceData } from './persistence.svelte';
+import { getDB } from './db';
 import type {
 	Workflow,
 	WorkflowStage,
 	WorkflowConnection,
 	MarkerCategory,
-	Role
+	Role,
+	CachedSession
 } from './types';
 
 const GATEWAY_KEY = Symbol('participant-gateway');
@@ -139,4 +141,58 @@ export async function initializeParticipantState(
 	}
 
 	return gateway;
+}
+
+// =============================================================================
+// Session Caching (for offline authentication)
+// =============================================================================
+
+const OFFLINE_GRACE_DAYS = 30;
+
+/**
+ * Cache participant session for offline use.
+ * Call when user toggles to offline mode.
+ */
+export async function cacheSession(participant: {
+	id: string;
+	project_id: string;
+	email?: string;
+}): Promise<void> {
+	const db = await getDB();
+	await db.put('records', {
+		_key: 'session/current',
+		_collection: 'session',
+		_status: 'unchanged',
+		id: 'current',
+		participantId: participant.id,
+		projectId: participant.project_id,
+		email: participant.email || '',
+		cachedAt: new Date().toISOString(),
+		expiresAt: new Date(Date.now() + OFFLINE_GRACE_DAYS * 24 * 60 * 60 * 1000).toISOString()
+	});
+}
+
+/**
+ * Get cached session for offline mode startup.
+ * Returns null if no session or expired.
+ */
+export async function getCachedSession(): Promise<CachedSession | null> {
+	const db = await getDB();
+	const record = await db.get('records', 'session/current');
+	if (!record) return null;
+
+	const session = record as unknown as CachedSession & { expiresAt: string };
+	if (new Date(session.expiresAt) < new Date()) {
+		return null; // Expired
+	}
+	return session;
+}
+
+/**
+ * Clear cached session.
+ * Call on logout.
+ */
+export async function clearCachedSession(): Promise<void> {
+	const db = await getDB();
+	await db.delete('records', 'session/current');
 }

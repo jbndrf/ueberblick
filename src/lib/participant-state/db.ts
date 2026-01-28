@@ -1,7 +1,7 @@
 /**
  * IndexedDB wrapper for participant state
  *
- * Version 3: Generic 'records' store for any collection.
+ * Version 4: Added tiles store for custom map tile caching.
  * The gateway is now a transparent proxy - any collection works.
  */
 
@@ -19,6 +19,21 @@ export interface CachedRecord {
 	_retryCount?: number;
 	id: string;
 	[key: string]: unknown; // actual record data
+}
+
+/**
+ * Cached map tile
+ * Key format: "{sourceId}/{z}/{x}/{y}" to support multiple tile sources
+ */
+export interface CachedTile {
+	key: string; // "{sourceId}/{z}/{x}/{y}"
+	sourceId: string; // map_sources.id
+	z: number;
+	x: number;
+	y: number;
+	blob: Blob;
+	urlTemplate: string; // original tile URL template for reference
+	cachedAt: string;
 }
 
 /**
@@ -50,10 +65,20 @@ interface ParticipantStateDB extends DBSchema {
 			'by-participant': string;
 		};
 	};
+
+	// Map tile cache (supports multiple tile sources)
+	tiles: {
+		key: string; // "{sourceId}/{z}/{x}/{y}"
+		value: CachedTile;
+		indexes: {
+			by_source: string;
+			by_zoom: number;
+		};
+	};
 }
 
 const DB_NAME = 'participant-state';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 let dbInstance: IDBPDatabase<ParticipantStateDB> | null = null;
 
@@ -112,6 +137,13 @@ export async function initDB(): Promise<IDBPDatabase<ParticipantStateDB>> {
 				store.createIndex('by-sync-status', 'syncStatus');
 				store.createIndex('by-timestamp', 'timestamp');
 				store.createIndex('by-participant', 'participantId');
+			}
+
+			// Map tile cache (v4) - supports multiple tile sources
+			if (!db.objectStoreNames.contains('tiles')) {
+				const store = db.createObjectStore('tiles', { keyPath: 'key' });
+				store.createIndex('by_source', 'sourceId');
+				store.createIndex('by_zoom', 'z');
 			}
 		}
 	});

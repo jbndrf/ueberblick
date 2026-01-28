@@ -18,10 +18,28 @@ async function getUnzipper() {
 	return unzipper;
 }
 
+interface TileBounds {
+	minLat: number;
+	maxLat: number;
+	minLon: number;
+	maxLon: number;
+}
+
 interface TileStats {
 	tileCount: number;
 	minZoom: number;
 	maxZoom: number;
+	bounds: TileBounds | null;
+}
+
+// Tile coordinate to lat/lon conversion functions
+function tile2lon(x: number, z: number): number {
+	return (x / Math.pow(2, z)) * 360 - 180;
+}
+
+function tile2lat(y: number, z: number): number {
+	const n = Math.PI - (2 * Math.PI * y) / Math.pow(2, z);
+	return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
 }
 
 /**
@@ -100,8 +118,8 @@ export async function processTileUpload(
 		const source = await pb.collection('map_sources').getOne(sourceId);
 		const config = (source.config as UploadedSourceConfig) || {};
 
-		// Generate tile URL pattern
-		const tileUrl = `/tiles/${sourceId}/{z}/{x}/{y}.${config.tile_format || 'png'}`;
+		// Generate tile URL pattern (use authenticated API endpoint)
+		const tileUrl = `/api/tiles/${sourceId}/{z}/{x}/{y}.${config.tile_format || 'png'}`;
 
 		// Update source with completed status
 		await pb.collection('map_sources').update(sourceId, {
@@ -112,7 +130,8 @@ export async function processTileUpload(
 			config: {
 				...config,
 				detected_min_zoom: stats.minZoom,
-				detected_max_zoom: stats.maxZoom
+				detected_max_zoom: stats.maxZoom,
+				bounds: stats.bounds
 			}
 		});
 
@@ -140,12 +159,19 @@ export async function processTileUpload(
 }
 
 /**
- * Calculate statistics about extracted tiles
+ * Calculate statistics about extracted tiles including geographic bounds
  */
 async function calculateTileStats(tilesDir: string): Promise<TileStats> {
 	let tileCount = 0;
 	let minZoom = Infinity;
 	let maxZoom = -Infinity;
+
+	// Track tile coordinates at the maximum zoom level for bounds calculation
+	let boundsZoom = -1;
+	let minX = Infinity;
+	let maxX = -Infinity;
+	let minY = Infinity;
+	let maxY = -Infinity;
 
 	try {
 		const zoomDirs = await readdir(tilesDir);
@@ -163,21 +189,64 @@ async function calculateTileStats(tilesDir: string): Promise<TileStats> {
 
 			const xDirs = await readdir(zPath);
 			for (const xDir of xDirs) {
+				const x = parseInt(xDir, 10);
 				const xPath = path.join(zPath, xDir);
 				const xStat = await stat(xPath);
 				if (!xStat.isDirectory()) continue;
 
 				const tiles = await readdir(xPath);
-				tileCount += tiles.filter((f) => /\.(png|jpg|jpeg|webp)$/i.test(f)).length;
+				const tileFiles = tiles.filter((f) => /\.(png|jpg|jpeg|webp)$/i.test(f));
+				tileCount += tileFiles.length;
+
+				// Track bounds at the highest zoom level (most precise)
+				if (z >= boundsZoom && tileFiles.length > 0) {
+					if (z > boundsZoom) {
+						// Reset bounds for higher zoom
+						boundsZoom = z;
+						minX = Infinity;
+						maxX = -Infinity;
+						minY = Infinity;
+						maxY = -Infinity;
+					}
+
+					if (!isNaN(x)) {
+						minX = Math.min(minX, x);
+						maxX = Math.max(maxX, x);
+					}
+
+					for (const tileFile of tileFiles) {
+						const y = parseInt(tileFile.replace(/\.(png|jpg|jpeg|webp)$/i, ''), 10);
+						if (!isNaN(y)) {
+							minY = Math.min(minY, y);
+							maxY = Math.max(maxY, y);
+						}
+					}
+				}
 			}
 		}
 	} catch (err) {
 		console.error('Error calculating tile stats:', err);
 	}
 
+	// Calculate geographic bounds from tile coordinates
+	let bounds: TileBounds | null = null;
+	if (boundsZoom >= 0 && minX !== Infinity && maxX !== -Infinity && minY !== Infinity && maxY !== -Infinity) {
+		bounds = {
+			// West edge of leftmost tile
+			minLon: tile2lon(minX, boundsZoom),
+			// East edge of rightmost tile (next tile's west edge)
+			maxLon: tile2lon(maxX + 1, boundsZoom),
+			// North edge of topmost tile (y increases southward in TMS)
+			maxLat: tile2lat(minY, boundsZoom),
+			// South edge of bottommost tile
+			minLat: tile2lat(maxY + 1, boundsZoom)
+		};
+	}
+
 	return {
 		tileCount,
 		minZoom: minZoom === Infinity ? 0 : minZoom,
-		maxZoom: maxZoom === -Infinity ? 0 : maxZoom
+		maxZoom: maxZoom === -Infinity ? 0 : maxZoom,
+		bounds
 	};
 }
