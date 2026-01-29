@@ -2,9 +2,6 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
 	import {
-		downloadPack,
-		deletePack,
-		getDownloadedPacks,
 		getDownloadProgress,
 		getDownloadCompleteSignal,
 		getOfflineModeChangeSignal
@@ -14,7 +11,7 @@
 	import { WorkflowInstanceDetailModule, createSelection, type Selection, type Marker } from './modules';
 	import { FormFillTool } from './modules/workflow-instance-detail/tools';
 	import ModuleShell from '$lib/components/module-shell.svelte';
-	import { ToolsMenu, AreaSelector } from '$lib/components/map';
+	import { ToolsMenu } from '$lib/components/map';
 	import type { Map as LeafletMap } from 'leaflet';
 	import { mapNavCallbacks } from './nav-store.svelte';
 
@@ -37,6 +34,8 @@
 				role_id?: string;
 				[key: string]: unknown;
 			};
+			collectionNames?: string[];
+			fileFields?: Record<string, string[]>;
 		};
 	}
 
@@ -53,8 +52,6 @@
 	let workflowSelectorOpen = $state(false);
 	let isSelectingCoordinates = $state(false);
 	let toolsMenuOpen = $state(false);
-	let areaSelectorActive = $state(false);
-	let isDownloading = $state(false);
 
 	// Set up navigation callbacks for header (desktop) navigation
 	onMount(() => {
@@ -91,6 +88,9 @@
 	let workflows = $state<Workflow[]>([]);
 	let workflowStages = $state<any[]>([]);
 	let isLoading = $state(true);
+
+	// Guard to prevent concurrent loadData() calls (avoids PocketBase auto-cancellation)
+	let loadDataInFlight = false;
 
 	// Layer state
 	let activeBaseLayerId = $state<string | null>(null);
@@ -141,6 +141,13 @@
 	});
 
 	async function loadData() {
+		// Prevent concurrent calls to avoid PocketBase auto-cancellation
+		if (loadDataInFlight) {
+			console.log('[loadData] Already loading, skipping duplicate request');
+			return;
+		}
+		loadDataInFlight = true;
+
 		try {
 			isLoading = true;
 			console.log('[loadData] Gateway online status:', gateway.isOnline);
@@ -197,6 +204,7 @@
 			console.error('Failed to load map data:', error);
 		} finally {
 			isLoading = false;
+			loadDataInFlight = false;
 		}
 	}
 
@@ -429,51 +437,6 @@
 		}
 	}
 
-	// ==========================================================================
-	// Area Selection & Offline Download
-	// ==========================================================================
-
-	function handleSelectArea() {
-		areaSelectorActive = true;
-	}
-
-	async function handleAreaConfirm(center: { lat: number; lon: number }, radiusKm: number, zoomLevels: number[]) {
-		const projectId = data.participant?.project_id;
-		if (!projectId || typeof projectId !== 'string') {
-			console.error('No project ID available');
-			return;
-		}
-
-		isDownloading = true;
-		areaSelectorActive = false;
-
-		try {
-			// Delete existing pack if any
-			const existingPacks = await getDownloadedPacks();
-			for (const pack of existingPacks) {
-				await deletePack(pack.id);
-			}
-
-			// Download new pack
-			await downloadPack({
-				projectId,
-				center,
-				radiusKm,
-				zoomLevels
-			});
-
-			console.log('Offline pack downloaded successfully');
-		} catch (error) {
-			console.error('Failed to download offline pack:', error);
-		} finally {
-			isDownloading = false;
-		}
-	}
-
-	function handleAreaCancel() {
-		areaSelectorActive = false;
-	}
-
 	async function handleLogout() {
 		try {
 			await fetch('/participant/logout', {
@@ -485,19 +448,6 @@
 		}
 		window.location.href = '/participant/login';
 	}
-
-	// Count of tile sources for area selector estimate
-	// Include: tile, uploaded (completed), preset
-	const TILE_SOURCE_TYPES = ['tile', 'uploaded', 'preset'];
-	const tileSourceCount = $derived(
-		mapLayers.filter((l) => {
-			const source = l.expand?.source_id;
-			if (!source) return false;
-			if (!TILE_SOURCE_TYPES.includes(source.source_type)) return false;
-			if (source.source_type === 'uploaded' && source.status !== 'completed') return false;
-			return source.url; // Must have a URL
-		}).length
-	);
 </script>
 
 <div class="relative h-full w-full">
@@ -597,21 +547,10 @@
 			project_id: data.participant.project_id ? String(data.participant.project_id) : undefined
 		} : undefined}
 		roles={[]}
+		collectionNames={data.collectionNames ?? []}
+		fileFields={data.fileFields ?? {}}
 		onLogout={handleLogout}
-		onSelectArea={handleSelectArea}
 	/>
-
-	<!-- Area Selector for offline download -->
-	{#if areaSelectorActive}
-		<AreaSelector
-			{map}
-			initialCenter={map ? { lat: map.getCenter().lat, lon: map.getCenter().lng } : null}
-			sourceCount={Math.max(1, tileSourceCount)}
-			onConfirm={handleAreaConfirm}
-			onCancel={handleAreaCancel}
-			bind:isActive={areaSelectorActive}
-		/>
-	{/if}
 
 	<!-- Floating download progress (always visible outside modal) -->
 	{#if downloadProgress && downloadProgress.status === 'downloading'}

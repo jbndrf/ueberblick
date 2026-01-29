@@ -6,6 +6,7 @@
  */
 
 import { getDB, type CachedRecord } from './db';
+import { revokeAllBlobUrls } from './file-cache';
 import type { ParticipantGateway } from './gateway.svelte';
 import type {
 	Workflow,
@@ -155,10 +156,16 @@ export async function clearCollection(collection: string): Promise<void> {
 }
 
 /**
- * Clear all IndexedDB data (records, tiles, and operation log).
+ * Clear all IndexedDB data (records, tiles, files, and operation log).
  * Called after sync when user toggles back to online mode.
  */
 export async function clearAllData(): Promise<void> {
+	revokeAllBlobUrls();
 	const db = await getDB();
-	await Promise.all([db.clear('records'), db.clear('tiles'), db.clear('operation_log')]);
+	await Promise.all([
+		db.clear('records'),
+		db.clear('tiles'),
+		db.clear('files'),
+		db.clear('operation_log')
+	]);
 }

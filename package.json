@@ -70,10 +70,12 @@
 	},
 	"dependencies": {
 		"@sentry/sveltekit": "^10.19.0",
+		"@turf/turf": "^7.3.3",
 		"@types/leaflet": "^1.9.21",
 		"@types/unzipper": "^0.10.11",
 		"@xyflow/svelte": "^1.5.0",
 		"date-fns": "^4.1.0",
+		"fflate": "^0.8.2",
 		"html5-qrcode": "^2.3.8",
 		"idb": "^8.0.3",
 		"leaflet": "^1.9.4",

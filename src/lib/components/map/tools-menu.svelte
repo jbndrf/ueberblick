@@ -16,23 +16,28 @@
 		MapPin,
 		Trash2,
 		RefreshCw,
-		HardDrive
+		HardDrive,
+		Package
 	} from 'lucide-svelte';
 	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
 	import { uploadChanges } from '$lib/participant-state/sync.svelte';
 	import {
 		getDownloadProgress,
-		getDownloadedPacks,
 		deletePack,
 		cacheSession,
 		clearAllData,
 		signalOfflineModeChange,
 		getDownloadCompleteSignal,
-		type OfflinePackMetadata
+		syncProjectData,
+		persistOfflineMode,
+		resetDownloadProgress
 	} from '$lib/participant-state';
+	import { getPocketBase } from '$lib/pocketbase';
+	import { getDB, type DownloadedPackage } from '$lib/participant-state/db';
 	import { createPWAState, initPWAInstallListeners } from '$lib/utils/pwa-detection.svelte';
 	import { Switch } from '$lib/components/ui/switch';
 	import { onMount } from 'svelte';
+	import PackageSelector from './package-selector.svelte';
 
 	interface Props {
 		open: boolean;
@@ -44,8 +49,9 @@
 			project_id?: string;
 		};
 		roles?: Array<{ id: string; name: string }>;
+		collectionNames?: string[];
+		fileFields?: Record<string, string[]>;
 		onLogout?: () => void;
-		onSelectArea?: () => void;
 	}
 
 	let {
@@ -53,8 +59,9 @@
 		onClose,
 		participant,
 		roles = [],
-		onLogout,
-		onSelectArea
+		collectionNames = [],
+		fileFields = {},
+		onLogout
 	}: Props = $props();
 
 	// Gateway for online/offline state
@@ -66,8 +73,8 @@
 	// Download progress
 	const downloadProgress = $derived(getDownloadProgress());
 
-	// Pack metadata
-	let currentPack = $state<OfflinePackMetadata | null>(null);
+	// Downloaded package info
+	let currentPack = $state<DownloadedPackage | null>(null);
 	let isLoadingPack = $state(true);
 
 	// Sync state
@@ -77,6 +84,9 @@
 	// Delete confirmation
 	let showDeleteConfirm = $state(false);
 	let isDeleting = $state(false);
+
+	// Package selector dialog
+	let showPackageSelector = $state(false);
 
 	// User-controlled offline mode (distinct from network status)
 	let userOfflineMode = $state(false);
@@ -110,8 +120,10 @@
 	async function loadPackMetadata() {
 		isLoadingPack = true;
 		try {
-			const packs = await getDownloadedPacks();
-			currentPack = packs.length > 0 ? packs[0] : null;
+			const db = await getDB();
+			const packs = await db.getAll('packages');
+			const readyPacks = packs.filter(p => p.status === 'ready');
+			currentPack = readyPacks.length > 0 ? readyPacks[0] : null;
 		} catch (error) {
 			console.error('Failed to load pack metadata:', error);
 		} finally {
@@ -140,7 +152,13 @@
 
 		isDeleting = true;
 		try {
+			// Delete from packages store
+			const db = await getDB();
+			await db.delete('packages', currentPack.id);
+
+			// Also clear cached data using pack-downloader utility
 			await deletePack(currentPack.id);
+
 			currentPack = null;
 			showDeleteConfirm = false;
 		} catch (error) {
@@ -154,17 +172,41 @@
 		if (!gateway || !participant || !participant.project_id) return;
 
 		if (checked) {
-			// Going offline: cache session, switch gateway
-			await cacheSession({
-				id: participant.id,
-				project_id: participant.project_id,
-				email: participant.email
-			});
-			gateway.setOfflineMode(true);
-			userOfflineMode = true;
+			// Going offline: sync data first, then switch mode
+			isSyncing = true;
+			syncError = null;
 
-			// Signal mode change to trigger data reload from IndexedDB
-			signalOfflineModeChange();
+			try {
+				// 1. Download all project data (records + file blobs) to IndexedDB
+				const pb = getPocketBase();
+				await syncProjectData(collectionNames, pb, fileFields);
+
+				// 2. Cache session for offline auth
+				await cacheSession({
+					id: participant.id,
+					project_id: participant.project_id,
+					email: participant.email
+				});
+
+				// 3. Persist offline mode preference
+				persistOfflineMode(true);
+
+				// 4. Switch gateway to offline
+				gateway.setOfflineMode(true);
+				userOfflineMode = true;
+
+				// 5. Signal mode change to trigger data reload from IndexedDB
+				signalOfflineModeChange();
+			} catch (error) {
+				console.error('Failed to sync for offline:', error);
+				syncError = error instanceof Error ? error.message : 'Sync failed';
+			} finally {
+				isSyncing = false;
+				// Clear download progress after a delay
+				setTimeout(() => {
+					resetDownloadProgress();
+				}, 2000);
+			}
 		} else {
 			// Going online: sync first, then clear data
 			await handleGoOnline();
@@ -184,11 +226,14 @@
 			// 2. Clear all local data
 			await clearAllData();
 
-			// 3. Switch gateway to online
+			// 3. Clear persisted offline mode preference
+			persistOfflineMode(false);
+
+			// 4. Switch gateway to online
 			gateway.setOfflineMode(false);
 			userOfflineMode = false;
 
-			// 4. Signal mode change to trigger data reload from server
+			// 5. Signal mode change to trigger data reload from server
 			signalOfflineModeChange();
 		} catch (error) {
 			console.error('Failed to go online:', error);
@@ -198,9 +243,12 @@
 		}
 	}
 
-	function handleSelectArea() {
-		open = false;
-		onSelectArea?.();
+	function handleOpenPackages() {
+		showPackageSelector = true;
+	}
+
+	function handlePackageDownloaded() {
+		loadPackMetadata();
 	}
 
 	function handleClose() {
@@ -225,6 +273,12 @@
 
 	function formatCoordinates(center: { lat: number; lon: number }): string {
 		return `${center.lat.toFixed(4)}, ${center.lon.toFixed(4)}`;
+	}
+
+	function formatFileSize(bytes: number): string {
+		if (bytes < 1024) return `${bytes} B`;
+		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+		return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 	}
 </script>
 
@@ -363,26 +417,27 @@
 						<!-- Has downloaded data -->
 						<div class="rounded-md bg-green-50 p-3 dark:bg-green-950">
 							<div class="mb-2 flex items-center gap-2">
-								<MapPin class="h-4 w-4 text-green-600" />
+								<Package class="h-4 w-4 text-green-600" />
 								<span class="text-sm font-medium text-green-700 dark:text-green-300">
-									{currentPack.radius_km} km radius
+									{currentPack.name}
 								</span>
 							</div>
 							<div class="space-y-1 text-xs text-green-600 dark:text-green-400">
-								<p>Center: {formatCoordinates(currentPack.center)}</p>
-								<p>Downloaded: {formatDate(currentPack.created_at)}</p>
+								<p>Downloaded: {formatDate(currentPack.downloadedAt)}</p>
 								<p>
-									{currentPack.marker_count} markers, {currentPack.instance_count} instances,
-									{currentPack.tile_count.toLocaleString()} tiles
+									{currentPack.tileCount.toLocaleString()} tiles
+									{#if currentPack.fileSizeBytes}
+										({formatFileSize(currentPack.fileSizeBytes)})
+									{/if}
 								</p>
 							</div>
 						</div>
 
 						<!-- Pack Actions -->
-						<div class="flex gap-2">
-							<Button variant="outline" size="sm" class="flex-1" onclick={handleSelectArea}>
-								<RefreshCw class="mr-1 h-3 w-3" />
-								Update Area
+						<div class="flex flex-wrap gap-2">
+							<Button variant="outline" size="sm" class="flex-1" onclick={handleOpenPackages}>
+								<Package class="mr-1 h-3 w-3" />
+								Get Packages
 							</Button>
 							{#if showDeleteConfirm}
 								<Button
@@ -412,12 +467,12 @@
 					{:else}
 						<!-- No data downloaded -->
 						<p class="mb-3 text-xs text-muted-foreground">
-							Download map tiles and data for a specific area to work offline.
+							Download an offline package to work without internet.
 						</p>
-						<Button variant="default" size="sm" class="w-full" onclick={handleSelectArea}>
-							<MapPin class="mr-2 h-4 w-4" />
-							Select Area to Download
-						</Button>
+						<Button variant="default" size="sm" class="w-full" onclick={handleOpenPackages}>
+								<Package class="mr-2 h-4 w-4" />
+								Download Package
+							</Button>
 					{/if}
 				</div>
 			</div>
@@ -458,7 +513,7 @@
 			{/if}
 
 			<!-- Offline Mode Toggle -->
-			{#if gateway && currentPack}
+			{#if gateway}
 				<div class="rounded-lg border p-4">
 					<div class="flex items-center justify-between">
 						<div class="flex items-center gap-2">
@@ -478,32 +533,39 @@
 						/>
 					</div>
 
-					{#if userOfflineMode}
-						<p class="mt-2 text-xs text-muted-foreground">
-							Working from local data. Toggle off to sync and go online.
-						</p>
-					{:else}
-						<p class="mt-2 text-xs text-muted-foreground">
-							Connected to server. Toggle on to work offline.
-						</p>
-					{/if}
-
-					{#if isGoingOnline}
+					{#if isSyncing}
+						<div class="mt-2 flex items-center gap-2 text-sm text-blue-600">
+							<Loader2 class="h-4 w-4 animate-spin" />
+							<span>Syncing data for offline use...</span>
+						</div>
+						{#if downloadProgress}
+							<p class="mt-1 text-xs text-muted-foreground">
+								{downloadProgress.current_operation}
+							</p>
+						{/if}
+					{:else if isGoingOnline}
 						<div class="mt-2 flex items-center gap-2 text-sm text-blue-600">
 							<Loader2 class="h-4 w-4 animate-spin" />
 							<span>Syncing and going online...</span>
 						</div>
-					{/if}
-				</div>
-			{:else if gateway}
-				<!-- No pack downloaded - show simple status -->
-				<div class="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2">
-					{#if navigator.onLine}
-						<Wifi class="h-4 w-4 text-green-600" />
-						<span class="text-sm">Connected</span>
+					{:else if userOfflineMode}
+						<p class="mt-2 text-xs text-muted-foreground">
+							Working from local data. Toggle off to sync and go online.
+						</p>
+						{#if !currentPack}
+							<p class="mt-1 text-xs text-orange-600 dark:text-orange-400">
+								No tile package downloaded. Map tiles may not display.
+							</p>
+						{/if}
 					{:else}
-						<WifiOff class="h-4 w-4 text-orange-600" />
-						<span class="text-sm">No Connection</span>
+						<p class="mt-2 text-xs text-muted-foreground">
+							Connected to server. Toggle on to work offline.
+						</p>
+						{#if !currentPack}
+							<p class="mt-1 text-xs text-orange-600 dark:text-orange-400">
+								Download a package for offline map tiles.
+							</p>
+						{/if}
 					{/if}
 				</div>
 			{/if}
@@ -522,3 +584,13 @@
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>
+
+<!-- Package Selector Dialog -->
+{#if participant?.project_id}
+	<PackageSelector
+		bind:open={showPackageSelector}
+		projectId={participant.project_id}
+		onClose={() => (showPackageSelector = false)}
+		onDownloadComplete={handlePackageDownloaded}
+	/>
+{/if}

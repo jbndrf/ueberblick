@@ -5,6 +5,8 @@ import { zod } from 'sveltekit-superforms/adapters';
 import { mapLayerSchema, projectMapDefaultsSchema } from '$lib/schemas/map-settings';
 import type { MapLayer, MapLayerWithSource, ProjectMapDefaults } from '$lib/types/map-layer';
 import type { MapSource } from '$lib/types/map-sources';
+import { isValidPolygon } from '$lib/utils/geo-utils';
+import { createTilePackage, type TileSource } from '$lib/server/tile-packager';
 
 // Default map view settings (used when no base layer exists)
 const DEFAULT_MAP_SETTINGS: ProjectMapDefaults = {
@@ -61,6 +63,31 @@ export const load: PageServerLoad = async ({ locals: { pb }, params }) => {
 		// Find base layer for view defaults
 		const baseLayer = mapLayers.find((l) => l.is_base_layer);
 
+		// Fetch offline packages for this project
+		let offlinePackages: Array<{
+			id: string;
+			name: string;
+			project_id: string;
+			region_geojson: object;
+			zoom_min: number;
+			zoom_max: number;
+			layers: string[];
+			status: 'draft' | 'processing' | 'ready' | 'failed';
+			error_message?: string;
+			tile_count?: number;
+			file_size_bytes?: number;
+			created: string;
+			updated: string;
+		}> = [];
+		try {
+			offlinePackages = await pb.collection('offline_packages').getFullList({
+				filter: `project_id = "${projectId}"`,
+				sort: '-created'
+			});
+		} catch {
+			// Collection might not exist yet
+		}
+
 		// Initialize forms
 		const layerForm = await superValidate(zod(mapLayerSchema));
 		const defaultsForm = await superValidate(mapDefaults, zod(projectMapDefaultsSchema));
@@ -72,6 +99,7 @@ export const load: PageServerLoad = async ({ locals: { pb }, params }) => {
 			roles,
 			mapDefaults,
 			baseLayer,
+			offlinePackages,
 			layerForm,
 			defaultsForm
 		};
@@ -299,6 +327,225 @@ export const actions: Actions = {
 		} catch (err) {
 			console.error('Error updating base layer defaults:', err);
 			return fail(500, { message: 'Failed to update base layer defaults' });
+		}
+	},
+
+	// Create offline package
+	createPackage: async ({ request, locals: { pb }, params }) => {
+		const { projectId } = params;
+		const formData = await request.formData();
+		const name = formData.get('name') as string;
+		const zoomMin = formData.get('zoom_min') as string;
+		const zoomMax = formData.get('zoom_max') as string;
+		const regionGeojsonStr = formData.get('region_geojson') as string;
+		const layersJson = formData.get('layers') as string;
+		const visibleToRolesJson = formData.get('visible_to_roles') as string;
+
+		if (!name?.trim()) {
+			return fail(400, { message: 'Package name is required' });
+		}
+
+		if (!regionGeojsonStr?.trim()) {
+			return fail(400, { message: 'Region GeoJSON is required' });
+		}
+
+		let regionGeojson: object;
+		try {
+			regionGeojson = JSON.parse(regionGeojsonStr);
+			if (!isValidPolygon(regionGeojson)) {
+				return fail(400, { message: 'Invalid GeoJSON polygon' });
+			}
+		} catch {
+			return fail(400, { message: 'Invalid JSON format' });
+		}
+
+		let layerIds: string[] = [];
+		try {
+			layerIds = JSON.parse(layersJson);
+			if (!Array.isArray(layerIds) || layerIds.length === 0) {
+				return fail(400, { message: 'At least one layer must be selected' });
+			}
+		} catch {
+			return fail(400, { message: 'Invalid layers format' });
+		}
+
+		let visibleToRoles: string[] = [];
+		try {
+			if (visibleToRolesJson) {
+				visibleToRoles = JSON.parse(visibleToRolesJson);
+				if (!Array.isArray(visibleToRoles)) visibleToRoles = [];
+			}
+		} catch {
+			// Empty = all roles
+		}
+
+		const userId = pb.authStore.record?.id;
+		const zoomMinNum = parseInt(zoomMin, 10) || 10;
+		const zoomMaxNum = parseInt(zoomMax, 10) || 16;
+
+		// Create the package record with 'processing' status
+		let pkg;
+		try {
+			pkg = await pb.collection('offline_packages').create({
+				name: name.trim(),
+				project_id: projectId,
+				region_geojson: regionGeojson,
+				zoom_min: zoomMinNum,
+				zoom_max: zoomMaxNum,
+				layers: layerIds,
+				visible_to_roles: visibleToRoles,
+				status: 'processing',
+				created_by: userId
+			});
+		} catch (err) {
+			console.error('Error creating package record:', err);
+			return fail(500, { message: 'Failed to create package' });
+		}
+
+		// Fetch layer details with their sources
+		try {
+			const layerRecords = await pb.collection('map_layers').getFullList<MapLayerWithSource>({
+				filter: layerIds.map(id => `id = "${id}"`).join(' || '),
+				expand: 'source_id'
+			});
+
+			console.log(`[createPackage] Found ${layerRecords.length} layers`);
+
+			// Build tile sources from layers
+			// Accept tile-based source types: 'tile', 'preset' (OSM etc.), 'uploaded' (user's custom tiles)
+			const tileSources: TileSource[] = [];
+			const httpSourceTypes = ['tile', 'preset'];
+			for (const layer of layerRecords) {
+				const source = layer.expand?.source_id as MapSource | undefined;
+				console.log(`[createPackage] Layer "${layer.name}": source_type=${source?.source_type}, url=${source?.url}, source_id=${source?.id}`);
+
+				if (!source) continue;
+
+				// Handle uploaded sources (read from filesystem)
+				if (source.source_type === 'uploaded' && source.status === 'completed') {
+					const sourceConfig = source.config as { tile_format?: string } | null;
+					tileSources.push({
+						id: source.id, // Use source.id to match cached tile layer lookups
+						name: layer.name,
+						urlTemplate: '', // Not used for uploaded
+						isUploaded: true,
+						sourceId: source.id,
+						tileFormat: sourceConfig?.tile_format || 'png'
+					});
+				}
+				// Handle HTTP tile sources (tile, preset)
+				else if (httpSourceTypes.includes(source.source_type) && source.url) {
+					tileSources.push({
+						id: source.id, // Use source.id to match cached tile layer lookups
+						name: layer.name,
+						urlTemplate: source.url,
+						subdomains: source.config?.subdomains as string[] | undefined
+					});
+				}
+			}
+
+			if (tileSources.length === 0) {
+				const errorMsg = layerRecords.length === 0
+					? 'No layers found with the given IDs'
+					: 'No tile sources found in selected layers. Only tile-based layers (tile, preset, uploaded) can be packaged.';
+				await pb.collection('offline_packages').update(pkg.id, {
+					status: 'failed',
+					error_message: errorMsg
+				});
+				return fail(400, { message: errorMsg });
+			}
+
+			console.log(`[createPackage] Starting tile download for ${tileSources.length} sources...`);
+
+			// Download tiles and create ZIP
+			const result = await createTilePackage({
+				packageId: pkg.id,
+				regionPolygon: regionGeojson as any,
+				zoomMin: zoomMinNum,
+				zoomMax: zoomMaxNum,
+				layers: tileSources,
+				onProgress: (done, total, layer) => {
+					console.log(`[createPackage] Progress: ${done}/${total} (${layer})`);
+				}
+			});
+
+			console.log(`[createPackage] Package created: ${result.tileCount} tiles, ${result.fileSizeBytes} bytes`);
+
+			// Upload the ZIP file to PocketBase
+			const zipBlob = new Blob([result.zipBuffer], { type: 'application/zip' });
+			const zipFile = new File([zipBlob], `${pkg.id}.zip`, { type: 'application/zip' });
+
+			const updateFormData = new FormData();
+			updateFormData.append('status', 'ready');
+			updateFormData.append('tile_count', result.tileCount.toString());
+			updateFormData.append('file_size_bytes', result.fileSizeBytes.toString());
+			updateFormData.append('archive_file', zipFile);
+
+			await pb.collection('offline_packages').update(pkg.id, updateFormData);
+
+			console.log(`[createPackage] Package ${pkg.id} ready!`);
+
+			return { success: true, packageId: pkg.id };
+		} catch (err) {
+			console.error('Error creating tile package:', err);
+
+			// Update package status to failed
+			try {
+				await pb.collection('offline_packages').update(pkg.id, {
+					status: 'failed',
+					error_message: err instanceof Error ? err.message : 'Unknown error'
+				});
+			} catch {
+				// Ignore update error
+			}
+
+			return fail(500, { message: 'Failed to create tile package' });
+		}
+	},
+
+	// Delete offline package
+	deletePackage: async ({ request, locals: { pb } }) => {
+		const formData = await request.formData();
+		const id = formData.get('id') as string;
+
+		if (!id) {
+			return fail(400, { message: 'Package ID is required' });
+		}
+
+		try {
+			await pb.collection('offline_packages').delete(id);
+			return { success: true };
+		} catch (err) {
+			console.error('Error deleting package:', err);
+			return fail(500, { message: 'Failed to delete package' });
+		}
+	},
+
+	// Update package role visibility
+	updatePackageRoles: async ({ request, locals: { pb } }) => {
+		const formData = await request.formData();
+		const packageId = formData.get('packageId') as string;
+		const roleIdsJson = formData.get('roleIds') as string;
+
+		if (!packageId) {
+			return fail(400, { message: 'Package ID is required' });
+		}
+
+		let roleIds: string[] = [];
+		try {
+			roleIds = JSON.parse(roleIdsJson);
+		} catch {
+			return fail(400, { message: 'Invalid role IDs format' });
+		}
+
+		try {
+			await pb.collection('offline_packages').update(packageId, {
+				visible_to_roles: roleIds
+			});
+			return { success: true };
+		} catch (err) {
+			console.error('Error updating package roles:', err);
+			return fail(500, { message: 'Failed to update package roles' });
 		}
 	}
 };

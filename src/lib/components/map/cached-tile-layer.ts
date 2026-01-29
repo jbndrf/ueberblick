@@ -80,8 +80,13 @@ export function createCachedTileLayer(
 						}
 					}
 				})
-				.catch(() => {
-					// IndexedDB error - only fall back to network if online
+				.catch((error) => {
+					// Log actual database errors for debugging
+					console.error(
+						'[CachedTileLayer] Database error for tile',
+						`${sourceId}/${coords.z}/${coords.x}/${coords.y}:`,
+						error
+					);
 					if (!gateway || gateway.isOnline) {
 						loadFromNetwork(self, tile, coords, done);
 					} else {

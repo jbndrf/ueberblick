@@ -25,6 +25,9 @@ export {
 	cacheSession,
 	getCachedSession,
 	clearCachedSession,
+	// Offline mode persistence
+	persistOfflineMode,
+	getPersistedOfflineMode,
 	type ReferenceData
 } from './context.svelte';
 
@@ -86,6 +89,18 @@ export {
 } from './network.svelte';
 
 // =============================================================================
+// File Cache (offline file/image support)
+// =============================================================================
+
+export {
+	getCachedFileUrl,
+	getCachedFileUrlByRecord,
+	getFilesForRecord,
+	revokeAllBlobUrls,
+	buildFileKey
+} from './file-cache';
+
+// =============================================================================
 // Database
 // =============================================================================
 
@@ -97,7 +112,9 @@ export {
 	checkStorageQuota,
 	requestPersistentStorage,
 	isStoragePersistent,
-	type CachedTile
+	type CachedFile,
+	type CachedTile,
+	type DownloadedPackage
 } from './db';
 
 // =============================================================================
@@ -105,9 +122,15 @@ export {
 // =============================================================================
 
 export {
+	// Progress
 	getDownloadProgress,
 	resetDownloadProgress,
-	downloadPack,
+	updateDownloadProgress,
+	// Record storage helpers
+	storeRecords,
+	getRecordsByCollection,
+	clearCollectionRecords,
+	// Pack management
 	getDownloadedPacks,
 	getPack,
 	deletePack,
@@ -115,8 +138,8 @@ export {
 	getPackWorkflows,
 	getPackForms,
 	getPackCategories,
-	refreshPack,
-	estimatePackSize
+	// Project data sync (for offline toggle)
+	syncProjectData
 } from './pack-downloader.svelte';
 
 // =============================================================================
@@ -135,14 +158,6 @@ export {
 // =============================================================================
 
 export {
-	// Progress tracking
-	getTileProgress,
-	resetTileProgress,
-	// Tile calculations
-	calculateTileCount,
-	estimateTileSize,
-	getTileCoordinates,
-	radiusToBbox,
 	// Tile storage
 	storeTile,
 	getTile,
@@ -151,13 +166,19 @@ export {
 	deleteTilesForSource,
 	clearAllTiles,
 	getTileCacheStats,
-	// Download
-	downloadTilesForArea,
+	// ZIP extraction for packages
+	extractAndStoreTiles,
+	getPackageMetadata,
 	// Types
 	type TileSource,
-	type TileDownloadProgress,
-	type DownloadOptions
+	type ZipExtractionProgress
 } from './tile-cache.svelte';
+
+// =============================================================================
+// Query Module (for offline filter/sort support)
+// =============================================================================
+
+export { query, parseFilter, parseSort, type QueryOptions } from './query';
 
 // =============================================================================
 // Utilities

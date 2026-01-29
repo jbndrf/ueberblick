@@ -7,6 +7,7 @@
 	import MediaGallery from './MediaGallery.svelte';
 	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
 	import { POCKETBASE_URL } from '$lib/config/pocketbase';
+	import { getCachedFileUrlByRecord } from '$lib/participant-state/file-cache';
 	import type {
 		FormMode,
 		FormFieldWithValue,
@@ -181,6 +182,9 @@
 	let selectedFiles = $state<File[]>([]);
 	let removedExistingIndices = $state<Set<number>>(new Set());
 
+	// Cached blob URLs for offline display (resolved async from IndexedDB)
+	let cachedBlobUrls = $state<Record<string, string>>({});
+
 	// Get existing files, filtering out removed ones
 	const existingFiles = $derived.by(() => {
 		if (field.storedFiles && field.storedFiles.length > 0) {
@@ -194,13 +198,43 @@
 	// Count of existing files (after removals)
 	const existingFilesCount = $derived(existingFiles.length);
 
+	// Resolve cached file URLs when offline
+	$effect(() => {
+		if (!gateway || gateway.isOnline) return;
+		const files = existingFiles;
+		if (files.length === 0) return;
+
+		// Resolve blob URLs from IndexedDB for each existing file
+		for (const storedFile of files) {
+			const cacheKey = `${fileCollection}/${storedFile.recordId}/${storedFile.fileName}`;
+			if (cachedBlobUrls[cacheKey]) continue;
+
+			getCachedFileUrlByRecord(storedFile.recordId, storedFile.fileName).then((url) => {
+				if (url) {
+					cachedBlobUrls = { ...cachedBlobUrls, [cacheKey]: url };
+				}
+			});
+		}
+	});
+
 	// Build media files array for MediaGallery
 	const mediaFiles = $derived.by((): MediaFile[] => {
 		const files: MediaFile[] = [];
+		const isOffline = gateway && !gateway.isOnline;
 
 		// Existing files from database (filtered)
 		for (const storedFile of existingFiles) {
-			const url = `${POCKETBASE_URL}/api/files/${fileCollection}/${storedFile.recordId}/${storedFile.fileName}`;
+			const cacheKey = `${fileCollection}/${storedFile.recordId}/${storedFile.fileName}`;
+
+			let url: string;
+			if (isOffline && cachedBlobUrls[cacheKey]) {
+				// Use cached blob URL when offline
+				url = cachedBlobUrls[cacheKey];
+			} else {
+				// Use PocketBase URL when online (or as fallback)
+				url = `${POCKETBASE_URL}/api/files/${fileCollection}/${storedFile.recordId}/${storedFile.fileName}`;
+			}
+
 			files.push({
 				url,
 				name: storedFile.fileName,

@@ -2,6 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import { superValidate } from 'sveltekit-superforms';
 import { zod } from 'sveltekit-superforms/adapters';
 import { participantLoginSchema } from '$lib/schemas/auth';
+import { getAdminPb } from '$lib/server/admin-auth';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -49,17 +50,15 @@ export const actions: Actions = {
 				});
 			}
 
-			// Update last_active
-			await locals.pb.collection('participants').update(participant.id, {
+			// Update last_active via admin client (participant can't update own record)
+			const adminPb = await getAdminPb();
+			await adminPb.collection('participants').update(participant.id, {
 				last_active: new Date().toISOString()
 			});
 
-			// Auth cookie is automatically handled by hooks.server.ts
-			redirect(303, '/participant/map');
 		} catch (error: any) {
 			console.error('Participant login error:', error);
 
-			// Handle invalid credentials
 			if (error?.status === 400) {
 				return fail(400, {
 					form,
@@ -72,5 +71,8 @@ export const actions: Actions = {
 				message: 'An error occurred during login. Please try again.'
 			});
 		}
+
+		// Redirect OUTSIDE try-catch so SvelteKit can process it
+		redirect(303, '/participant/map');
 	}
 };

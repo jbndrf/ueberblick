@@ -9,6 +9,7 @@
 
 import { getPocketBase } from '$lib/pocketbase';
 import { getDB, type CachedRecord } from './db';
+import { getFilesForRecord, deleteLocalFilesForRecord, deleteFilesForRecord } from './file-cache';
 import type { ParticipantGateway } from './gateway.svelte';
 import type { SyncProgress } from './types';
 
@@ -94,8 +95,31 @@ export async function downloadAll(
 // =============================================================================
 
 /**
+ * Collection sync priority for dependency ordering.
+ * Lower numbers sync first. Collections not listed get priority 50.
+ *
+ * Order matters when records have relations:
+ * - workflow_instance_tool_usage must exist before field_values reference it
+ * - workflow_instances must exist before tool_usage references them
+ */
+const SYNC_PRIORITY: Record<string, number> = {
+	// Core entities first
+	workflow_instances: 10,
+	// Tool usage before field values (field values reference tool usage via last_modified_by_action)
+	workflow_instance_tool_usage: 20,
+	// Field values last (they reference tool usage)
+	workflow_instance_field_values: 30
+};
+
+function getSyncPriority(collection: string): number {
+	return SYNC_PRIORITY[collection] ?? 50;
+}
+
+/**
  * Push all pending changes from IndexedDB to PocketBase.
  * Reads from the generic 'records' store and syncs by status.
+ *
+ * Records are sorted by collection priority to ensure dependencies are synced first.
  */
 export async function uploadChanges(gateway: ParticipantGateway): Promise<void> {
 	const pb = getPocketBase();
@@ -103,9 +127,10 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 
 	// Get all pending records (new, modified, deleted)
 	const allRecords = await db.getAll('records');
-	const pending = allRecords.filter((r) =>
-		['new', 'modified', 'deleted'].includes(r._status)
-	);
+	const pending = allRecords
+		.filter((r) => ['new', 'modified', 'deleted'].includes(r._status))
+		// Sort by collection priority (lower = sync first)
+		.sort((a, b) => getSyncPriority(a._collection) - getSyncPriority(b._collection));
 
 	if (pending.length === 0) {
 		return;
@@ -126,14 +151,42 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 			// Prepare data for sync (remove local metadata)
 			const { _key, _collection, _status, _error, _retryCount, ...data } = record;
 
-			if (record._status === 'new') {
-				// Create new record in PocketBase
-				await pb.collection(collection).create(data);
-				console.log(`Created ${collection}/${id}`);
-			} else if (record._status === 'modified') {
-				// Update existing record
-				await pb.collection(collection).update(id, data);
-				console.log(`Updated ${collection}/${id}`);
+			if (record._status === 'new' || record._status === 'modified') {
+				// Check for associated file blobs that need to be uploaded
+				const localFiles = (await getFilesForRecord(id)).filter((f) => f.source === 'local');
+
+				let syncData: Record<string, unknown> | FormData = data;
+
+				if (localFiles.length > 0) {
+					// Reconstruct FormData with file blobs
+					const formData = new FormData();
+					for (const [key, value] of Object.entries(data)) {
+						if (value !== null && value !== undefined) {
+							formData.append(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
+						}
+					}
+					// Attach file blobs
+					for (const cachedFile of localFiles) {
+						const file = new File([cachedFile.blob], cachedFile.fileName, {
+							type: cachedFile.mimeType
+						});
+						formData.append(cachedFile.fieldName, file);
+					}
+					syncData = formData;
+				}
+
+				if (record._status === 'new') {
+					await pb.collection(collection).create(syncData);
+					console.log(`Created ${collection}/${id}`);
+				} else {
+					await pb.collection(collection).update(id, syncData);
+					console.log(`Updated ${collection}/${id}`);
+				}
+
+				// Clean up local file blobs after successful sync (downloaded ones stay)
+				if (localFiles.length > 0) {
+					await deleteLocalFilesForRecord(id);
+				}
 			} else if (record._status === 'deleted') {
 				// Delete from PocketBase
 				try {
@@ -145,6 +198,8 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 						throw e;
 					}
 				}
+				// Clean up all file blobs for deleted records
+				await deleteFilesForRecord(id);
 			}
 
 			// Mark as synced or remove

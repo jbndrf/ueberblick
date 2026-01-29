@@ -196,3 +196,32 @@ export async function clearCachedSession(): Promise<void> {
 	const db = await getDB();
 	await db.delete('records', 'session/current');
 }
+
+// =============================================================================
+// Offline Mode Persistence
+// =============================================================================
+
+const OFFLINE_MODE_KEY = 'participant-offline-mode';
+
+/**
+ * Persist offline mode preference to localStorage.
+ * Call when user toggles offline mode.
+ */
+export function persistOfflineMode(enabled: boolean): void {
+	if (typeof window === 'undefined') return;
+
+	if (enabled) {
+		localStorage.setItem(OFFLINE_MODE_KEY, 'true');
+	} else {
+		localStorage.removeItem(OFFLINE_MODE_KEY);
+	}
+}
+
+/**
+ * Get persisted offline mode preference from localStorage.
+ * Returns true if user previously enabled offline mode.
+ */
+export function getPersistedOfflineMode(): boolean {
+	if (typeof window === 'undefined') return false;
+	return localStorage.getItem(OFFLINE_MODE_KEY) === 'true';
+}

@@ -79,6 +79,7 @@
 	let isAtScrollTop = $state(true);
 	let isAtScrollBottom = $state(false);
 	let contentTouchState = $state({
+		startX: 0,
 		startY: 0,
 		currentY: 0,
 		isTracking: false,
@@ -164,6 +165,7 @@
 			updateScrollBoundaries(node);
 
 			contentTouchState = {
+				startX: e.touches[0].clientX,
 				startY: e.touches[0].clientY,
 				currentY: e.touches[0].clientY,
 				isTracking: true,
@@ -177,8 +179,18 @@
 		function handleTouchMove(e: TouchEvent) {
 			if (!contentTouchState.isTracking || !isMobile) return;
 
+			const clientX = e.touches[0].clientX;
 			const clientY = e.touches[0].clientY;
+			const deltaX = clientX - contentTouchState.startX;
 			const deltaY = clientY - contentTouchState.startY;
+
+			// Horizontal swipe intent -- stop tracking so all remaining events
+			// for this gesture pass through to child elements (e.g. carousel)
+			if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
+				contentTouchState.isTracking = false;
+				return;
+			}
+
 			contentTouchState.currentY = clientY;
 
 			// Check if actual scrolling has occurred
@@ -226,6 +238,7 @@
 			}
 
 			contentTouchState = {
+				startX: 0,
 				startY: 0,
 				currentY: 0,
 				isTracking: false,

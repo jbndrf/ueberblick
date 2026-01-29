@@ -1,8 +1,9 @@
 <script lang="ts">
-	import { FileText, Plus, X, ChevronLeft, ChevronRight } from 'lucide-svelte';
+	import { FileText, Camera, ImagePlus, X, ChevronLeft, ChevronRight } from 'lucide-svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Carousel from '$lib/components/ui/carousel';
+	import type { CarouselAPI } from '$lib/components/ui/carousel/context';
 	import type { MediaFile, FormMode } from './types';
 
 	// ==========================================================================
@@ -34,8 +35,11 @@
 	// ==========================================================================
 
 	let fileInput: HTMLInputElement | undefined = $state();
+	let cameraInput: HTMLInputElement | undefined = $state();
 	let lightboxOpen = $state(false);
 	let lightboxIndex = $state(0);
+	let carouselApi: CarouselAPI | undefined = $state();
+	let carouselContainer: HTMLDivElement | undefined = $state();
 
 	// ==========================================================================
 	// Derived
@@ -45,6 +49,14 @@
 	const imageFiles = $derived(files.filter((f) => f.isImage));
 	const currentLightboxFile = $derived(imageFiles[lightboxIndex]);
 	const acceptTypes = $derived(allowedTypes?.join(',') || 'image/*,.pdf,.doc,.docx,.txt');
+
+	const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.heic', '.heif'];
+	const acceptsImages = $derived.by(() => {
+		if (!allowedTypes || allowedTypes.length === 0) return true;
+		return allowedTypes.some(
+			(t) => IMAGE_EXTENSIONS.includes(t.toLowerCase()) || t.startsWith('image/')
+		);
+	});
 
 	// Calculate carousel item basis based on columnPosition (same for all modes)
 	const itemBasisClass = $derived.by(() => {
@@ -85,8 +97,12 @@
 		}
 	}
 
-	function handleAddClick() {
+	function handleFileClick() {
 		fileInput?.click();
+	}
+
+	function handleCameraClick() {
+		cameraInput?.click();
 	}
 
 	function handleRemove(index: number) {
@@ -118,6 +134,66 @@
 		if (e.key === 'ArrowRight') lightboxNext();
 		if (e.key === 'Escape') lightboxOpen = false;
 	}
+
+	// ==========================================================================
+	// Re-init carousel when it becomes visible (e.g. hidden tab panel)
+	// ResizeObserver is used instead of IntersectionObserver because the latter
+	// fails on mobile inside CSS-transformed fixed containers (module-shell).
+	// ==========================================================================
+
+	$effect(() => {
+		const api = carouselApi;
+		const el = carouselContainer;
+		if (!api || !el) return;
+
+		let didReInit = false;
+		const ro = new ResizeObserver((entries) => {
+			if (didReInit) return;
+			if (entries[0].contentRect.width > 0) {
+				didReInit = true;
+				api.reInit();
+				ro.disconnect();
+			}
+		});
+		ro.observe(el);
+
+		return () => ro.disconnect();
+	});
+
+	// ==========================================================================
+	// Mousewheel scrolling (desktop)
+	// ==========================================================================
+
+	$effect(() => {
+		const api = carouselApi;
+		const el = carouselContainer;
+		if (!api || !el) return;
+
+		let wheelTimer: ReturnType<typeof setTimeout> | null = null;
+
+		function onWheel(e: WheelEvent) {
+			if (!api) return;
+			const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+			if (delta === 0) return;
+
+			const forward = delta > 0;
+			if (forward ? !api.canScrollNext() : !api.canScrollPrev()) return;
+
+			e.preventDefault();
+			if (wheelTimer) return;
+
+			forward ? api.scrollNext() : api.scrollPrev();
+			wheelTimer = setTimeout(() => {
+				wheelTimer = null;
+			}, 300);
+		}
+
+		el.addEventListener('wheel', onWheel, { passive: false });
+		return () => {
+			el.removeEventListener('wheel', onWheel);
+			if (wheelTimer) clearTimeout(wheelTimer);
+		};
+	});
 </script>
 
 <svelte:window onkeydown={lightboxOpen ? handleLightboxKeydown : undefined} />
@@ -126,6 +202,7 @@
 	<div class="space-y-2">
 		<!-- Carousel Gallery -->
 		{#if files.length > 0}
+			<div bind:this={carouselContainer} class="touch-pan-y">
 			<Carousel.Root
 				class="w-full"
 				opts={{
@@ -133,6 +210,7 @@
 					containScroll: 'trimSnaps',
 					dragFree: false
 				}}
+				setApi={(api) => (carouselApi = api)}
 			>
 				<Carousel.Content class="-ml-2">
 					{#each files as file, index}
@@ -181,17 +259,38 @@
 					<Carousel.Next class="right-0 translate-x-1/2" />
 				{/if}
 			</Carousel.Root>
+			</div>
 		{/if}
 
-		<!-- Add Button (fill/edit mode only) -->
+		<!-- Add Buttons (fill/edit mode only) -->
 		{#if canAdd}
-			<Button variant="outline" size="sm" class="mt-2" onclick={handleAddClick}>
-				<Plus class="w-4 h-4 mr-1" />
-				Add
-			</Button>
+			<div class="flex gap-2 mt-2 w-1/2">
+				{#if acceptsImages}
+					<Button variant="outline" size="sm" class="flex-1" onclick={handleCameraClick}>
+						<Camera class="w-4 h-4 mr-1" />
+						Camera
+					</Button>
+				{/if}
+				<Button variant="outline" size="sm" class="flex-1" onclick={handleFileClick}>
+					<ImagePlus class="w-4 h-4 mr-1" />
+					Files
+				</Button>
+			</div>
 		{/if}
 
-		<!-- Hidden File Input -->
+		<!-- Hidden Camera Input (capture forces camera on mobile) -->
+		{#if acceptsImages}
+			<input
+				bind:this={cameraInput}
+				type="file"
+				accept="image/*"
+				capture="environment"
+				class="hidden"
+				onchange={handleFileSelect}
+			/>
+		{/if}
+
+		<!-- Hidden File/Gallery Input -->
 		<input
 			bind:this={fileInput}
 			type="file"

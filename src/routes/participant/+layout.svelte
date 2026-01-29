@@ -19,7 +19,8 @@
 		setParticipantGateway,
 		setReferenceData,
 		getCachedSession,
-		clearCachedSession
+		clearCachedSession,
+		getPersistedOfflineMode
 	} from '$lib/participant-state/context.svelte';
 
 	// Register service worker for PWA
@@ -57,6 +58,14 @@
 	// This allows $effect in setupPersistence to work during component init
 	if (data.participant) {
 		gateway = createParticipantGateway(data.participant.id, data.participant.project_id);
+
+		// Restore offline mode BEFORE children see the gateway.
+		// This prevents the race where loadData() fires with isOnline=true
+		// before the old $effect had a chance to restore offline mode.
+		if (browser && getPersistedOfflineMode()) {
+			gateway.setOfflineMode(true);
+		}
+
 		setParticipantGateway(gateway);
 
 		// Set up auto-persistence (uses $effect, must be called during init)
@@ -79,7 +88,10 @@
 
 	async function checkOfflineSession() {
 		const cached = await getCachedSession();
-		if (cached) {
+		const wasOffline = getPersistedOfflineMode();
+
+		if (cached && wasOffline) {
+			// Restore offline session
 			offlineSession = cached;
 			gateway = createParticipantGateway(cached.participantId, cached.projectId);
 			gateway.setOfflineMode(true); // Start in offline mode

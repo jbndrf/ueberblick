@@ -40,10 +40,14 @@ export default defineConfig({
 				]
 			},
 			workbox: {
-				globPatterns: [],
+				// Pre-cache app shell for offline start
+				// This includes JS (with fflate bundled), CSS, and HTML
+				globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+				globIgnores: ['**/node_modules/**', '**/sw.js', '**/workbox-*.js'],
 				navigateFallback: null,
 				navigateFallbackDenylist: [/^\/api\//, /^\/_\//],
 				runtimeCaching: [
+					// Cache participant pages with NetworkFirst strategy
 					{
 						urlPattern: /^https:\/\/.*\/participant\/.*/,
 						handler: 'NetworkFirst',
@@ -51,7 +55,33 @@ export default defineConfig({
 							cacheName: 'pages-cache',
 							expiration: {
 								maxEntries: 50,
-								maxAgeSeconds: 60 * 60 * 24 * 7
+								maxAgeSeconds: 60 * 60 * 24 * 7 // 7 days
+							},
+							networkTimeoutSeconds: 10
+						}
+					},
+					// Cache PocketBase API responses for offline access
+					{
+						urlPattern: /^https?:\/\/.*\/api\/collections\/.*/,
+						handler: 'NetworkFirst',
+						options: {
+							cacheName: 'api-cache',
+							expiration: {
+								maxEntries: 100,
+								maxAgeSeconds: 60 * 60 * 24 // 24 hours
+							},
+							networkTimeoutSeconds: 10
+						}
+					},
+					// Cache package archive files (ZIP) with CacheFirst
+					{
+						urlPattern: /^https?:\/\/.*\/api\/files\/.*\.zip$/i,
+						handler: 'CacheFirst',
+						options: {
+							cacheName: 'package-files-cache',
+							expiration: {
+								maxEntries: 10,
+								maxAgeSeconds: 60 * 60 * 24 * 30 // 30 days
 							}
 						}
 					}

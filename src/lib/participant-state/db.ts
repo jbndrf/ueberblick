@@ -1,12 +1,46 @@
 /**
  * IndexedDB wrapper for participant state
  *
+ * Version 6: Added files store for offline file/image blob caching.
+ * Version 5: Added packages store for offline tile packages.
  * Version 4: Added tiles store for custom map tile caching.
  * The gateway is now a transparent proxy - any collection works.
  */
 
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { OperationLogEntry, OperationSyncStatus } from './types';
+
+/**
+ * Downloaded offline package metadata (local tracking)
+ */
+export interface DownloadedPackage {
+	id: string; // offline_packages record ID
+	name: string;
+	projectId: string;
+	downloadedAt: string;
+	tileCount: number;
+	fileSizeBytes: number;
+	status: 'downloading' | 'ready' | 'failed';
+	error?: string;
+}
+
+/**
+ * Cached file blob for offline file/image support.
+ * Files are stored separately from records because Blob objects
+ * need their own store (records use structured clone for JSON-like data).
+ */
+export interface CachedFile {
+	key: string; // "{collection}/{recordId}/{fieldName}/{fileName}"
+	collection: string;
+	recordId: string;
+	fieldName: string;
+	fileName: string;
+	blob: Blob;
+	mimeType: string;
+	size: number;
+	cachedAt: string;
+	source: 'downloaded' | 'local'; // downloaded = from server, local = created offline
+}
 
 /**
  * Generic cached record - can hold any collection's data
@@ -75,10 +109,31 @@ interface ParticipantStateDB extends DBSchema {
 			by_zoom: number;
 		};
 	};
+
+	// Downloaded offline packages (v5)
+	packages: {
+		key: string; // package ID
+		value: DownloadedPackage;
+		indexes: {
+			by_project: string;
+			by_status: 'downloading' | 'ready' | 'failed';
+		};
+	};
+
+	// Cached file blobs for offline file/image support (v6)
+	files: {
+		key: string; // "{collection}/{recordId}/{fieldName}/{fileName}"
+		value: CachedFile;
+		indexes: {
+			by_collection: string;
+			by_record: string; // recordId
+			by_source: 'downloaded' | 'local';
+		};
+	};
 }
 
 const DB_NAME = 'participant-state';
-const DB_VERSION = 4;
+const DB_VERSION = 6;
 
 let dbInstance: IDBPDatabase<ParticipantStateDB> | null = null;
 
@@ -144,6 +199,21 @@ export async function initDB(): Promise<IDBPDatabase<ParticipantStateDB>> {
 				const store = db.createObjectStore('tiles', { keyPath: 'key' });
 				store.createIndex('by_source', 'sourceId');
 				store.createIndex('by_zoom', 'z');
+			}
+
+			// Downloaded packages store (v5) - tracks offline tile packages
+			if (!db.objectStoreNames.contains('packages')) {
+				const store = db.createObjectStore('packages', { keyPath: 'id' });
+				store.createIndex('by_project', 'projectId');
+				store.createIndex('by_status', 'status');
+			}
+
+			// Cached file blobs store (v6) - offline file/image support
+			if (!db.objectStoreNames.contains('files')) {
+				const store = db.createObjectStore('files', { keyPath: 'key' });
+				store.createIndex('by_collection', 'collection');
+				store.createIndex('by_record', 'recordId');
+				store.createIndex('by_source', 'source');
 			}
 		}
 	});
