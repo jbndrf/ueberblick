@@ -171,10 +171,6 @@ export {
 	getDownloadedPacks,
 	getPack,
 	deletePack,
-	getPackMarkers,
-	getPackWorkflows,
-	getPackForms,
-	getPackCategories,
 	// Project data sync (for full local copy toggle)
 	syncProjectData
 } from './pack-downloader.svelte';
@@ -221,7 +217,7 @@ export { query, parseFilter, parseSort, type QueryOptions } from './query';
 // Utilities
 // =============================================================================
 
-export { generateId, deepEqual, arraysEqual } from './utils';
+export { cleanRecord, generateId, deepEqual, arraysEqual } from './utils';
 
 // =============================================================================
 // Types

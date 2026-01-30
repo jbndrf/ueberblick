@@ -105,19 +105,25 @@
 	{/if}
 {:else}
 	<div class="flex items-center gap-2">
-		<button
-			type="button"
-			onclick={startEditing}
-			class="flex-1 text-left {editMode && !readonly && onUpdate
-				? 'hover:bg-muted/50 cursor-text'
-				: 'cursor-default'} px-2 py-1 -mx-2 -my-1 rounded transition-colors max-w-[300px] truncate block"
-			title={displayValue}
-			disabled={!editMode || readonly || !onUpdate}
-		>
-			{displayValue}
-		</button>
+		{#if editMode && !readonly && onUpdate}
+			<button
+				type="button"
+				onclick={startEditing}
+				class="flex-1 text-left hover:bg-muted/50 cursor-text px-2 py-1 -mx-2 -my-1 rounded transition-colors max-w-[300px] truncate block"
+				title={displayValue}
+			>
+				{displayValue}
+			</button>
+		{:else}
+			<span
+				class="flex-1 text-left cursor-default px-2 py-1 -mx-2 -my-1 rounded max-w-[300px] truncate block select-text"
+				title={displayValue}
+			>
+				{displayValue}
+			</span>
+		{/if}
 		{#if copyable && value}
-			<Button variant="ghost" size="sm" onclick={copyToClipboard} class="h-7 w-7 p-0 flex-shrink-0">
+			<Button variant="ghost" size="sm" onclick={copyToClipboard} class="h-7 w-7 p-0 flex-shrink-0 relative z-10">
 				{#if copied}
 					<Check class="h-3 w-3 text-green-600" />
 				{:else}

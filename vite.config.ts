@@ -11,6 +11,7 @@ export default defineConfig({
 		tailwindcss(),
 		sveltekit(),
 		SvelteKitPWA({
+			injectRegister: false,
 			strategies: 'generateSW',
 			registerType: 'autoUpdate',
 			includeAssets: ['icons/*.png', 'icons/*.svg'],
@@ -29,27 +30,45 @@ export default defineConfig({
 						src: '/icons/icon-192.png',
 						sizes: '192x192',
 						type: 'image/png',
-						purpose: 'any maskable'
+						purpose: 'any'
+					},
+					{
+						src: '/icons/icon-192.png',
+						sizes: '192x192',
+						type: 'image/png',
+						purpose: 'maskable'
 					},
 					{
 						src: '/icons/icon-512.png',
 						sizes: '512x512',
 						type: 'image/png',
-						purpose: 'any maskable'
+						purpose: 'any'
+					},
+					{
+						src: '/icons/icon-512.png',
+						sizes: '512x512',
+						type: 'image/png',
+						purpose: 'maskable'
 					}
 				]
 			},
 			workbox: {
+				// Ensure autoUpdate works correctly with injectRegister: false
+				clientsClaim: true,
+				skipWaiting: true,
 				// Pre-cache app shell for offline start
 				// This includes JS (with fflate bundled), CSS, and HTML
 				globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
-				globIgnores: ['**/node_modules/**', '**/sw.js', '**/workbox-*.js'],
+				globIgnores: ['**/node_modules/**', '**/sw.js', '**/workbox-*.js', '**/tiles/**'],
+				// No navigateFallback -- it creates a NavigationRoute that hijacks
+				// ALL navigations before the runtime cache can serve cached pages,
+				// causing a redirect loop with offline.html. Instead, let the
+				// NetworkFirst runtime cache below handle navigations directly.
 				navigateFallback: null,
-				navigateFallbackDenylist: [/^\/api\//, /^\/_\//],
 				runtimeCaching: [
 					// Cache participant pages with NetworkFirst strategy
 					{
-						urlPattern: /^https:\/\/.*\/participant\/.*/,
+						urlPattern: /^https?:\/\/.*\/participant\/.*/,
 						handler: 'NetworkFirst',
 						options: {
 							cacheName: 'pages-cache',

@@ -40,7 +40,6 @@ COPY --from=builder /build/pocketbase ./pocketbase
 # Copy PocketBase migrations and hooks
 COPY pb/pb_migrations ./pb_migrations
 COPY pb/pb_hooks ./pb_hooks
-COPY pb/security ./security
 
 # Copy the entrypoint script
 COPY docker-entrypoint.sh ./docker-entrypoint.sh

@@ -10,11 +10,7 @@ import { storeFileBlob, buildFileKey, isImageMimeType } from './file-cache';
 import { POCKETBASE_URL } from '$lib/config/pocketbase';
 import type {
 	OfflinePackMetadata,
-	DownloadProgress,
-	Marker,
-	Workflow,
-	ToolForm,
-	MarkerCategory
+	DownloadProgress
 } from './types';
 
 // =============================================================================
@@ -155,34 +151,6 @@ export async function deletePack(packId: string): Promise<void> {
 	// Clear tiles
 	const { clearAllTiles } = await import('./tile-cache.svelte');
 	await clearAllTiles();
-}
-
-/**
- * Get markers from cache
- */
-export async function getPackMarkers(packId: string): Promise<Marker[]> {
-	return getRecordsByCollection<Marker>('markers');
-}
-
-/**
- * Get workflows from cache
- */
-export async function getPackWorkflows(packId: string): Promise<Workflow[]> {
-	return getRecordsByCollection<Workflow>('workflows');
-}
-
-/**
- * Get forms from cache
- */
-export async function getPackForms(packId: string): Promise<ToolForm[]> {
-	return getRecordsByCollection<ToolForm>('tools_forms');
-}
-
-/**
- * Get marker categories from cache
- */
-export async function getPackCategories(packId: string): Promise<MarkerCategory[]> {
-	return getRecordsByCollection<MarkerCategory>('marker_categories');
 }
 
 // =============================================================================

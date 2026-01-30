@@ -13,6 +13,7 @@ import { getFilesForRecord, deleteLocalFilesForRecord, deleteFilesForRecord } fr
 import { onDataChange } from './gateway.svelte';
 import type { ParticipantGateway } from './gateway.svelte';
 import type { SyncProgress } from './types';
+import { generateId, cleanRecord } from './utils';
 
 // =============================================================================
 // Sync Progress State
@@ -200,7 +201,7 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 			const id = record.id;
 
 			// Prepare data for sync (remove local metadata)
-			const { _key, _collection, _status, _serverUpdated, _error, _retryCount, ...data } = record;
+			const data = cleanRecord(record);
 
 			if (record._status === 'modified') {
 				// --- Conflict Detection ---
@@ -338,15 +339,6 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 // Conflict Storage
 // =============================================================================
 
-function generateConflictId(): string {
-	const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-	let id = '';
-	for (let i = 0; i < 15; i++) {
-		id += chars.charAt(Math.floor(Math.random() * chars.length));
-	}
-	return id;
-}
-
 async function storeConflict(
 	localRecord: CachedRecord,
 	serverRecord: Record<string, unknown>,
@@ -355,7 +347,7 @@ async function storeConflict(
 	const db = await getDB();
 
 	// Strip internal fields from local version
-	const { _key, _collection, _status, _serverUpdated, _error, _retryCount, ...localData } = localRecord;
+	const localData = cleanRecord(localRecord);
 
 	// Determine the parent workflow instance ID
 	// Field values and tool_usage have instance_id, workflow_instances are their own instance
@@ -364,7 +356,7 @@ async function storeConflict(
 		(localRecord._collection === 'workflow_instances' ? localRecord.id : '');
 
 	const conflict: SyncConflict = {
-		id: generateConflictId(),
+		id: generateId(),
 		collection: localRecord._collection,
 		recordId: localRecord.id,
 		instanceId,
@@ -522,14 +514,58 @@ export function startSyncLoop(
 }
 
 /**
- * Trigger an immediate sync (for manual "Sync Now" button).
+ * Trigger a full resync (for manual "Sync Now" button).
+ * Pushes local changes, resets sync timestamps so all data is re-pulled,
+ * and runs deletion detection to remove records the participant can no
+ * longer access.
  */
 export async function triggerSync(gateway: ParticipantGateway): Promise<boolean> {
 	if (!navigator.onLine) {
 		return false;
 	}
 
-	await runSyncCycle(gateway);
+	if (syncInProgress) return false;
+	syncInProgress = true;
+
+	try {
+		// 1. Push local changes to server
+		await uploadChanges(gateway);
+
+		// 2. Clear sync timestamps so pullChanges fetches everything
+		const db = await getDB();
+		const allMeta = await db.getAll('sync_metadata');
+		for (const meta of allMeta) {
+			await db.delete('sync_metadata', meta.collection);
+		}
+
+		// 3. Pull all records (full pull since timestamps are cleared)
+		let totalPulled = 0;
+		for (const collection of syncCollections) {
+			const count = await pullChanges(collection);
+			totalPulled += count;
+		}
+		if (totalPulled > 0) {
+			console.log(`Full resync pulled ${totalPulled} records`);
+		}
+
+		// 4. Always detect deletions (removes records no longer accessible)
+		let totalDeleted = 0;
+		for (const collection of syncCollections) {
+			const count = await detectServerDeletions(collection);
+			totalDeleted += count;
+		}
+		if (totalDeleted > 0) {
+			console.log(`Full resync removed ${totalDeleted} records no longer on server`);
+		}
+
+		currentInterval = BASE_INTERVAL_MS;
+	} catch (error) {
+		console.error('Full resync failed:', error);
+		currentInterval = Math.min(currentInterval * 2, MAX_INTERVAL_MS);
+	} finally {
+		syncInProgress = false;
+	}
+
 	return true;
 }
 

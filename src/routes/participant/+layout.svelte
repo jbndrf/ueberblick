@@ -24,24 +24,63 @@
 	import { startSyncLoop } from '$lib/participant-state/sync.svelte';
 	import { setupRealtime } from '$lib/participant-state/realtime.svelte';
 
-	// Register service worker for PWA
+	// Register service worker for PWA using absolute path.
+	// virtual:pwa-register generates relative "./sw.js" which breaks on sub-paths like /participant/map.
 	onMount(async () => {
-		if (browser && 'serviceWorker' in navigator) {
-			try {
-				const { registerSW } = await import('virtual:pwa-register');
-				const updateSW = registerSW({
-					onRegisteredSW(swScriptUrl, registration) {
-						console.log('Service worker registered:', swScriptUrl);
-					},
-					onRegisterError(error) {
-						console.error('Service worker registration error:', error);
+		if (!browser || !('serviceWorker' in navigator)) return;
+
+		try {
+			const registration = await navigator.serviceWorker.register('/sw.js', {
+				scope: '/',
+				type: 'classic'
+			});
+			console.log('Service worker registered:', registration.scope);
+
+			// Auto-update lifecycle: reload when a new SW takes control.
+			// The generated SW calls skipWaiting() + clientsClaim(), so a waiting
+			// worker activates immediately. We listen for the controller swap and
+			// reload so the page picks up the fresh precache -- this replaces the
+			// update handling that virtual:pwa-register used to provide.
+			navigator.serviceWorker.addEventListener('controllerchange', () => {
+				window.location.reload();
+			});
+
+			// The initial page HTML loads BEFORE the SW exists, so the SW never
+			// captures it via runtime caching. Once the SW activates, proactively
+			// put the current page into the pages-cache so the app can start offline.
+			const sw = registration.active || registration.waiting || registration.installing;
+			if (sw) {
+				const cacheOnActivation = () => {
+					if (sw.state === 'activated') {
+						cacheCurrentPage();
+					} else {
+						sw.addEventListener('statechange', () => {
+							if (sw.state === 'activated') cacheCurrentPage();
+						});
 					}
-				});
-			} catch (e) {
-				console.log('PWA registration not available:', e);
+				};
+				cacheOnActivation();
 			}
+		} catch (error) {
+			// Firefox with strict cookie/privacy settings silently blocks SW registration.
+			// Safari may also fail in private browsing. Log but don't crash.
+			console.error('Service worker registration error:', error);
 		}
 	});
+
+	async function cacheCurrentPage() {
+		try {
+			const cache = await caches.open('pages-cache');
+			const existing = await cache.match(window.location.href);
+			if (!existing) {
+				await cache.add(window.location.href);
+				console.log('Cached current page for offline use');
+			}
+		} catch (e) {
+			// Non-critical -- will be cached on next online visit via NetworkFirst.
+			console.warn('Failed to cache current page:', e);
+		}
+	}
 
 	let { data, children } = $props();
 

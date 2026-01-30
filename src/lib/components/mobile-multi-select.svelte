@@ -613,6 +613,7 @@
 			style="top: {dropdownPosition.top}px; left: {dropdownPosition.left}px; width: {dropdownPosition.width}px;{openUpward ? ' transform: translateY(-100%);' : ''}"
 			role="listbox"
 			aria-label="Options"
+			use:portal
 		>
 			<!-- Search input with inline badges -->
 			<div class="p-2 border-b border-border sticky top-0 bg-popover">

@@ -2,6 +2,16 @@
  * Participant State Utilities
  */
 
+import type { CachedRecord } from './db';
+
+/**
+ * Strip internal fields from a CachedRecord, returning only the record data.
+ */
+export function cleanRecord(record: CachedRecord): Record<string, unknown> {
+	const { _key, _collection, _status, _serverUpdated, _error, _retryCount, ...clean } = record;
+	return clean;
+}
+
 /**
  * Generate a PocketBase-compatible ID (15 alphanumeric characters)
  * PocketBase accepts custom IDs in this format

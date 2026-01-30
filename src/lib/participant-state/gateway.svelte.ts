@@ -14,6 +14,7 @@ import { getDB, initDB, type CachedRecord, requestPersistentStorage } from './db
 import { getPocketBase } from '$lib/pocketbase';
 import { query } from './query';
 import { storeFileBlob, buildFileKey } from './file-cache';
+import { generateId, cleanRecord } from './utils';
 
 // =============================================================================
 // Type Definitions
@@ -74,19 +75,6 @@ function notifyDataChange(collection: string): void {
 }
 
 // =============================================================================
-// ID Generation
-// =============================================================================
-
-function generateId(): string {
-	const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-	let id = '';
-	for (let i = 0; i < 15; i++) {
-		id += chars.charAt(Math.floor(Math.random() * chars.length));
-	}
-	return id;
-}
-
-// =============================================================================
 // Offline Expand Support
 // =============================================================================
 
@@ -128,10 +116,7 @@ async function expandRecords<T>(
 				if (typeof relationValue === 'string') {
 					const relatedRecord = await findRelatedRecord(db, relationValue);
 					if (relatedRecord) {
-						// Remove internal fields from expanded record
-						const { _key, _collection, _status, _serverUpdated, _error, _retryCount, ...cleanRecord } =
-							relatedRecord;
-						expanded[field] = cleanRecord;
+						expanded[field] = cleanRecord(relatedRecord);
 					}
 				}
 				// Handle multi-relation (array of IDs)
@@ -141,9 +126,7 @@ async function expandRecords<T>(
 							if (typeof id !== 'string') return null;
 							const relatedRecord = await findRelatedRecord(db, id);
 							if (relatedRecord) {
-								const { _key, _collection, _status, _serverUpdated, _error, _retryCount, ...cleanRecord } =
-									relatedRecord;
-								return cleanRecord;
+								return cleanRecord(relatedRecord);
 							}
 							return null;
 						})
@@ -163,18 +146,6 @@ async function expandRecords<T>(
 			return record;
 		})
 	);
-}
-
-// =============================================================================
-// Clean Record Helper
-// =============================================================================
-
-/**
- * Strip internal fields from a CachedRecord for returning to callers.
- */
-function cleanRecord(record: CachedRecord): Record<string, unknown> {
-	const { _key, _collection, _status, _serverUpdated, _error, _retryCount, ...clean } = record;
-	return clean;
 }
 
 // =============================================================================

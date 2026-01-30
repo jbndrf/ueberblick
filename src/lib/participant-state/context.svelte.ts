@@ -198,33 +198,6 @@ export async function clearCachedSession(): Promise<void> {
 }
 
 // =============================================================================
-// Offline Mode Persistence (legacy -- kept for backward compat during migration)
-// =============================================================================
-
-const OFFLINE_MODE_KEY = 'participant-offline-mode';
-
-/**
- * @deprecated Use fullLocalCopy mode instead. Kept for migration path.
- */
-export function persistOfflineMode(enabled: boolean): void {
-	if (typeof window === 'undefined') return;
-
-	if (enabled) {
-		localStorage.setItem(OFFLINE_MODE_KEY, 'true');
-	} else {
-		localStorage.removeItem(OFFLINE_MODE_KEY);
-	}
-}
-
-/**
- * @deprecated Use fullLocalCopy mode instead. Kept for migration path.
- */
-export function getPersistedOfflineMode(): boolean {
-	if (typeof window === 'undefined') return false;
-	return localStorage.getItem(OFFLINE_MODE_KEY) === 'true';
-}
-
-// =============================================================================
 // Full Local Copy Mode (replaces offline mode toggle)
 // =============================================================================
 
