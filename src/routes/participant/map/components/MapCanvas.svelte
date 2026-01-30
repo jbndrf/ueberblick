@@ -2,7 +2,6 @@
 	import { onMount, onDestroy } from 'svelte';
 	import type { Map as LeafletMap, TileLayer, Marker as LeafletMarker } from 'leaflet';
 	import { createCachedTileLayer } from '$lib/components/map/cached-tile-layer';
-	import type { ParticipantGateway } from '$lib/participant-state/gateway.svelte';
 
 	interface MapSource {
 		id: string;
@@ -92,7 +91,6 @@
 		visibleCategoryIds?: string[];
 		workflowInstances?: WorkflowInstance[];
 		visibleWorkflowIds?: string[];
-		gateway?: ParticipantGateway | null;
 		onMarkerClick?: (marker: MapMarker) => void;
 		onWorkflowInstanceClick?: (instance: WorkflowInstance) => void;
 		onMapReady?: (map: LeafletMap) => void;
@@ -108,7 +106,6 @@
 		visibleCategoryIds = [],
 		workflowInstances = [],
 		visibleWorkflowIds = [],
-		gateway,
 		onMarkerClick,
 		onWorkflowInstanceClick,
 		onMapReady,
@@ -185,13 +182,11 @@
 		};
 
 		// Use cached tile layer which checks IndexedDB first
-		// Pass gateway to respect online/offline state
 		return createCachedTileLayer(
 			source.id,
 			source.url || defaultTileUrl,
 			options,
-			L,
-			gateway
+			L
 		);
 	}
 
@@ -223,8 +218,7 @@
 				'default-osm',
 				defaultTileUrl,
 				{ attribution: defaultAttribution },
-				L,
-				gateway
+				L
 			);
 			currentBaseTileLayer.addTo(map);
 		}

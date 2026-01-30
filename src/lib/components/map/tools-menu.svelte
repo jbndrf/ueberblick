@@ -6,32 +6,26 @@
 		LogOut,
 		User,
 		Shield,
-		Wifi,
-		WifiOff,
 		Loader2,
 		Download,
-		Upload,
 		Smartphone,
 		Globe,
-		MapPin,
 		Trash2,
-		RefreshCw,
 		HardDrive,
-		Package
+		Package,
+		RefreshCw
 	} from 'lucide-svelte';
 	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
-	import { uploadChanges } from '$lib/participant-state/sync.svelte';
+	import { getFullLocalCopyMode, setFullLocalCopyMode } from '$lib/participant-state/context.svelte';
+	import { triggerSync } from '$lib/participant-state/sync.svelte';
 	import {
 		getDownloadProgress,
 		deletePack,
-		cacheSession,
-		clearAllData,
-		signalOfflineModeChange,
 		getDownloadCompleteSignal,
 		syncProjectData,
-		persistOfflineMode,
 		resetDownloadProgress
 	} from '$lib/participant-state';
+	import { deleteDownloadedFiles } from '$lib/participant-state/file-cache';
 	import { getPocketBase } from '$lib/pocketbase';
 	import { getDB, type DownloadedPackage } from '$lib/participant-state/db';
 	import { createPWAState, initPWAInstallListeners } from '$lib/utils/pwa-detection.svelte';
@@ -88,15 +82,13 @@
 	// Package selector dialog
 	let showPackageSelector = $state(false);
 
-	// User-controlled offline mode (distinct from network status)
-	let userOfflineMode = $state(false);
-	let isGoingOnline = $state(false);
+	// Full local copy mode (controls media caching)
+	let fullLocalCopy = $state(false);
+	let isTogglingMode = $state(false);
 
-	// Initialize offline mode from gateway state
+	// Initialize from localStorage
 	$effect(() => {
-		if (gateway) {
-			userOfflineMode = !gateway.isOnline;
-		}
+		fullLocalCopy = getFullLocalCopyMode();
 	});
 
 	// Watch for download complete signal to reload pack metadata
@@ -131,22 +123,6 @@
 		}
 	}
 
-	async function handleUploadChanges() {
-		if (!gateway) return;
-
-		isSyncing = true;
-		syncError = null;
-
-		try {
-			await uploadChanges(gateway);
-		} catch (error) {
-			syncError = error instanceof Error ? error.message : 'Upload failed';
-			console.error('Upload error:', error);
-		} finally {
-			isSyncing = false;
-		}
-	}
-
 	async function handleDeletePack() {
 		if (!currentPack) return;
 
@@ -168,78 +144,48 @@
 		}
 	}
 
-	async function handleToggleOfflineMode(checked: boolean) {
+	async function handleToggleFullLocalCopy(checked: boolean) {
 		if (!gateway || !participant || !participant.project_id) return;
 
-		if (checked) {
-			// Going offline: sync data first, then switch mode
-			isSyncing = true;
-			syncError = null;
+		isTogglingMode = true;
+		syncError = null;
 
-			try {
-				// 1. Download all project data (records + file blobs) to IndexedDB
+		try {
+			if (checked) {
+				// Light -> Full Local Copy: download thumbnails for all file records
 				const pb = getPocketBase();
 				await syncProjectData(collectionNames, pb, fileFields);
 
-				// 2. Cache session for offline auth
-				await cacheSession({
-					id: participant.id,
-					project_id: participant.project_id,
-					email: participant.email
-				});
+				setFullLocalCopyMode(true);
+				fullLocalCopy = true;
+			} else {
+				// Full Local Copy -> Light: delete all downloaded files
+				await deleteDownloadedFiles();
 
-				// 3. Persist offline mode preference
-				persistOfflineMode(true);
-
-				// 4. Switch gateway to offline
-				gateway.setOfflineMode(true);
-				userOfflineMode = true;
-
-				// 5. Signal mode change to trigger data reload from IndexedDB
-				signalOfflineModeChange();
-			} catch (error) {
-				console.error('Failed to sync for offline:', error);
-				syncError = error instanceof Error ? error.message : 'Sync failed';
-			} finally {
-				isSyncing = false;
-				// Clear download progress after a delay
-				setTimeout(() => {
-					resetDownloadProgress();
-				}, 2000);
+				setFullLocalCopyMode(false);
+				fullLocalCopy = false;
 			}
-		} else {
-			// Going online: sync first, then clear data
-			await handleGoOnline();
+		} catch (error) {
+			console.error('Failed to toggle full local copy:', error);
+			syncError = error instanceof Error ? error.message : 'Toggle failed';
+		} finally {
+			isTogglingMode = false;
+			setTimeout(() => resetDownloadProgress(), 2000);
 		}
 	}
 
-	async function handleGoOnline() {
+	async function handleManualSync() {
 		if (!gateway) return;
 
-		isGoingOnline = true;
+		isSyncing = true;
+		syncError = null;
+
 		try {
-			// 1. Sync pending changes
-			if (gateway.pendingCount > 0) {
-				await uploadChanges(gateway);
-			}
-
-			// 2. Clear all local data
-			await clearAllData();
-
-			// 3. Clear persisted offline mode preference
-			persistOfflineMode(false);
-
-			// 4. Switch gateway to online
-			gateway.setOfflineMode(false);
-			userOfflineMode = false;
-
-			// 5. Signal mode change to trigger data reload from server
-			signalOfflineModeChange();
+			await triggerSync(gateway);
 		} catch (error) {
-			console.error('Failed to go online:', error);
 			syncError = error instanceof Error ? error.message : 'Sync failed';
 		} finally {
-			isGoingOnline = false;
+			isSyncing = false;
 		}
 	}
 
@@ -477,95 +423,85 @@
 				</div>
 			</div>
 
-			<!-- Sync Status (when offline with pending changes) -->
-			{#if gateway && gateway.pendingCount > 0}
-				<div class="rounded-lg border bg-orange-50 p-4 dark:bg-orange-950">
+			<!-- Sync Status -->
+			{#if gateway}
+				<div class="rounded-lg border p-4">
 					<div class="flex items-center justify-between">
 						<div class="flex items-center gap-2">
-							<Upload class="h-4 w-4 text-orange-600" />
-							<span class="text-sm font-medium text-orange-700 dark:text-orange-300">
-								{gateway.pendingCount} changes pending
-							</span>
+							<RefreshCw class="h-4 w-4 text-muted-foreground" />
+							<span class="text-sm font-medium">Sync</span>
 						</div>
-						<Button
-							variant="outline"
-							size="sm"
-							onclick={handleUploadChanges}
-							disabled={isSyncing || !navigator.onLine}
-						>
-							{#if isSyncing}
-								<Loader2 class="mr-1 h-3 w-3 animate-spin" />
-								Syncing...
-							{:else}
-								<Upload class="mr-1 h-3 w-3" />
-								Sync Now
+						<div class="flex items-center gap-2">
+							{#if gateway.pendingCount > 0}
+								<span class="text-xs text-orange-600 dark:text-orange-400">
+									{gateway.pendingCount} pending
+								</span>
 							{/if}
-						</Button>
+							<Button
+								variant="outline"
+								size="sm"
+								onclick={handleManualSync}
+								disabled={isSyncing || !navigator.onLine}
+							>
+								{#if isSyncing}
+									<Loader2 class="mr-1 h-3 w-3 animate-spin" />
+									Syncing...
+								{:else}
+									<RefreshCw class="mr-1 h-3 w-3" />
+									Sync Now
+								{/if}
+							</Button>
+						</div>
 					</div>
 					{#if syncError}
 						<p class="mt-2 text-xs text-destructive">{syncError}</p>
-					{:else if !navigator.onLine}
-						<p class="mt-2 text-xs text-orange-600 dark:text-orange-400">
-							Connect to the internet to sync your changes.
+					{:else}
+						<p class="mt-2 text-xs text-muted-foreground">
+							Data syncs automatically in the background. Records are always available locally.
 						</p>
 					{/if}
 				</div>
 			{/if}
 
-			<!-- Offline Mode Toggle -->
+			<!-- Full Local Copy Toggle -->
 			{#if gateway}
 				<div class="rounded-lg border p-4">
 					<div class="flex items-center justify-between">
 						<div class="flex items-center gap-2">
-							{#if userOfflineMode}
-								<WifiOff class="h-4 w-4 text-orange-600" />
-								<span class="text-sm font-medium">Offline Mode</span>
-							{:else}
-								<Wifi class="h-4 w-4 text-green-600" />
-								<span class="text-sm font-medium">Online Mode</span>
-							{/if}
+							<HardDrive class="h-4 w-4 text-muted-foreground" />
+							<span class="text-sm font-medium">Full Local Copy</span>
 						</div>
 
 						<Switch
-							checked={userOfflineMode}
-							onCheckedChange={handleToggleOfflineMode}
-							disabled={isGoingOnline || isSyncing}
+							checked={fullLocalCopy}
+							onCheckedChange={handleToggleFullLocalCopy}
+							disabled={isTogglingMode || isSyncing}
 						/>
 					</div>
 
-					{#if isSyncing}
+					{#if isTogglingMode}
 						<div class="mt-2 flex items-center gap-2 text-sm text-blue-600">
 							<Loader2 class="h-4 w-4 animate-spin" />
-							<span>Syncing data for offline use...</span>
+							<span>{fullLocalCopy ? 'Downloading images for offline...' : 'Removing cached images...'}</span>
 						</div>
 						{#if downloadProgress}
 							<p class="mt-1 text-xs text-muted-foreground">
 								{downloadProgress.current_operation}
 							</p>
 						{/if}
-					{:else if isGoingOnline}
-						<div class="mt-2 flex items-center gap-2 text-sm text-blue-600">
-							<Loader2 class="h-4 w-4 animate-spin" />
-							<span>Syncing and going online...</span>
-						</div>
-					{:else if userOfflineMode}
+					{:else if fullLocalCopy}
 						<p class="mt-2 text-xs text-muted-foreground">
-							Working from local data. Toggle off to sync and go online.
+							Image thumbnails are cached locally. Everything works offline.
 						</p>
-						{#if !currentPack}
-							<p class="mt-1 text-xs text-orange-600 dark:text-orange-400">
-								No tile package downloaded. Map tiles may not display.
-							</p>
-						{/if}
 					{:else}
 						<p class="mt-2 text-xs text-muted-foreground">
-							Connected to server. Toggle on to work offline.
+							Images load from server when online. Data is always available locally.
 						</p>
-						{#if !currentPack}
-							<p class="mt-1 text-xs text-orange-600 dark:text-orange-400">
-								Download a package for offline map tiles.
-							</p>
-						{/if}
+					{/if}
+					{#if !currentPack}
+						<p class="mt-1 text-xs text-orange-600 dark:text-orange-400">
+							Download a tile package for offline map tiles.
+						</p>
 					{/if}
 				</div>
 			{/if}

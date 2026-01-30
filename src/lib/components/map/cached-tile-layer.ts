@@ -11,27 +11,27 @@
 
 import type L from 'leaflet';
 import { getTile } from '$lib/participant-state/tile-cache.svelte';
-import type { ParticipantGateway } from '$lib/participant-state/gateway.svelte';
-
 type TileCoords = { x: number; y: number; z: number };
 type DoneCallback = (error: Error | null, tile: HTMLImageElement) => void;
 
 /**
- * Create a cached tile layer for a specific source
+ * Create a cached tile layer for a specific source.
+ *
+ * In local-first mode, always tries IndexedDB cache first.
+ * Falls back to network when online and tile is not cached.
+ * Uses navigator.onLine for network detection (no gateway dependency).
  *
  * @param sourceId - The map_sources.id for this layer (used as cache key)
  * @param urlTemplate - The tile URL template (e.g., "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png")
  * @param options - Standard Leaflet TileLayer options
  * @param leaflet - Leaflet instance (pass L from your component)
- * @param gateway - Optional gateway to check online/offline state
  * @returns A Leaflet TileLayer that uses IndexedDB cache
  */
 export function createCachedTileLayer(
 	sourceId: string,
 	urlTemplate: string,
 	options: L.TileLayerOptions | undefined,
-	leaflet: typeof L,
-	gateway?: ParticipantGateway | null
+	leaflet: typeof L
 ): L.TileLayer {
 	// Create extended tile layer class
 	const CachedTileLayer = leaflet.TileLayer.extend({
@@ -57,8 +57,8 @@ export function createCachedTileLayer(
 						};
 						tile.onerror = () => {
 							URL.revokeObjectURL(url);
-							// Cache corrupted - only try network if online
-							if (!gateway || gateway.isOnline) {
+							// Cache corrupted - try network if online
+							if (navigator.onLine) {
 								loadFromNetwork(self, tile, coords, done);
 							} else {
 								done(new Error('Tile corrupted and offline'), tile);
@@ -67,13 +67,13 @@ export function createCachedTileLayer(
 						tile.src = url;
 					} else {
 						// Not in cache
-						if (!gateway || gateway.isOnline) {
+						if (navigator.onLine) {
 							// Online: load from network
 							loadFromNetwork(self, tile, coords, done);
 						} else {
 							// Offline: fail gracefully
 							console.log(
-								'[CachedTileLayer] Tile not cached, offline mode:',
+								'[CachedTileLayer] Tile not cached, offline:',
 								`${sourceId}/${coords.z}/${coords.x}/${coords.y}`
 							);
 							done(new Error('Tile not cached and offline'), tile);
@@ -87,7 +87,7 @@ export function createCachedTileLayer(
 						`${sourceId}/${coords.z}/${coords.x}/${coords.y}:`,
 						error
 					);
-					if (!gateway || gateway.isOnline) {
+					if (navigator.onLine) {
 						loadFromNetwork(self, tile, coords, done);
 					} else {
 						done(new Error('IndexedDB error and offline'), tile);
@@ -130,7 +130,6 @@ function loadFromNetwork(
  *
  * @param sources - Array of map sources with id, url, and config
  * @param leaflet - Leaflet instance
- * @param gateway - Optional gateway to check online/offline state
  * @returns Map of sourceId -> CachedTileLayer
  */
 export function createCachedTileLayers(
@@ -144,8 +143,7 @@ export function createCachedTileLayers(
 			minZoom?: number;
 		};
 	}>,
-	leaflet: typeof L,
-	gateway?: ParticipantGateway | null
+	leaflet: typeof L
 ): Map<string, L.TileLayer> {
 	const layers = new Map<string, L.TileLayer>();
 
@@ -159,7 +157,7 @@ export function createCachedTileLayers(
 		};
 
 		try {
-			const layer = createCachedTileLayer(source.id, source.url, options, leaflet, gateway);
+			const layer = createCachedTileLayer(source.id, source.url, options, leaflet);
 			layers.set(source.id, layer);
 		} catch (error) {
 			console.warn(`Failed to create cached layer for source ${source.id}:`, error);

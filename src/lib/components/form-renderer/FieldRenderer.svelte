@@ -198,9 +198,8 @@
 	// Count of existing files (after removals)
 	const existingFilesCount = $derived(existingFiles.length);
 
-	// Resolve cached file URLs when offline
+	// Local-first: always try to resolve cached blob URLs from IndexedDB
 	$effect(() => {
-		if (!gateway || gateway.isOnline) return;
 		const files = existingFiles;
 		if (files.length === 0) return;
 
@@ -218,20 +217,20 @@
 	});
 
 	// Build media files array for MediaGallery
+	// Local-first: prefer cached blob URL, fall back to server URL when online
 	const mediaFiles = $derived.by((): MediaFile[] => {
 		const files: MediaFile[] = [];
-		const isOffline = gateway && !gateway.isOnline;
 
 		// Existing files from database (filtered)
 		for (const storedFile of existingFiles) {
 			const cacheKey = `${fileCollection}/${storedFile.recordId}/${storedFile.fileName}`;
 
 			let url: string;
-			if (isOffline && cachedBlobUrls[cacheKey]) {
-				// Use cached blob URL when offline
+			if (cachedBlobUrls[cacheKey]) {
+				// Use cached blob URL (local-first: always preferred)
 				url = cachedBlobUrls[cacheKey];
 			} else {
-				// Use PocketBase URL when online (or as fallback)
+				// Fall back to PocketBase server URL (works when online)
 				url = `${POCKETBASE_URL}/api/files/${fileCollection}/${storedFile.recordId}/${storedFile.fileName}`;
 			}
 

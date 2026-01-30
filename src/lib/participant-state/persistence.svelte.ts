@@ -156,8 +156,7 @@ export async function clearCollection(collection: string): Promise<void> {
 }
 
 /**
- * Clear all IndexedDB data (records, tiles, files, and operation log).
- * Called after sync when user toggles back to online mode.
+ * Clear all IndexedDB data (records, tiles, files, operation log, sync metadata, conflicts).
  */
 export async function clearAllData(): Promise<void> {
 	revokeAllBlobUrls();
@@ -166,6 +165,8 @@ export async function clearAllData(): Promise<void> {
 		db.clear('records'),
 		db.clear('tiles'),
 		db.clear('files'),
-		db.clear('operation_log')
+		db.clear('operation_log'),
+		db.clear('sync_metadata'),
+		db.clear('conflicts')
 	]);
 }

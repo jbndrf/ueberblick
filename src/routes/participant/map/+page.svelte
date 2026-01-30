@@ -3,9 +3,9 @@
 	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
 	import {
 		getDownloadProgress,
-		getDownloadCompleteSignal,
-		getOfflineModeChangeSignal
+		getDownloadCompleteSignal
 	} from '$lib/participant-state';
+	import { onDataChange } from '$lib/participant-state/gateway.svelte';
 	import { Loader2 } from 'lucide-svelte';
 	import { MapCanvas, BottomControlBar, LayerSheet, FilterSheet, WorkflowSelector } from './components';
 	import { WorkflowInstanceDetailModule, createSelection, type Selection, type Marker } from './modules';
@@ -109,11 +109,8 @@
 
 	// Event signals for reactive data reload
 	const downloadCompleteSignal = $derived(getDownloadCompleteSignal());
-	const offlineModeSignal = $derived(getOfflineModeChangeSignal());
-
 	// Track previous signal values to detect changes
 	let prevDownloadSignal = 0;
-	let prevOfflineSignal = 0;
 
 	// Load data on mount
 	$effect(() => {
@@ -130,17 +127,25 @@
 		}
 	});
 
-	// Reload on offline mode change
-	$effect(() => {
-		const signal = offlineModeSignal;
-		if (signal > prevOfflineSignal) {
-			prevOfflineSignal = signal;
-			console.log('[map page] Offline mode change signal received, reloading data...');
+	// Reload when background sync updates data (replaces offline mode signal)
+	let cleanupDataChangeListener: (() => void) | null = null;
+
+	onMount(() => {
+		cleanupDataChangeListener = onDataChange((_collection) => {
+			console.log('[map page] Data changed via background sync, reloading...');
 			loadData();
-		}
+		});
+	});
+
+	onDestroy(() => {
+		cleanupDataChangeListener?.();
 	});
 
 	async function loadData() {
+		if (!gateway) {
+			isLoading = false;
+			return;
+		}
 		// Prevent concurrent calls to avoid PocketBase auto-cancellation
 		if (loadDataInFlight) {
 			console.log('[loadData] Already loading, skipping duplicate request');
@@ -150,9 +155,7 @@
 
 		try {
 			isLoading = true;
-			console.log('[loadData] Gateway online status:', gateway.isOnline);
-
-			// Load all in parallel
+			// Load all in parallel (local-first: reads from IndexedDB, background revalidation when online)
 			const [layersResult, markersResult, instancesResult, workflowsResult, stagesResult] = await Promise.all([
 				gateway.collection('map_layers').getFullList({
 					filter: 'is_active = true',
@@ -459,7 +462,6 @@
 		{visibleCategoryIds}
 		{workflowInstances}
 		{visibleWorkflowIds}
-		{gateway}
 		onMarkerClick={handleMarkerClick}
 		onWorkflowInstanceClick={handleWorkflowInstanceClick}
 		onMapReady={handleMapReady}

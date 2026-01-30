@@ -1,6 +1,7 @@
 /**
  * IndexedDB wrapper for participant state
  *
+ * Version 7: Added sync_metadata + conflicts stores, resolution field on files.
  * Version 6: Added files store for offline file/image blob caching.
  * Version 5: Added packages store for offline tile packages.
  * Version 4: Added tiles store for custom map tile caching.
@@ -40,6 +41,32 @@ export interface CachedFile {
 	size: number;
 	cachedAt: string;
 	source: 'downloaded' | 'local'; // downloaded = from server, local = created offline
+	resolution: 'original' | 'thumbnail';
+}
+
+/**
+ * Sync metadata per collection - tracks last sync timestamp for delta sync.
+ */
+export interface SyncMetadata {
+	collection: string;
+	lastSyncTimestamp: string;
+}
+
+/**
+ * Stored conflict when server version wins during push sync.
+ * Participant can review and optionally re-apply their changes.
+ */
+export interface SyncConflict {
+	id: string;
+	collection: string;
+	recordId: string;
+	instanceId: string;
+	localVersion: Record<string, unknown>;
+	serverVersion: Record<string, unknown>;
+	localModifiedBy: string;
+	detectedAt: string;
+	status: 'pending' | 'resolved';
+	resolvedAt?: string;
 }
 
 /**
@@ -49,6 +76,7 @@ export interface CachedRecord {
 	_key: string; // compound key: `${collection}/${id}`
 	_collection: string; // collection name
 	_status: 'unchanged' | 'new' | 'modified' | 'deleted';
+	_serverUpdated?: string; // server's `updated` timestamp at last pull (for conflict detection)
 	_error?: string;
 	_retryCount?: number;
 	id: string;
@@ -120,7 +148,7 @@ interface ParticipantStateDB extends DBSchema {
 		};
 	};
 
-	// Cached file blobs for offline file/image support (v6)
+	// Cached file blobs for offline file/image support (v6, resolution added v7)
 	files: {
 		key: string; // "{collection}/{recordId}/{fieldName}/{fileName}"
 		value: CachedFile;
@@ -128,116 +156,194 @@ interface ParticipantStateDB extends DBSchema {
 			by_collection: string;
 			by_record: string; // recordId
 			by_source: 'downloaded' | 'local';
+			by_resolution: 'original' | 'thumbnail';
+		};
+	};
+
+	// Sync metadata per collection - last sync timestamp for delta sync (v7)
+	sync_metadata: {
+		key: string; // collection name
+		value: SyncMetadata;
+	};
+
+	// Conflict store for server-wins resolution (v7)
+	conflicts: {
+		key: string; // conflict ID
+		value: SyncConflict;
+		indexes: {
+			by_instance: string;
+			by_status: 'pending' | 'resolved';
 		};
 	};
 }
 
 const DB_NAME = 'participant-state';
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 
-let dbInstance: IDBPDatabase<ParticipantStateDB> | null = null;
+// Promise-based singleton: all concurrent callers share one openDB() call.
+let dbPromise: Promise<IDBPDatabase<ParticipantStateDB>> | null = null;
 
 /**
- * Initialize and open the IndexedDB database
+ * Schema upgrade logic -- shared between primary open and recovery retry.
  */
-export async function initDB(): Promise<IDBPDatabase<ParticipantStateDB>> {
-	if (dbInstance) {
-		return dbInstance;
-	}
-
-	dbInstance = await openDB<ParticipantStateDB>(DB_NAME, DB_VERSION, {
-		upgrade(db, oldVersion) {
-			// Delete all old stores when upgrading to v3
-			if (oldVersion < 3) {
-				const oldStores = [
-					'pending_markers',
-					'pending_surveys',
-					'pending_photos',
-					'workflow_progress',
-					'forms',
-					'markers',
-					'workflow_instances',
-					'workflow_instance_field_values',
-					'workflow_instance_tool_usage',
-					'workflows',
-					'workflow_stages',
-					'workflow_connections',
-					'tools_forms',
-					'tools_form_fields',
-					'tools_edit',
-					'marker_categories',
-					'roles',
-					'pack_metadata'
-				];
-				for (const storeName of oldStores) {
-					if (db.objectStoreNames.contains(storeName as never)) {
-						db.deleteObjectStore(storeName as never);
-					}
-				}
-			}
-
-			// Generic records store - holds any collection
-			if (!db.objectStoreNames.contains('records')) {
-				const store = db.createObjectStore('records', { keyPath: '_key' });
-				store.createIndex('by_collection', '_collection');
-				store.createIndex('by_status', '_status');
-				store.createIndex('by_collection_status', ['_collection', '_status']);
-			}
-
-			// Operation log for audit trail
-			if (!db.objectStoreNames.contains('operation_log')) {
-				const store = db.createObjectStore('operation_log', { keyPath: 'id' });
-				store.createIndex('by-collection', 'collection');
-				store.createIndex('by-entity', '_entityKey');
-				store.createIndex('by-sync-status', 'syncStatus');
-				store.createIndex('by-timestamp', 'timestamp');
-				store.createIndex('by-participant', 'participantId');
-			}
-
-			// Map tile cache (v4) - supports multiple tile sources
-			if (!db.objectStoreNames.contains('tiles')) {
-				const store = db.createObjectStore('tiles', { keyPath: 'key' });
-				store.createIndex('by_source', 'sourceId');
-				store.createIndex('by_zoom', 'z');
-			}
-
-			// Downloaded packages store (v5) - tracks offline tile packages
-			if (!db.objectStoreNames.contains('packages')) {
-				const store = db.createObjectStore('packages', { keyPath: 'id' });
-				store.createIndex('by_project', 'projectId');
-				store.createIndex('by_status', 'status');
-			}
-
-			// Cached file blobs store (v6) - offline file/image support
-			if (!db.objectStoreNames.contains('files')) {
-				const store = db.createObjectStore('files', { keyPath: 'key' });
-				store.createIndex('by_collection', 'collection');
-				store.createIndex('by_record', 'recordId');
-				store.createIndex('by_source', 'source');
+function upgradeSchema(db: IDBPDatabase<ParticipantStateDB>, oldVersion: number): void {
+	// Delete all old stores when upgrading to v3
+	if (oldVersion < 3) {
+		const oldStores = [
+			'pending_markers',
+			'pending_surveys',
+			'pending_photos',
+			'workflow_progress',
+			'forms',
+			'markers',
+			'workflow_instances',
+			'workflow_instance_field_values',
+			'workflow_instance_tool_usage',
+			'workflows',
+			'workflow_stages',
+			'workflow_connections',
+			'tools_forms',
+			'tools_form_fields',
+			'tools_edit',
+			'marker_categories',
+			'roles',
+			'pack_metadata'
+		];
+		for (const storeName of oldStores) {
+			if (db.objectStoreNames.contains(storeName as never)) {
+				db.deleteObjectStore(storeName as never);
 			}
 		}
-	});
+	}
 
-	return dbInstance;
+	// Generic records store - holds any collection
+	if (!db.objectStoreNames.contains('records')) {
+		const store = db.createObjectStore('records', { keyPath: '_key' });
+		store.createIndex('by_collection', '_collection');
+		store.createIndex('by_status', '_status');
+		store.createIndex('by_collection_status', ['_collection', '_status']);
+	}
+
+	// Operation log for audit trail
+	if (!db.objectStoreNames.contains('operation_log')) {
+		const store = db.createObjectStore('operation_log', { keyPath: 'id' });
+		store.createIndex('by-collection', 'collection');
+		store.createIndex('by-entity', '_entityKey');
+		store.createIndex('by-sync-status', 'syncStatus');
+		store.createIndex('by-timestamp', 'timestamp');
+		store.createIndex('by-participant', 'participantId');
+	}
+
+	// Map tile cache (v4) - supports multiple tile sources
+	if (!db.objectStoreNames.contains('tiles')) {
+		const store = db.createObjectStore('tiles', { keyPath: 'key' });
+		store.createIndex('by_source', 'sourceId');
+		store.createIndex('by_zoom', 'z');
+	}
+
+	// Downloaded packages store (v5) - tracks offline tile packages
+	if (!db.objectStoreNames.contains('packages')) {
+		const store = db.createObjectStore('packages', { keyPath: 'id' });
+		store.createIndex('by_project', 'projectId');
+		store.createIndex('by_status', 'status');
+	}
+
+	// Cached file blobs store (v6, resolution index added v7)
+	if (!db.objectStoreNames.contains('files')) {
+		const store = db.createObjectStore('files', { keyPath: 'key' });
+		store.createIndex('by_collection', 'collection');
+		store.createIndex('by_record', 'recordId');
+		store.createIndex('by_source', 'source');
+		store.createIndex('by_resolution', 'resolution');
+	}
+
+	// Sync metadata store (v7) - tracks last sync timestamp per collection
+	if (!db.objectStoreNames.contains('sync_metadata')) {
+		db.createObjectStore('sync_metadata', { keyPath: 'collection' });
+	}
+
+	// Conflicts store (v7) - server-wins conflict records for participant review
+	if (!db.objectStoreNames.contains('conflicts')) {
+		const store = db.createObjectStore('conflicts', { keyPath: 'id' });
+		store.createIndex('by_instance', 'instanceId');
+		store.createIndex('by_status', 'status');
+	}
+}
+
+/**
+ * Internal: open the database with full error handling and recovery.
+ */
+async function doOpenDB(): Promise<IDBPDatabase<ParticipantStateDB>> {
+	try {
+		return await openDB<ParticipantStateDB>(DB_NAME, DB_VERSION, {
+			upgrade(db, oldVersion) {
+				upgradeSchema(db, oldVersion);
+			},
+			blocked(currentVersion, blockedVersion) {
+				// Another connection (old tab/SW) is preventing our upgrade.
+				console.warn(
+					`IndexedDB upgrade blocked (v${currentVersion} -> v${blockedVersion}). Waiting for other connections to close.`
+				);
+			},
+			blocking(_currentVersion, _blockedVersion, event) {
+				// OUR connection is blocking someone else's upgrade.
+				// Close so the other connection can proceed.
+				(event.target as IDBDatabase).close();
+				dbPromise = null;
+			},
+			terminated() {
+				// Browser closed our connection unexpectedly (e.g., storage pressure).
+				// Clear the singleton so the next access re-opens.
+				console.warn('IndexedDB connection terminated by browser.');
+				dbPromise = null;
+			}
+		});
+	} catch (error) {
+		// DB open failed (corrupted, quota, schema mismatch, etc.).
+		// Recovery: delete the database and retry once.
+		console.error('IndexedDB open failed, attempting recovery:', error);
+		dbPromise = null;
+
+		await new Promise<void>((resolve, reject) => {
+			const req = indexedDB.deleteDatabase(DB_NAME);
+			req.onsuccess = () => resolve();
+			req.onerror = () => reject(req.error);
+		});
+
+		// Retry with a fresh database (non-recursive: calls openDB directly).
+		return await openDB<ParticipantStateDB>(DB_NAME, DB_VERSION, {
+			upgrade(db, oldVersion) {
+				upgradeSchema(db, oldVersion);
+			}
+		});
+	}
+}
+
+/**
+ * Initialize and open the IndexedDB database.
+ * Safe to call concurrently -- all callers share a single openDB() call.
+ */
+export function initDB(): Promise<IDBPDatabase<ParticipantStateDB>> {
+	if (!dbPromise) {
+		dbPromise = doOpenDB();
+	}
+	return dbPromise;
 }
 
 /**
  * Get the database instance (initialize if needed)
  */
-export async function getDB(): Promise<IDBPDatabase<ParticipantStateDB>> {
-	if (!dbInstance) {
-		return await initDB();
-	}
-	return dbInstance;
+export function getDB(): Promise<IDBPDatabase<ParticipantStateDB>> {
+	return initDB();
 }
 
 /**
  * Close the database connection
  */
 export function closeDB(): void {
-	if (dbInstance) {
-		dbInstance.close();
-		dbInstance = null;
+	if (dbPromise) {
+		dbPromise.then((db) => db.close()).catch(() => {});
+		dbPromise = null;
 	}
 }
 

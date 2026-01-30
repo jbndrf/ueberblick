@@ -198,14 +198,13 @@ export async function clearCachedSession(): Promise<void> {
 }
 
 // =============================================================================
-// Offline Mode Persistence
+// Offline Mode Persistence (legacy -- kept for backward compat during migration)
 // =============================================================================
 
 const OFFLINE_MODE_KEY = 'participant-offline-mode';
 
 /**
- * Persist offline mode preference to localStorage.
- * Call when user toggles offline mode.
+ * @deprecated Use fullLocalCopy mode instead. Kept for migration path.
  */
 export function persistOfflineMode(enabled: boolean): void {
 	if (typeof window === 'undefined') return;
@@ -218,10 +217,38 @@ export function persistOfflineMode(enabled: boolean): void {
 }
 
 /**
- * Get persisted offline mode preference from localStorage.
- * Returns true if user previously enabled offline mode.
+ * @deprecated Use fullLocalCopy mode instead. Kept for migration path.
  */
 export function getPersistedOfflineMode(): boolean {
 	if (typeof window === 'undefined') return false;
 	return localStorage.getItem(OFFLINE_MODE_KEY) === 'true';
+}
+
+// =============================================================================
+// Full Local Copy Mode (replaces offline mode toggle)
+// =============================================================================
+
+const FULL_LOCAL_COPY_KEY = 'participant-full-local-copy';
+
+/**
+ * Persist "full local copy" mode preference to localStorage.
+ * In full local copy mode, thumbnails of all images are cached in IndexedDB
+ * for complete offline capability.
+ */
+export function setFullLocalCopyMode(enabled: boolean): void {
+	if (typeof window === 'undefined') return;
+
+	if (enabled) {
+		localStorage.setItem(FULL_LOCAL_COPY_KEY, 'true');
+	} else {
+		localStorage.removeItem(FULL_LOCAL_COPY_KEY);
+	}
+}
+
+/**
+ * Get whether full local copy mode is enabled.
+ */
+export function getFullLocalCopyMode(): boolean {
+	if (typeof window === 'undefined') return false;
+	return localStorage.getItem(FULL_LOCAL_COPY_KEY) === 'true';
 }

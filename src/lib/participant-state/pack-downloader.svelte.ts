@@ -6,7 +6,7 @@
  */
 
 import { getDB, type CachedRecord } from './db';
-import { storeFileBlob, buildFileKey } from './file-cache';
+import { storeFileBlob, buildFileKey, isImageMimeType } from './file-cache';
 import { POCKETBASE_URL } from '$lib/config/pocketbase';
 import type {
 	OfflinePackMetadata,
@@ -301,7 +301,10 @@ export async function syncProjectData(
 							}
 
 							try {
-								const url = `${POCKETBASE_URL}/api/files/${collectionName}/${record.id}/${fileName}`;
+								// Use thumbnail URL for images to save storage (~50KB vs 3-8MB)
+								const isImage = /\.(jpg|jpeg|png|gif|webp|bmp|tiff?)$/i.test(fileName);
+								const thumbParam = isImage ? '?thumb=800x0f' : '';
+								const url = `${POCKETBASE_URL}/api/files/${collectionName}/${record.id}/${fileName}${thumbParam}`;
 								const response = await fetch(url);
 								if (!response.ok) {
 									console.log(`Skipped file ${fileName}: HTTP ${response.status}`);
@@ -320,7 +323,8 @@ export async function syncProjectData(
 									mimeType: blob.type,
 									size: blob.size,
 									cachedAt: new Date().toISOString(),
-									source: 'downloaded'
+									source: 'downloaded',
+									resolution: isImage ? 'thumbnail' : 'original'
 								});
 
 								downloadedFiles++;

@@ -19,9 +19,10 @@
 		setParticipantGateway,
 		setReferenceData,
 		getCachedSession,
-		clearCachedSession,
-		getPersistedOfflineMode
+		clearCachedSession
 	} from '$lib/participant-state/context.svelte';
+	import { startSyncLoop } from '$lib/participant-state/sync.svelte';
+	import { setupRealtime } from '$lib/participant-state/realtime.svelte';
 
 	// Register service worker for PWA
 	onMount(async () => {
@@ -54,18 +55,14 @@
 	// Offline session state (for when server is unreachable)
 	let offlineSession = $state<{ participantId: string; projectId: string; email: string } | null>(null);
 
+	// Cleanup functions for sync loop and realtime
+	let cleanupSyncLoop: (() => void) | null = null;
+	let cleanupRealtime: (() => void) | null = null;
+
 	// Create gateway synchronously if participant is available
 	// This allows $effect in setupPersistence to work during component init
 	if (data.participant) {
 		gateway = createParticipantGateway(data.participant.id, data.participant.project_id);
-
-		// Restore offline mode BEFORE children see the gateway.
-		// This prevents the race where loadData() fires with isOnline=true
-		// before the old $effect had a chance to restore offline mode.
-		if (browser && getPersistedOfflineMode()) {
-			gateway.setOfflineMode(true);
-		}
-
 		setParticipantGateway(gateway);
 
 		// Set up auto-persistence (uses $effect, must be called during init)
@@ -88,13 +85,11 @@
 
 	async function checkOfflineSession() {
 		const cached = await getCachedSession();
-		const wasOffline = getPersistedOfflineMode();
 
-		if (cached && wasOffline) {
-			// Restore offline session
+		if (cached) {
+			// Restore offline session -- in local-first mode, the app always works
 			offlineSession = cached;
 			gateway = createParticipantGateway(cached.participantId, cached.projectId);
-			gateway.setOfflineMode(true); // Start in offline mode
 			setParticipantGateway(gateway);
 			setupPersistence(gateway);
 		}
@@ -108,6 +103,28 @@
 			await gateway.init();
 			gatewayInitialized = true;
 			console.log('Participant gateway initialized');
+
+			// Start background sync loop and realtime subscriptions
+			// Collections to sync (participant-accessible collections)
+			const syncCollections = [
+				'markers',
+				'marker_categories',
+				'workflows',
+				'workflow_stages',
+				'workflow_connections',
+				'workflow_instances',
+				'workflow_instance_field_values',
+				'workflow_instance_tool_usage',
+				'tools_forms',
+				'tools_form_fields',
+				'tools_edit',
+				'roles',
+				'map_layers',
+				'map_sources'
+			];
+
+			cleanupSyncLoop = startSyncLoop(gateway, syncCollections);
+			cleanupRealtime = setupRealtime(syncCollections);
 		} catch (error) {
 			console.error('Failed to initialize gateway:', error);
 		}
@@ -115,6 +132,10 @@
 
 	async function handleSignOut() {
 		try {
+			// Stop sync loop and realtime before logout
+			cleanupSyncLoop?.();
+			cleanupRealtime?.();
+
 			// Clear cached offline session
 			await clearCachedSession();
 			// Call logout endpoint to clear cookie

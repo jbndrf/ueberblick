@@ -14,7 +14,11 @@
 	import * as Card from '$lib/components/ui/card';
 	import * as Tabs from '$lib/components/ui/tabs';
 	import { MapPin, Clock, ChevronDown } from 'lucide-svelte';
-	import { FormFillTool, EditFieldsTool, ViewFieldsTool, LocationEditTool } from './tools';
+	import { FormFillTool, EditFieldsTool, ViewFieldsTool, LocationEditTool, ConflictResolutionTool } from './tools';
+	import { getConflictsForInstance, resolveConflict } from '$lib/participant-state/sync.svelte';
+	import type { SyncConflict } from '$lib/participant-state/db';
+	import { getPocketBase } from '$lib/pocketbase';
+	import { AlertTriangle } from 'lucide-svelte';
 	import type { Map as LeafletMap } from 'leaflet';
 
 	// ==========================================================================
@@ -58,6 +62,10 @@
 	let isLocationPickerActive = $state(false);
 	let activeLocationEditTool = $state<ToolEdit | null>(null);
 
+	// Conflict resolution state
+	let pendingConflicts = $state<SyncConflict[]>([]);
+	let showConflictTool = $state(false);
+
 	// ==========================================================================
 	// Effects
 	// ==========================================================================
@@ -73,8 +81,38 @@
 		activeEditTool = null;
 		isLocationPickerActive = false;
 		activeLocationEditTool = null;
+		showConflictTool = false;
 		newState.load();
+
+		// Check for pending conflicts on this instance
+		loadConflicts(instanceId);
 	});
+
+	async function loadConflicts(instanceId: string) {
+		try {
+			const raw = await getConflictsForInstance(instanceId);
+			// Re-fetch current server versions so "Current value" is up-to-date
+			if (navigator.onLine) {
+				const pb = getPocketBase();
+				const refreshed = await Promise.all(
+					raw.map(async (conflict) => {
+						try {
+							const current = await pb.collection(conflict.collection).getOne(conflict.recordId);
+							return { ...conflict, serverVersion: current as Record<string, unknown> };
+						} catch {
+							// Record may have been deleted; keep the snapshot
+							return conflict;
+						}
+					})
+				);
+				pendingConflicts = refreshed;
+			} else {
+				pendingConflicts = raw;
+			}
+		} catch {
+			pendingConflicts = [];
+		}
+	}
 
 	// Sync internal location picker state with bindable prop
 	$effect(() => {
@@ -517,6 +555,67 @@
 		isLocationPickerActive = false;
 		activeLocationEditTool = null;
 	}
+
+	// ==========================================================================
+	// Conflict Resolution Handlers
+	// ==========================================================================
+
+	async function handleConflictResolve(resolutions: Array<{ conflictId: string; action: 'keep_server' | 'reapply_local'; fieldsToReapply?: string[] }>) {
+		if (!detailState || !gateway) return;
+
+		for (const resolution of resolutions) {
+			const conflict = pendingConflicts.find((c) => c.id === resolution.conflictId);
+			if (!conflict) continue;
+
+			if (resolution.action === 'reapply_local') {
+				const localData = conflict.localVersion;
+				const updateData: Record<string, unknown> = {};
+				const allowedFields = resolution.fieldsToReapply
+					? new Set(resolution.fieldsToReapply)
+					: null;
+
+				for (const [key, localVal] of Object.entries(localData)) {
+					if (key === 'id' || key === 'created' || key === 'updated') continue;
+					if (key === 'collectionId' || key === 'collectionName') continue;
+					// Only re-apply fields the participant explicitly selected
+					if (allowedFields && !allowedFields.has(key)) continue;
+					if (JSON.stringify(localVal) !== JSON.stringify(conflict.serverVersion[key])) {
+						updateData[key] = localVal;
+					}
+				}
+
+				if (Object.keys(updateData).length > 0) {
+					await gateway.collection(conflict.collection).update(conflict.recordId, updateData);
+
+					// Create audit trail entry
+					await gateway.collection('workflow_instance_tool_usage').create({
+						instance_id: conflict.instanceId,
+						stage_id: detailState.instance?.current_stage_id,
+						executed_by: gateway.participantId,
+						executed_at: new Date().toISOString(),
+						metadata: {
+							action: 'conflict_resolution',
+							conflict_id: conflict.id,
+							resolution: 'reapply_local',
+							fields: Object.keys(updateData)
+						}
+					});
+				}
+			}
+
+			// Mark conflict as resolved regardless of action
+			await resolveConflict(resolution.conflictId);
+		}
+
+		// Refresh
+		pendingConflicts = [];
+		showConflictTool = false;
+		await detailState.refresh();
+	}
+
+	function handleConflictCancel() {
+		showConflictTool = false;
+	}
 </script>
 
 <ModuleShell
@@ -556,6 +655,13 @@
 					onCancel={handleToolFlowCancel}
 				/>
 			{/if}
+		{:else if showConflictTool && pendingConflicts.length > 0 && detailState}
+			<ConflictResolutionTool
+				conflicts={pendingConflicts}
+				formFields={detailState.formFields}
+				onResolve={handleConflictResolve}
+				onCancel={handleConflictCancel}
+			/>
 		{:else if activeEditTool && detailState}
 			<EditFieldsTool
 				editTool={activeEditTool}
@@ -570,6 +676,21 @@
 		{:else}
 			<!-- Normal detail view with tabs -->
 			<div class="p-4">
+				<!-- Conflict Banner -->
+				{#if pendingConflicts.length > 0}
+					<button
+						class="mb-4 flex w-full items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-left transition-colors hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950 dark:hover:bg-amber-900"
+						onclick={() => (showConflictTool = true)}
+					>
+						<AlertTriangle class="h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+						<span class="text-sm text-amber-800 dark:text-amber-200">
+							{pendingConflicts.length === 1
+								? 'One of your changes was overridden. Tap to review.'
+								: `${pendingConflicts.length} changes were overridden. Tap to review.`}
+						</span>
+					</button>
+				{/if}
+
 				<!-- Action Roll Bar -->
 				{#if actions.length > 0}
 					<div class="mb-4">

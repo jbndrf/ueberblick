@@ -40,6 +40,9 @@
 	let lightboxIndex = $state(0);
 	let carouselApi: CarouselAPI | undefined = $state();
 	let carouselContainer: HTMLDivElement | undefined = $state();
+	let swipeStartX = 0;
+	let swipeStartY = 0;
+	let swipeStartIndex = 0;
 
 	// ==========================================================================
 	// Derived
@@ -194,6 +197,30 @@
 			if (wheelTimer) clearTimeout(wheelTimer);
 		};
 	});
+
+	// ==========================================================================
+	// Custom swipe detection (bypasses Embla's drag which fails on Chrome mobile
+	// because Chrome's compositor makes touchmove non-cancelable inside scroll containers)
+	// ==========================================================================
+
+	function handleSwipeStart(e: TouchEvent) {
+		swipeStartX = e.touches[0].clientX;
+		swipeStartY = e.touches[0].clientY;
+		swipeStartIndex = carouselApi?.selectedScrollSnap() ?? 0;
+	}
+
+	function handleSwipeEnd(e: TouchEvent) {
+		if (!carouselApi) return;
+		// If Embla already handled this gesture (Firefox, desktop), do nothing
+		if (carouselApi.selectedScrollSnap() !== swipeStartIndex) return;
+		const deltaX = e.changedTouches[0].clientX - swipeStartX;
+		const deltaY = e.changedTouches[0].clientY - swipeStartY;
+		if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 30) {
+			if (deltaX > 0) carouselApi.scrollPrev();
+			else carouselApi.scrollNext();
+		}
+	}
+
 </script>
 
 <svelte:window onkeydown={lightboxOpen ? handleLightboxKeydown : undefined} />
@@ -202,7 +229,13 @@
 	<div class="space-y-2">
 		<!-- Carousel Gallery -->
 		{#if files.length > 0}
-			<div bind:this={carouselContainer} class="touch-pan-y">
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				bind:this={carouselContainer}
+				class="touch-pan-y"
+				ontouchstart={handleSwipeStart}
+				ontouchend={handleSwipeEnd}
+			>
 			<Carousel.Root
 				class="w-full"
 				opts={{
@@ -212,46 +245,46 @@
 				}}
 				setApi={(api) => (carouselApi = api)}
 			>
-				<Carousel.Content class="-ml-2">
-					{#each files as file, index}
-						<Carousel.Item class="{itemBasisClass} pl-2">
-							<div class="relative group aspect-[2/3]">
-								{#if file.isImage}
-									<!-- Image Thumbnail -->
-									<button
-										type="button"
-										class="block w-full h-full rounded-md overflow-hidden border border-border hover:border-primary transition-colors cursor-pointer"
-										onclick={() => openLightbox(file)}
-									>
-										<img src={file.url} alt={file.name} class="w-full h-full object-cover" />
-									</button>
-								{:else}
-									<!-- File Icon -->
-									<div
-										class="w-full h-full rounded-md border border-border bg-muted flex flex-col items-center justify-center p-2"
-									>
-										<FileText class="w-8 h-8 text-muted-foreground mb-2" />
-										<span class="text-xs text-muted-foreground truncate w-full text-center">
-											{file.name}
-										</span>
-									</div>
-								{/if}
+					<Carousel.Content class="-ml-2">
+						{#each files as file, index}
+							<Carousel.Item class="{itemBasisClass} pl-2">
+								<div class="relative group aspect-[2/3]">
+									{#if file.isImage}
+										<!-- Image Thumbnail -->
+										<button
+											type="button"
+											class="block w-full h-full rounded-md overflow-hidden border border-border hover:border-primary transition-colors cursor-pointer"
+											onclick={() => openLightbox(file)}
+										>
+											<img src={file.url} alt={file.name} class="w-full h-full object-cover" />
+										</button>
+									{:else}
+										<!-- File Icon -->
+										<div
+											class="w-full h-full rounded-md border border-border bg-muted flex flex-col items-center justify-center p-2"
+										>
+											<FileText class="w-8 h-8 text-muted-foreground mb-2" />
+											<span class="text-xs text-muted-foreground truncate w-full text-center">
+												{file.name}
+											</span>
+										</div>
+									{/if}
 
-								<!-- Remove Button (fill/edit mode only) -->
-								{#if mode !== 'view'}
-									<button
-										type="button"
-										class="absolute top-1 right-1 w-6 h-6 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 md:group-hover:opacity-100 transition-opacity touch:opacity-100"
-										style="opacity: 1;"
-										onclick={() => handleRemove(index)}
-									>
-										<X class="w-3.5 h-3.5" />
-									</button>
-								{/if}
-							</div>
-						</Carousel.Item>
-					{/each}
-				</Carousel.Content>
+									<!-- Remove Button (fill/edit mode only) -->
+									{#if mode !== 'view'}
+										<button
+											type="button"
+											class="absolute top-1 right-1 w-6 h-6 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 md:group-hover:opacity-100 transition-opacity touch:opacity-100"
+											style="opacity: 1;"
+											onclick={() => handleRemove(index)}
+										>
+											<X class="w-3.5 h-3.5" />
+										</button>
+									{/if}
+								</div>
+							</Carousel.Item>
+						{/each}
+					</Carousel.Content>
 
 				<!-- Navigation arrows (only show if more items than visible) -->
 				{#if files.length > visibleItemCount}

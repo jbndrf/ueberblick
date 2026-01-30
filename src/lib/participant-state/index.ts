@@ -1,5 +1,5 @@
 /**
- * Participant State - Offline-first data management
+ * Participant State - Local-first data management
  *
  * Main entry point for the participant-state module.
  * Provides a unified gateway for all participant data operations.
@@ -9,7 +9,12 @@
 // Gateway (Primary Interface)
 // =============================================================================
 
-export { createParticipantGateway, type ParticipantGateway } from './gateway.svelte';
+export {
+	createParticipantGateway,
+	onDataChange,
+	type ParticipantGateway,
+	type CollectionProxy
+} from './gateway.svelte';
 
 // =============================================================================
 // Context (for sharing gateway across components)
@@ -21,13 +26,13 @@ export {
 	getReferenceData,
 	setReferenceData,
 	initializeParticipantState,
-	// Session caching for offline mode
+	// Session caching
 	cacheSession,
 	getCachedSession,
 	clearCachedSession,
-	// Offline mode persistence
-	persistOfflineMode,
-	getPersistedOfflineMode,
+	// Full local copy mode (replaces old offline mode toggle)
+	setFullLocalCopyMode,
+	getFullLocalCopyMode,
 	type ReferenceData
 } from './context.svelte';
 
@@ -48,7 +53,31 @@ export {
 // Sync Engine
 // =============================================================================
 
-export { downloadAll, uploadChanges, enableAutoSync, triggerSync, getSyncProgress } from './sync.svelte';
+export {
+	downloadAll,
+	uploadChanges,
+	enableAutoSync,
+	triggerSync,
+	getSyncProgress,
+	startSyncLoop,
+	// Conflict management
+	getConflictsForInstance,
+	getPendingConflicts,
+	resolveConflict
+} from './sync.svelte';
+
+// =============================================================================
+// Realtime Subscriptions
+// =============================================================================
+
+export {
+	setupRealtime,
+	connect as connectRealtime,
+	disconnect as disconnectRealtime,
+	reconnect as reconnectRealtime,
+	onRealtimeChange,
+	getRealtimeConnected
+} from './realtime.svelte';
 
 // =============================================================================
 // Operation Log
@@ -96,6 +125,11 @@ export {
 	getCachedFileUrl,
 	getCachedFileUrlByRecord,
 	getFilesForRecord,
+	getOriginalsForRecord,
+	deleteOriginalsForRecord,
+	deleteDownloadedFiles,
+	createThumbnail,
+	isImageMimeType,
 	revokeAllBlobUrls,
 	buildFileKey
 } from './file-cache';
@@ -114,6 +148,9 @@ export {
 	isStoragePersistent,
 	type CachedFile,
 	type CachedTile,
+	type CachedRecord,
+	type SyncMetadata,
+	type SyncConflict,
 	type DownloadedPackage
 } from './db';
 
@@ -138,7 +175,7 @@ export {
 	getPackWorkflows,
 	getPackForms,
 	getPackCategories,
-	// Project data sync (for offline toggle)
+	// Project data sync (for full local copy toggle)
 	syncProjectData
 } from './pack-downloader.svelte';
 

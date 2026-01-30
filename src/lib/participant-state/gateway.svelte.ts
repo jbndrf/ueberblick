@@ -1,11 +1,11 @@
 /**
- * Participant Gateway - Transparent Proxy to PocketBase
+ * Participant Gateway - Local-First Architecture
  *
- * Drop-in replacement for PocketBase SDK with offline support.
- * ANY collection works - no configuration needed.
+ * All reads go to IndexedDB first (instant). When online, a background fetch
+ * updates IndexedDB and notifies the UI if data changed.
  *
- * Online mode: Routes directly to PocketBase
- * Offline mode: Routes to IndexedDB
+ * All writes go to IndexedDB immediately (optimistic). Background sync pushes
+ * changes to PocketBase.
  *
  * Audit trail is handled at the tool level via workflow_instance_tool_usage collection.
  */
@@ -45,6 +45,32 @@ export interface CollectionProxy<T = Record<string, unknown>> {
 	getList(page?: number, perPage?: number, options?: ListOptions): Promise<ListResult<T>>;
 	getFullList(options?: ListOptions): Promise<T[]>;
 	getFirstListItem(filter: string, options?: { expand?: string; fields?: string }): Promise<T>;
+}
+
+// =============================================================================
+// Data Change Notification
+// =============================================================================
+
+type DataChangeListener = (collection: string) => void;
+const dataChangeListeners = new Set<DataChangeListener>();
+
+/**
+ * Subscribe to data changes. Called when background fetch updates IndexedDB.
+ * Returns unsubscribe function.
+ */
+export function onDataChange(listener: DataChangeListener): () => void {
+	dataChangeListeners.add(listener);
+	return () => dataChangeListeners.delete(listener);
+}
+
+function notifyDataChange(collection: string): void {
+	for (const listener of dataChangeListeners) {
+		try {
+			listener(collection);
+		} catch (e) {
+			console.error('Data change listener error:', e);
+		}
+	}
 }
 
 // =============================================================================
@@ -103,7 +129,7 @@ async function expandRecords<T>(
 					const relatedRecord = await findRelatedRecord(db, relationValue);
 					if (relatedRecord) {
 						// Remove internal fields from expanded record
-						const { _key, _collection, _status, _error, _retryCount, ...cleanRecord } =
+						const { _key, _collection, _status, _serverUpdated, _error, _retryCount, ...cleanRecord } =
 							relatedRecord;
 						expanded[field] = cleanRecord;
 					}
@@ -115,7 +141,7 @@ async function expandRecords<T>(
 							if (typeof id !== 'string') return null;
 							const relatedRecord = await findRelatedRecord(db, id);
 							if (relatedRecord) {
-								const { _key, _collection, _status, _error, _retryCount, ...cleanRecord } =
+								const { _key, _collection, _status, _serverUpdated, _error, _retryCount, ...cleanRecord } =
 									relatedRecord;
 								return cleanRecord;
 							}
@@ -140,17 +166,26 @@ async function expandRecords<T>(
 }
 
 // =============================================================================
+// Clean Record Helper
+// =============================================================================
+
+/**
+ * Strip internal fields from a CachedRecord for returning to callers.
+ */
+function cleanRecord(record: CachedRecord): Record<string, unknown> {
+	const { _key, _collection, _status, _serverUpdated, _error, _retryCount, ...clean } = record;
+	return clean;
+}
+
+// =============================================================================
 // Gateway Factory
 // =============================================================================
 
 /**
  * Create the participant gateway.
- * Transparent proxy to PocketBase - any collection works.
+ * Local-first proxy - all reads from IndexedDB, writes are optimistic.
  */
 export function createParticipantGateway(participantId: string, projectId: string) {
-	// Online/offline mode - starts online
-	let isOnline = $state(true);
-
 	// Pending count for UI (offline records awaiting sync)
 	let pendingCount = $state(0);
 
@@ -197,7 +232,8 @@ export function createParticipantGateway(participantId: string, projectId: strin
 					mimeType: value.type,
 					size: value.size,
 					cachedAt: now,
-					source: 'local'
+					source: 'local',
+					resolution: 'original'
 				});
 				// Store the filename in the record (PocketBase stores filenames as strings)
 				plainData[key] = fileName;
@@ -232,7 +268,7 @@ export function createParticipantGateway(participantId: string, projectId: strin
 		await db.put('records', record);
 		await updatePendingCount();
 
-		return record as unknown as T;
+		return cleanRecord(record) as unknown as T;
 	}
 
 	async function updateFromFormData<T>(
@@ -261,28 +297,103 @@ export function createParticipantGateway(participantId: string, projectId: strin
 		await db.put('records', updated);
 		await updatePendingCount();
 
-		return updated as unknown as T;
+		return cleanRecord(updated) as unknown as T;
 	}
 
 	// =========================================================================
-	// Collection Proxy Factory - Generic for ANY collection
+	// Background Fetch (stale-while-revalidate pattern)
+	// =========================================================================
+
+	/**
+	 * Fetch from PocketBase in background and update IndexedDB if data changed.
+	 * This is fire-and-forget -- errors are logged but not thrown.
+	 */
+	function backgroundFetchFullList(name: string, options?: ListOptions): void {
+		if (typeof window === 'undefined' || !navigator.onLine) return;
+
+		const pb = getPocketBase();
+		pb.collection(name)
+			.getFullList(options)
+			.then(async (serverRecords) => {
+				const db = await getDB();
+				let changed = false;
+
+				for (const record of serverRecords) {
+					const key = `${name}/${record.id}`;
+					const existing = await db.get('records', key);
+
+					// Skip if we have local modifications (don't overwrite pending changes)
+					if (existing && existing._status !== 'unchanged') continue;
+
+					// Check if data actually changed
+					if (existing && existing.updated === record.updated) continue;
+
+					const cached: CachedRecord = {
+						...record,
+						_key: key,
+						_collection: name,
+						_status: 'unchanged',
+						_serverUpdated: record.updated as string
+					};
+					await db.put('records', cached);
+					changed = true;
+				}
+
+				if (changed) {
+					notifyDataChange(name);
+				}
+			})
+			.catch((e) => {
+				// Silent fail for background fetches
+				console.debug(`Background fetch failed for ${name}:`, e);
+			});
+	}
+
+	/**
+	 * Background fetch for a single record.
+	 */
+	function backgroundFetchOne(name: string, id: string, options?: { expand?: string; fields?: string }): void {
+		if (typeof window === 'undefined' || !navigator.onLine) return;
+
+		const pb = getPocketBase();
+		pb.collection(name)
+			.getOne(id, options)
+			.then(async (record) => {
+				const db = await getDB();
+				const key = `${name}/${record.id}`;
+				const existing = await db.get('records', key);
+
+				// Skip if we have local modifications
+				if (existing && existing._status !== 'unchanged') return;
+
+				// Check if data actually changed
+				if (existing && existing.updated === record.updated) return;
+
+				const cached: CachedRecord = {
+					...record,
+					_key: key,
+					_collection: name,
+					_status: 'unchanged',
+					_serverUpdated: record.updated as string
+				};
+				await db.put('records', cached);
+				notifyDataChange(name);
+			})
+			.catch((e) => {
+				console.debug(`Background fetch one failed for ${name}/${id}:`, e);
+			});
+	}
+
+	// =========================================================================
+	// Collection Proxy Factory - Local-First for ANY collection
 	// =========================================================================
 
 	function collection<T = Record<string, unknown>>(name: string): CollectionProxy<T> {
-		const pb = getPocketBase();
-
 		return {
 			// -----------------------------------------------------------------
-			// CREATE
+			// CREATE - Always optimistic (write to IndexedDB first)
 			// -----------------------------------------------------------------
 			async create(data: Partial<T> | FormData): Promise<T> {
-				if (isOnline) {
-					// ONLINE: Write directly to PocketBase
-					const result = await pb.collection(name).create(data as Record<string, unknown>);
-					return result as T;
-				}
-
-				// OFFLINE: Store in IndexedDB
 				// Handle FormData (contains File objects that can't be stored directly)
 				if (data instanceof FormData) {
 					return await createFromFormData(name, data);
@@ -305,25 +416,18 @@ export function createParticipantGateway(participantId: string, projectId: strin
 				await db.put('records', record);
 				await updatePendingCount();
 
-				return record as unknown as T;
+				return cleanRecord(record) as unknown as T;
 			},
 
 			// -----------------------------------------------------------------
-			// UPDATE
+			// UPDATE - Always optimistic (write to IndexedDB first)
 			// -----------------------------------------------------------------
 			async update(id: string, data: Partial<T> | FormData): Promise<T> {
-				if (isOnline) {
-					// ONLINE: Write directly to PocketBase
-					const result = await pb.collection(name).update(id, data as Record<string, unknown>);
-					return result as T;
-				}
-
-				// OFFLINE: Handle FormData (contains File objects)
+				// Handle FormData (contains File objects)
 				if (data instanceof FormData) {
 					return await updateFromFormData(name, id, data);
 				}
 
-				// OFFLINE: Update in IndexedDB
 				const db = await getDB();
 				const key = `${name}/${id}`;
 				const existing = await db.get('records', key);
@@ -343,20 +447,13 @@ export function createParticipantGateway(participantId: string, projectId: strin
 				await db.put('records', updated);
 				await updatePendingCount();
 
-				return updated as unknown as T;
+				return cleanRecord(updated) as unknown as T;
 			},
 
 			// -----------------------------------------------------------------
-			// DELETE
+			// DELETE - Always optimistic (mark in IndexedDB first)
 			// -----------------------------------------------------------------
 			async delete(id: string): Promise<boolean> {
-				if (isOnline) {
-					// ONLINE: Delete directly from PocketBase
-					await pb.collection(name).delete(id);
-					return true;
-				}
-
-				// OFFLINE: Mark for deletion or remove if new
 				const db = await getDB();
 				const key = `${name}/${id}`;
 				const existing = await db.get('records', key);
@@ -383,43 +480,54 @@ export function createParticipantGateway(participantId: string, projectId: strin
 			},
 
 			// -----------------------------------------------------------------
-			// GET ONE
+			// GET ONE - Local-first with background revalidation
 			// -----------------------------------------------------------------
 			async getOne(id: string, options?: { expand?: string; fields?: string }): Promise<T> {
-				if (isOnline) {
-					return pb.collection(name).getOne(id, options) as Promise<T>;
-				}
-
-				// OFFLINE: Get from IndexedDB
 				const db = await getDB();
 				const record = await db.get('records', `${name}/${id}`);
 
-				if (!record || record._status === 'deleted') {
-					throw new Error(`Record not found: ${name}/${id}`);
+				if (record && record._status !== 'deleted') {
+					// Trigger background revalidation
+					backgroundFetchOne(name, id, options);
+
+					// Process expand parameter if present
+					if (options?.expand) {
+						const [expanded] = await expandRecords([record], options.expand);
+						return cleanRecord(expanded as unknown as CachedRecord) as unknown as T;
+					}
+
+					return cleanRecord(record) as unknown as T;
 				}
 
-				// Process expand parameter if present
-				if (options?.expand) {
-					const [expanded] = await expandRecords([record], options.expand);
-					return expanded as unknown as T;
+				// Not in cache -- try server directly (first load scenario)
+				if (navigator.onLine) {
+					const pb = getPocketBase();
+					const serverRecord = await pb.collection(name).getOne(id, options);
+
+					// Cache it
+					const cached: CachedRecord = {
+						...serverRecord,
+						_key: `${name}/${serverRecord.id}`,
+						_collection: name,
+						_status: 'unchanged',
+						_serverUpdated: serverRecord.updated as string
+					};
+					await db.put('records', cached);
+
+					return serverRecord as T;
 				}
 
-				return record as unknown as T;
+				throw new Error(`Record not found: ${name}/${id}`);
 			},
 
 			// -----------------------------------------------------------------
-			// GET LIST (paginated)
+			// GET LIST (paginated) - Local-first with background revalidation
 			// -----------------------------------------------------------------
 			async getList(
 				page: number = 1,
 				perPage: number = 30,
 				options?: ListOptions
 			): Promise<ListResult<T>> {
-				if (isOnline) {
-					return pb.collection(name).getList(page, perPage, options) as Promise<ListResult<T>>;
-				}
-
-				// OFFLINE: Get from IndexedDB with pagination
 				const db = await getDB();
 				const all = await db.getAllFromIndex('records', 'by_collection', name);
 				const visible = all.filter((r) => r._status !== 'deleted');
@@ -440,24 +548,22 @@ export function createParticipantGateway(participantId: string, projectId: strin
 					items = (await expandRecords(items, options.expand)) as CachedRecord[];
 				}
 
+				// Trigger background revalidation
+				backgroundFetchFullList(name, options);
+
 				return {
 					page,
 					perPage,
 					totalItems,
 					totalPages,
-					items: items as unknown as T[]
+					items: items.map((r) => cleanRecord(r)) as unknown as T[]
 				};
 			},
 
 			// -----------------------------------------------------------------
-			// GET FULL LIST (all records)
+			// GET FULL LIST - Local-first with background revalidation
 			// -----------------------------------------------------------------
 			async getFullList(options?: ListOptions): Promise<T[]> {
-				if (isOnline) {
-					return pb.collection(name).getFullList(options) as Promise<T[]>;
-				}
-
-				// OFFLINE: Get all from IndexedDB
 				const db = await getDB();
 				const all = await db.getAllFromIndex('records', 'by_collection', name);
 				const visible = all.filter((r) => r._status !== 'deleted');
@@ -468,26 +574,25 @@ export function createParticipantGateway(participantId: string, projectId: strin
 					sort: options?.sort
 				});
 
+				// Trigger background revalidation
+				backgroundFetchFullList(name, options);
+
 				// Process expand parameter if present
 				if (options?.expand) {
-					return expandRecords(result, options.expand) as Promise<T[]>;
+					const expanded = await expandRecords(result, options.expand);
+					return expanded.map((r) => cleanRecord(r as unknown as CachedRecord)) as unknown as T[];
 				}
 
-				return result as unknown as T[];
+				return result.map((r) => cleanRecord(r)) as unknown as T[];
 			},
 
 			// -----------------------------------------------------------------
-			// GET FIRST LIST ITEM
+			// GET FIRST LIST ITEM - Local-first with background revalidation
 			// -----------------------------------------------------------------
 			async getFirstListItem(
 				filter: string,
 				options?: { expand?: string; fields?: string }
 			): Promise<T> {
-				if (isOnline) {
-					return pb.collection(name).getFirstListItem(filter, options) as Promise<T>;
-				}
-
-				// OFFLINE: Apply filter using query module and return first match
 				const db = await getDB();
 				const all = await db.getAllFromIndex('records', 'by_collection', name);
 				const visible = all.filter((r) => r._status !== 'deleted');
@@ -496,17 +601,38 @@ export function createParticipantGateway(participantId: string, projectId: strin
 				const filtered = query(visible, { filter });
 				const record = filtered[0];
 
-				if (!record) {
-					throw new Error(`No records found in ${name} matching filter: ${filter}`);
+				if (record) {
+					// Trigger background revalidation
+					backgroundFetchFullList(name, { filter, ...options });
+
+					// Process expand parameter if present
+					if (options?.expand) {
+						const [expanded] = await expandRecords([record], options.expand);
+						return cleanRecord(expanded as unknown as CachedRecord) as unknown as T;
+					}
+
+					return cleanRecord(record) as unknown as T;
 				}
 
-				// Process expand parameter if present
-				if (options?.expand) {
-					const [expanded] = await expandRecords([record], options.expand);
-					return expanded as unknown as T;
+				// Not in cache -- try server directly
+				if (navigator.onLine) {
+					const pb = getPocketBase();
+					const serverRecord = await pb.collection(name).getFirstListItem(filter, options);
+
+					// Cache it
+					const cached: CachedRecord = {
+						...serverRecord,
+						_key: `${name}/${serverRecord.id}`,
+						_collection: name,
+						_status: 'unchanged',
+						_serverUpdated: serverRecord.updated as string
+					};
+					await db.put('records', cached);
+
+					return serverRecord as T;
 				}
 
-				return record as unknown as T;
+				throw new Error(`No records found in ${name} matching filter: ${filter}`);
 			}
 		};
 	}
@@ -532,18 +658,13 @@ export function createParticipantGateway(participantId: string, projectId: strin
 		// Lifecycle
 		init,
 
-		// Online/offline status
-		get isOnline() {
-			return isOnline;
-		},
-		setOfflineMode(offline: boolean) {
-			isOnline = !offline;
-		},
-
 		// Pending changes count (for UI)
 		get pendingCount() {
 			return pendingCount;
 		},
+
+		// Refresh pending count (called after sync)
+		updatePendingCount,
 
 		// Context
 		participantId,
