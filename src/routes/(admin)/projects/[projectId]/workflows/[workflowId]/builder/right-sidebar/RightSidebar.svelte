@@ -7,8 +7,10 @@
 	import GlobalToolsPanel from './views/properties/panels/GlobalToolsPanel.svelte';
 	import { FormEditorView } from './views/form-editor';
 	import { EditToolEditorView } from './views/edit-tool-editor';
+	import { StagePreviewView, type StageAction, type TimelineStage, type IncomingFormGroup } from './views/stage-preview';
 
 	import type { ToolsForm, ToolsFormField, TrackedFormField, WorkflowStage, ColumnPosition, ToolsEdit, VisualConfig } from '$lib/workflow-builder';
+	import type { FormFieldWithValue } from '$lib/components/form-renderer';
 
 	type AncestorFieldGroup = {
 		stage: WorkflowStage;
@@ -40,6 +42,15 @@
 		connectionForms?: ToolsForm[];
 		connectionEditTools?: ToolsEdit[];
 		globalEditTools?: ToolsEdit[];
+		// Stage preview props
+		stagePreviewData?: {
+			stage: WorkflowStage;
+			actions: StageAction[];
+			globalTools: StageAction[];
+			timeline: TimelineStage[];
+			availableTargetStages: WorkflowStage[];
+			incomingForms: IncomingFormGroup[];
+		} | null;
 		// Handlers for property updates
 		onStageRename?: (stageId: string, newName: string) => void;
 		onStageDelete?: (stageId: string) => void;
@@ -77,6 +88,20 @@
 		onEditToolClose?: () => void;
 		// Global tools handlers (for GlobalToolsPanel - reuses onToolRolesChange/onToolVisualConfigChange)
 		onGlobalToolDelete?: (toolType: string, toolId: string) => void;
+		// Stage preview handlers
+		onAddConnection?: (fromStageId: string, toStageId: string) => void;
+		onAddStageTool?: (stageId: string, toolType: string) => void;
+		onButtonLabelChange?: (actionId: string, actionType: string, label: string) => void;
+		onButtonColorChange?: (actionId: string, actionType: string, color: string) => void;
+		onButtonRolesChange?: (actionId: string, actionType: string, roleIds: string[]) => void;
+		onButtonDelete?: (actionId: string, actionType: string) => void;
+		onConnectionVisualConfigChange?: (connectionId: string, config: VisualConfig) => void;
+		onCreateStageAndConnect?: (fromStageId: string) => void;
+		onHighlightEdge?: (edgeId: string | null) => void;
+		onHighlightStageTool?: (toolId: string | null) => void;
+		// PreviewView stage fields (grouped by form with role info)
+		stageFields?: Map<string, { formName: string; allowedRoles: string[]; fields: FormFieldWithValue[] }[]>;
+		onDeselect?: () => void;
 	};
 
 	let {
@@ -94,6 +119,7 @@
 		connectionForms = [],
 		connectionEditTools = [],
 		globalEditTools = [],
+		stagePreviewData = null,
 		onStageRename,
 		onStageDelete,
 		onStageRolesChange,
@@ -124,7 +150,19 @@
 		onEditToolEditModeChange,
 		onEditToolDelete,
 		onEditToolClose,
-		onGlobalToolDelete
+		onGlobalToolDelete,
+		onAddConnection,
+		onAddStageTool,
+		onButtonLabelChange,
+		onButtonColorChange,
+		onButtonRolesChange,
+		onButtonDelete,
+		onConnectionVisualConfigChange,
+		onCreateStageAndConnect,
+		onHighlightEdge,
+		onHighlightStageTool,
+		stageFields,
+		onDeselect
 	}: Props = $props();
 
 	// Track palette expanded state for sidebar width
@@ -139,13 +177,19 @@
 	// Global tools panel mode
 	const isGlobalToolsPanel = $derived(context.type === 'globalTools');
 
-	// Auto-switch logic: show PropertyView when something is selected (not form, editTool, or globalTools)
+	// Stage preview mode (replaces old StagePropertyPanel)
+	const isStagePreview = $derived(context.type === 'stage' && stagePreviewData != null);
+
+	// Action/edge selection (still uses PropertyView for now)
+	const isActionSelection = $derived(context.type === 'action');
+
+	// Any other selection that isn't handled by dedicated views
 	const hasSelection = $derived(
-		context.type !== 'none' && context.type !== 'form' && context.type !== 'editTool' && context.type !== 'globalTools'
+		context.type !== 'none' && context.type !== 'form' && context.type !== 'editTool' && context.type !== 'globalTools' && !isStagePreview
 	);
 </script>
 
-<aside class="right-sidebar" class:wide={isFormEditor || isEditToolEditor} class:expanded={isFormEditor && paletteExpanded}>
+<aside class="right-sidebar" class:wide={isFormEditor || isEditToolEditor || isStagePreview} class:expanded={isFormEditor && paletteExpanded}>
 	{#if isFormEditor && selectedForm}
 		<FormEditorView
 			form={selectedForm}
@@ -185,6 +229,33 @@
 			onDeleteTool={onGlobalToolDelete}
 			{onCreateRole}
 		/>
+	{:else if isStagePreview && stagePreviewData}
+		<StagePreviewView
+			stage={stagePreviewData.stage}
+			actions={stagePreviewData.actions}
+			globalTools={stagePreviewData.globalTools}
+			timeline={stagePreviewData.timeline}
+			{roles}
+			availableTargetStages={stagePreviewData.availableTargetStages}
+			incomingForms={stagePreviewData.incomingForms}
+			{onStageRename}
+			{onStageRolesChange}
+			{onStageDelete}
+			onClose={onDeselect}
+			{onButtonLabelChange}
+			{onButtonColorChange}
+			{onButtonRolesChange}
+			{onButtonDelete}
+			{onAddConnection}
+			{onAddStageTool}
+			{onSelectTool}
+			{onCreateRole}
+			onConnectionVisualConfigChange={onConnectionVisualConfigChange}
+			onToolVisualConfigChange={onToolVisualConfigChange}
+			{onCreateStageAndConnect}
+			{onHighlightEdge}
+			{onHighlightStageTool}
+		/>
 	{:else if hasSelection}
 		<PropertyView
 			{context}
@@ -208,7 +279,7 @@
 			{onCreateRole}
 		/>
 	{:else}
-		<PreviewView {workflowName} {nodes} {edges} {onSelectStage} />
+		<PreviewView {workflowName} {nodes} {edges} {roles} {stageFields} {onSelectStage} />
 	{/if}
 </aside>
 

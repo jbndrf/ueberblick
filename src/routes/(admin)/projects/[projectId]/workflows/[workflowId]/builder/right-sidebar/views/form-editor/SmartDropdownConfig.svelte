@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { ChevronDown, X, Settings2 } from 'lucide-svelte';
+	import { X, Settings2, Search } from 'lucide-svelte';
 	import { Label } from '$lib/components/ui/label';
 	import { Button } from '$lib/components/ui/button';
+	import * as Dialog from '$lib/components/ui/dialog';
 
 	import type {
 		ToolsFormField,
@@ -34,7 +35,7 @@
 	// Local state
 	let sourceFieldId = $state<string>('');
 	let mappings = $state<SmartDropdownMapping[]>([]);
-	let sourceDropdownOpen = $state(false);
+	let pickerOpen = $state(false);
 	let modalOpen = $state(false);
 
 	// Track if we've initialized from props
@@ -44,26 +45,26 @@
 	// Helpers
 	// ==========================================================================
 
-	// Get fields that can be used as source (dropdown or multiple_choice with options)
-	function getEligibleSourceFields(): Array<{
+	type EligibleSourceField = {
 		field: ToolsFormField;
 		stage: WorkflowStage;
 		form: ToolsForm;
 		options: FieldOption[];
-	}> {
-		const result: Array<{
-			field: ToolsFormField;
-			stage: WorkflowStage;
-			form: ToolsForm;
-			options: FieldOption[];
-		}> = [];
+	};
+
+	type EligibleFieldsByStage = {
+		stage: WorkflowStage;
+		fields: EligibleSourceField[];
+	};
+
+	function getEligibleSourceFields(): EligibleSourceField[] {
+		const result: EligibleSourceField[] = [];
 
 		for (const group of ancestorFields) {
 			for (const field of group.fields) {
 				if (field.field_type === 'dropdown' || field.field_type === 'multiple_choice') {
 					const rawOptions = field.field_options?.options;
 					if (rawOptions && Array.isArray(rawOptions) && rawOptions.length > 0) {
-						// Normalize options to FieldOption[]
 						const options: FieldOption[] = rawOptions.map((opt: string | FieldOption) => {
 							if (typeof opt === 'string') return { label: opt };
 							return opt;
@@ -83,6 +84,18 @@
 	}
 
 	const eligibleFields = $derived(getEligibleSourceFields());
+
+	const eligibleByStage = $derived.by((): EligibleFieldsByStage[] => {
+		const stageMap = new Map<string, EligibleFieldsByStage>();
+		for (const ef of eligibleFields) {
+			const key = ef.stage.id;
+			if (!stageMap.has(key)) {
+				stageMap.set(key, { stage: ef.stage, fields: [] });
+			}
+			stageMap.get(key)!.fields.push(ef);
+		}
+		return Array.from(stageMap.values());
+	});
 
 	// Find the selected source field and its options
 	const selectedSource = $derived.by(() => {
@@ -117,7 +130,7 @@
 
 	function handleSourceFieldSelect(fieldId: string) {
 		sourceFieldId = fieldId;
-		sourceDropdownOpen = false;
+		pickerOpen = false;
 
 		// Clear mappings when source changes
 		mappings = [];
@@ -156,49 +169,22 @@
 			<p class="no-fields-message">
 				No dropdown or multiple choice fields with options found in earlier stages.
 			</p>
-		{:else}
-			<div class="source-field-selector">
-				{#if selectedSource}
-					<div class="selected-source">
-						<div class="source-info">
-							<span class="source-stage">{selectedSource.stage.stage_name}</span>
-							<span class="source-separator">/</span>
-							<span class="source-field">{selectedSource.field.field_label}</span>
-						</div>
-						<button class="clear-source" onclick={clearSourceField} type="button">
-							<X class="h-3 w-3" />
-						</button>
-					</div>
-				{:else}
-					<button
-						class="source-dropdown-trigger"
-						onclick={() => (sourceDropdownOpen = !sourceDropdownOpen)}
-						type="button"
-					>
-						<span class="placeholder">Select source field...</span>
-						<ChevronDown class="h-4 w-4" />
-					</button>
-				{/if}
-
-				{#if sourceDropdownOpen}
-					<div class="source-dropdown">
-						{#each eligibleFields as source (source.field.id)}
-							<button
-								class="field-option"
-								class:selected={sourceFieldId === source.field.id}
-								onclick={() => handleSourceFieldSelect(source.field.id)}
-								type="button"
-							>
-								<div class="field-option-info">
-									<span class="field-stage">{source.stage.stage_name}</span>
-									<span class="field-name">{source.field.field_label}</span>
-								</div>
-								<span class="field-count">{source.options.length} options</span>
-							</button>
-						{/each}
-					</div>
-				{/if}
+		{:else if selectedSource}
+			<div class="selected-source">
+				<div class="source-info">
+					<span class="source-stage">{selectedSource.stage.stage_name}</span>
+					<span class="source-separator">/</span>
+					<span class="source-field">{selectedSource.field.field_label}</span>
+				</div>
+				<button class="clear-source" onclick={clearSourceField} type="button">
+					<X class="h-3 w-3" />
+				</button>
 			</div>
+		{:else}
+			<Button variant="outline" class="picker-trigger" onclick={() => (pickerOpen = true)}>
+				<Search class="h-4 w-4" />
+				Browse available fields
+			</Button>
 		{/if}
 	</div>
 
@@ -224,6 +210,46 @@
 		</div>
 	{/if}
 </div>
+
+<!-- Source Field Picker Modal -->
+<Dialog.Root bind:open={pickerOpen}>
+	<Dialog.Content class="source-picker-modal">
+		<Dialog.Header>
+			<Dialog.Title>Choose a source field</Dialog.Title>
+			<Dialog.Description>
+				Pick a field from an earlier stage. This dropdown's choices will change based on what the participant selects there.
+			</Dialog.Description>
+		</Dialog.Header>
+
+		<div class="picker-body">
+			{#each eligibleByStage as group (group.stage.id)}
+				<div class="picker-stage-group">
+					<div class="picker-stage-header">{group.stage.stage_name}</div>
+					<div class="picker-fields">
+						{#each group.fields as source (source.field.id)}
+							<button
+								class="picker-field-card"
+								class:selected={sourceFieldId === source.field.id}
+								onclick={() => handleSourceFieldSelect(source.field.id)}
+								type="button"
+							>
+								<div class="card-header">
+									<span class="card-field-name">{source.field.field_label}</span>
+									<span class="card-field-type">{source.field.field_type === 'multiple_choice' ? 'Multiple choice' : 'Dropdown'}</span>
+								</div>
+								<div class="card-options">
+									{#each source.options as opt (opt.label)}
+										<span class="card-option-tag">{opt.label}</span>
+									{/each}
+								</div>
+							</button>
+						{/each}
+					</div>
+				</div>
+			{/each}
+		</div>
+	</Dialog.Content>
+</Dialog.Root>
 
 <!-- Mapping Modal -->
 <SmartDropdownMappingModal
@@ -270,10 +296,7 @@
 		margin: 0;
 	}
 
-	.source-field-selector {
-		position: relative;
-	}
-
+	/* Selected source chip in the sidebar */
 	.selected-source {
 		display: flex;
 		align-items: center;
@@ -330,90 +353,107 @@
 		color: hsl(var(--destructive));
 	}
 
-	.source-dropdown-trigger {
+	/* Picker trigger button */
+	:global(.picker-trigger) {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
+		gap: 0.5rem;
 		width: 100%;
-		padding: 0.5rem;
-		background: hsl(var(--background));
-		border: 1px solid hsl(var(--border));
-		border-radius: 0.375rem;
-		cursor: pointer;
-		font-size: 0.8125rem;
+		justify-content: center;
 	}
 
-	.source-dropdown-trigger:hover {
-		border-color: hsl(var(--primary));
+	/* Source picker modal */
+	:global(.source-picker-modal) {
+		max-width: 560px !important;
+		width: 100% !important;
 	}
 
-	.placeholder {
-		color: hsl(var(--muted-foreground));
-	}
-
-	.source-dropdown {
-		position: absolute;
-		top: 100%;
-		left: 0;
-		right: 0;
-		max-height: 200px;
-		overflow-y: auto;
-		background: hsl(var(--card));
-		border: 1px solid hsl(var(--border));
-		border-radius: 0.375rem;
-		box-shadow: 0 4px 12px hsl(var(--foreground) / 0.1);
-		z-index: 50;
-		margin-top: 0.25rem;
-	}
-
-	.field-option {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		width: 100%;
-		padding: 0.5rem;
-		background: transparent;
-		border: none;
-		border-bottom: 1px solid hsl(var(--border));
-		cursor: pointer;
-		font-size: 0.75rem;
-		text-align: left;
-	}
-
-	.field-option:last-child {
-		border-bottom: none;
-	}
-
-	.field-option:hover {
-		background: hsl(var(--accent));
-	}
-
-	.field-option.selected {
-		background: hsl(var(--primary) / 0.1);
-	}
-
-	.field-option-info {
+	.picker-body {
 		display: flex;
 		flex-direction: column;
-		gap: 0.125rem;
+		gap: 1rem;
+		max-height: 400px;
+		overflow-y: auto;
 	}
 
-	.field-stage {
-		font-size: 0.625rem;
+	.picker-stage-group {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.picker-stage-header {
+		font-size: 0.6875rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
 		color: hsl(var(--muted-foreground));
 	}
 
-	.field-name {
+	.picker-fields {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+	}
+
+	.picker-field-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.75rem;
+		background: hsl(var(--background));
+		border: 1px solid hsl(var(--border));
+		border-radius: 0.5rem;
+		cursor: pointer;
+		text-align: left;
+		transition: border-color 0.15s ease, background 0.15s ease;
+	}
+
+	.picker-field-card:hover {
+		border-color: hsl(var(--primary) / 0.5);
+		background: hsl(var(--accent) / 0.5);
+	}
+
+	.picker-field-card.selected {
+		border-color: hsl(var(--primary));
+		background: hsl(var(--primary) / 0.08);
+	}
+
+	.card-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+	}
+
+	.card-field-name {
+		font-size: 0.875rem;
 		font-weight: 500;
 		color: hsl(var(--foreground));
 	}
 
-	.field-count {
+	.card-field-type {
 		font-size: 0.625rem;
 		color: hsl(var(--muted-foreground));
 		padding: 0.125rem 0.375rem;
 		background: hsl(var(--muted));
 		border-radius: 0.25rem;
+		white-space: nowrap;
+	}
+
+	.card-options {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem;
+	}
+
+	.card-option-tag {
+		font-size: 0.6875rem;
+		color: hsl(var(--muted-foreground));
+		padding: 0.125rem 0.5rem;
+		background: hsl(var(--muted) / 0.7);
+		border-radius: 9999px;
 	}
 
 	/* Configure button */

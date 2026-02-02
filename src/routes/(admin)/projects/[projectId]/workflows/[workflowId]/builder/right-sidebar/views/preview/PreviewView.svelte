@@ -1,255 +1,288 @@
 <script lang="ts">
 	import type { Node, Edge } from '@xyflow/svelte';
 
-	import { Button } from '$lib/components/ui/button';
 	import * as Tabs from '$lib/components/ui/tabs';
+	import { FormRenderer } from '$lib/components/form-renderer';
+	import type { FormFieldWithValue } from '$lib/components/form-renderer';
 	import {
-		RefreshCw,
 		Play,
 		Square,
 		CircleStop,
-		MapPin,
-		Clock,
-		User,
-		FileText,
-		History
+		FileText
 	} from 'lucide-svelte';
+
+	type FormGroup = { formName: string; allowedRoles: string[]; fields: FormFieldWithValue[] };
+
+	type Role = {
+		id: string;
+		name: string;
+		description?: string;
+	};
 
 	type Props = {
 		workflowName: string;
 		nodes: Node[];
 		edges: Edge[];
+		roles?: Role[];
+		stageFields?: Map<string, FormGroup[]>;
 		onSelectStage?: (node: Node) => void;
 	};
 
-	let { workflowName, nodes, edges, onSelectStage }: Props = $props();
+	let { workflowName, nodes, edges, roles = [], stageFields, onSelectStage }: Props = $props();
 
-	let previewTab = $state('overview');
+	let activeTab = $state<string>('overview');
+	let roleFilter = $state('all');
+
+	// Filter to only stage nodes (exclude entry markers)
+	const stageNodes = $derived(nodes.filter(n => n.type === 'stage'));
+
+	// Track active stage tab in Details
+	let activeStageTab = $state<string>('');
+
+	// Set default stage tab when stages change
+	$effect(() => {
+		if (stageNodes.length > 0 && !stageNodes.find(n => n.id === activeStageTab)) {
+			activeStageTab = stageNodes[0].id;
+		}
+	});
+
+	function getFormGroups(nodeId: string): FormGroup[] {
+		return stageFields?.get(nodeId) ?? [];
+	}
+
+	// Get field count respecting role filter
+	function getFieldCount(nodeId: string): number {
+		const groups = getFormGroups(nodeId);
+		if (roleFilter === 'all') {
+			return groups.reduce((sum, g) => sum + g.fields.length, 0);
+		}
+		return groups
+			.filter(g => g.allowedRoles.length === 0 || g.allowedRoles.includes(roleFilter))
+			.reduce((sum, g) => sum + g.fields.length, 0);
+	}
+
+	// Get visible form groups for a stage (filtered by role)
+	function getVisibleGroups(nodeId: string): FormGroup[] {
+		const groups = getFormGroups(nodeId);
+		if (roleFilter === 'all') return groups;
+		return groups.filter(g => g.allowedRoles.length === 0 || g.allowedRoles.includes(roleFilter));
+	}
 </script>
 
-<div class="preview-view">
-	<div class="preview-header">
-		<div class="preview-title">
-			<span class="text-sm font-medium">{workflowName}</span>
-			<span class="text-xs text-muted-foreground">Participant View</span>
+<!-- Participant Sidebar Lookalike (matches ParticipantPreview structure) -->
+<div class="participant-preview">
+	<!-- ================================================================== -->
+	<!-- Header (exact ModuleShell styling) -->
+	<!-- ================================================================== -->
+	<div
+		class="flex items-center justify-between p-4 bg-primary text-primary-foreground rounded-t-xl flex-shrink-0 border-b border-border"
+	>
+		<div class="flex-1 min-w-0 space-y-0.5">
+			<div class="text-lg font-semibold truncate">{workflowName}</div>
 		</div>
-		<Button variant="ghost" size="icon" class="h-7 w-7" title="Refresh Preview">
-			<RefreshCw class="h-3.5 w-3.5" />
-		</Button>
+
+		<div class="flex items-center gap-1 ml-2">
+			<!-- Role filter -->
+			<select
+				class="text-xs bg-primary-foreground/10 rounded px-2 py-1 border-0 outline-none cursor-pointer text-primary-foreground"
+				bind:value={roleFilter}
+			>
+				<option value="all">All roles</option>
+				{#each roles as role}
+					<option value={role.id}>{role.name}</option>
+				{/each}
+			</select>
+		</div>
 	</div>
 
-	<Tabs.Root bind:value={previewTab} class="flex-1 flex flex-col">
-		<Tabs.List class="preview-tabs">
-			<Tabs.Trigger value="overview">Overview</Tabs.Trigger>
-			<Tabs.Trigger value="details">Details</Tabs.Trigger>
-			<Tabs.Trigger value="audit">Audit</Tabs.Trigger>
-		</Tabs.List>
+	<!-- ================================================================== -->
+	<!-- Content -->
+	<!-- ================================================================== -->
+	<div class="flex-1 min-h-0 overflow-y-auto">
+		<div class="p-4">
+			<!-- Tabs -->
+			<Tabs.Root
+				value={activeTab}
+				onValueChange={(v) => (activeTab = v as string)}
+				class="flex-1 flex flex-col min-h-0"
+			>
+				<Tabs.List
+					class="grid w-full flex-shrink-0"
+					style="grid-template-columns: repeat(2, minmax(0, 1fr))"
+				>
+					<Tabs.Trigger value="overview" class="text-xs sm:text-sm">
+						Overview
+					</Tabs.Trigger>
+					<Tabs.Trigger value="details" class="text-xs sm:text-sm">
+						Details
+					</Tabs.Trigger>
+				</Tabs.List>
 
-		<div class="preview-content bg-card">
-			<Tabs.Content value="overview" class="preview-tab-content">
-				<!-- Mock location info -->
-				<div class="preview-section">
-					<div class="preview-section-header">
-						<MapPin class="h-4 w-4 text-muted-foreground" />
-						<span class="text-muted-foreground">Location</span>
-					</div>
-					<div class="preview-mock-field bg-muted/50 border border-dashed border-border">
-						<span class="text-sm text-muted-foreground">Sample Location</span>
-					</div>
-				</div>
-
-				<!-- Timestamps -->
-				<div class="preview-section">
-					<div class="preview-section-header">
-						<Clock class="h-4 w-4 text-muted-foreground" />
-						<span class="text-muted-foreground">Timeline</span>
-					</div>
-					<div class="preview-info-row">
-						<span class="text-xs text-muted-foreground">Created</span>
-						<span class="text-xs text-foreground">--</span>
-					</div>
-					<div class="preview-info-row">
-						<span class="text-xs text-muted-foreground">Updated</span>
-						<span class="text-xs text-foreground">--</span>
-					</div>
-				</div>
-
-				<!-- Current stage -->
-				<div class="preview-section">
-					<div class="preview-section-header">
-						<User class="h-4 w-4 text-muted-foreground" />
-						<span class="text-muted-foreground">Status</span>
-					</div>
-					<div class="preview-info-row">
-						<span class="text-xs text-muted-foreground">Current Stage</span>
-						<span class="text-xs text-foreground">None selected</span>
-					</div>
-				</div>
-
-				<!-- Form fields overview -->
-				<div class="preview-section">
-					<div class="preview-section-header">
-						<FileText class="h-4 w-4 text-muted-foreground" />
-						<span class="text-muted-foreground">Form Fields</span>
-					</div>
-					{#if nodes.length === 0}
-						<p class="text-xs text-muted-foreground py-2">No stages yet</p>
-					{:else}
-						{#each nodes as node}
-							<button
-								class="preview-stage-summary bg-accent/30 border border-border"
-								onclick={() => onSelectStage?.(node)}
-							>
-								<div class="preview-stage-name">
-									{#if node.data.stageType === 'start'}
-										<Play class="h-3 w-3 text-green-500" />
-									{:else if node.data.stageType === 'end'}
-										<CircleStop class="h-3 w-3 text-pink-500" />
-									{:else}
-										<Square class="h-3 w-3 text-blue-500" />
-									{/if}
-									<span class="text-xs font-medium text-foreground">{node.data.title}</span>
-								</div>
-								<span class="text-xs text-muted-foreground">0 fields</span>
-							</button>
-						{/each}
-					{/if}
-				</div>
-			</Tabs.Content>
-
-			<Tabs.Content value="details" class="preview-tab-content">
-				<div class="preview-empty">
-					<FileText class="h-8 w-8 text-muted-foreground/50" />
-					<p class="text-sm text-muted-foreground">Select a stage to preview its form</p>
-				</div>
-			</Tabs.Content>
-
-			<Tabs.Content value="audit" class="preview-tab-content">
-				<div class="preview-section">
-					<div class="preview-section-header">
-						<History class="h-4 w-4 text-muted-foreground" />
-						<span class="text-muted-foreground">Activity Log</span>
-					</div>
-					<div class="preview-audit-list">
-						<p class="text-xs text-muted-foreground text-center py-4">
-							Preview mode - no activity yet
+				<!-- ====================================================== -->
+				<!-- Overview Tab -->
+				<!-- ====================================================== -->
+				<Tabs.Content value="overview" class="pt-4">
+					{#if stageNodes.length === 0}
+						<p class="text-sm text-muted-foreground text-center py-6">
+							No stages yet. Add stages to the canvas to see a preview.
 						</p>
-					</div>
-				</div>
-			</Tabs.Content>
+					{:else}
+						<div class="space-y-2">
+							{#each stageNodes as node}
+								{@const fieldCount = getFieldCount(node.id)}
+								{@const stageType = node.data.stageType as string}
+								<button
+									class="stage-card"
+									onclick={() => onSelectStage?.(node)}
+								>
+									<div class="stage-card-left">
+										{#if stageType === 'start'}
+											<Play class="h-3.5 w-3.5 text-green-500 shrink-0" />
+										{:else if stageType === 'end'}
+											<CircleStop class="h-3.5 w-3.5 text-pink-500 shrink-0" />
+										{:else}
+											<Square class="h-3.5 w-3.5 text-blue-500 shrink-0" />
+										{/if}
+										<div class="stage-card-info">
+											<span class="stage-card-name">{node.data.title}</span>
+											<span class="stage-card-meta">{fieldCount} {fieldCount === 1 ? 'field' : 'fields'}</span>
+										</div>
+									</div>
+									<span class="stage-card-type">{stageType}</span>
+								</button>
+							{/each}
+						</div>
+					{/if}
+				</Tabs.Content>
+
+				<!-- ====================================================== -->
+				<!-- Details Tab (stage sub-tabs with FormRenderer) -->
+				<!-- ====================================================== -->
+				<Tabs.Content value="details" class="pt-4">
+					{#if stageNodes.length === 0}
+						<p class="text-sm text-muted-foreground text-center py-6">
+							No stages yet
+						</p>
+					{:else}
+						<Tabs.Root bind:value={activeStageTab}>
+							<Tabs.List class="w-full overflow-x-auto flex-nowrap">
+								{#each stageNodes as node}
+									<Tabs.Trigger value={node.id} class="text-xs whitespace-nowrap">
+										{node.data.title}
+									</Tabs.Trigger>
+								{/each}
+							</Tabs.List>
+							{#each stageNodes as node}
+								<Tabs.Content value={node.id} class="pt-3">
+									{@const groups = getVisibleGroups(node.id)}
+									{#if groups.length === 0 || groups.every(g => g.fields.length === 0)}
+										<p class="text-xs text-muted-foreground text-center py-4">No form fields for this stage{roleFilter !== 'all' ? ' (for selected role)' : ''}</p>
+									{:else}
+										<div class="space-y-3">
+											{#each groups as group}
+												{#if group.fields.length > 0}
+													<div class="form-group">
+														<div class="form-group-header">
+															<FileText class="w-3 h-3 text-muted-foreground" />
+															<span class="text-xs font-medium">{group.formName}</span>
+														</div>
+														<div class="p-3">
+															<FormRenderer mode="view" fields={group.fields} />
+														</div>
+													</div>
+												{/if}
+											{/each}
+										</div>
+									{/if}
+								</Tabs.Content>
+							{/each}
+						</Tabs.Root>
+					{/if}
+				</Tabs.Content>
+			</Tabs.Root>
 		</div>
-	</Tabs.Root>
+	</div>
 </div>
 
 <style>
-	.preview-view {
+	.participant-preview {
 		display: flex;
 		flex-direction: column;
 		height: 100%;
+		overflow: hidden;
+		background: hsl(var(--background));
+		border-radius: 0.75rem 0.75rem 0 0;
 	}
 
-	.preview-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 0.75rem 1rem;
-		border-bottom: 1px solid oklch(0.88 0.01 250);
-	}
-
-	:global(.dark) .preview-header {
-		border-bottom-color: oklch(1 0 0 / 20%);
-	}
-
-	.preview-title {
-		display: flex;
-		flex-direction: column;
-		gap: 0.125rem;
-	}
-
-	.preview-tabs {
-		width: 100%;
-		justify-content: stretch;
-		border-radius: 0;
-		padding: 0 0.5rem;
-		border-bottom: 1px solid oklch(0.88 0.01 250);
-	}
-
-	:global(.dark) .preview-tabs {
-		border-bottom-color: oklch(1 0 0 / 20%);
-	}
-
-	.preview-content {
-		flex: 1;
-		overflow-y: auto;
-	}
-
-	.preview-tab-content {
-		padding: 0;
-	}
-
-	.preview-section {
-		padding: 1rem;
-		border-bottom: 1px solid oklch(0.88 0.01 250);
-	}
-
-	:global(.dark) .preview-section {
-		border-bottom-color: oklch(1 0 0 / 20%);
-	}
-
-	.preview-section-header {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		font-size: 0.75rem;
-		font-weight: 500;
-		text-transform: uppercase;
-		margin-bottom: 0.75rem;
-	}
-
-	.preview-mock-field {
-		padding: 0.5rem 0.75rem;
-		border-radius: 0.375rem;
-	}
-
-	.preview-info-row {
-		display: flex;
-		justify-content: space-between;
-		padding: 0.25rem 0;
-	}
-
-	.preview-stage-summary {
+	/* Stage cards */
+	.stage-card {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
 		width: 100%;
-		padding: 0.5rem 0.75rem;
-		border-radius: 0.375rem;
-		margin-bottom: 0.375rem;
+		padding: 0.625rem 0.75rem;
+		border-radius: 0.5rem;
+		border: 1px solid hsl(var(--border));
+		background: hsl(var(--card));
 		cursor: pointer;
 		transition: all 0.15s ease;
+		text-align: left;
 	}
 
-	.preview-stage-summary:hover {
-		background: hsl(var(--accent) / 0.5);
+	.stage-card:hover {
+		background: hsl(var(--accent));
+		border-color: hsl(var(--accent));
 	}
 
-	.preview-stage-name {
+	.stage-card-left {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
+		min-width: 0;
 	}
 
-	.preview-empty {
+	.stage-card-info {
 		display: flex;
 		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		padding: 3rem 1rem;
-		gap: 0.75rem;
-		text-align: center;
+		gap: 0.0625rem;
+		min-width: 0;
 	}
 
-	.preview-audit-list {
-		min-height: 100px;
+	.stage-card-name {
+		font-size: 0.8125rem;
+		font-weight: 500;
+		color: hsl(var(--foreground));
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.stage-card-meta {
+		font-size: 0.6875rem;
+		color: hsl(var(--muted-foreground));
+	}
+
+	.stage-card-type {
+		font-size: 0.625rem;
+		color: hsl(var(--muted-foreground));
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		flex-shrink: 0;
+	}
+
+	/* Form groups */
+	.form-group {
+		border: 1px solid hsl(var(--border));
+		border-radius: 0.5rem;
+		overflow: hidden;
+	}
+
+	.form-group-header {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.5rem 0.75rem;
+		background: hsl(var(--muted) / 0.5);
+		border-bottom: 1px solid hsl(var(--border));
 	}
 </style>

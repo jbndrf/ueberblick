@@ -107,8 +107,23 @@
 		stroke-width: 2;
 	}
 
+	:global(.svelte-flow__edge.entry-edge .svelte-flow__edge-path) {
+		stroke: rgb(34 197 94);
+		stroke-dasharray: 5 5;
+	}
+
 	:global(.svelte-flow__edge.selected .svelte-flow__edge-path) {
 		stroke: hsl(var(--primary));
 		stroke-width: 2;
+		stroke-dasharray: none;
+	}
+
+	:global(.svelte-flow__edge:not(.highlighted):not(.selected) .svelte-flow__edge-path) {
+		transition: opacity 0.15s ease;
+	}
+
+	/* Dim non-highlighted edges when any edge has .highlighted */
+	:global(.svelte-flow__edges:has(.highlighted) .svelte-flow__edge:not(.highlighted):not(.selected) .svelte-flow__edge-path) {
+		opacity: 0.25;
 	}
 </style>

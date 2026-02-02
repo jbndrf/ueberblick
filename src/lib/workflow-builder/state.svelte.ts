@@ -364,7 +364,6 @@ export class WorkflowBuilderState {
 				allowed_roles: [],
 				visual_config: {
 					button_label: 'Submit',
-					button_color: '#3b82f6'
 				}
 			})
 		};
@@ -514,7 +513,6 @@ export class WorkflowBuilderState {
 				allowed_roles: [],
 				visual_config: {
 					button_label: 'Edit',
-					button_color: '#f97316' // orange for edit actions
 				}
 			})
 		};
@@ -545,7 +543,6 @@ export class WorkflowBuilderState {
 			allowed_roles: [],
 			visual_config: {
 				button_label: editMode === 'location' ? 'Location' : 'Edit',
-				button_color: editMode === 'location' ? '#10b981' : '#f97316'
 			}
 		};
 

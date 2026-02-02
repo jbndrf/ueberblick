@@ -274,6 +274,7 @@
 
 			<!-- Settings Tab -->
 			<Tabs.Content value="settings" class="tab-content">
+				{#if !isEntryConnection}
 				<PropertySection title="Button Appearance">
 					<div class="form-field">
 						<Label for="button-label">Button Label</Label>
@@ -335,6 +336,11 @@
 						</div>
 					{/if}
 				</PropertySection>
+				{:else}
+				<p class="text-sm text-muted-foreground text-center py-4">
+					Entry connections are configured from the workflow settings.
+				</p>
+				{/if}
 			</Tabs.Content>
 		</div>
 	</Tabs.Root>

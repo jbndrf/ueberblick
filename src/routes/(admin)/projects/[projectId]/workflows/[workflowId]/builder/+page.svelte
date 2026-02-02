@@ -37,6 +37,8 @@
 	import ActionEdge from './ActionEdge.svelte';
 	import { ContextSidebar, createContext, type SelectionContext, type StageData } from './context-sidebar';
 	import { RightSidebar } from './right-sidebar';
+	import type { StageAction, TimelineStage, IncomingFormGroup } from './right-sidebar/views/stage-preview';
+	import type { FormFieldWithValue } from '$lib/components/form-renderer';
 	import {
 		createWorkflowBuilderState,
 		type WorkflowStage,
@@ -248,7 +250,7 @@
 					y: targetY + 10 // Slightly below center for visual alignment
 				},
 				data: {
-					label: 'Entry',
+					label: conn.visual_config?.button_label || conn.action_name || 'Entry',
 					connectionId: conn.id
 				},
 				draggable: false,
@@ -258,10 +260,16 @@
 	}
 
 	// Convert state connections to xyflow edges (including entry connections)
-	function connectionsToEdges(connections: WorkflowConnection[]): Edge[] {
+	function connectionsToEdges(connections: WorkflowConnection[], highlighted: Set<string>): Edge[] {
 		return connections.map((conn) => {
 			const isEntryConnection = !conn.from_stage_id;
 			const isSelfLoop = !isEntryConnection && conn.from_stage_id === conn.to_stage_id;
+			const isHighlighted = highlighted.has(conn.id);
+
+			const classes = [
+				isEntryConnection ? 'entry-edge' : '',
+				isHighlighted ? 'highlighted' : ''
+			].filter(Boolean).join(' ') || undefined;
 
 			return {
 				id: conn.id,
@@ -271,11 +279,10 @@
 				label: conn.visual_config?.button_label || conn.action_name,
 				type: 'action',
 				animated: isSelfLoop,
-				style: isEntryConnection
-					? 'stroke: rgb(34 197 94); stroke-dasharray: 5 5;'
-					: conn.visual_config?.button_color
-						? `stroke: ${conn.visual_config.button_color}`
-						: undefined,
+				class: classes,
+				style: !isEntryConnection && conn.visual_config?.button_color
+					? `stroke: ${conn.visual_config.button_color}`
+					: undefined,
 				data: {
 					tools: getToolsForConnection(conn.id),
 					isSelfLoop,
@@ -299,7 +306,7 @@
 		)
 	]);
 	let edges = $state.raw<Edge[]>(
-		connectionsToEdges(builderState.visibleConnections.map((c) => c.data))
+		connectionsToEdges(builderState.visibleConnections.map((c) => c.data), new Set())
 	);
 
 	// Sync nodes/edges when state changes
@@ -336,16 +343,9 @@
 		const _forms = builderState.visibleForms;
 		const _editTools = builderState.visibleEditTools;
 		const _connections = builderState.visibleConnections;
+		const _highlighted = highlightedEdgeIds;
 
-		// Log for debugging entry connection tools
-		console.log('All forms:', _forms.map(f => ({ id: f.data.id, connection_id: f.data.connection_id, stage_id: f.data.stage_id, name: f.data.name })));
-		const entryConns = _connections.filter(c => !c.data.from_stage_id);
-		for (const ec of entryConns) {
-			const tools = getToolsForConnection(ec.data.id);
-			console.log('Entry connection', ec.data.id, 'has tools:', tools);
-		}
-
-		edges = connectionsToEdges(_connections.map((c) => c.data));
+		edges = connectionsToEdges(_connections.map((c) => c.data), _highlighted);
 	});
 
 	// Connection state
@@ -353,6 +353,36 @@
 
 	// Selection context for context sidebar
 	let selectionContext = $state<SelectionContext>(createContext.none());
+
+	// Sync selection highlight onto canvas nodes
+	// Edge selection is handled natively by xyflow on canvas clicks
+	$effect(() => {
+		const ctx = selectionContext;
+
+		const selectedNodeId = ctx.type === 'stage' ? ctx.stageId : null;
+
+		const updatedNodes = untrack(() => nodes).map(n => {
+			const shouldSelect = n.id === selectedNodeId;
+			if (n.selected === shouldSelect) return n;
+			return { ...n, selected: shouldSelect };
+		});
+		if (updatedNodes.some((n, i) => n !== untrack(() => nodes)[i])) {
+			nodes = updatedNodes;
+		}
+	});
+
+	// ========================================================================
+	// Edge Highlighting
+	// ========================================================================
+
+	let hoverEdgeId = $state<string | null>(null);
+
+	// Edges to highlight (from button hover/click in stage preview)
+	const highlightedEdgeIds = $derived.by(() => {
+		const ids = new Set<string>();
+		if (hoverEdgeId) ids.add(hoverEdgeId);
+		return ids;
+	});
 
 	// Derived helpers
 	const selectedStageId = $derived(
@@ -430,6 +460,163 @@
 		return builderState.getGlobalEditTools();
 	});
 
+	// ==========================================================================
+	// Stage Preview Data (participant sidebar lookalike)
+	// ==========================================================================
+
+	const stagePreviewData = $derived.by(() => {
+		if (selectionContext.type !== 'stage') return null;
+		const stageId = selectionContext.stageId;
+		const stageData = builderState.getStageById(stageId);
+		if (!stageData) return null;
+
+		const stage = stageData.data;
+
+		// Outgoing connections (= transition buttons)
+		const outgoing: StageAction[] = builderState.visibleConnections
+			.filter((c) => c.data.from_stage_id === stageId)
+			.map((c) => {
+				const conn = c.data;
+				const targetStage = builderState.getStageById(conn.to_stage_id);
+				const connForms = builderState.getFormsForConnection(conn.id).map((f) => f.data);
+				const connEditTools = builderState.getEditToolsForConnection(conn.id).map((t) => t.data);
+				return {
+					type: 'connection' as const,
+					id: conn.id,
+					buttonLabel: conn.visual_config?.button_label || conn.action_name,
+					buttonColor: conn.visual_config?.button_color,
+					allowed_roles: conn.allowed_roles || [],
+					edge: edges.find((e) => e.id === conn.id),
+					targetStage: targetStage?.data,
+					forms: connForms,
+					editTools: connEditTools
+				};
+			});
+
+		// Stage edit tools (non-global, = tool buttons)
+		const stageToolActions: StageAction[] = builderState
+			.getNonGlobalEditToolsForStage(stageId)
+			.map((t) => ({
+				type: 'stage_tool' as const,
+				id: t.data.id,
+				buttonLabel: t.data.visual_config?.button_label || t.data.name,
+				buttonColor: t.data.visual_config?.button_color,
+				allowed_roles: t.data.allowed_roles || [],
+				tool: t.data
+			}));
+
+		// Stage forms (stage-attached, = form buttons)
+		const stageFormActions: StageAction[] = builderState
+			.getFormsForStage(stageId)
+			.map((f) => ({
+				type: 'stage_form' as const,
+				id: f.data.id,
+				buttonLabel: f.data.visual_config?.button_label || f.data.name,
+				buttonColor: f.data.visual_config?.button_color,
+				allowed_roles: f.data.allowed_roles || [],
+				form: f.data
+			}));
+
+		// Global tools (shown at every stage)
+		const globalToolActions: StageAction[] = builderState.getGlobalEditTools().map((t) => ({
+			type: 'global_tool' as const,
+			id: t.data.id,
+			buttonLabel: t.data.visual_config?.button_label || t.data.name,
+			buttonColor: t.data.visual_config?.button_color,
+			allowed_roles: t.data.allowed_roles || [],
+			tool: t.data
+		}));
+
+		// Incoming forms (from connections targeting this stage) for the Details tab
+		const incomingForms: IncomingFormGroup[] = [];
+		const incomingConnections = builderState.visibleConnections
+			.filter((c) => c.data.to_stage_id === stageId);
+		for (const c of incomingConnections) {
+			const connForms = builderState.getFormsForConnection(c.data.id);
+			for (const tf of connForms) {
+				const fields = builderState.getFieldsForForm(tf.data.id).map((f) => f.data);
+				incomingForms.push({
+					connectionName: c.data.action_name || 'Connection',
+					form: tf.data,
+					fields
+				});
+			}
+		}
+
+		// Timeline: compute ancestors and descendants
+		const ancestors = builderState.getAncestorStages(stageId);
+		const allStages = builderState.visibleStages.map((s) => s.data);
+		const ancestorIds = new Set(ancestors.map((a) => a.data.id));
+
+		// Build timeline from ancestors -> current -> rest
+		const timelineStages: TimelineStage[] = [];
+		for (const a of ancestors) {
+			timelineStages.push({
+				id: a.data.id,
+				name: a.data.stage_name,
+				status: 'completed'
+			});
+		}
+		timelineStages.push({
+			id: stageId,
+			name: stage.stage_name,
+			status: 'current'
+		});
+		// Add stages that are not ancestors and not current
+		for (const s of allStages) {
+			if (s.id !== stageId && !ancestorIds.has(s.id)) {
+				timelineStages.push({
+					id: s.id,
+					name: s.stage_name,
+					status: 'future'
+				});
+			}
+		}
+
+		// Available target stages for new connections (exclude self-loops for now)
+		const availableTargetStages = allStages.filter((s) => s.id !== stageId);
+
+		return {
+			stage,
+			actions: [...outgoing, ...stageToolActions, ...stageFormActions] as StageAction[],
+			globalTools: globalToolActions,
+			timeline: timelineStages,
+			availableTargetStages,
+			incomingForms
+		};
+	});
+
+	// Per-stage form groups for PreviewView (workflow overview)
+	// Each entry includes form name, allowed_roles, and fields -- enables role filtering
+	type PreviewFormGroup = { formName: string; allowedRoles: string[]; fields: FormFieldWithValue[] };
+	const previewStageFields = $derived.by(() => {
+		const map = new Map<string, PreviewFormGroup[]>();
+		for (const s of builderState.visibleStages) {
+			const groups: PreviewFormGroup[] = [];
+			// Forms from incoming connections
+			const incoming = builderState.visibleConnections.filter(c => c.data.to_stage_id === s.data.id);
+			for (const c of incoming) {
+				for (const f of builderState.getFormsForConnection(c.data.id)) {
+					groups.push({
+						formName: f.data.name || 'Unnamed form',
+						allowedRoles: f.data.allowed_roles || [],
+						fields: builderState.getFieldsForForm(f.data.id).map(ff => ff.data as unknown as FormFieldWithValue)
+					});
+				}
+			}
+			// Stage-attached forms
+			for (const f of builderState.getFormsForStage(s.data.id)) {
+				groups.push({
+					formName: f.data.name || 'Unnamed form',
+					allowedRoles: f.data.allowed_roles || [],
+					fields: builderState.getFieldsForForm(f.data.id).map(ff => ff.data as unknown as FormFieldWithValue)
+				});
+			}
+			map.set(s.data.id, groups);
+		}
+		return map;
+	});
+
 	// Convert global edit tools to ToolInstances for ToolBar display
 	const globalToolInstances = $derived.by((): ToolInstance[] => {
 		return globalEditTools.map((tool, index) => ({
@@ -488,9 +675,8 @@
 
 	// Handle node click for selection
 	function onNodeClick({ node }: { node: Node }) {
-		// Ignore entry marker clicks (or select the entry edge instead)
+		// Entry marker click opens the entry edge config sidebar
 		if (node.type === 'entryMarker') {
-			// Find and select the entry edge
 			const connectionId = node.data.connectionId as string;
 			const edge = edges.find((e) => e.id === connectionId);
 			if (edge) {
@@ -893,6 +1079,137 @@
 		}
 		return undefined;
 	});
+
+	// ==========================================================================
+	// Stage Preview Handlers
+	// ==========================================================================
+
+	function handleAddConnectionFromPreview(fromStageId: string, toStageId: string) {
+		builderState.addConnection(fromStageId, toStageId);
+	}
+
+	function handleCreateStageAndConnect(fromStageId: string) {
+		const sourceNode = nodes.find(n => n.id === fromStageId);
+		if (!sourceNode) {
+			const newStage = builderState.addStage('intermediate');
+			builderState.addConnection(fromStageId, newStage.id);
+			return;
+		}
+
+		// Stack vertically when multiple stages branch from the same source
+		const existingOutgoing = edges.filter(
+			e => e.source === fromStageId && !e.data?.isEntry
+		).length;
+
+		const position = {
+			x: sourceNode.position.x + 280,
+			y: sourceNode.position.y + existingOutgoing * 120
+		};
+		const newStage = builderState.addStage('intermediate', position);
+		builderState.addConnection(fromStageId, newStage.id);
+	}
+
+	function handleHighlightEdge(edgeId: string | null) {
+		hoverEdgeId = edgeId;
+	}
+
+	function handleHighlightStageTool(toolId: string | null) {
+		const stageId = selectionContext.type === 'stage' ? selectionContext.stageId : null;
+		if (!stageId) return;
+		nodes = nodes.map(n =>
+			n.id === stageId
+				? { ...n, data: { ...n.data, selectedToolId: toolId } }
+				: n
+		);
+	}
+
+	function handleAddStageToolFromPreview(stageId: string, toolType: string) {
+		if (toolType === 'form') {
+			builderState.addForm({ stageId });
+		} else if (toolType === 'edit') {
+			builderState.addEditTool({ stageId });
+		}
+	}
+
+	function handleButtonLabelChange(actionId: string, actionType: string, label: string) {
+		if (actionType === 'connection') {
+			const conn = builderState.getConnectionById(actionId);
+			if (conn) {
+				builderState.updateConnection(actionId, {
+					visual_config: { ...conn.data.visual_config, button_label: label }
+				});
+			}
+		} else if (actionType === 'stage_tool' || actionType === 'global_tool') {
+			builderState.updateEditTool(actionId, {
+				visual_config: {
+					...builderState.getEditToolById(actionId)?.data.visual_config,
+					button_label: label
+				}
+			});
+		} else if (actionType === 'stage_form') {
+			builderState.updateForm(actionId, {
+				visual_config: {
+					...builderState.getFormById(actionId)?.data.visual_config,
+					button_label: label
+				}
+			});
+		}
+	}
+
+	function handleButtonColorChange(actionId: string, actionType: string, color: string) {
+		if (actionType === 'connection') {
+			const conn = builderState.getConnectionById(actionId);
+			if (conn) {
+				builderState.updateConnection(actionId, {
+					visual_config: { ...conn.data.visual_config, button_color: color }
+				});
+			}
+		} else if (actionType === 'stage_tool' || actionType === 'global_tool') {
+			builderState.updateEditTool(actionId, {
+				visual_config: {
+					...builderState.getEditToolById(actionId)?.data.visual_config,
+					button_color: color
+				}
+			});
+		} else if (actionType === 'stage_form') {
+			builderState.updateForm(actionId, {
+				visual_config: {
+					...builderState.getFormById(actionId)?.data.visual_config,
+					button_color: color
+				}
+			});
+		}
+	}
+
+	function handleButtonRolesChange(actionId: string, actionType: string, roleIds: string[]) {
+		if (actionType === 'connection') {
+			builderState.updateConnection(actionId, { allowed_roles: roleIds });
+		} else if (actionType === 'stage_tool' || actionType === 'global_tool') {
+			builderState.updateEditTool(actionId, { allowed_roles: roleIds });
+		} else if (actionType === 'stage_form') {
+			builderState.updateForm(actionId, { allowed_roles: roleIds });
+		}
+	}
+
+	function handleButtonDelete(actionId: string, actionType: string) {
+		if (actionType === 'connection') {
+			builderState.deleteConnection(actionId);
+		} else if (actionType === 'stage_tool' || actionType === 'global_tool') {
+			builderState.deleteEditTool(actionId);
+		} else if (actionType === 'stage_form') {
+			builderState.deleteForm(actionId);
+		}
+	}
+
+	function handleSelectToolFromPreview(toolType: string, toolId: string) {
+		if (selectionContext.type === 'stage') {
+			if (toolType === 'form') {
+				selectionContext = createContext.form(toolId, { type: 'stage', stageId: selectionContext.stageId });
+			} else if (toolType === 'edit') {
+				selectionContext = createContext.editTool(toolId, { type: 'stage', stageId: selectionContext.stageId });
+			}
+		}
+	}
 </script>
 
 <div class="workflow-builder">
@@ -1035,6 +1352,7 @@
 			workflowName={builderState.workflowName}
 			{nodes}
 			{edges}
+			stageFields={previewStageFields}
 			roles={data.roles}
 			{selectedForm}
 			{formFields}
@@ -1045,6 +1363,7 @@
 			{connectionForms}
 			{connectionEditTools}
 			globalEditTools={globalEditTools.map(t => t.data)}
+			{stagePreviewData}
 			onStageRename={handleStageRename}
 			onStageDelete={handleDeleteStage}
 			onStageRolesChange={handleStageRolesChange}
@@ -1076,6 +1395,16 @@
 			onEditToolDelete={handleEditToolDelete}
 			onEditToolClose={handleEditToolClose}
 			onGlobalToolDelete={handleDeleteGlobalTool}
+			onAddConnection={handleAddConnectionFromPreview}
+			onAddStageTool={handleAddStageToolFromPreview}
+			onButtonLabelChange={handleButtonLabelChange}
+			onButtonColorChange={handleButtonColorChange}
+			onButtonRolesChange={handleButtonRolesChange}
+			onButtonDelete={handleButtonDelete}
+			onCreateStageAndConnect={handleCreateStageAndConnect}
+			onHighlightEdge={handleHighlightEdge}
+			onHighlightStageTool={handleHighlightStageTool}
+			onDeselect={() => (selectionContext = createContext.none())}
 		/>
 	</div>
 </div>
