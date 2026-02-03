@@ -7,6 +7,7 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { Button } from '$lib/components/ui/button';
 	import ModeToggle from '$lib/components/mode-toggle.svelte';
+	import FontSizeSelector from '$lib/components/font-size-selector.svelte';
 	import LanguageSelectorDropdown from '$lib/components/language-selector-dropdown.svelte';
 	import { UserCircle, LogOut, Layers, Filter, Navigation, Settings, Plus } from 'lucide-svelte';
 	import { mapNavCallbacks } from './map/nav-store.svelte';
@@ -252,6 +253,9 @@
 
 						<!-- Theme Toggle -->
 						<ModeToggle />
+
+						<!-- Font Size -->
+						<FontSizeSelector />
 
 						<!-- Language Selector -->
 						<LanguageSelectorDropdown />

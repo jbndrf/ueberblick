@@ -57,7 +57,7 @@
 			title="Layers"
 		>
 			<Layers class="h-5 w-5" />
-			<span class="text-[10px]">Layers</span>
+			<span class="text-[0.625rem]">Layers</span>
 		</button>
 
 		<button
@@ -66,7 +66,7 @@
 			title="Filters"
 		>
 			<Filter class="h-5 w-5" />
-			<span class="text-[10px]">Filters</span>
+			<span class="text-[0.625rem]">Filters</span>
 		</button>
 
 		<!-- Center raised button - square that rotates -->
@@ -88,7 +88,7 @@
 			title="My Location"
 		>
 			<Navigation class="h-5 w-5" />
-			<span class="text-[10px]">Location</span>
+			<span class="text-[0.625rem]">Location</span>
 		</button>
 
 		<button
@@ -97,7 +97,7 @@
 			title="Tools"
 		>
 			<Settings class="h-5 w-5" />
-			<span class="text-[10px]">Tools</span>
+			<span class="text-[0.625rem]">Tools</span>
 		</button>
 	</div>
 {/if}

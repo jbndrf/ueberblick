@@ -461,6 +461,7 @@
 		{markers}
 		{visibleCategoryIds}
 		{workflowInstances}
+		{workflowStages}
 		{visibleWorkflowIds}
 		onMarkerClick={handleMarkerClick}
 		onWorkflowInstanceClick={handleWorkflowInstanceClick}

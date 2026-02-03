@@ -123,6 +123,70 @@ export const actions: Actions = {
 		})(request);
 	},
 
+	updateIconConfig: async ({ request, params, locals: { pb } }) => {
+		const formData = await request.formData();
+		const workflowId = formData.get('id') as string;
+		const iconConfigJson = formData.get('iconConfig') as string;
+
+		if (!workflowId) {
+			return fail(400, { message: 'Workflow ID is required' });
+		}
+
+		let iconConfig;
+		try {
+			iconConfig = iconConfigJson ? JSON.parse(iconConfigJson) : {};
+		} catch {
+			return fail(400, { message: 'Invalid icon config JSON' });
+		}
+
+		try {
+			await pb.collection('workflows').update(workflowId, {
+				icon_config: iconConfig
+			});
+			return { success: true };
+		} catch (err) {
+			console.error('Error updating workflow icon config:', err);
+			return fail(500, { message: 'Failed to update icon config' });
+		}
+	},
+
+	updateStageIconConfig: async ({ request, params, locals: { pb } }) => {
+		const formData = await request.formData();
+		const stageId = formData.get('stageId') as string;
+		const iconConfigJson = formData.get('iconConfig') as string;
+
+		if (!stageId) {
+			return fail(400, { message: 'Stage ID is required' });
+		}
+
+		let iconConfig: Record<string, unknown> | null;
+		try {
+			iconConfig = iconConfigJson ? JSON.parse(iconConfigJson) : null;
+		} catch {
+			return fail(400, { message: 'Invalid icon config JSON' });
+		}
+
+		try {
+			// Get current visual_config to merge
+			const stage = await pb.collection('workflow_stages').getOne(stageId);
+			const currentVisualConfig = (stage.visual_config as Record<string, unknown>) || {};
+
+			// Build updated config, omitting icon_config if clearing
+			const { icon_config: _removed, ...rest } = currentVisualConfig;
+			const updatedVisualConfig = iconConfig
+				? { ...rest, icon_config: iconConfig }
+				: rest;
+
+			await pb.collection('workflow_stages').update(stageId, {
+				visual_config: updatedVisualConfig
+			});
+			return { success: true };
+		} catch (err) {
+			console.error('Error updating stage icon config:', err);
+			return fail(500, { message: 'Failed to update stage icon config' });
+		}
+	},
+
 	toggleStatus: async ({ request, params, locals: { pb } }) => {
 		const formData = await request.formData();
 		const workflowId = formData.get('id') as string;

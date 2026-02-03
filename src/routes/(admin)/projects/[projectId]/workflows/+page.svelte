@@ -5,7 +5,7 @@
 	import * as m from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { toast } from 'svelte-sonner';
-	import { Workflow as WorkflowIcon, Hammer } from 'lucide-svelte';
+	import { Workflow as WorkflowIcon, Hammer, Palette } from 'lucide-svelte';
 	import type { PageData } from './$types';
 	import { BaseTable, type BaseColumnConfig } from '$lib/components/admin/base-table';
 	import CrudDialogs, { type CrudDialogConfig } from '$lib/components/admin/crud-dialogs.svelte';
@@ -13,6 +13,8 @@
 	import { Label } from '$lib/components/ui/label';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { ChevronDown } from 'lucide-svelte';
+	import WorkflowIconDesigner from '$lib/components/admin/workflow-icon-designer.svelte';
+	import { getPocketBase } from '$lib/pocketbase';
 
 	type Workflow = {
 		id: string;
@@ -33,6 +35,70 @@
 	let deleteDialogOpen = $state(false);
 	let selectedWorkflow = $state<Workflow | null>(null);
 	let selectedWorkflowType = $state<'incident' | 'survey'>('incident');
+
+	// Icon designer state
+	let iconDesignerOpen = $state(false);
+	let iconDesignerWorkflow = $state<Workflow | null>(null);
+	let iconDesignerStages = $state<any[]>([]);
+	let iconDesignerWorkflowIconConfig = $state<any>(undefined);
+
+	async function openIconDesigner(workflow: Workflow) {
+		try {
+			const pb = getPocketBase();
+			// Fetch stages and full workflow data (including icon_config) client-side
+			const [stages, fullWorkflow] = await Promise.all([
+				pb.collection('workflow_stages').getFullList({
+					filter: `workflow_id = "${workflow.id}"`,
+					sort: 'stage_order'
+				}),
+				pb.collection('workflows').getOne(workflow.id)
+			]);
+			iconDesignerWorkflow = workflow;
+			iconDesignerStages = stages;
+			iconDesignerWorkflowIconConfig = (fullWorkflow as any).icon_config?.svgContent
+				? (fullWorkflow as any).icon_config
+				: undefined;
+			iconDesignerOpen = true;
+		} catch (err) {
+			console.error('Error loading icon designer data:', err);
+			toast.error('Failed to load workflow data');
+		}
+	}
+
+	async function handleSaveWorkflowIcon(config: any) {
+		if (!iconDesignerWorkflow) return;
+
+		const formData = new FormData();
+		formData.append('id', iconDesignerWorkflow.id);
+		formData.append('iconConfig', config ? JSON.stringify(config) : '');
+
+		const response = await fetch('?/updateIconConfig', {
+			method: 'POST',
+			body: formData
+		});
+
+		const result = await response.json();
+		if (result.type !== 'success') {
+			throw new Error('Failed to save');
+		}
+		await invalidateAll();
+	}
+
+	async function handleSaveStageIcon(stageId: string, config: any) {
+		const formData = new FormData();
+		formData.append('stageId', stageId);
+		formData.append('iconConfig', config ? JSON.stringify(config) : '');
+
+		const response = await fetch('?/updateStageIconConfig', {
+			method: 'POST',
+			body: formData
+		});
+
+		const result = await response.json();
+		if (result.type !== 'success') {
+			throw new Error('Failed to save');
+		}
+	}
 
 	// Create reusable update handlers
 	const updateField = createFieldUpdateHandler('updateField');
@@ -236,6 +302,13 @@
 					onClick: (workflow) => {
 						goto(`/projects/${$page.params.projectId}/workflows/${workflow.id}/builder`);
 					}
+				},
+				{
+					label: 'Design Icon',
+					icon: Palette,
+					onClick: (workflow) => {
+						setTimeout(() => openIconDesigner(workflow), 0);
+					}
 				}
 			],
 			onEdit: (workflow) => {
@@ -322,3 +395,24 @@
 		</div>
 	{/snippet}
 </CrudDialogs>
+
+<!-- Workflow Icon Designer Modal -->
+{#if iconDesignerOpen && iconDesignerWorkflow}
+	<div class="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm" onclick={() => {
+		iconDesignerOpen = false;
+		iconDesignerWorkflow = null;
+	}}></div>
+	<div class="fixed left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%]">
+		<WorkflowIconDesigner
+			workflowName={iconDesignerWorkflow.name}
+			initialIconConfig={iconDesignerWorkflowIconConfig}
+			stages={iconDesignerStages}
+			onSaveWorkflowIcon={handleSaveWorkflowIcon}
+			onSaveStageIcon={handleSaveStageIcon}
+			onCancel={() => {
+				iconDesignerOpen = false;
+				iconDesignerWorkflow = null;
+			}}
+		/>
+	</div>
+{/if}

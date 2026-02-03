@@ -75,10 +75,20 @@
 	interface WorkflowInstance {
 		id: string;
 		workflow_id: string;
+		current_stage_id?: string;
 		status: string;
 		location?: { lat: number; lon: number };
 		expand?: {
 			workflow_id?: WorkflowDef;
+		};
+	}
+
+	interface WorkflowStageInfo {
+		id: string;
+		workflow_id: string;
+		visual_config?: {
+			icon_config?: IconConfig;
+			[key: string]: unknown;
 		};
 	}
 
@@ -90,6 +100,7 @@
 		markers?: MapMarker[];
 		visibleCategoryIds?: string[];
 		workflowInstances?: WorkflowInstance[];
+		workflowStages?: WorkflowStageInfo[];
 		visibleWorkflowIds?: string[];
 		onMarkerClick?: (marker: MapMarker) => void;
 		onWorkflowInstanceClick?: (instance: WorkflowInstance) => void;
@@ -105,6 +116,7 @@
 		markers = [],
 		visibleCategoryIds = [],
 		workflowInstances = [],
+		workflowStages = [],
 		visibleWorkflowIds = [],
 		onMarkerClick,
 		onWorkflowInstanceClick,
@@ -140,6 +152,8 @@
 	let overlayTileLayers: Map<string, TileLayer> = new Map();
 	let markerLayers: Map<string, LeafletMarker> = new Map();
 	let workflowInstanceLayers: Map<string, LeafletMarker> = new Map();
+	/** Track current_stage_id per instance to detect icon changes */
+	let workflowInstanceStageIds: Map<string, string | undefined> = new Map();
 
 	// Derived: compute which markers should be visible on the map
 	const visibleMarkers = $derived.by(() => {
@@ -383,16 +397,31 @@
 	}
 
 	// Create Leaflet icon for workflow instance using workflow's icon_config or marker_color
-	function createWorkflowInstanceIcon(L: typeof import('leaflet'), workflow: WorkflowDef | undefined, instanceId: string) {
-		const iconConfig = workflow?.icon_config;
+	function createWorkflowInstanceIcon(L: typeof import('leaflet'), workflow: WorkflowDef | undefined, instance: WorkflowInstance) {
 		const markerColor = workflow?.marker_color || '#6366f1'; // Default to indigo
 
-		// If workflow has icon_config with SVG, use it (but still add instance id)
-		if (iconConfig?.svgContent) {
-			const baseIcon = createMarkerIcon(L, { icon_config: iconConfig } as MarkerCategory);
-			// Wrap in container with data-instance-id for testing
+		// Fallback chain: stage icon -> workflow icon -> colored circle
+		let effectiveIconConfig: IconConfig | undefined;
+
+		// 1. Check current stage icon
+		if (instance.current_stage_id && workflowStages.length > 0) {
+			const stage = workflowStages.find(s => s.id === instance.current_stage_id);
+			const stageIconConfig = stage?.visual_config?.icon_config;
+			if (stageIconConfig?.svgContent) {
+				effectiveIconConfig = stageIconConfig;
+			}
+		}
+
+		// 2. Fall back to workflow icon
+		if (!effectiveIconConfig && workflow?.icon_config?.svgContent) {
+			effectiveIconConfig = workflow.icon_config;
+		}
+
+		// 3. If we have an icon config, render it
+		if (effectiveIconConfig?.svgContent) {
+			const baseIcon = createMarkerIcon(L, { icon_config: effectiveIconConfig } as MarkerCategory);
 			return L.divIcon({
-				html: `<div data-instance-id="${instanceId}">${baseIcon.options.html || ''}</div>`,
+				html: `<div data-instance-id="${instance.id}">${baseIcon.options.html || ''}</div>`,
 				className: baseIcon.options.className || 'custom-marker-icon',
 				iconSize: baseIcon.options.iconSize,
 				iconAnchor: baseIcon.options.iconAnchor,
@@ -400,7 +429,7 @@
 			});
 		}
 
-		// Otherwise create a simple colored circle marker
+		// 4. Default: colored circle
 		const size = 24;
 		const svgContent = `
 			<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
@@ -410,7 +439,7 @@
 		`;
 
 		return L.divIcon({
-			html: `<div class="workflow-instance-icon" data-instance-id="${instanceId}">${svgContent}</div>`,
+			html: `<div class="workflow-instance-icon" data-instance-id="${instance.id}">${svgContent}</div>`,
 			className: 'custom-marker-icon',
 			iconSize: [size, size],
 			iconAnchor: [size / 2, size / 2],
@@ -432,6 +461,7 @@
 		}
 		for (const id of toRemove) {
 			workflowInstanceLayers.delete(id);
+			workflowInstanceStageIds.delete(id);
 		}
 
 		// Add or update visible instances
@@ -441,15 +471,23 @@
 			const existingMarker = workflowInstanceLayers.get(instance.id);
 
 			if (existingMarker) {
-				// Update existing marker position if it changed
+				// Update position if changed
 				const currentLatLng = existingMarker.getLatLng();
 				if (currentLatLng.lat !== instance.location.lat || currentLatLng.lng !== instance.location.lon) {
 					existingMarker.setLatLng([instance.location.lat, instance.location.lon]);
 				}
+				// Update icon if stage changed
+				const prevStageId = workflowInstanceStageIds.get(instance.id);
+				if (prevStageId !== instance.current_stage_id) {
+					const workflow = instance.expand?.workflow_id;
+					const newIcon = createWorkflowInstanceIcon(L, workflow, instance);
+					existingMarker.setIcon(newIcon);
+					workflowInstanceStageIds.set(instance.id, instance.current_stage_id);
+				}
 			} else {
 				// Create new marker
 				const workflow = instance.expand?.workflow_id;
-				const icon = createWorkflowInstanceIcon(L, workflow, instance.id);
+				const icon = createWorkflowInstanceIcon(L, workflow, instance);
 
 				const leafletMarker = L.marker([instance.location.lat, instance.location.lon], { icon })
 					.addTo(map);
@@ -460,6 +498,7 @@
 				}
 
 				workflowInstanceLayers.set(instance.id, leafletMarker);
+				workflowInstanceStageIds.set(instance.id, instance.current_stage_id);
 			}
 		}
 	}

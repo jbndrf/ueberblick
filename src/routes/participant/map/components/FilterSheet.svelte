@@ -17,6 +17,16 @@
 		};
 	}
 
+	interface IconConfig {
+		type: 'svg';
+		svgContent: string;
+		style?: {
+			size?: number;
+			color?: string;
+			shape?: 'none' | 'pin';
+		};
+	}
+
 	interface WorkflowInstance {
 		id: string;
 		status: string;
@@ -26,8 +36,18 @@
 			workflow_id?: {
 				name: string;
 				marker_color?: string;
+				icon_config?: IconConfig;
 			};
 		};
+	}
+
+	function renderIcon(config: IconConfig | null | undefined, size: number = 16): string | null {
+		if (!config?.svgContent) return null;
+		const color = config.style?.color || '#333';
+		return config.svgContent.replace(
+			/(<svg[^>]*)(>)/,
+			`$1 style="width: ${size}px; height: ${size}px; fill: ${color};"$2`
+		);
 	}
 
 	interface Props {
@@ -113,10 +133,16 @@
 						{#each instancesByWorkflow as { workflowId, workflow, count }}
 							<div class="flex items-center justify-between rounded-lg border p-3">
 								<div class="flex items-center gap-2">
-									<div
-										class="h-3 w-3 rounded-full"
-										style:background-color={workflow.marker_color || '#6b7280'}
-									></div>
+									{#if workflow.icon_config?.svgContent}
+										<div class="flex h-5 w-5 shrink-0 items-center justify-center">
+											{@html renderIcon(workflow.icon_config, 16)}
+										</div>
+									{:else}
+										<div
+											class="h-3 w-3 rounded-full"
+											style:background-color={workflow.marker_color || '#6b7280'}
+										></div>
+									{/if}
 									<span class="text-sm font-medium">{workflow.name}</span>
 									<Badge variant="secondary" class="text-xs">{count}</Badge>
 								</div>
@@ -142,7 +168,13 @@
 						{#each markersByCategory as { categoryId, category, count }}
 							<div class="flex items-center justify-between rounded-lg border p-3">
 								<div class="flex items-center gap-2">
-									<div class="h-3 w-3 rounded-full bg-primary"></div>
+									{#if category.icon_config?.svgContent}
+										<div class="flex h-5 w-5 shrink-0 items-center justify-center">
+											{@html renderIcon(category.icon_config, 16)}
+										</div>
+									{:else}
+										<div class="h-3 w-3 rounded-full bg-primary"></div>
+									{/if}
 									<span class="text-sm font-medium">{category.name}</span>
 									<Badge variant="secondary" class="text-xs">{count}</Badge>
 								</div>
