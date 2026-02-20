@@ -10,7 +10,7 @@
  * 3. The UI will automatically show it in the right places based on attachableTo
  */
 
-import { FileText, Edit3 } from 'lucide-svelte';
+import { FileText, Edit3, Tag, Zap } from 'lucide-svelte';
 import type { ToolDefinition, AttachmentTarget } from './types';
 
 // =============================================================================
@@ -106,16 +106,38 @@ const editTool: ToolDefinition = {
 	displayName: 'Edit Fields',
 	description: 'Allow editing existing fields',
 	icon: Edit3,
-	attachableTo: ['stage', 'connection'],
+	attachableTo: ['stage', 'connection', 'global'],
 	defaultColor: '#6366F1'
+};
+
+// Field tag tool - semantic tagging for form fields (workflow-level)
+const fieldTagTool: ToolDefinition = {
+	toolType: 'field_tag',
+	displayName: 'Field Tags',
+	description: 'Tag form fields with semantic roles (e.g. filterable)',
+	icon: Tag,
+	attachableTo: ['global'],
+	defaultColor: '#F59E0B'
+};
+
+// Automation tool - runs actions automatically based on triggers
+const automationTool: ToolDefinition = {
+	toolType: 'automation',
+	displayName: 'Automation',
+	description: 'Run actions on triggers like transitions or field changes',
+	icon: Zap,
+	attachableTo: ['global'],
+	defaultColor: '#F59E0B'
 };
 
 // Register the built-in tools
 toolRegistry.register(formTool);
 toolRegistry.register(editTool);
+toolRegistry.register(fieldTagTool);
+toolRegistry.register(automationTool);
 
 // =============================================================================
 // Export individual tool definitions for direct access if needed
 // =============================================================================
 
-export { formTool, editTool };
+export { formTool, editTool, fieldTagTool, automationTool };

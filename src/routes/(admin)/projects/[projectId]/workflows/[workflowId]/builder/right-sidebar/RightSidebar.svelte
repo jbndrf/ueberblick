@@ -7,9 +7,15 @@
 	import GlobalToolsPanel from './views/properties/panels/GlobalToolsPanel.svelte';
 	import { FormEditorView } from './views/form-editor';
 	import { EditToolEditorView } from './views/edit-tool-editor';
+	import { FieldTagEditorView } from './views/field-tag-editor';
+	import { AutomationEditorView } from './views/automation-editor';
 	import { StagePreviewView, type StageAction, type TimelineStage, type IncomingFormGroup } from './views/stage-preview';
 
-	import type { ToolsForm, ToolsFormField, TrackedFormField, WorkflowStage, ColumnPosition, ToolsEdit, VisualConfig } from '$lib/workflow-builder';
+	import type {
+		ToolsForm, ToolsFormField, TrackedFormField, WorkflowStage, ColumnPosition, ToolsEdit, VisualConfig,
+		ToolsAutomation, TriggerType, TriggerConfig, ConditionGroup, AutomationAction,
+		TagMapping
+	} from '$lib/workflow-builder';
 	import type { FormFieldWithValue } from '$lib/components/form-renderer';
 
 	type AncestorFieldGroup = {
@@ -42,6 +48,17 @@
 		connectionForms?: ToolsForm[];
 		connectionEditTools?: ToolsEdit[];
 		globalEditTools?: ToolsEdit[];
+		// Automation props
+		automations?: ToolsAutomation[];
+		selectedAutomation?: ToolsAutomation | null;
+		automationStages?: { id: string; name: string }[];
+		automationFieldOptions?: { key: string; label: string }[];
+		// Field tag props
+		fieldTagMappings?: TagMapping[];
+		fieldTagAllFormFields?: AncestorFieldGroup[];
+		onFieldTagMappingChange?: (tagType: string, fieldId: string | null, config?: Record<string, unknown>) => void;
+		onFieldTagConfigChange?: (tagType: string, config: Record<string, unknown>) => void;
+		onFieldTagDelete?: () => void;
 		// Stage preview props
 		stagePreviewData?: {
 			stage: WorkflowStage;
@@ -88,6 +105,18 @@
 		onEditToolClose?: () => void;
 		// Global tools handlers (for GlobalToolsPanel - reuses onToolRolesChange/onToolVisualConfigChange)
 		onGlobalToolDelete?: (toolType: string, toolId: string) => void;
+		// Automation handlers
+		onSelectAutomation?: (automationId: string) => void;
+		onAddAutomation?: () => void;
+		onToggleAutomation?: (automationId: string, enabled: boolean) => void;
+		onDeleteAutomation?: (automationId: string) => void;
+		onAutomationNameChange?: (automationId: string, name: string) => void;
+		onAutomationEnabledChange?: (automationId: string, enabled: boolean) => void;
+		onAutomationTriggerTypeChange?: (automationId: string, triggerType: TriggerType) => void;
+		onAutomationTriggerConfigChange?: (automationId: string, config: TriggerConfig) => void;
+		onAutomationConditionsChange?: (automationId: string, conditions: ConditionGroup | null) => void;
+		onAutomationActionsChange?: (automationId: string, actions: AutomationAction[]) => void;
+		onAutomationClose?: () => void;
 		// Stage preview handlers
 		onAddConnection?: (fromStageId: string, toStageId: string) => void;
 		onAddStageTool?: (stageId: string, toolType: string) => void;
@@ -119,6 +148,15 @@
 		connectionForms = [],
 		connectionEditTools = [],
 		globalEditTools = [],
+		automations = [],
+		selectedAutomation = null,
+		automationStages = [],
+		automationFieldOptions = [],
+		fieldTagMappings = [],
+		fieldTagAllFormFields = [],
+		onFieldTagMappingChange,
+		onFieldTagConfigChange,
+		onFieldTagDelete,
 		stagePreviewData = null,
 		onStageRename,
 		onStageDelete,
@@ -151,6 +189,17 @@
 		onEditToolDelete,
 		onEditToolClose,
 		onGlobalToolDelete,
+		onSelectAutomation,
+		onAddAutomation,
+		onToggleAutomation,
+		onDeleteAutomation,
+		onAutomationNameChange,
+		onAutomationEnabledChange,
+		onAutomationTriggerTypeChange,
+		onAutomationTriggerConfigChange,
+		onAutomationConditionsChange,
+		onAutomationActionsChange,
+		onAutomationClose,
 		onAddConnection,
 		onAddStageTool,
 		onButtonLabelChange,
@@ -177,6 +226,12 @@
 	// Global tools panel mode
 	const isGlobalToolsPanel = $derived(context.type === 'globalTools');
 
+	// Field tag editor mode
+	const isFieldTagEditor = $derived(context.type === 'fieldTags');
+
+	// Automation editor mode
+	const isAutomationEditor = $derived(context.type === 'automation' && selectedAutomation != null);
+
 	// Stage preview mode (replaces old StagePropertyPanel)
 	const isStagePreview = $derived(context.type === 'stage' && stagePreviewData != null);
 
@@ -185,7 +240,7 @@
 
 	// Any other selection that isn't handled by dedicated views
 	const hasSelection = $derived(
-		context.type !== 'none' && context.type !== 'form' && context.type !== 'editTool' && context.type !== 'globalTools' && !isStagePreview
+		context.type !== 'none' && context.type !== 'form' && context.type !== 'editTool' && context.type !== 'globalTools' && context.type !== 'automation' && context.type !== 'fieldTags' && !isStagePreview
 	);
 </script>
 
@@ -219,15 +274,43 @@
 			onDelete={() => onEditToolDelete?.(selectedEditTool.id)}
 			onClose={onEditToolClose}
 		/>
+	{:else if isFieldTagEditor}
+		<FieldTagEditorView
+			tagMappings={fieldTagMappings}
+			allFormFields={fieldTagAllFormFields}
+			onMappingChange={(tagType, fieldId, config) => onFieldTagMappingChange?.(tagType, fieldId, config)}
+			onConfigChange={(tagType, config) => onFieldTagConfigChange?.(tagType, config)}
+			onDelete={onFieldTagDelete}
+			onClose={onDeselect}
+		/>
+	{:else if isAutomationEditor && selectedAutomation}
+		<AutomationEditorView
+			automation={selectedAutomation}
+			stages={automationStages}
+			fieldOptions={automationFieldOptions}
+			onNameChange={(name) => onAutomationNameChange?.(selectedAutomation.id, name)}
+			onEnabledChange={(enabled) => onAutomationEnabledChange?.(selectedAutomation.id, enabled)}
+			onTriggerTypeChange={(tt) => onAutomationTriggerTypeChange?.(selectedAutomation.id, tt)}
+			onTriggerConfigChange={(config) => onAutomationTriggerConfigChange?.(selectedAutomation.id, config)}
+			onConditionsChange={(c) => onAutomationConditionsChange?.(selectedAutomation.id, c)}
+			onActionsChange={(a) => onAutomationActionsChange?.(selectedAutomation.id, a)}
+			onDelete={() => onDeleteAutomation?.(selectedAutomation.id)}
+			onClose={onAutomationClose}
+		/>
 	{:else if isGlobalToolsPanel}
 		<GlobalToolsPanel
 			{globalEditTools}
+			{automations}
 			{roles}
 			onToolRolesChange={onToolRolesChange}
 			onToolVisualConfigChange={onToolVisualConfigChange}
 			onSelectTool={onSelectTool}
 			onDeleteTool={onGlobalToolDelete}
 			{onCreateRole}
+			{onSelectAutomation}
+			{onAddAutomation}
+			{onToggleAutomation}
+			{onDeleteAutomation}
 		/>
 	{:else if isStagePreview && stagePreviewData}
 		<StagePreviewView

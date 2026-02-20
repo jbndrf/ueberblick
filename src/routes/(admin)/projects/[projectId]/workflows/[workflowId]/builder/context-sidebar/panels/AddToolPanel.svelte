@@ -10,9 +10,9 @@
 
 	let { context, onAddTool }: Props = $props();
 
-	// Global tools use stage attachment (edit tools only)
+	// Global tools use 'global' attachment target to show edit tools + automations
 	const attachmentTarget = $derived(
-		context.attachedTo.type === 'global' ? 'stage' : context.attachedTo.type
+		context.attachedTo.type === 'global' ? 'global' : context.attachedTo.type
 	);
 
 	const title = $derived(

@@ -16,6 +16,7 @@
 	const tools = $derived(toolRegistry.getToolsFor(attachmentTarget));
 
 	const sectionTitle = $derived(
+		attachmentTarget === 'global' ? 'Global Tools' :
 		attachmentTarget === 'stage' ? 'Stage Tools' : 'Connection Tools'
 	);
 

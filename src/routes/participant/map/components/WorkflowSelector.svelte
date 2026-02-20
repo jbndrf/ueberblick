@@ -9,6 +9,7 @@
 		name: string;
 		workflow_type: 'incident' | 'survey';
 		description?: string;
+		entry_button_label?: string;
 	}
 
 	interface Props {
@@ -212,7 +213,7 @@
 			onclick={confirmCoordinateSelection}
 			class="flex-1 text-center font-semibold"
 		>
-			{selectedWorkflow.name}
+			{selectedWorkflow.entry_button_label || selectedWorkflow.name}
 		</button>
 		<button
 			onclick={exitCoordinateSelectionMode}
@@ -248,7 +249,7 @@
 						active:scale-[0.98]"
 					style="animation-delay: {i * 0.03}s"
 				>
-					<span class="line-clamp-2 text-center leading-snug">{workflow.name}</span>
+					<span class="line-clamp-2 text-center leading-snug">{workflow.entry_button_label || workflow.name}</span>
 				</button>
 			{/each}
 		</div>

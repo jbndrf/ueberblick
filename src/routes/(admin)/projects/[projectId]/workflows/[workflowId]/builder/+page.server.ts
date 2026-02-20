@@ -27,7 +27,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 		}
 
 		// Load workflow builder data - these collections may not exist yet
-		const [stages, connections, forms, formFields, editTools, roles] = await Promise.all([
+		const [stages, connections, forms, formFields, editTools, automations, fieldTags, roles] = await Promise.all([
 			safeGetFullList(pb, 'workflow_stages', {
 				filter: `workflow_id = "${workflowId}"`,
 				sort: 'stage_order'
@@ -42,6 +42,12 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 				sort: 'field_order'
 			}),
 			safeGetFullList(pb, 'tools_edit', {}),
+			safeGetFullList(pb, 'tools_automation', {
+				filter: `workflow_id = "${workflowId}"`
+			}),
+			safeGetFullList(pb, 'tools_field_tags', {
+				filter: `workflow_id = "${workflowId}"`
+			}),
 			safeGetFullList(pb, 'roles', {
 				filter: `project_id = "${projectId}"`,
 				sort: 'name'
@@ -67,6 +73,8 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 			forms,
 			formFields: workflowFormFields,
 			editTools: workflowEditTools,
+			automations,
+			fieldTags,
 			roles
 		};
 	} catch (err: any) {
@@ -116,6 +124,8 @@ export const actions: Actions = {
 			forms: { new: any[]; modified: any[]; deleted: string[] };
 			formFields: { new: any[]; modified: any[]; deleted: string[] };
 			editTools: { new: any[]; modified: any[]; deleted: string[] };
+			automations: { new: any[]; modified: any[]; deleted: string[] };
+			fieldTags?: { new: any[]; modified: any[]; deleted: string[] };
 		};
 
 		try {
@@ -180,6 +190,32 @@ export const actions: Actions = {
 			}
 			for (const toolId of changes.editTools.deleted) {
 				batch.collection('tools_edit').delete(toolId);
+			}
+
+			// 6. Automations
+			if (changes.automations) {
+				for (const automation of changes.automations.new) {
+					batch.collection('tools_automation').create(automation);
+				}
+				for (const automation of changes.automations.modified) {
+					batch.collection('tools_automation').update(automation.id, automation);
+				}
+				for (const automationId of changes.automations.deleted) {
+					batch.collection('tools_automation').delete(automationId);
+				}
+			}
+
+			// 7. Field Tags
+			if (changes.fieldTags) {
+				for (const ft of changes.fieldTags.new) {
+					batch.collection('tools_field_tags').create(ft);
+				}
+				for (const ft of changes.fieldTags.modified) {
+					batch.collection('tools_field_tags').update(ft.id, ft);
+				}
+				for (const ftId of changes.fieldTags.deleted) {
+					batch.collection('tools_field_tags').delete(ftId);
+				}
 			}
 
 			// Execute batch

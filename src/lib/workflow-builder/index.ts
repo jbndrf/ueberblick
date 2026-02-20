@@ -40,7 +40,23 @@ export type {
 	SmartDropdownMapping,
 	SmartDropdownFieldOptions,
 	EntitySourceType,
-	EntitySelectorOptions
+	EntitySelectorOptions,
+	// Field tag types
+	TagMapping,
+	ToolsFieldTag,
+	TrackedFieldTag,
+	// Automation types
+	ToolsAutomation,
+	TrackedAutomation,
+	TriggerType,
+	TriggerConfig,
+	TransitionTriggerConfig,
+	FieldChangeTriggerConfig,
+	TimeBasedTriggerConfig,
+	ConditionGroup,
+	ConditionLeaf,
+	ConditionOperator,
+	AutomationAction
 } from './types';
 
 // Save

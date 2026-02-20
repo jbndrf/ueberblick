@@ -263,6 +263,74 @@ export interface ToolsEdit {
 }
 
 // =============================================================================
+// Automation Types
+// =============================================================================
+
+export type TriggerType = 'on_transition' | 'on_field_change' | 'time_based';
+
+export interface TransitionTriggerConfig {
+	from_stage_id: string | null;
+	to_stage_id: string | null;
+}
+
+export interface FieldChangeTriggerConfig {
+	stage_id: string | null;
+	field_key: string | null;
+}
+
+export interface TimeBasedTriggerConfig {
+	stage_id: string | null;
+	days: number;
+}
+
+export type TriggerConfig =
+	| TransitionTriggerConfig
+	| FieldChangeTriggerConfig
+	| TimeBasedTriggerConfig;
+
+export type ConditionOperator = 'equals' | 'not_equals' | 'is_empty' | 'is_not_empty' | 'contains';
+
+export type ConditionLeaf =
+	| { type: 'field_value'; params: { field_key: string; operator: ConditionOperator; value?: string } }
+	| { type: 'instance_status'; params: { status: string } };
+
+export interface ConditionGroup {
+	operator: 'AND' | 'OR';
+	conditions: ConditionLeaf[];
+}
+
+export type AutomationAction =
+	| { type: 'set_instance_status'; params: { status: string } }
+	| { type: 'set_field_value'; params: { field_key: string; value: string; stage_id: string } };
+
+export interface ToolsAutomation {
+	id: string;
+	workflow_id: string;
+	name: string;
+	trigger_type: TriggerType;
+	trigger_config: TriggerConfig;
+	conditions: ConditionGroup | null;
+	actions: AutomationAction[];
+	is_enabled: boolean;
+}
+
+// =============================================================================
+// Field Tag Types
+// =============================================================================
+
+export interface TagMapping {
+	tagType: string;
+	fieldId: string | null; // null when filterBy='stage', otherwise references tools_form_fields.id
+	config: Record<string, unknown>;
+}
+
+export interface ToolsFieldTag {
+	id: string;
+	workflow_id: string;
+	tag_mappings: TagMapping[];
+}
+
+// =============================================================================
 // Status Tracking
 // =============================================================================
 
@@ -284,3 +352,5 @@ export type TrackedConnection = TrackedItem<WorkflowConnection>;
 export type TrackedForm = TrackedItem<ToolsForm>;
 export type TrackedFormField = TrackedItem<ToolsFormField>;
 export type TrackedEditTool = TrackedItem<ToolsEdit>;
+export type TrackedAutomation = TrackedItem<ToolsAutomation>;
+export type TrackedFieldTag = TrackedItem<ToolsFieldTag>;

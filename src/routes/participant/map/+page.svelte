@@ -20,6 +20,8 @@
 		name: string;
 		workflow_type: 'incident' | 'survey';
 		description?: string;
+		entry_button_label?: string;
+		filter_value_icons?: Record<string, any>;
 	}
 
 	interface PendingWorkflow {
@@ -100,6 +102,13 @@
 	let visibleCategoryIds = $state<string[]>([]);
 	let visibleWorkflowIds = $state<string[]>([]);
 
+	// Field tag data (for filterable sub-sections)
+	let fieldTags = $state<any[]>([]);
+	let fieldValues = $state<any[]>([]);
+
+	// Tag value visibility: workflowId -> Set of visible tag values (all visible by default)
+	let visibleTagValues = $state<Map<string, Set<string>>>(new Map());
+
 	// ==========================================================================
 	// Download Progress & Event Signals
 	// ==========================================================================
@@ -156,7 +165,7 @@
 		try {
 			isLoading = true;
 			// Load all in parallel (local-first: reads from IndexedDB, background revalidation when online)
-			const [layersResult, markersResult, instancesResult, workflowsResult, stagesResult] = await Promise.all([
+			const [layersResult, markersResult, instancesResult, workflowsResult, stagesResult, fieldTagsResult, fieldValuesResult, entryConnectionsResult] = await Promise.all([
 				gateway.collection('map_layers').getFullList({
 					filter: 'is_active = true',
 					expand: 'source_id',
@@ -171,14 +180,33 @@
 				gateway.collection('workflows').getFullList({
 					filter: 'is_active = true'
 				}),
-				gateway.collection('workflow_stages').getFullList()
+				gateway.collection('workflow_stages').getFullList(),
+				gateway.collection('tools_field_tags').getFullList(),
+				gateway.collection('workflow_instance_field_values').getFullList(),
+				gateway.collection('workflow_connections').getFullList({
+					filter: 'from_stage_id = ""'
+				})
 			]);
 
 			mapLayers = layersResult;
 			markers = markersResult;
 			workflowInstances = instancesResult;
-			workflows = workflowsResult as Workflow[];
+
+			// Map entry connection button labels onto workflows
+			const entryLabelByWorkflow = new Map<string, string>();
+			for (const conn of entryConnectionsResult) {
+				const label = (conn.visual_config as any)?.button_label;
+				if (label) {
+					entryLabelByWorkflow.set(conn.workflow_id, label);
+				}
+			}
+			workflows = (workflowsResult as Workflow[]).map(wf => ({
+				...wf,
+				entry_button_label: entryLabelByWorkflow.get(wf.id) || wf.name
+			}));
 			workflowStages = stagesResult;
+			fieldTags = fieldTagsResult;
+			fieldValues = fieldValuesResult;
 
 			console.log('[loadData] Loaded map layers:', mapLayers);
 			console.log('[loadData] First layer expand:', mapLayers[0]?.expand);
@@ -202,6 +230,44 @@
 				// Get unique workflow IDs from instances
 				const workflowIds = [...new Set(workflowInstances.map((i) => i.workflow_id).filter(Boolean))];
 				visibleWorkflowIds = workflowIds;
+			}
+
+			// Initialize tag value visibility - all values visible by default
+			if (visibleTagValues.size === 0 && fieldTagsResult.length > 0) {
+				const newMap = new Map<string, Set<string>>();
+				for (const ft of fieldTagsResult) {
+					const mappings = ft.tag_mappings || [];
+					for (const mapping of mappings) {
+						if (mapping.tagType !== 'filterable') continue;
+						const wfId = ft.workflow_id;
+						const filterBy = (mapping.config?.filterBy as string) || 'field';
+
+						if (filterBy === 'stage') {
+							// Collect unique stage IDs from instances of this workflow
+							const vals = new Set<string>();
+							for (const inst of instancesResult) {
+								if (inst.workflow_id === wfId && inst.current_stage_id) {
+									vals.add(inst.current_stage_id);
+								}
+							}
+							if (vals.size > 0) {
+								newMap.set(wfId, vals);
+							}
+						} else if (mapping.fieldId) {
+							// Collect all unique values for this field across instances
+							const vals = new Set<string>();
+							for (const fv of fieldValuesResult) {
+								if (fv.field_key === mapping.fieldId && fv.value) {
+									vals.add(fv.value);
+								}
+							}
+							if (vals.size > 0) {
+								newMap.set(wfId, vals);
+							}
+						}
+					}
+				}
+				visibleTagValues = newMap;
 			}
 		} catch (error) {
 			console.error('Failed to load map data:', error);
@@ -234,6 +300,51 @@
 			visibleWorkflowIds = visibleWorkflowIds.filter((x) => x !== workflowId);
 		}
 	}
+
+	function handleTagValueToggle(workflowId: string, tagValue: string, visible: boolean) {
+		const newMap = new Map(visibleTagValues);
+		const current = newMap.get(workflowId) ?? new Set<string>();
+		const updated = new Set(current);
+		if (visible) {
+			updated.add(tagValue);
+		} else {
+			updated.delete(tagValue);
+		}
+		newMap.set(workflowId, updated);
+		visibleTagValues = newMap;
+	}
+
+	/**
+	 * For each workflow with a "filterable" tag mapping, build a map:
+	 * instanceId -> filter value (stage ID or field value depending on mode)
+	 */
+	const filterableValues = $derived.by(() => {
+		const map = new Map<string, string>();
+		for (const ft of fieldTags) {
+			const mappings = (ft.tag_mappings || []) as Array<{ tagType: string; fieldId: string | null; config: Record<string, unknown> }>;
+			for (const mapping of mappings) {
+				if (mapping.tagType !== 'filterable') continue;
+				const filterBy = (mapping.config?.filterBy as string) || 'field';
+
+				if (filterBy === 'stage') {
+					// Stage mode: map instanceId -> current_stage_id
+					for (const inst of workflowInstances) {
+						if (inst.workflow_id === ft.workflow_id && inst.current_stage_id) {
+							map.set(inst.id, inst.current_stage_id);
+						}
+					}
+				} else if (mapping.fieldId) {
+					// Field mode: map instanceId -> field value
+					for (const fv of fieldValues) {
+						if (fv.field_key === mapping.fieldId && fv.value) {
+							map.set(fv.instance_id, fv.value);
+						}
+					}
+				}
+			}
+		}
+		return map;
+	});
 
 	// ==========================================================================
 	// Marker Selection & Navigation
@@ -463,6 +574,9 @@
 		{workflowInstances}
 		{workflowStages}
 		{visibleWorkflowIds}
+		{filterableValues}
+		{visibleTagValues}
+		{workflows}
 		onMarkerClick={handleMarkerClick}
 		onWorkflowInstanceClick={handleWorkflowInstanceClick}
 		onMapReady={handleMapReady}
@@ -506,8 +620,14 @@
 		{workflowInstances}
 		{visibleCategoryIds}
 		{visibleWorkflowIds}
+		{fieldTags}
+		{fieldValues}
+		{visibleTagValues}
+		{workflowStages}
+		{workflows}
 		onCategoryToggle={handleCategoryToggle}
 		onWorkflowToggle={handleWorkflowToggle}
+		onTagValueToggle={handleTagValueToggle}
 	/>
 
 	<!-- Workflow Instance Detail Module (handles tool flows internally) -->

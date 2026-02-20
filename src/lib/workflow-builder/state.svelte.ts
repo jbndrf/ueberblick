@@ -12,13 +12,21 @@ import type {
 	ToolsForm,
 	ToolsFormField,
 	ToolsEdit,
+	ToolsAutomation,
+	ToolsFieldTag,
+	TagMapping,
 	TrackedStage,
 	TrackedConnection,
 	TrackedForm,
 	TrackedFormField,
 	TrackedEditTool,
+	TrackedAutomation,
+	TrackedFieldTag,
 	StageType,
-	ItemStatus
+	ItemStatus,
+	TriggerType,
+	TriggerConfig,
+	TransitionTriggerConfig
 } from './types';
 
 // =============================================================================
@@ -37,6 +45,8 @@ export class WorkflowBuilderState {
 	forms = $state<TrackedForm[]>([]);
 	formFields = $state<TrackedFormField[]>([]);
 	editTools = $state<TrackedEditTool[]>([]);
+	automations = $state<TrackedAutomation[]>([]);
+	fieldTags = $state<TrackedFieldTag[]>([]);
 
 	// Derived: dirty state
 	isDirty = $derived(
@@ -44,7 +54,9 @@ export class WorkflowBuilderState {
 			this.connections.some((c) => c.status !== 'unchanged') ||
 			this.forms.some((f) => f.status !== 'unchanged') ||
 			this.formFields.some((f) => f.status !== 'unchanged') ||
-			this.editTools.some((e) => e.status !== 'unchanged')
+			this.editTools.some((e) => e.status !== 'unchanged') ||
+			this.automations.some((a) => a.status !== 'unchanged') ||
+			this.fieldTags.some((ft) => ft.status !== 'unchanged')
 	);
 
 	// Derived: visible items (exclude deleted)
@@ -53,6 +65,7 @@ export class WorkflowBuilderState {
 	visibleForms = $derived(this.forms.filter((f) => f.status !== 'deleted'));
 	visibleFormFields = $derived(this.formFields.filter((f) => f.status !== 'deleted'));
 	visibleEditTools = $derived(this.editTools.filter((e) => e.status !== 'deleted'));
+	visibleAutomations = $derived(this.automations.filter((a) => a.status !== 'deleted'));
 
 	// Derived: has start stage
 	hasStartStage = $derived(
@@ -74,6 +87,8 @@ export class WorkflowBuilderState {
 		forms?: ToolsForm[];
 		formFields?: ToolsFormField[];
 		editTools?: ToolsEdit[];
+		automations?: ToolsAutomation[];
+		fieldTags?: ToolsFieldTag[];
 	}) {
 		// Guard against re-initialization (prevents infinite effect loops)
 		if (this.initialized) return;
@@ -108,7 +123,7 @@ export class WorkflowBuilderState {
 					from_stage_id: null,
 					to_stage_id: stage.data.id,
 					action_name: 'entry',
-					visual_config: { button_label: 'Start' }
+					visual_config: { button_label: this.workflowName || 'Start' }
 				};
 				loadedConnections.push({
 					data: entryConnection,
@@ -135,6 +150,18 @@ export class WorkflowBuilderState {
 			data: e,
 			status: 'unchanged' as ItemStatus,
 			original: structuredClone(e)
+		}));
+
+		this.automations = (data.automations || []).map((a) => ({
+			data: a,
+			status: 'unchanged' as ItemStatus,
+			original: structuredClone(a)
+		}));
+
+		this.fieldTags = (data.fieldTags || []).map((ft) => ({
+			data: ft,
+			status: 'unchanged' as ItemStatus,
+			original: structuredClone(ft)
 		}));
 	}
 
@@ -191,7 +218,7 @@ export class WorkflowBuilderState {
 			to_stage_id: toStageId,
 			action_name: 'entry',
 			visual_config: {
-				button_label: 'Start'
+				button_label: this.workflowName || 'Start'
 			}
 		};
 
@@ -476,6 +503,18 @@ export class WorkflowBuilderState {
 			}
 		}
 
+		// Remove any field tag mappings that reference this field
+		for (const ft of this.fieldTags) {
+			if (ft.status === 'deleted') continue;
+			const before = ft.data.tag_mappings.length;
+			ft.data.tag_mappings = ft.data.tag_mappings.filter((m) => m.fieldId !== id);
+			if (ft.data.tag_mappings.length !== before && ft.status === 'unchanged') {
+				if (!deepEqual(ft.data, ft.original)) {
+					ft.status = 'modified';
+				}
+			}
+		}
+
 		if (field.status === 'new') {
 			this.formFields = this.formFields.filter((f) => f.data.id !== id);
 		} else {
@@ -632,6 +671,186 @@ export class WorkflowBuilderState {
 	 */
 	getGlobalEditTools(): TrackedEditTool[] {
 		return this.visibleEditTools.filter((e) => e.data.is_global);
+	}
+
+	// =========================================================================
+	// Automation Operations
+	// =========================================================================
+
+	addAutomation(triggerType: TriggerType = 'on_transition'): ToolsAutomation {
+		const defaultConfig: TriggerConfig = triggerType === 'on_transition'
+			? { from_stage_id: null, to_stage_id: null }
+			: triggerType === 'on_field_change'
+				? { stage_id: null, field_key: null }
+				: { stage_id: null, days: 30 };
+
+		const newAutomation: ToolsAutomation = {
+			id: generateId(),
+			workflow_id: this.workflowId,
+			name: 'New Automation',
+			trigger_type: triggerType,
+			trigger_config: defaultConfig,
+			conditions: null,
+			actions: [],
+			is_enabled: true
+		};
+
+		this.automations.push({
+			data: newAutomation,
+			status: 'new'
+		});
+
+		return newAutomation;
+	}
+
+	updateAutomation(id: string, updates: Partial<ToolsAutomation>) {
+		const automation = this.automations.find((a) => a.data.id === id);
+		if (!automation) return;
+
+		Object.assign(automation.data, updates);
+
+		if (automation.status === 'unchanged') {
+			if (!deepEqual(automation.data, automation.original)) {
+				automation.status = 'modified';
+			}
+		}
+	}
+
+	deleteAutomation(id: string) {
+		const automation = this.automations.find((a) => a.data.id === id);
+		if (!automation) return;
+
+		if (automation.status === 'new') {
+			this.automations = this.automations.filter((a) => a.data.id !== id);
+		} else {
+			automation.status = 'deleted';
+		}
+	}
+
+	getAutomationById(id: string): TrackedAutomation | undefined {
+		return this.automations.find((a) => a.data.id === id);
+	}
+
+	// =========================================================================
+	// Field Tag Operations
+	// =========================================================================
+
+	/**
+	 * Get the field tag record for this workflow (there is at most one).
+	 */
+	getFieldTagForWorkflow(): TrackedFieldTag | undefined {
+		return this.fieldTags.find(
+			(ft) => ft.status !== 'deleted' && ft.data.workflow_id === this.workflowId
+		);
+	}
+
+	/**
+	 * Get or create the field tag record for this workflow.
+	 * Ensures exactly one record exists.
+	 */
+	getOrCreateFieldTag(): ToolsFieldTag {
+		const existing = this.getFieldTagForWorkflow();
+		if (existing) return existing.data;
+
+		const newFieldTag: ToolsFieldTag = {
+			id: generateId(),
+			workflow_id: this.workflowId,
+			tag_mappings: []
+		};
+
+		this.fieldTags.push({
+			data: newFieldTag,
+			status: 'new'
+		});
+
+		return newFieldTag;
+	}
+
+	/**
+	 * Update the entire field tag record.
+	 */
+	updateFieldTag(id: string, updates: Partial<ToolsFieldTag>) {
+		const ft = this.fieldTags.find((t) => t.data.id === id);
+		if (!ft) return;
+
+		Object.assign(ft.data, updates);
+
+		if (ft.status === 'unchanged') {
+			if (!deepEqual(ft.data, ft.original)) {
+				ft.status = 'modified';
+			}
+		}
+	}
+
+	/**
+	 * Set (or clear) a tag mapping for a given tag type.
+	 * If fieldId is null, removes the mapping for that tag type.
+	 */
+	setTagMapping(tagType: string, fieldId: string | null, config?: Record<string, unknown>) {
+		const fieldTag = this.getOrCreateFieldTag();
+		const ft = this.fieldTags.find((t) => t.data.id === fieldTag.id)!;
+
+		// Remove existing mapping for this tag type
+		ft.data.tag_mappings = ft.data.tag_mappings.filter((m) => m.tagType !== tagType);
+
+		// Add new mapping if fieldId or config provided (config alone = stage mode)
+		if (fieldId || config) {
+			ft.data.tag_mappings.push({
+				tagType,
+				fieldId,
+				config: config ?? {}
+			});
+		}
+
+		if (ft.status === 'unchanged') {
+			if (!deepEqual(ft.data, ft.original)) {
+				ft.status = 'modified';
+			}
+		}
+	}
+
+	/**
+	 * Get the current mapping for a tag type, if any.
+	 */
+	getTagMapping(tagType: string): TagMapping | undefined {
+		const ft = this.getFieldTagForWorkflow();
+		if (!ft) return undefined;
+		return ft.data.tag_mappings.find((m) => m.tagType === tagType);
+	}
+
+	/**
+	 * Delete the field tag record for this workflow.
+	 * If it was never saved (status 'new'), removes it from the array.
+	 * Otherwise marks it as 'deleted' for the save to pick up.
+	 */
+	deleteFieldTag() {
+		const ft = this.getFieldTagForWorkflow();
+		if (!ft) return;
+
+		if (ft.status === 'new') {
+			this.fieldTags = this.fieldTags.filter((t) => t.data.id !== ft.data.id);
+		} else {
+			ft.status = 'deleted';
+		}
+	}
+
+	/**
+	 * Update the config for an existing tag mapping.
+	 */
+	updateTagMappingConfig(tagType: string, config: Record<string, unknown>) {
+		const ft = this.getFieldTagForWorkflow();
+		if (!ft) return;
+
+		const mapping = ft.data.tag_mappings.find((m) => m.tagType === tagType);
+		if (!mapping) return;
+
+		mapping.config = config;
+
+		if (ft.status === 'unchanged') {
+			if (!deepEqual(ft.data, ft.original)) {
+				ft.status = 'modified';
+			}
+		}
 	}
 
 	// =========================================================================
@@ -896,6 +1115,8 @@ export class WorkflowBuilderState {
 		this.forms = this.forms.filter((f) => f.status !== 'deleted');
 		this.formFields = this.formFields.filter((f) => f.status !== 'deleted');
 		this.editTools = this.editTools.filter((e) => e.status !== 'deleted');
+		this.automations = this.automations.filter((a) => a.status !== 'deleted');
+		this.fieldTags = this.fieldTags.filter((ft) => ft.status !== 'deleted');
 
 		// Mark all as unchanged and update originals
 		// Use $state.snapshot() to convert reactive proxies to plain objects
@@ -918,6 +1139,14 @@ export class WorkflowBuilderState {
 		for (const tool of this.editTools) {
 			tool.status = 'unchanged';
 			tool.original = $state.snapshot(tool.data);
+		}
+		for (const automation of this.automations) {
+			automation.status = 'unchanged';
+			automation.original = $state.snapshot(automation.data);
+		}
+		for (const ft of this.fieldTags) {
+			ft.status = 'unchanged';
+			ft.original = $state.snapshot(ft.data);
 		}
 	}
 
@@ -955,6 +1184,16 @@ export class WorkflowBuilderState {
 				new: this.editTools.filter((e) => e.status === 'new').map((e) => $state.snapshot(e.data)),
 				modified: this.editTools.filter((e) => e.status === 'modified').map((e) => $state.snapshot(e.data)),
 				deleted: this.editTools.filter((e) => e.status === 'deleted').map((e) => e.data.id)
+			},
+			automations: {
+				new: this.automations.filter((a) => a.status === 'new').map((a) => $state.snapshot(a.data)),
+				modified: this.automations.filter((a) => a.status === 'modified').map((a) => $state.snapshot(a.data)),
+				deleted: this.automations.filter((a) => a.status === 'deleted').map((a) => a.data.id)
+			},
+			fieldTags: {
+				new: this.fieldTags.filter((ft) => ft.status === 'new').map((ft) => $state.snapshot(ft.data)),
+				modified: this.fieldTags.filter((ft) => ft.status === 'modified').map((ft) => $state.snapshot(ft.data)),
+				deleted: this.fieldTags.filter((ft) => ft.status === 'deleted').map((ft) => ft.data.id)
 			}
 		};
 	}

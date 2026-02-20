@@ -49,9 +49,14 @@
 		type ToolsForm,
 		type ToolsFormField,
 		type ToolsEdit,
-		type VisualConfig
+		type ToolsAutomation,
+		type VisualConfig,
+		type TriggerType,
+		type TriggerConfig,
+		type ConditionGroup,
+		type AutomationAction
 	} from '$lib/workflow-builder';
-	import type { ToolInstance, FormToolConfig, EditToolConfig } from '$lib/workflow-builder/tools';
+	import type { ToolInstance, FormToolConfig, EditToolConfig, AutomationToolConfig, FieldTagToolConfig } from '$lib/workflow-builder/tools';
 	import { ToolBar } from '$lib/workflow-builder/components';
 	import type { ColumnPosition } from '$lib/workflow-builder';
 	import { deserialize } from '$app/forms';
@@ -73,7 +78,9 @@
 			connections: data.connections,
 			forms: data.forms,
 			formFields: data.formFields,
-			editTools: data.editTools
+			editTools: data.editTools,
+			automations: data.automations,
+			fieldTags: data.fieldTags
 		});
 	});
 
@@ -461,6 +468,60 @@
 	});
 
 	// ==========================================================================
+	// Automation State
+	// ==========================================================================
+
+	const automations = $derived(builderState.visibleAutomations.map(a => a.data));
+
+	const selectedAutomation = $derived.by((): ToolsAutomation | null => {
+		if (selectionContext.type !== 'automation') return null;
+		const automation = builderState.getAutomationById(selectionContext.automationId);
+		return automation?.data ?? null;
+	});
+
+	// Stage options for automation dropdowns
+	const automationStages = $derived(
+		builderState.visibleStages.map(s => ({ id: s.data.id, name: s.data.stage_name }))
+	);
+
+	// Field options for automation dropdowns (all form fields across the workflow)
+	const automationFieldOptions = $derived.by(() => {
+		const options: { key: string; label: string }[] = [];
+		for (const form of builderState.visibleForms) {
+			const fields = builderState.getFieldsForForm(form.data.id);
+			for (const field of fields) {
+				// Use field ID as key (matches field_key in field_values)
+				options.push({
+					key: field.data.id,
+					label: field.data.field_label || field.data.id
+				});
+			}
+		}
+		return options;
+	});
+
+	// ==========================================================================
+	// Field Tag State
+	// ==========================================================================
+
+	const fieldTagMappings = $derived.by(() => {
+		const ft = builderState.getFieldTagForWorkflow();
+		return ft?.data.tag_mappings ?? [];
+	});
+
+	const fieldTagAllFormFields = $derived.by(() => {
+		return builderState.getAllFormFields();
+	});
+
+	function handleFieldTagMappingChange(tagType: string, fieldId: string | null, config?: Record<string, unknown>) {
+		builderState.setTagMapping(tagType, fieldId, config);
+	}
+
+	function handleFieldTagConfigChange(tagType: string, config: Record<string, unknown>) {
+		builderState.updateTagMappingConfig(tagType, config);
+	}
+
+	// ==========================================================================
 	// Stage Preview Data (participant sidebar lookalike)
 	// ==========================================================================
 
@@ -619,7 +680,7 @@
 
 	// Convert global edit tools to ToolInstances for ToolBar display
 	const globalToolInstances = $derived.by((): ToolInstance[] => {
-		return globalEditTools.map((tool, index) => ({
+		const editInstances: ToolInstance[] = globalEditTools.map((tool, index) => ({
 			id: tool.data.id,
 			toolType: 'edit',
 			config: {
@@ -629,6 +690,26 @@
 			} satisfies EditToolConfig,
 			order: index
 		}));
+		const automationInstances: ToolInstance[] = automations.map((a, index) => ({
+			id: a.id,
+			toolType: 'automation',
+			config: {
+				toolType: 'automation' as const,
+				buttonLabel: a.name
+			} satisfies AutomationToolConfig,
+			order: editInstances.length + index
+		}));
+		const ft = builderState.getFieldTagForWorkflow();
+		const result: ToolInstance[] = [...editInstances, ...automationInstances];
+		if (ft) {
+			result.push({
+				id: '__field_tags__',
+				toolType: 'field_tag',
+				config: { toolType: 'field_tag' } satisfies FieldTagToolConfig,
+				order: editInstances.length + automationInstances.length
+			});
+		}
+		return result;
 	});
 
 	// Callback when a new node is added via drag-drop (from DefaultPanel)
@@ -1046,16 +1127,30 @@
 	}
 
 	function handleAddGlobalTool(toolType: string) {
-		// Currently only 'edit' tool type is supported for global tools
 		if (toolType === 'edit') {
 			const tool = builderState.addGlobalEditTool('form_fields');
-			// Select the newly created tool
 			selectionContext = createContext.editTool(tool.id, { type: 'global' });
+		} else if (toolType === 'automation') {
+			const automation = builderState.addAutomation('on_transition');
+			selectionContext = createContext.automation(automation.id);
+		} else if (toolType === 'field_tag') {
+			builderState.getOrCreateFieldTag();
+			selectionContext = createContext.fieldTags();
 		}
 	}
 
 	function handleSelectGlobalTool(toolId: string) {
-		selectionContext = createContext.editTool(toolId, { type: 'global' });
+		if (toolId === '__field_tags__') {
+			selectionContext = createContext.fieldTags();
+			return;
+		}
+		// Check if it's an automation or edit tool
+		const isAutomation = builderState.getAutomationById(toolId);
+		if (isAutomation) {
+			selectionContext = createContext.automation(toolId);
+		} else {
+			selectionContext = createContext.editTool(toolId, { type: 'global' });
+		}
 	}
 
 	function handleGlobalToolsLabelClick() {
@@ -1065,17 +1160,85 @@
 	function handleDeleteGlobalTool(toolType: string, toolId: string) {
 		if (toolType === 'edit') {
 			builderState.deleteEditTool(toolId);
+		} else if (toolType === 'field_tag') {
+			builderState.deleteFieldTag();
 		}
 		// If we were viewing this tool, go back to global tools panel
 		if (selectionContext.type === 'editTool' && selectionContext.editToolId === toolId) {
 			selectionContext = createContext.globalTools();
 		}
+		if (selectionContext.type === 'fieldTags') {
+			selectionContext = createContext.globalTools();
+		}
+	}
+
+	// ==========================================================================
+	// Automation Handlers
+	// ==========================================================================
+
+	function handleSelectAutomation(automationId: string) {
+		selectionContext = createContext.automation(automationId);
+	}
+
+	function handleAddAutomation() {
+		const automation = builderState.addAutomation('on_transition');
+		selectionContext = createContext.automation(automation.id);
+	}
+
+	function handleToggleAutomation(automationId: string, enabled: boolean) {
+		builderState.updateAutomation(automationId, { is_enabled: enabled });
+	}
+
+	function handleDeleteAutomation(automationId: string) {
+		builderState.deleteAutomation(automationId);
+		if (selectionContext.type === 'automation' && selectionContext.automationId === automationId) {
+			selectionContext = createContext.globalTools();
+		}
+	}
+
+	function handleAutomationNameChange(automationId: string, name: string) {
+		builderState.updateAutomation(automationId, { name });
+	}
+
+	function handleAutomationEnabledChange(automationId: string, enabled: boolean) {
+		builderState.updateAutomation(automationId, { is_enabled: enabled });
+	}
+
+	function handleAutomationTriggerTypeChange(automationId: string, triggerType: TriggerType) {
+		builderState.updateAutomation(automationId, { trigger_type: triggerType });
+	}
+
+	function handleAutomationTriggerConfigChange(automationId: string, config: TriggerConfig) {
+		builderState.updateAutomation(automationId, { trigger_config: config });
+	}
+
+	function handleAutomationConditionsChange(automationId: string, conditions: ConditionGroup | null) {
+		builderState.updateAutomation(automationId, { conditions });
+	}
+
+	function handleAutomationActionsChange(automationId: string, actions: AutomationAction[]) {
+		builderState.updateAutomation(automationId, { actions });
+	}
+
+	function handleAutomationClose() {
+		selectionContext = createContext.globalTools();
+	}
+
+	function handleDeleteFieldTags() {
+		builderState.deleteFieldTag();
+		selectionContext = createContext.globalTools();
 	}
 
 	// Currently selected global tool ID (for ToolBar highlighting)
 	const selectedGlobalToolId = $derived.by(() => {
 		if (selectionContext.type === 'editTool' && selectionContext.attachedTo.type === 'global') {
 			return selectionContext.editToolId;
+		}
+		if (selectionContext.type === 'automation') {
+			return selectionContext.automationId;
+		}
+		if (selectionContext.type === 'fieldTags') {
+			return '__field_tags__';
 		}
 		return undefined;
 	});
@@ -1363,6 +1526,15 @@
 			{connectionForms}
 			{connectionEditTools}
 			globalEditTools={globalEditTools.map(t => t.data)}
+			{automations}
+			{selectedAutomation}
+			{automationStages}
+			{automationFieldOptions}
+			{fieldTagMappings}
+			{fieldTagAllFormFields}
+			onFieldTagMappingChange={handleFieldTagMappingChange}
+			onFieldTagConfigChange={handleFieldTagConfigChange}
+			onFieldTagDelete={handleDeleteFieldTags}
 			{stagePreviewData}
 			onStageRename={handleStageRename}
 			onStageDelete={handleDeleteStage}
@@ -1395,6 +1567,17 @@
 			onEditToolDelete={handleEditToolDelete}
 			onEditToolClose={handleEditToolClose}
 			onGlobalToolDelete={handleDeleteGlobalTool}
+			onSelectAutomation={handleSelectAutomation}
+			onAddAutomation={handleAddAutomation}
+			onToggleAutomation={handleToggleAutomation}
+			onDeleteAutomation={handleDeleteAutomation}
+			onAutomationNameChange={handleAutomationNameChange}
+			onAutomationEnabledChange={handleAutomationEnabledChange}
+			onAutomationTriggerTypeChange={handleAutomationTriggerTypeChange}
+			onAutomationTriggerConfigChange={handleAutomationTriggerConfigChange}
+			onAutomationConditionsChange={handleAutomationConditionsChange}
+			onAutomationActionsChange={handleAutomationActionsChange}
+			onAutomationClose={handleAutomationClose}
 			onAddConnection={handleAddConnectionFromPreview}
 			onAddStageTool={handleAddStageToolFromPreview}
 			onButtonLabelChange={handleButtonLabelChange}
@@ -1487,6 +1670,12 @@
 	}
 
 	.global-tools-label:hover {
+		color: hsl(var(--foreground));
+		background: hsl(var(--accent));
+		border-color: hsl(var(--border));
+	}
+
+	.global-tools-label.active {
 		color: hsl(var(--foreground));
 		background: hsl(var(--accent));
 		border-color: hsl(var(--border));

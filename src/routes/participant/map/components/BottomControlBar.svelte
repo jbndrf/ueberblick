@@ -8,6 +8,7 @@
 		name: string;
 		workflow_type: 'incident' | 'survey';
 		description?: string;
+		entry_button_label?: string;
 	}
 
 	interface Props {

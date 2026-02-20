@@ -54,7 +54,9 @@ export type SelectionContext =
 	| { type: 'form'; formId: string; attachedTo: FormContextData['attachedTo'] }
 	| { type: 'editTool'; editToolId: string; attachedTo: EditToolContextData['attachedTo'] }
 	| { type: 'addTool'; attachedTo: AddToolContextData['attachedTo'] }
-	| { type: 'globalTools' };
+	| { type: 'globalTools' }
+	| { type: 'automation'; automationId: string }
+	| { type: 'fieldTags' };
 
 // Helper to create contexts
 export const createContext = {
@@ -99,7 +101,14 @@ export const createContext = {
 		attachedTo
 	}),
 
-	globalTools: (): SelectionContext => ({ type: 'globalTools' })
+	globalTools: (): SelectionContext => ({ type: 'globalTools' }),
+
+	automation: (automationId: string): SelectionContext => ({
+		type: 'automation',
+		automationId
+	}),
+
+	fieldTags: (): SelectionContext => ({ type: 'fieldTags' })
 };
 
 // Type guards for narrowing
@@ -135,4 +144,16 @@ export function isGlobalToolsContext(
 	ctx: SelectionContext
 ): ctx is Extract<SelectionContext, { type: 'globalTools' }> {
 	return ctx.type === 'globalTools';
+}
+
+export function isAutomationContext(
+	ctx: SelectionContext
+): ctx is Extract<SelectionContext, { type: 'automation' }> {
+	return ctx.type === 'automation';
+}
+
+export function isFieldTagsContext(
+	ctx: SelectionContext
+): ctx is Extract<SelectionContext, { type: 'fieldTags' }> {
+	return ctx.type === 'fieldTags';
 }

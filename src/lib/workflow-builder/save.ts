@@ -45,14 +45,18 @@ export async function saveWorkflow(
 		changes.formFields.deleted.length > 0 ||
 		changes.editTools.new.length > 0 ||
 		changes.editTools.modified.length > 0 ||
-		changes.editTools.deleted.length > 0;
+		changes.editTools.deleted.length > 0 ||
+		changes.automations.new.length > 0 ||
+		changes.automations.modified.length > 0 ||
+		changes.automations.deleted.length > 0;
 
 	console.log('[saveWorkflow] Changes detected:', {
 		stages: { new: changes.stages.new.length, modified: changes.stages.modified.length, deleted: changes.stages.deleted.length },
 		connections: { new: changes.connections.new.length, modified: changes.connections.modified.length, deleted: changes.connections.deleted.length },
 		forms: { new: changes.forms.new.length, modified: changes.forms.modified.length, deleted: changes.forms.deleted.length },
 		formFields: { new: changes.formFields.new.length, modified: changes.formFields.modified.length, deleted: changes.formFields.deleted.length },
-		editTools: { new: changes.editTools.new.length, modified: changes.editTools.modified.length, deleted: changes.editTools.deleted.length }
+		editTools: { new: changes.editTools.new.length, modified: changes.editTools.modified.length, deleted: changes.editTools.deleted.length },
+		automations: { new: changes.automations.new.length, modified: changes.automations.modified.length, deleted: changes.automations.deleted.length }
 	});
 
 	if (!hasChanges) {
@@ -126,6 +130,19 @@ export async function saveWorkflow(
 		}
 		for (const toolId of changes.editTools.deleted) {
 			batch.collection('tools_edit').delete(toolId);
+		}
+
+		// =======================================================================
+		// 6. Automations
+		// =======================================================================
+		for (const automation of changes.automations.new) {
+			batch.collection('tools_automation').create(automation);
+		}
+		for (const automation of changes.automations.modified) {
+			batch.collection('tools_automation').update(automation.id, automation);
+		}
+		for (const automationId of changes.automations.deleted) {
+			batch.collection('tools_automation').delete(automationId);
 		}
 
 		// Execute batch

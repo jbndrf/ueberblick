@@ -13,7 +13,7 @@ import type { Component } from 'svelte';
 // Attachment Target
 // =============================================================================
 
-export type AttachmentTarget = 'stage' | 'connection';
+export type AttachmentTarget = 'stage' | 'connection' | 'global';
 
 // =============================================================================
 // Tool Definition
@@ -64,11 +64,27 @@ export interface EditToolConfig {
 	buttonLabel: string;
 }
 
+/**
+ * Automation tool config - runs actions on triggers
+ */
+export interface AutomationToolConfig {
+	toolType: 'automation';
+	/** Button label */
+	buttonLabel: string;
+}
+
+/**
+ * Field tag tool config - semantic tagging for form fields
+ */
+export interface FieldTagToolConfig {
+	toolType: 'field_tag';
+}
+
 // =============================================================================
 // Tool Config Union
 // =============================================================================
 
-export type ToolConfig = FormToolConfig | EditToolConfig;
+export type ToolConfig = FormToolConfig | EditToolConfig | AutomationToolConfig | FieldTagToolConfig;
 
 // =============================================================================
 // Type Guards

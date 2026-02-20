@@ -158,6 +158,7 @@
 				'tools_forms',
 				'tools_form_fields',
 				'tools_edit',
+				'tools_field_tags',
 				'roles',
 				'map_layers',
 				'map_sources'

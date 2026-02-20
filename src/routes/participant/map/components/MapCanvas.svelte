@@ -70,6 +70,7 @@
 		name: string;
 		marker_color?: string;
 		icon_config?: IconConfig;
+		filter_value_icons?: Record<string, IconConfig>;
 	}
 
 	interface WorkflowInstance {
@@ -102,6 +103,12 @@
 		workflowInstances?: WorkflowInstance[];
 		workflowStages?: WorkflowStageInfo[];
 		visibleWorkflowIds?: string[];
+		/** Map of instanceId -> dropdown value for the tagged filterable field */
+		filterableValues?: Map<string, string>;
+		/** Map of workflowId -> Set of visible tag values */
+		visibleTagValues?: Map<string, Set<string>>;
+		/** All workflow definitions (for filter_value_icons) */
+		workflows?: Array<{ id: string; filter_value_icons?: Record<string, IconConfig> }>;
 		onMarkerClick?: (marker: MapMarker) => void;
 		onWorkflowInstanceClick?: (instance: WorkflowInstance) => void;
 		onMapReady?: (map: LeafletMap) => void;
@@ -118,6 +125,9 @@
 		workflowInstances = [],
 		workflowStages = [],
 		visibleWorkflowIds = [],
+		filterableValues = new Map(),
+		visibleTagValues = new Map(),
+		workflows = [],
 		onMarkerClick,
 		onWorkflowInstanceClick,
 		onMapReady,
@@ -154,6 +164,8 @@
 	let workflowInstanceLayers: Map<string, LeafletMarker> = new Map();
 	/** Track current_stage_id per instance to detect icon changes */
 	let workflowInstanceStageIds: Map<string, string | undefined> = new Map();
+	/** Track filter value per instance to detect icon changes */
+	let workflowInstanceFilterValues: Map<string, string | undefined> = new Map();
 
 	// Derived: compute which markers should be visible on the map
 	const visibleMarkers = $derived.by(() => {
@@ -164,9 +176,22 @@
 
 	// Derived: compute which workflow instances should be visible on the map
 	const visibleWorkflowInstances = $derived.by(() => {
-		return workflowInstances.filter(
-			(i) => visibleWorkflowIds.includes(i.workflow_id) && i.location?.lat && i.location?.lon
-		);
+		return workflowInstances.filter((i) => {
+			// 1. Check workflow visibility (existing)
+			if (!visibleWorkflowIds.includes(i.workflow_id)) return false;
+			// 2. Check location exists (existing)
+			if (!i.location?.lat || !i.location?.lon) return false;
+			// 3. Check tag value filtering
+			const allowedValues = visibleTagValues.get(i.workflow_id);
+			if (allowedValues) {
+				// This workflow has tag-based filtering active
+				const instanceValue = filterableValues.get(i.id);
+				// If instance has a value for the tagged field and it's not in the visible set, hide it
+				if (instanceValue && !allowedValues.has(instanceValue)) return false;
+				// If instance has no value, keep it (don't filter untagged)
+			}
+			return true;
+		});
 	});
 
 	// Default settings
@@ -400,11 +425,23 @@
 	function createWorkflowInstanceIcon(L: typeof import('leaflet'), workflow: WorkflowDef | undefined, instance: WorkflowInstance) {
 		const markerColor = workflow?.marker_color || '#6366f1'; // Default to indigo
 
-		// Fallback chain: stage icon -> workflow icon -> colored circle
+		// Fallback chain: filter value icon -> stage icon -> workflow icon -> colored circle
 		let effectiveIconConfig: IconConfig | undefined;
 
-		// 1. Check current stage icon
-		if (instance.current_stage_id && workflowStages.length > 0) {
+		// 1. Check filter value icon (from workflow.filter_value_icons)
+		const filterValue = filterableValues.get(instance.id);
+		if (filterValue) {
+			// Look up from the workflow def passed via expand, or from the workflows array
+			const wfFilterIcons = workflow?.filter_value_icons
+				?? workflows.find(w => w.id === instance.workflow_id)?.filter_value_icons;
+			const filterIcon = wfFilterIcons?.[filterValue];
+			if (filterIcon?.svgContent) {
+				effectiveIconConfig = filterIcon;
+			}
+		}
+
+		// 2. Check current stage icon
+		if (!effectiveIconConfig && instance.current_stage_id && workflowStages.length > 0) {
 			const stage = workflowStages.find(s => s.id === instance.current_stage_id);
 			const stageIconConfig = stage?.visual_config?.icon_config;
 			if (stageIconConfig?.svgContent) {
@@ -412,7 +449,7 @@
 			}
 		}
 
-		// 2. Fall back to workflow icon
+		// 3. Fall back to workflow icon
 		if (!effectiveIconConfig && workflow?.icon_config?.svgContent) {
 			effectiveIconConfig = workflow.icon_config;
 		}
@@ -462,6 +499,7 @@
 		for (const id of toRemove) {
 			workflowInstanceLayers.delete(id);
 			workflowInstanceStageIds.delete(id);
+			workflowInstanceFilterValues.delete(id);
 		}
 
 		// Add or update visible instances
@@ -476,13 +514,16 @@
 				if (currentLatLng.lat !== instance.location.lat || currentLatLng.lng !== instance.location.lon) {
 					existingMarker.setLatLng([instance.location.lat, instance.location.lon]);
 				}
-				// Update icon if stage changed
+				// Update icon if stage or filter value changed
 				const prevStageId = workflowInstanceStageIds.get(instance.id);
-				if (prevStageId !== instance.current_stage_id) {
+				const prevFilterValue = workflowInstanceFilterValues.get(instance.id);
+				const currentFilterValue = filterableValues.get(instance.id);
+				if (prevStageId !== instance.current_stage_id || prevFilterValue !== currentFilterValue) {
 					const workflow = instance.expand?.workflow_id;
 					const newIcon = createWorkflowInstanceIcon(L, workflow, instance);
 					existingMarker.setIcon(newIcon);
 					workflowInstanceStageIds.set(instance.id, instance.current_stage_id);
+					workflowInstanceFilterValues.set(instance.id, currentFilterValue);
 				}
 			} else {
 				// Create new marker
@@ -499,6 +540,7 @@
 
 				workflowInstanceLayers.set(instance.id, leafletMarker);
 				workflowInstanceStageIds.set(instance.id, instance.current_stage_id);
+				workflowInstanceFilterValues.set(instance.id, filterableValues.get(instance.id));
 			}
 		}
 	}

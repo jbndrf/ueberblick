@@ -5,13 +5,14 @@
 	import * as Tabs from '$lib/components/ui/tabs';
 	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 
-	import { Globe } from 'lucide-svelte';
+	import { Globe, Zap, Plus, ChevronRight } from 'lucide-svelte';
+	import * as Switch from '$lib/components/ui/switch';
 
 	import PropertySection from '../shared/PropertySection.svelte';
 	import ConnectedToolItem from '../shared/ConnectedToolItem.svelte';
 
 	import { toolRegistry } from '$lib/workflow-builder/tools';
-	import type { ToolsEdit, VisualConfig } from '$lib/workflow-builder';
+	import type { ToolsEdit, ToolsAutomation, VisualConfig } from '$lib/workflow-builder';
 
 	type Role = {
 		id: string;
@@ -22,6 +23,8 @@
 	type Props = {
 		/** Global edit tools (is_global=true) */
 		globalEditTools: ToolsEdit[];
+		/** Automations for this workflow */
+		automations?: ToolsAutomation[];
 		/** Available roles */
 		roles: Role[];
 		/** Callback when a tool's allowed_roles change */
@@ -34,17 +37,36 @@
 		onDeleteTool?: (toolType: string, toolId: string) => void;
 		/** Callback to create a new role via server action */
 		onCreateRole?: (name: string) => Promise<Role>;
+		/** Callback when an automation is selected (opens editor) */
+		onSelectAutomation?: (automationId: string) => void;
+		/** Callback to add a new automation */
+		onAddAutomation?: () => void;
+		/** Callback to toggle automation enabled state */
+		onToggleAutomation?: (automationId: string, enabled: boolean) => void;
+		/** Callback to delete an automation */
+		onDeleteAutomation?: (automationId: string) => void;
 	};
 
 	let {
 		globalEditTools = [],
+		automations = [],
 		roles,
 		onToolRolesChange,
 		onToolVisualConfigChange,
 		onSelectTool,
 		onDeleteTool,
-		onCreateRole
+		onCreateRole,
+		onSelectAutomation,
+		onAddAutomation,
+		onToggleAutomation,
+		onDeleteAutomation
 	}: Props = $props();
+
+	const TRIGGER_LABELS: Record<string, string> = {
+		on_transition: 'Transition',
+		on_field_change: 'Field Change',
+		time_based: 'Time Based'
+	};
 
 	let activeTab = $state('permissions');
 
@@ -118,6 +140,7 @@
 		<Tabs.List class="panel-tabs">
 			<Tabs.Trigger value="permissions">Permissions</Tabs.Trigger>
 			<Tabs.Trigger value="tools">Tools</Tabs.Trigger>
+			<Tabs.Trigger value="automations">Automations</Tabs.Trigger>
 		</Tabs.List>
 
 		<div class="panel-content">
@@ -183,6 +206,52 @@
 						</div>
 					{/if}
 				</PropertySection>
+			</Tabs.Content>
+
+			<!-- Automations Tab -->
+			<Tabs.Content value="automations" class="tab-content">
+				<div class="automations-header">
+					<Button variant="outline" size="sm" onclick={() => onAddAutomation?.()}>
+						<Plus class="h-3.5 w-3.5 mr-1.5" />
+						Add Automation
+					</Button>
+				</div>
+
+				{#if automations.length === 0}
+					<p class="empty-text">No automations configured. Automations run automatically based on triggers like stage transitions, field changes, or time-based schedules.</p>
+				{:else}
+					<div class="automations-list">
+						{#each automations as automation (automation.id)}
+							<button
+								class="automation-item"
+								onclick={() => onSelectAutomation?.(automation.id)}
+							>
+								<div class="automation-item-left">
+									<div class="automation-icon">
+										<Zap class="h-3.5 w-3.5" />
+									</div>
+									<div class="automation-info">
+										<span class="automation-name">{automation.name}</span>
+										<span class="automation-trigger">{TRIGGER_LABELS[automation.trigger_type] || automation.trigger_type}</span>
+									</div>
+								</div>
+								<div class="automation-item-right">
+									<!-- svelte-ignore a11y_click_events_have_key_events -->
+									<!-- svelte-ignore a11y_no_static_element_interactions -->
+									<div
+										class="automation-toggle"
+										onclick={(e) => { e.stopPropagation(); onToggleAutomation?.(automation.id, !automation.is_enabled); }}
+									>
+										<Switch.Root checked={automation.is_enabled}>
+											<Switch.Thumb />
+										</Switch.Root>
+									</div>
+									<ChevronRight class="h-4 w-4 chevron-icon" />
+								</div>
+							</button>
+						{/each}
+					</div>
+				{/if}
 			</Tabs.Content>
 		</div>
 	</Tabs.Root>
@@ -317,5 +386,95 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.375rem;
+	}
+
+	/* Automations styling */
+	.automations-header {
+		display: flex;
+		justify-content: flex-end;
+		padding: 0.75rem 1rem 0;
+	}
+
+	.automations-list {
+		display: flex;
+		flex-direction: column;
+		padding: 0.5rem;
+		gap: 0.25rem;
+	}
+
+	.automation-item {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		padding: 0.625rem 0.75rem;
+		border-radius: 0.375rem;
+		border: 1px solid hsl(var(--border));
+		background: hsl(var(--card));
+		cursor: pointer;
+		transition: background 0.1s ease;
+		text-align: left;
+		width: 100%;
+	}
+
+	.automation-item:hover {
+		background: hsl(var(--accent));
+	}
+
+	.automation-item-left {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		min-width: 0;
+		flex: 1;
+	}
+
+	.automation-icon {
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		border-radius: 0.25rem;
+		background: hsl(var(--primary) / 0.1);
+		color: hsl(var(--primary));
+	}
+
+	.automation-info {
+		display: flex;
+		flex-direction: column;
+		gap: 0.0625rem;
+		min-width: 0;
+	}
+
+	.automation-name {
+		font-size: 0.8125rem;
+		font-weight: 500;
+		color: hsl(var(--foreground));
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.automation-trigger {
+		font-size: 0.6875rem;
+		color: hsl(var(--muted-foreground));
+	}
+
+	.automation-item-right {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-shrink: 0;
+	}
+
+	.automation-toggle {
+		display: flex;
+		align-items: center;
+	}
+
+	.chevron-icon {
+		color: hsl(var(--muted-foreground));
 	}
 </style>

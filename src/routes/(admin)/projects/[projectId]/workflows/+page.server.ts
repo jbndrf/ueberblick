@@ -187,6 +187,33 @@ export const actions: Actions = {
 		}
 	},
 
+	updateFilterValueIcons: async ({ request, params, locals: { pb } }) => {
+		const formData = await request.formData();
+		const workflowId = formData.get('id') as string;
+		const iconsJson = formData.get('filterValueIcons') as string;
+
+		if (!workflowId) {
+			return fail(400, { message: 'Workflow ID is required' });
+		}
+
+		let filterValueIcons;
+		try {
+			filterValueIcons = iconsJson ? JSON.parse(iconsJson) : {};
+		} catch {
+			return fail(400, { message: 'Invalid filter value icons JSON' });
+		}
+
+		try {
+			await pb.collection('workflows').update(workflowId, {
+				filter_value_icons: filterValueIcons
+			});
+			return { success: true };
+		} catch (err) {
+			console.error('Error updating filter value icons:', err);
+			return fail(500, { message: 'Failed to update filter value icons' });
+		}
+	},
+
 	toggleStatus: async ({ request, params, locals: { pb } }) => {
 		const formData = await request.formData();
 		const workflowId = formData.get('id') as string;

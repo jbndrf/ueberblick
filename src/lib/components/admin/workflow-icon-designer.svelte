@@ -40,21 +40,37 @@
 		workflowName: string;
 		initialIconConfig?: IconConfig;
 		stages: Stage[];
+		filterMode?: 'none' | 'stage' | 'field';
+		filterFieldOptions?: string[];
+		filterValueIcons?: Record<string, IconConfig>;
 		onSaveWorkflowIcon: (config: IconConfig | null) => Promise<void>;
 		onSaveStageIcon: (stageId: string, iconConfig: IconConfig | null) => Promise<void>;
+		onSaveFilterValueIcon?: (value: string, config: IconConfig | null) => Promise<void>;
 		onCancel?: () => void;
 	}
 
-	let { workflowName, initialIconConfig, stages, onSaveWorkflowIcon, onSaveStageIcon, onCancel }: Props = $props();
+	let {
+		workflowName,
+		initialIconConfig,
+		stages,
+		filterMode = 'none',
+		filterFieldOptions = [],
+		filterValueIcons = {},
+		onSaveWorkflowIcon,
+		onSaveStageIcon,
+		onSaveFilterValueIcon,
+		onCancel
+	}: Props = $props();
 
 	// State machine: 'overview' | 'editing'
 	let view = $state<'overview' | 'editing'>('overview');
-	let editingTarget = $state<{ type: 'workflow' } | { type: 'stage'; stageId: string } | null>(null);
+	let editingTarget = $state<{ type: 'workflow' } | { type: 'stage'; stageId: string } | { type: 'filterValue'; value: string } | null>(null);
 	let editingInitialConfig = $state<IconConfig | undefined>(undefined);
 
 	// Local state for icon configs (so we can show previews before saving)
 	let workflowIconConfig = $state<IconConfig | undefined>(initialIconConfig);
 	let stageIconConfigs = $state<Map<string, IconConfig>>(new Map());
+	let localFilterValueIcons = $state<Record<string, IconConfig>>(filterValueIcons as Record<string, IconConfig>);
 
 	// Initialize stage icon configs from visual_config
 	$effect(() => {
@@ -111,6 +127,24 @@
 		}
 	}
 
+	function editFilterValueIcon(value: string) {
+		editingTarget = { type: 'filterValue', value };
+		editingInitialConfig = localFilterValueIcons[value];
+		view = 'editing';
+	}
+
+	async function clearFilterValueIcon(value: string) {
+		try {
+			await onSaveFilterValueIcon?.(value, null);
+			const updated = { ...localFilterValueIcons };
+			delete updated[value];
+			localFilterValueIcons = updated;
+			toast.success('Filter value icon cleared');
+		} catch {
+			toast.error('Failed to clear filter value icon');
+		}
+	}
+
 	async function handleDesignerSave(config: IconConfig) {
 		if (!editingTarget) return;
 
@@ -118,10 +152,13 @@
 			if (editingTarget.type === 'workflow') {
 				await onSaveWorkflowIcon(config);
 				workflowIconConfig = config;
-			} else {
+			} else if (editingTarget.type === 'stage') {
 				await onSaveStageIcon(editingTarget.stageId, config);
 				stageIconConfigs.set(editingTarget.stageId, config);
 				stageIconConfigs = stageIconConfigs; // trigger reactivity
+			} else if (editingTarget.type === 'filterValue') {
+				await onSaveFilterValueIcon?.(editingTarget.value, config);
+				localFilterValueIcons = { ...localFilterValueIcons, [editingTarget.value]: config };
 			}
 			view = 'overview';
 			editingTarget = null;
@@ -147,6 +184,7 @@
 	function getEditingLabel(): string {
 		if (!editingTarget) return '';
 		if (editingTarget.type === 'workflow') return `Default Icon: ${workflowName}`;
+		if (editingTarget.type === 'filterValue') return `Filter Value Icon: ${editingTarget.value}`;
 		const target = editingTarget;
 		const stage = stages.find(s => s.id === target.stageId);
 		return `Stage Icon: ${stage?.stage_name ?? 'Unknown'}`;
@@ -236,6 +274,9 @@
 				<h3 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
 					Stage Overrides
 					<span class="ml-1 font-normal normal-case">({sortedStages.length} stages)</span>
+					{#if filterMode === 'stage'}
+						<span class="ml-1 font-normal normal-case text-xs">(used for map filtering)</span>
+					{/if}
 				</h3>
 
 				{#if sortedStages.length === 0}
@@ -295,6 +336,66 @@
 					</div>
 				{/if}
 			</div>
+
+			<!-- Filter Value Icons (only when filterMode='field') -->
+			{#if filterMode === 'field' && filterFieldOptions.length > 0}
+				<Separator />
+
+				<div class="space-y-3">
+					<h3 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+						Filter Value Icons
+						<span class="ml-1 font-normal normal-case">({filterFieldOptions.length} values)</span>
+					</h3>
+					<p class="text-xs text-muted-foreground">
+						Set icons for each dropdown value used in map filtering.
+					</p>
+
+					<div class="space-y-2">
+						{#each filterFieldOptions as value}
+							{@const valueIcon = localFilterValueIcons[value]}
+							<div class="flex items-center gap-3 rounded-lg border p-3">
+								<!-- Icon preview -->
+								<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-muted/50">
+									{#if valueIcon?.svgContent}
+										{@html renderIconPreview(valueIcon, 24)}
+									{:else if workflowIconConfig?.svgContent}
+										<div class="opacity-30">
+											{@html renderIconPreview(workflowIconConfig, 20)}
+										</div>
+									{:else}
+										<div class="h-3 w-3 rounded-full bg-muted-foreground/30"></div>
+									{/if}
+								</div>
+
+								<!-- Value info -->
+								<div class="min-w-0 flex-1">
+									<div class="text-sm font-medium">{value}</div>
+									<div class="text-xs text-muted-foreground">
+										{#if valueIcon?.svgContent}
+											Custom icon
+										{:else}
+											Uses default
+										{/if}
+									</div>
+								</div>
+
+								<!-- Actions -->
+								<div class="flex gap-2">
+									<Button variant="ghost" size="sm" onclick={() => editFilterValueIcon(value)}>
+										<Pencil class="mr-1 h-3 w-3" />
+										{valueIcon?.svgContent ? 'Edit' : 'Set'}
+									</Button>
+									{#if valueIcon?.svgContent}
+										<Button variant="ghost" size="sm" onclick={() => clearFilterValueIcon(value)}>
+											<Trash2 class="h-3 w-3" />
+										</Button>
+									{/if}
+								</div>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
 		</div>
 
 		<!-- Footer -->

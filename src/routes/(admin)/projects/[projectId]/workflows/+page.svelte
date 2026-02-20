@@ -41,23 +41,58 @@
 	let iconDesignerWorkflow = $state<Workflow | null>(null);
 	let iconDesignerStages = $state<any[]>([]);
 	let iconDesignerWorkflowIconConfig = $state<any>(undefined);
+	let iconDesignerFilterMode = $state<'none' | 'stage' | 'field'>('none');
+	let iconDesignerFilterFieldOptions = $state<string[]>([]);
+	let iconDesignerFilterValueIcons = $state<Record<string, any>>({});
 
 	async function openIconDesigner(workflow: Workflow) {
 		try {
 			const pb = getPocketBase();
-			// Fetch stages and full workflow data (including icon_config) client-side
-			const [stages, fullWorkflow] = await Promise.all([
+			// Fetch stages, full workflow data, and field tags client-side
+			const [stages, fullWorkflow, fieldTagRecords] = await Promise.all([
 				pb.collection('workflow_stages').getFullList({
 					filter: `workflow_id = "${workflow.id}"`,
 					sort: 'stage_order'
 				}),
-				pb.collection('workflows').getOne(workflow.id)
+				pb.collection('workflows').getOne(workflow.id),
+				pb.collection('tools_field_tags').getFullList({
+					filter: `workflow_id = "${workflow.id}"`
+				})
 			]);
 			iconDesignerWorkflow = workflow;
 			iconDesignerStages = stages;
 			iconDesignerWorkflowIconConfig = (fullWorkflow as any).icon_config?.svgContent
 				? (fullWorkflow as any).icon_config
 				: undefined;
+			iconDesignerFilterValueIcons = (fullWorkflow as any).filter_value_icons || {};
+
+			// Determine filter mode from field tags
+			let filterMode: 'none' | 'stage' | 'field' = 'none';
+			let filterFieldOptions: string[] = [];
+
+			for (const ft of fieldTagRecords) {
+				const mappings = (ft.tag_mappings || []) as Array<{ tagType: string; fieldId: string | null; config: Record<string, unknown> }>;
+				const filterable = mappings.find((m) => m.tagType === 'filterable');
+				if (!filterable) continue;
+
+				const filterBy = (filterable.config?.filterBy as string) || 'field';
+				if (filterBy === 'stage') {
+					filterMode = 'stage';
+				} else if (filterBy === 'field' && filterable.fieldId) {
+					filterMode = 'field';
+					// Fetch the form field to get its options
+					try {
+						const formField = await pb.collection('tools_form_fields').getOne(filterable.fieldId);
+						const opts = (formField.field_options as any)?.options || [];
+						filterFieldOptions = opts.map((o: any) => o.label || o);
+					} catch {
+						// Field might have been deleted
+					}
+				}
+			}
+
+			iconDesignerFilterMode = filterMode;
+			iconDesignerFilterFieldOptions = filterFieldOptions;
 			iconDesignerOpen = true;
 		} catch (err) {
 			console.error('Error loading icon designer data:', err);
@@ -90,6 +125,34 @@
 		formData.append('iconConfig', config ? JSON.stringify(config) : '');
 
 		const response = await fetch('?/updateStageIconConfig', {
+			method: 'POST',
+			body: formData
+		});
+
+		const result = await response.json();
+		if (result.type !== 'success') {
+			throw new Error('Failed to save');
+		}
+	}
+
+	async function handleSaveFilterValueIcon(value: string, config: any) {
+		if (!iconDesignerWorkflow) return;
+
+		// Update local state first
+		const updated = { ...iconDesignerFilterValueIcons };
+		if (config) {
+			updated[value] = config;
+		} else {
+			delete updated[value];
+		}
+		iconDesignerFilterValueIcons = updated;
+
+		// Persist to server
+		const formData = new FormData();
+		formData.append('id', iconDesignerWorkflow.id);
+		formData.append('filterValueIcons', JSON.stringify(updated));
+
+		const response = await fetch('?/updateFilterValueIcons', {
 			method: 'POST',
 			body: formData
 		});
@@ -407,8 +470,12 @@
 			workflowName={iconDesignerWorkflow.name}
 			initialIconConfig={iconDesignerWorkflowIconConfig}
 			stages={iconDesignerStages}
+			filterMode={iconDesignerFilterMode}
+			filterFieldOptions={iconDesignerFilterFieldOptions}
+			filterValueIcons={iconDesignerFilterValueIcons}
 			onSaveWorkflowIcon={handleSaveWorkflowIcon}
 			onSaveStageIcon={handleSaveStageIcon}
+			onSaveFilterValueIcon={handleSaveFilterValueIcon}
 			onCancel={() => {
 				iconDesignerOpen = false;
 				iconDesignerWorkflow = null;

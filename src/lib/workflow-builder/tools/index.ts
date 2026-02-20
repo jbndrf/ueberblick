@@ -10,6 +10,8 @@ export type {
 	ToolDefinition,
 	FormToolConfig,
 	EditToolConfig,
+	AutomationToolConfig,
+	FieldTagToolConfig,
 	ToolConfig,
 	ToolInstance
 } from './types';
@@ -33,4 +35,4 @@ export type {
 } from './schemas';
 
 // Registry
-export { toolRegistry, formTool, editTool } from './registry';
+export { toolRegistry, formTool, editTool, fieldTagTool, automationTool } from './registry';
