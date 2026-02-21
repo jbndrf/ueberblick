@@ -195,8 +195,8 @@ export {
 	storeTile,
 	getTile,
 	hasTile,
-	getTilesForSource,
-	deleteTilesForSource,
+	getTilesForLayer,
+	deleteTilesForLayer,
 	clearAllTiles,
 	getTileCacheStats,
 	// ZIP extraction for packages
@@ -260,7 +260,6 @@ export type {
 	ToolEdit,
 	MarkerCategory,
 	Role,
-	MapSource,
 	MapLayer,
 
 	// Network

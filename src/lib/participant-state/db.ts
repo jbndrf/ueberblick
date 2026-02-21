@@ -85,11 +85,11 @@ export interface CachedRecord {
 
 /**
  * Cached map tile
- * Key format: "{sourceId}/{z}/{x}/{y}" to support multiple tile sources
+ * Key format: "{layerId}/{z}/{x}/{y}" to support multiple tile layers
  */
 export interface CachedTile {
-	key: string; // "{sourceId}/{z}/{x}/{y}"
-	sourceId: string; // map_sources.id
+	key: string; // "{layerId}/{z}/{x}/{y}"
+	layerId: string; // map_layers.id
 	z: number;
 	x: number;
 	y: number;
@@ -128,12 +128,12 @@ interface ParticipantStateDB extends DBSchema {
 		};
 	};
 
-	// Map tile cache (supports multiple tile sources)
+	// Map tile cache (supports multiple tile layers)
 	tiles: {
-		key: string; // "{sourceId}/{z}/{x}/{y}"
+		key: string; // "{layerId}/{z}/{x}/{y}"
 		value: CachedTile;
 		indexes: {
-			by_source: string;
+			by_layer: string;
 			by_zoom: number;
 		};
 	};
@@ -178,7 +178,7 @@ interface ParticipantStateDB extends DBSchema {
 }
 
 const DB_NAME = 'participant-state';
-const DB_VERSION = 7;
+const DB_VERSION = 8;
 
 // Promise-based singleton: all concurrent callers share one openDB() call.
 let dbPromise: Promise<IDBPDatabase<ParticipantStateDB>> | null = null;
@@ -234,10 +234,19 @@ function upgradeSchema(db: IDBPDatabase<ParticipantStateDB>, oldVersion: number)
 		store.createIndex('by-participant', 'participantId');
 	}
 
-	// Map tile cache (v4) - supports multiple tile sources
+	// Map tile cache (v4, index renamed v8) - supports multiple tile layers
 	if (!db.objectStoreNames.contains('tiles')) {
 		const store = db.createObjectStore('tiles', { keyPath: 'key' });
-		store.createIndex('by_source', 'sourceId');
+		store.createIndex('by_layer', 'layerId');
+		store.createIndex('by_zoom', 'z');
+	}
+
+	// v8: rename by_source index to by_layer (sourceId -> layerId)
+	if (oldVersion >= 4 && oldVersion < 8 && db.objectStoreNames.contains('tiles')) {
+		// Can't rename indexes in-place; delete and recreate the tiles store
+		db.deleteObjectStore('tiles');
+		const store = db.createObjectStore('tiles', { keyPath: 'key' });
+		store.createIndex('by_layer', 'layerId');
 		store.createIndex('by_zoom', 'z');
 	}
 

@@ -5,13 +5,14 @@
 	import * as m from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { toast } from 'svelte-sonner';
-	import { Workflow as WorkflowIcon, Hammer, Palette } from 'lucide-svelte';
+	import { Workflow as WorkflowIcon, Hammer, Palette, Copy, Import } from 'lucide-svelte';
 	import type { PageData } from './$types';
 	import { BaseTable, type BaseColumnConfig } from '$lib/components/admin/base-table';
 	import CrudDialogs, { type CrudDialogConfig } from '$lib/components/admin/crud-dialogs.svelte';
 	import { createFieldUpdateHandler, createToggleHandler } from '$lib/utils/table-actions';
 	import { Label } from '$lib/components/ui/label';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import * as Dialog from '$lib/components/ui/dialog';
 	import { ChevronDown } from 'lucide-svelte';
 	import WorkflowIconDesigner from '$lib/components/admin/workflow-icon-designer.svelte';
 	import { getPocketBase } from '$lib/pocketbase';
@@ -36,6 +37,8 @@
 	let selectedWorkflow = $state<Workflow | null>(null);
 	let selectedWorkflowType = $state<'incident' | 'survey'>('incident');
 
+	let duplicating = $state(false);
+
 	// Icon designer state
 	let iconDesignerOpen = $state(false);
 	let iconDesignerWorkflow = $state<Workflow | null>(null);
@@ -44,6 +47,65 @@
 	let iconDesignerFilterMode = $state<'none' | 'stage' | 'field'>('none');
 	let iconDesignerFilterFieldOptions = $state<string[]>([]);
 	let iconDesignerFilterValueIcons = $state<Record<string, any>>({});
+
+	// Import dialog state
+	let importDialogOpen = $state(false);
+	let importSelectedProjectId = $state('');
+	let importWorkflows = $state<Array<{ id: string; name: string }>>([]);
+	let importSelectedWorkflowId = $state('');
+	let importLoading = $state(false);
+	let importFetchingWorkflows = $state(false);
+
+	async function onImportProjectChange(projectId: string) {
+		importSelectedProjectId = projectId;
+		importSelectedWorkflowId = '';
+		importWorkflows = [];
+		if (!projectId) return;
+
+		importFetchingWorkflows = true;
+		try {
+			const pb = getPocketBase();
+			const wfs = await pb.collection('workflows').getFullList({
+				filter: `project_id = "${projectId}"`,
+				sort: 'name'
+			});
+			importWorkflows = wfs.map((w: any) => ({ id: w.id, name: w.name }));
+		} catch (err) {
+			console.error('Error fetching workflows for project:', err);
+			toast.error('Failed to load workflows');
+		} finally {
+			importFetchingWorkflows = false;
+		}
+	}
+
+	async function handleImport() {
+		if (!importSelectedWorkflowId) return;
+		importLoading = true;
+		try {
+			const formData = new FormData();
+			formData.append('sourceWorkflowId', importSelectedWorkflowId);
+			const response = await fetch('?/importFromProject', {
+				method: 'POST',
+				body: formData
+			});
+			const result = await response.json();
+			if (result.type === 'success') {
+				await invalidateAll();
+				toast.success('Workflow imported. Role permissions have been reset and must be configured for this project.');
+				importDialogOpen = false;
+				importSelectedProjectId = '';
+				importSelectedWorkflowId = '';
+				importWorkflows = [];
+			} else {
+				toast.error('Failed to import workflow');
+			}
+		} catch (err) {
+			console.error('Error importing workflow:', err);
+			toast.error('Failed to import workflow');
+		} finally {
+			importLoading = false;
+		}
+	}
 
 	async function openIconDesigner(workflow: Workflow) {
 		try {
@@ -335,6 +397,24 @@
 	{/if}
 {/snippet}
 
+{#snippet importButton()}
+	<DropdownMenu.Root>
+		<DropdownMenu.Trigger asChild>
+			{#snippet child({ props })}
+				<Button variant="outline" size="sm" class="rounded-r-none border-r-0 px-2" {...props}>
+					<ChevronDown class="h-4 w-4" />
+				</Button>
+			{/snippet}
+		</DropdownMenu.Trigger>
+		<DropdownMenu.Content align="start">
+			<DropdownMenu.Item onclick={() => (importDialogOpen = true)}>
+				<Import class="mr-2 h-4 w-4" />
+				Import from Project
+			</DropdownMenu.Item>
+		</DropdownMenu.Content>
+	</DropdownMenu.Root>
+{/snippet}
+
 <div class="flex flex-col gap-6 min-w-0 w-full">
 	<!-- Header -->
 	<div>
@@ -372,6 +452,34 @@
 					onClick: (workflow) => {
 						setTimeout(() => openIconDesigner(workflow), 0);
 					}
+				},
+				{
+					label: 'Duplicate',
+					icon: Copy,
+					onClick: async (workflow) => {
+						if (duplicating) return;
+						duplicating = true;
+						try {
+							const formData = new FormData();
+							formData.append('id', workflow.id);
+							const response = await fetch('?/duplicate', {
+								method: 'POST',
+								body: formData
+							});
+							const result = await response.json();
+							if (result.type === 'success') {
+								await invalidateAll();
+								toast.success(`Workflow duplicated as "Copy of ${workflow.name}"`);
+							} else {
+								toast.error('Failed to duplicate workflow');
+							}
+						} catch (err) {
+							console.error('Error duplicating workflow:', err);
+							toast.error('Failed to duplicate workflow');
+						} finally {
+							duplicating = false;
+						}
+					}
 				}
 			],
 			onEdit: (workflow) => {
@@ -383,6 +491,7 @@
 				deleteDialogOpen = true;
 			}
 		}}
+		createAreaPrefix={importButton}
 		inlineRowCreation={{
 			enabled: true,
 			createButtonLabel: 'Create Workflow',
@@ -458,6 +567,64 @@
 		</div>
 	{/snippet}
 </CrudDialogs>
+
+<!-- Import from Project Dialog -->
+<Dialog.Root bind:open={importDialogOpen} onOpenChange={(open) => {
+	if (!open) {
+		importSelectedProjectId = '';
+		importSelectedWorkflowId = '';
+		importWorkflows = [];
+	}
+}}>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>Import Workflow from Project</Dialog.Title>
+			<Dialog.Description>
+				Select a project and workflow to import. Role permissions will be reset and must be configured after import.
+			</Dialog.Description>
+		</Dialog.Header>
+		<div class="grid gap-4 py-4">
+			<div class="grid gap-2">
+				<Label for="import-project">Project</Label>
+				<select
+					id="import-project"
+					value={importSelectedProjectId}
+					onchange={(e) => onImportProjectChange(e.currentTarget.value)}
+					class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+				>
+					<option value="">Select a project...</option>
+					{#each (data.projects || []).filter((p) => p.id !== $page.params.projectId) as project}
+						<option value={project.id}>{project.name}</option>
+					{/each}
+				</select>
+			</div>
+			<div class="grid gap-2">
+				<Label for="import-workflow">Workflow</Label>
+				<select
+					id="import-workflow"
+					value={importSelectedWorkflowId}
+					onchange={(e) => (importSelectedWorkflowId = e.currentTarget.value)}
+					disabled={!importSelectedProjectId || importFetchingWorkflows}
+					class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					<option value="">{importFetchingWorkflows ? 'Loading...' : 'Select a workflow...'}</option>
+					{#each importWorkflows as wf}
+						<option value={wf.id}>{wf.name}</option>
+					{/each}
+				</select>
+			</div>
+		</div>
+		<Dialog.Footer>
+			<Button variant="outline" onclick={() => (importDialogOpen = false)}>Cancel</Button>
+			<Button
+				onclick={handleImport}
+				disabled={!importSelectedWorkflowId || importLoading}
+			>
+				{importLoading ? 'Importing...' : 'Import'}
+			</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
 
 <!-- Workflow Icon Designer Modal -->
 {#if iconDesignerOpen && iconDesignerWorkflow}

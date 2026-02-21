@@ -19,7 +19,8 @@
 
 	const ACTION_TYPES = [
 		{ value: 'set_instance_status', label: 'Set Instance Status' },
-		{ value: 'set_field_value', label: 'Set Field Value' }
+		{ value: 'set_field_value', label: 'Set Field Value' },
+		{ value: 'set_stage', label: 'Set Stage' }
 	];
 
 	const STATUS_OPTIONS = ['active', 'completed', 'archived', 'deleted'];
@@ -56,8 +57,10 @@
 							const type = e.currentTarget.value;
 							if (type === 'set_instance_status') {
 								updateAction(index, { type: 'set_instance_status', params: { status: 'archived' } });
-							} else {
+							} else if (type === 'set_field_value') {
 								updateAction(index, { type: 'set_field_value', params: { field_key: '', value: '', stage_id: stageOptions[0]?.id ?? '' } });
+							} else if (type === 'set_stage') {
+								updateAction(index, { type: 'set_stage', params: { stage_id: stageOptions[0]?.id ?? '' } });
 							}
 						}}
 					>
@@ -113,10 +116,13 @@
 										params: { ...action.params, value: e.currentTarget.value }
 									});
 								}}
-								placeholder="Value..."
+								placeholder="Value or expression..."
 								class="h-7 text-xs"
 							/>
 						</div>
+						<span class="expression-help">
+							Expressions: {'{field_key}'} + 1, {'{a}'} - {'{b}'}
+						</span>
 						<div class="action-param-row">
 							<span class="param-label">Stage:</span>
 							<select
@@ -129,6 +135,25 @@
 									});
 								}}
 							>
+								{#each stageOptions as stage}
+									<option value={stage.id}>{stage.name}</option>
+								{/each}
+							</select>
+						</div>
+					{:else if action.type === 'set_stage'}
+						<div class="action-param-row">
+							<span class="param-label">Stage:</span>
+							<select
+								class="stage-select"
+								value={action.params.stage_id}
+								onchange={(e) => {
+									updateAction(index, {
+										type: 'set_stage',
+										params: { stage_id: e.currentTarget.value }
+									});
+								}}
+							>
+								<option value="">Select stage...</option>
 								{#each stageOptions as stage}
 									<option value={stage.id}>{stage.name}</option>
 								{/each}
@@ -208,6 +233,13 @@
 		color: hsl(var(--muted-foreground));
 		white-space: nowrap;
 		min-width: 3rem;
+	}
+
+	.expression-help {
+		font-size: 0.5625rem;
+		color: hsl(var(--muted-foreground));
+		font-style: italic;
+		padding: 0 0.25rem;
 	}
 
 	:global(.add-action-btn) {

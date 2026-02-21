@@ -156,11 +156,153 @@ onRecordAfterUpdateSuccess((e) => {
 }, "workflow_instances");
 
 // =============================================================================
+// Expression Parser (arithmetic only, no eval)
+// =============================================================================
+
+/**
+ * Check if a string contains expression syntax (field references like {key}).
+ */
+function isExpression(value) {
+  return typeof value === "string" && value.indexOf("{") !== -1 && value.indexOf("}") !== -1;
+}
+
+/**
+ * Look up a field value for an instance.
+ * @returns {string} The field value or "" if not found.
+ */
+function lookupFieldValue(instanceId, fieldKey) {
+  try {
+    const records = $app.findRecordsByFilter(
+      "workflow_instance_field_values",
+      'instance_id = "' + instanceId + '" && field_key = "' + fieldKey + '"',
+      "-updated",
+      1
+    );
+    if (records.length > 0) {
+      return records[0].get("value") || "";
+    }
+  } catch (err) {
+    // Field not found
+  }
+  return "";
+}
+
+/**
+ * Evaluate an arithmetic expression with field references.
+ * Grammar: additive = multiplicative (('+' | '-') multiplicative)*
+ *          multiplicative = unary (('*' | '/') unary)*
+ *          unary = '-' unary | primary
+ *          primary = NUMBER | FIELD_REF | '(' additive ')'
+ *
+ * Field references: {field_key} resolved via lookupFieldValue()
+ * Returns the numeric result as a string.
+ * Throws on invalid syntax, non-numeric fields, division by zero.
+ */
+function evaluateExpression(expr, instanceId) {
+  var pos = 0;
+  var str = expr.trim();
+
+  function peek() { return pos < str.length ? str[pos] : null; }
+  function advance() { return str[pos++]; }
+  function skipWhitespace() { while (pos < str.length && (str[pos] === " " || str[pos] === "\t")) pos++; }
+
+  function parseNumber() {
+    skipWhitespace();
+    var start = pos;
+    if (peek() === "-") advance(); // negative sign handled by unary, but allow here too
+    while (pos < str.length && ((str[pos] >= "0" && str[pos] <= "9") || str[pos] === ".")) pos++;
+    if (pos === start) return null;
+    var num = parseFloat(str.substring(start, pos));
+    if (isNaN(num)) throw new Error("Invalid number: " + str.substring(start, pos));
+    return num;
+  }
+
+  function parseFieldRef() {
+    skipWhitespace();
+    if (peek() !== "{") return null;
+    advance(); // skip {
+    var start = pos;
+    while (pos < str.length && str[pos] !== "}") pos++;
+    if (pos >= str.length) throw new Error("Unclosed field reference");
+    var fieldKey = str.substring(start, pos);
+    advance(); // skip }
+    var rawValue = lookupFieldValue(instanceId, fieldKey);
+    var num = parseFloat(rawValue);
+    if (isNaN(num)) throw new Error("Field '" + fieldKey + "' is not numeric (value: '" + rawValue + "')");
+    return num;
+  }
+
+  function parsePrimary() {
+    skipWhitespace();
+    if (peek() === "(") {
+      advance(); // skip (
+      var val = parseAdditive();
+      skipWhitespace();
+      if (peek() !== ")") throw new Error("Expected closing parenthesis");
+      advance(); // skip )
+      return val;
+    }
+    if (peek() === "{") return parseFieldRef();
+    var num = parseNumber();
+    if (num !== null) return num;
+    throw new Error("Unexpected character: " + (peek() || "end of expression"));
+  }
+
+  function parseUnary() {
+    skipWhitespace();
+    if (peek() === "-") {
+      advance();
+      return -parseUnary();
+    }
+    return parsePrimary();
+  }
+
+  function parseMultiplicative() {
+    var left = parseUnary();
+    skipWhitespace();
+    while (peek() === "*" || peek() === "/") {
+      var op = advance();
+      var right = parseUnary();
+      if (op === "*") left = left * right;
+      else {
+        if (right === 0) throw new Error("Division by zero");
+        left = left / right;
+      }
+      skipWhitespace();
+    }
+    return left;
+  }
+
+  function parseAdditive() {
+    var left = parseMultiplicative();
+    skipWhitespace();
+    while (peek() === "+" || peek() === "-") {
+      var op = advance();
+      var right = parseMultiplicative();
+      if (op === "+") left = left + right;
+      else left = left - right;
+      skipWhitespace();
+    }
+    return left;
+  }
+
+  var result = parseAdditive();
+  skipWhitespace();
+  if (pos < str.length) throw new Error("Unexpected trailing characters: " + str.substring(pos));
+
+  // Return clean number string (no trailing .0 for integers)
+  if (Number.isInteger(result)) return String(result);
+  return String(Math.round(result * 1000000) / 1000000); // 6 decimal precision
+}
+
+// =============================================================================
 // Condition Evaluator
 // =============================================================================
 
 /**
  * Evaluate a condition group against an instance.
+ * Supports: equals, not_equals, is_empty, is_not_empty, contains,
+ *           gt, gte, lt, lte (numeric), and field-to-field comparison.
  * @param {object} conditionGroup - { operator: "AND"|"OR", conditions: [...] }
  * @param {string} instanceId
  * @returns {boolean}
@@ -182,30 +324,24 @@ function evaluateConditions(conditionGroup, instanceId) {
     } else if (condition.type === "field_value") {
       const fieldKey = condition.params.field_key;
       const operator = condition.params.operator;
-      const value = condition.params.value || "";
 
-      // Look up the field value
-      let fieldValue = "";
-      try {
-        const fieldRecords = $app.findRecordsByFilter(
-          "workflow_instance_field_values",
-          'instance_id = "' + instanceId + '" && field_key = "' + fieldKey + '"',
-          "-updated",
-          1
-        );
-        if (fieldRecords.length > 0) {
-          fieldValue = fieldRecords[0].get("value") || "";
-        }
-      } catch (err) {
-        // Field not found = empty
+      // Look up the left-hand field value
+      const fieldValue = lookupFieldValue(instanceId, fieldKey);
+
+      // Determine comparison value: field-to-field or static
+      let compareValue;
+      if (condition.params.compare_field_key) {
+        compareValue = lookupFieldValue(instanceId, condition.params.compare_field_key);
+      } else {
+        compareValue = condition.params.value || "";
       }
 
       switch (operator) {
         case "equals":
-          result = fieldValue === value;
+          result = fieldValue === compareValue;
           break;
         case "not_equals":
-          result = fieldValue !== value;
+          result = fieldValue !== compareValue;
           break;
         case "is_empty":
           result = fieldValue === "" || fieldValue === null || fieldValue === undefined;
@@ -214,8 +350,32 @@ function evaluateConditions(conditionGroup, instanceId) {
           result = fieldValue !== "" && fieldValue !== null && fieldValue !== undefined;
           break;
         case "contains":
-          result = fieldValue.indexOf(value) !== -1;
+          result = fieldValue.indexOf(compareValue) !== -1;
           break;
+        case "gt": {
+          const a = parseFloat(fieldValue);
+          const b = parseFloat(compareValue);
+          result = !isNaN(a) && !isNaN(b) && a > b;
+          break;
+        }
+        case "gte": {
+          const a = parseFloat(fieldValue);
+          const b = parseFloat(compareValue);
+          result = !isNaN(a) && !isNaN(b) && a >= b;
+          break;
+        }
+        case "lt": {
+          const a = parseFloat(fieldValue);
+          const b = parseFloat(compareValue);
+          result = !isNaN(a) && !isNaN(b) && a < b;
+          break;
+        }
+        case "lte": {
+          const a = parseFloat(fieldValue);
+          const b = parseFloat(compareValue);
+          result = !isNaN(a) && !isNaN(b) && a <= b;
+          break;
+        }
         default:
           result = false;
       }
@@ -238,6 +398,7 @@ function evaluateConditions(conditionGroup, instanceId) {
 /**
  * Execute automation actions on an instance.
  * All writes use unsafeWithoutHooks to prevent loop re-triggering.
+ * Supports: set_instance_status, set_field_value (with expressions), set_stage.
  * @param {Array} actions - Array of { type, params }
  * @param {string} instanceId
  * @returns {Array} results - Array of { type, params, success, error? }
@@ -253,7 +414,20 @@ function executeActions(actions, instanceId) {
         instance.set("status", action.params.status);
         noHooksApp.save(instance);
         results.push({ type: action.type, params: action.params, success: true });
+
       } else if (action.type === "set_field_value") {
+        // Resolve value: if it's an expression, evaluate it
+        let resolvedValue = action.params.value;
+        if (isExpression(resolvedValue)) {
+          try {
+            resolvedValue = evaluateExpression(resolvedValue, instanceId);
+          } catch (err) {
+            console.error("[Automation] Expression error:", err);
+            results.push({ type: action.type, params: action.params, success: false, error: "Expression: " + err });
+            continue;
+          }
+        }
+
         // Find or create the field value record
         let fieldRecords = [];
         try {
@@ -270,7 +444,7 @@ function executeActions(actions, instanceId) {
         if (fieldRecords.length > 0) {
           // Update existing
           const record = fieldRecords[0];
-          record.set("value", action.params.value);
+          record.set("value", resolvedValue);
           record.set("last_modified_at", new Date().toISOString());
           noHooksApp.save(record);
         } else {
@@ -279,12 +453,24 @@ function executeActions(actions, instanceId) {
           const record = new Record(collection);
           record.set("instance_id", instanceId);
           record.set("field_key", action.params.field_key);
-          record.set("value", action.params.value);
+          record.set("value", resolvedValue);
           record.set("stage_id", action.params.stage_id);
           record.set("last_modified_at", new Date().toISOString());
           noHooksApp.save(record);
         }
-        results.push({ type: action.type, params: action.params, success: true });
+        var paramsWithResolved = JSON.parse(JSON.stringify(action.params));
+        paramsWithResolved.resolved_value = resolvedValue;
+        results.push({ type: action.type, params: paramsWithResolved, success: true });
+
+      } else if (action.type === "set_stage") {
+        const instance = $app.findRecordById("workflow_instances", instanceId);
+        const oldStageId = instance.get("current_stage_id");
+        instance.set("current_stage_id", action.params.stage_id);
+        instance.set("last_activity_at", new Date().toISOString());
+        noHooksApp.save(instance);
+        var paramsWithStage = JSON.parse(JSON.stringify(action.params));
+        paramsWithStage.from_stage_id = oldStageId;
+        results.push({ type: action.type, params: paramsWithStage, success: true });
       }
     } catch (err) {
       console.error("[Automation] Action failed:", action.type, err);
@@ -450,76 +636,144 @@ onRecordAfterCreateSuccess(handleFieldChange, "workflow_instance_field_values");
 onRecordAfterUpdateSuccess(handleFieldChange, "workflow_instance_field_values");
 
 // =============================================================================
-// time_based trigger (daily cron)
+// scheduled trigger (per-automation cron expressions)
 // =============================================================================
 
-cronAdd("automation_time_check", "0 2 * * *", () => {
-  console.log("[Automation] Running daily time-based check...");
+// Parse a 5-field cron expression and check if it matches the given Date.
+// Fields: minute hour dom month dow
+// Supports: *, N, N-M, N/step, star/step, comma-separated values
+function cronMatchesNow(cronExpr, now) {
+  var parts = cronExpr.trim().split(/\s+/);
+  if (parts.length !== 5) return false;
+
+  var minute = now.getMinutes();
+  var hour = now.getHours();
+  var dom = now.getDate();
+  var month = now.getMonth() + 1; // 1-12
+  var dow = now.getDay(); // 0=Sun
+
+  function matchField(field, value, min, max) {
+    // Handle comma-separated list
+    var segments = field.split(",");
+    for (var i = 0; i < segments.length; i++) {
+      if (matchSegment(segments[i].trim(), value, min, max)) return true;
+    }
+    return false;
+  }
+
+  function matchSegment(seg, value, min, max) {
+    // */N -- every N
+    if (seg.indexOf("*/") === 0) {
+      var step = parseInt(seg.substring(2), 10);
+      return !isNaN(step) && step > 0 && value % step === 0;
+    }
+    // N-M or N-M/step -- range with optional step
+    if (seg.indexOf("-") !== -1) {
+      var rangeParts = seg.split("/");
+      var range = rangeParts[0].split("-");
+      var rangeStart = parseInt(range[0], 10);
+      var rangeEnd = parseInt(range[1], 10);
+      var step = rangeParts.length > 1 ? parseInt(rangeParts[1], 10) : 1;
+      if (isNaN(rangeStart) || isNaN(rangeEnd) || isNaN(step)) return false;
+      if (value < rangeStart || value > rangeEnd) return false;
+      return (value - rangeStart) % step === 0;
+    }
+    // * -- any
+    if (seg === "*") return true;
+    // N -- exact
+    var exact = parseInt(seg, 10);
+    return !isNaN(exact) && exact === value;
+  }
+
+  return matchField(parts[0], minute, 0, 59)
+    && matchField(parts[1], hour, 0, 23)
+    && matchField(parts[2], dom, 1, 31)
+    && matchField(parts[3], month, 1, 12)
+    && matchField(parts[4], dow, 0, 6);
+}
+
+/**
+ * Master cron that runs every 15 minutes. Checks all scheduled automations
+ * and runs those whose cron expression matches the current time.
+ */
+cronAdd("automation_scheduled_check", "*/15 * * * *", () => {
+  var now = new Date();
+  console.log("[Automation] Running scheduled check at " + now.toISOString());
 
   try {
-    const automations = $app.findRecordsByFilter(
+    var automations = $app.findRecordsByFilter(
       "tools_automation",
-      'trigger_type = "time_based" && is_enabled = true',
+      'trigger_type = "scheduled" && is_enabled = true',
       "",
       100
     );
 
-    for (const automation of automations) {
-      let config = automation.get("trigger_config");
+    var executed = 0;
+
+    for (var i = 0; i < automations.length; i++) {
+      var automation = automations[i];
+      var config = automation.get("trigger_config");
       if (typeof config === "string") {
         try { config = JSON.parse(config); } catch (err) { continue; }
       }
 
-      const days = config.days || 30;
-      const cutoffMs = days * 86400000;
-      const cutoffDate = new Date(Date.now() - cutoffMs).toISOString();
-      const workflowId = automation.get("workflow_id");
-      const automationId = automation.id;
+      var cronExpr = config.cron;
+      if (!cronExpr) continue;
+
+      // Check if this automation's cron matches now
+      if (!cronMatchesNow(cronExpr, now)) continue;
+
+      // Double-execution guard: skip if last_run_at is within the last 14 minutes
+      var lastRunAt = automation.get("last_run_at");
+      if (lastRunAt) {
+        var lastRun = new Date(lastRunAt);
+        var diffMs = now.getTime() - lastRun.getTime();
+        if (diffMs < 14 * 60 * 1000) continue; // Already ran recently
+      }
+
+      var workflowId = automation.get("workflow_id");
 
       // Build filter for matching instances
-      let filter = 'workflow_id = "' + workflowId + '" && status = "active" && last_activity_at <= "' + cutoffDate + '"';
-      if (config.stage_id) {
-        filter += ' && current_stage_id = "' + config.stage_id + '"';
+      var filter = 'workflow_id = "' + workflowId + '" && status = "active"';
+      if (config.target_stage_id) {
+        filter += ' && current_stage_id = "' + config.target_stage_id + '"';
+      }
+      if (config.inactive_days && config.inactive_days > 0) {
+        var cutoffDate = new Date(now.getTime() - config.inactive_days * 86400000).toISOString();
+        filter += ' && last_activity_at <= "' + cutoffDate + '"';
       }
 
       try {
-        const instances = $app.findRecordsByFilter(
+        var instances = $app.findRecordsByFilter(
           "workflow_instances",
           filter,
           "",
-          100
+          500
         );
 
-        for (const instance of instances) {
-          // Cooldown: skip if already triggered for this automation+instance in last 24h
-          const oneDayAgo = new Date(Date.now() - 86400000).toISOString();
-          try {
-            const recentLogs = $app.findRecordsByFilter(
-              "workflow_instance_tool_usage",
-              'instance_id = "' + instance.id + '" && executed_at >= "' + oneDayAgo + '" && metadata ~ "' + automationId + '"',
-              "",
-              1
-            );
-            if (recentLogs.length > 0) {
-              continue; // Already triggered recently
-            }
-          } catch (err) {
-            // No logs found, proceed
-          }
-
-          runAutomation(automation, instance.id, instance.get("current_stage_id"));
+        for (var j = 0; j < instances.length; j++) {
+          runAutomation(automation, instances[j].id, instances[j].get("current_stage_id"));
+          executed++;
         }
       } catch (err) {
         // No matching instances
       }
+
+      // Update last_run_at
+      try {
+        automation.set("last_run_at", now.toISOString());
+        $app.unsafeWithoutHooks().save(automation);
+      } catch (err) {
+        console.error("[Automation] Failed to update last_run_at:", err);
+      }
     }
+
+    console.log("[Automation] Scheduled check complete. Executed " + executed + " automation(s).");
   } catch (err) {
     if (("" + err).indexOf("Missing collection") === -1) {
-      console.error("[Automation] time_based cron error:", err);
+      console.error("[Automation] scheduled cron error:", err);
     }
   }
-
-  console.log("[Automation] Daily time-based check complete.");
 });
 
 // =============================================================================

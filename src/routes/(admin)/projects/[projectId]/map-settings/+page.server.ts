@@ -3,10 +3,13 @@ import type { Actions, PageServerLoad } from './$types';
 import { superValidate } from 'sveltekit-superforms';
 import { zod } from 'sveltekit-superforms/adapters';
 import { mapLayerSchema, projectMapDefaultsSchema } from '$lib/schemas/map-settings';
-import type { MapLayer, MapLayerWithSource, ProjectMapDefaults } from '$lib/types/map-layer';
-import type { MapSource } from '$lib/types/map-sources';
+import type { MapLayer } from '$lib/types/map-layer';
+import { PRESET_SOURCES, type TileSourceConfig, type WmsSourceConfig } from '$lib/types/map-layer';
 import { isValidPolygon } from '$lib/utils/geo-utils';
 import { createTilePackage, type TileSource } from '$lib/server/tile-packager';
+import { rm } from 'fs/promises';
+import path from 'path';
+import type { ProjectMapDefaults } from '$lib/types/map-layer';
 
 // Default map view settings (used when no base layer exists)
 const DEFAULT_MAP_SETTINGS: ProjectMapDefaults = {
@@ -23,13 +26,12 @@ export const load: PageServerLoad = async ({ locals: { pb }, params }) => {
 			fields: 'id, name, settings'
 		});
 
-		// Fetch map layers for this project with expanded source data
-		let mapLayers: MapLayerWithSource[] = [];
+		// Fetch map layers for this project (source data is now inline)
+		let mapLayers: MapLayer[] = [];
 		try {
-			mapLayers = await pb.collection('map_layers').getFullList<MapLayerWithSource>({
+			mapLayers = await pb.collection('map_layers').getFullList<MapLayer>({
 				filter: `project_id = "${projectId}" && is_active = true`,
-				sort: 'display_order',
-				expand: 'source_id'
+				sort: 'display_order'
 			});
 		} catch {
 			// Collection might not exist yet
@@ -42,26 +44,12 @@ export const load: PageServerLoad = async ({ locals: { pb }, params }) => {
 			sort: 'name'
 		});
 
-		// Fetch user's map sources (for layer source selection)
-		let mapSources: MapSource[] = [];
-		try {
-			const userId = pb.authStore.record?.id;
-			if (userId) {
-				mapSources = await pb.collection('map_sources').getFullList<MapSource>({
-					filter: `owner_id = "${userId}"`,
-					sort: 'name'
-				});
-			}
-		} catch {
-			// Collection might not exist yet
-		}
-
 		// Get map defaults from project settings or use system defaults
 		const projectSettings = project.settings as { map_defaults?: ProjectMapDefaults } | null;
 		const mapDefaults = projectSettings?.map_defaults || DEFAULT_MAP_SETTINGS;
 
 		// Find base layer for view defaults
-		const baseLayer = mapLayers.find((l) => l.is_base_layer);
+		const baseLayer = mapLayers.find((l) => l.layer_type === 'base');
 
 		// Fetch offline packages for this project
 		let offlinePackages: Array<{
@@ -95,7 +83,6 @@ export const load: PageServerLoad = async ({ locals: { pb }, params }) => {
 		return {
 			project,
 			mapLayers,
-			mapSources,
 			roles,
 			mapDefaults,
 			baseLayer,
@@ -139,7 +126,7 @@ export const actions: Actions = {
 		}
 	},
 
-	// Create new map layer
+	// Create new map layer with source fields directly
 	createLayer: async ({ request, locals: { pb }, params }) => {
 		const { projectId } = params;
 		const form = await superValidate(request, zod(mapLayerSchema));
@@ -149,23 +136,26 @@ export const actions: Actions = {
 		}
 
 		try {
+			const layerType = form.data.layer_type as 'base' | 'overlay';
+
 			// If this is marked as base layer, unset other base layers
-			if (form.data.is_base_layer) {
+			if (layerType === 'base') {
 				const existingBase = await pb.collection('map_layers').getFullList({
-					filter: `project_id = "${projectId}" && is_base_layer = true`
+					filter: `project_id = "${projectId}" && layer_type = "base"`
 				});
 				for (const layer of existingBase) {
-					await pb.collection('map_layers').update(layer.id, { is_base_layer: false });
+					await pb.collection('map_layers').update(layer.id, { layer_type: 'overlay' });
 				}
 			}
 
 			await pb.collection('map_layers').create({
 				project_id: projectId,
-				source_id: form.data.source_id,
 				name: form.data.name,
+				source_type: form.data.source_type,
+				layer_type: layerType,
+				url: form.data.url || null,
 				display_order: form.data.display_order,
 				visible_to_roles: form.data.visible_to_roles,
-				is_base_layer: form.data.is_base_layer,
 				is_active: form.data.is_active,
 				config: form.data.config
 			});
@@ -174,6 +164,156 @@ export const actions: Actions = {
 		} catch (err) {
 			console.error('Error creating map layer:', err);
 			return fail(500, { form, message: 'Failed to create map layer' });
+		}
+	},
+
+	// Add preset layer
+	addPreset: async ({ request, locals: { pb }, params }) => {
+		const { projectId } = params;
+		const formData = await request.formData();
+		const presetId = formData.get('preset_id') as string;
+		const layerType = (formData.get('layer_type') as string) || 'base';
+
+		if (!presetId) {
+			return fail(400, { message: 'Preset ID is required' });
+		}
+
+		const preset = PRESET_SOURCES.find((p) => p.id === presetId);
+		if (!preset) {
+			return fail(400, { message: 'Invalid preset' });
+		}
+
+		try {
+			// If adding as base, unset existing base layers
+			if (layerType === 'base') {
+				const existingBase = await pb.collection('map_layers').getFullList({
+					filter: `project_id = "${projectId}" && layer_type = "base"`
+				});
+				for (const layer of existingBase) {
+					await pb.collection('map_layers').update(layer.id, { layer_type: 'overlay' });
+				}
+			}
+
+			if (preset.sourceType === 'wms') {
+				const config: WmsSourceConfig = {
+					attribution: preset.attribution,
+					layers: preset.wmsLayers || '',
+					format: preset.wmsFormat || 'image/png',
+					transparent: preset.wmsTransparent ?? true,
+					version: preset.wmsVersion || '1.1.1'
+				};
+
+				await pb.collection('map_layers').create({
+					project_id: projectId,
+					name: preset.name,
+					source_type: 'wms',
+					layer_type: layerType,
+					url: preset.url,
+					config,
+					is_active: true
+				});
+			} else {
+				const config: TileSourceConfig = {
+					attribution: preset.attribution,
+					detected_min_zoom: preset.minZoom,
+					detected_max_zoom: preset.maxZoom
+				};
+
+				await pb.collection('map_layers').create({
+					project_id: projectId,
+					name: preset.name,
+					source_type: 'preset',
+					layer_type: layerType,
+					url: preset.url,
+					config,
+					is_active: true
+				});
+			}
+
+			return { success: true };
+		} catch (err) {
+			console.error('Error adding preset layer:', err);
+			return fail(500, { message: 'Failed to add preset' });
+		}
+	},
+
+	// Add tile URL layer
+	addTile: async ({ request, locals: { pb }, params }) => {
+		const { projectId } = params;
+		const formData = await request.formData();
+		const name = formData.get('name') as string;
+		const url = formData.get('url') as string;
+		const attribution = formData.get('attribution') as string;
+		const layerType = (formData.get('layer_type') as string) || 'overlay';
+
+		if (!name?.trim()) {
+			return fail(400, { message: 'Name is required' });
+		}
+		if (!url?.trim()) {
+			return fail(400, { message: 'URL is required' });
+		}
+
+		try {
+			const config: TileSourceConfig = {};
+			if (attribution?.trim()) {
+				config.attribution = attribution.trim();
+			}
+
+			await pb.collection('map_layers').create({
+				project_id: projectId,
+				name: name.trim(),
+				source_type: 'tile',
+				layer_type: layerType,
+				url: url.trim(),
+				config,
+				is_active: true
+			});
+
+			return { success: true };
+		} catch (err) {
+			console.error('Error adding tile layer:', err);
+			return fail(500, { message: 'Failed to add tile layer' });
+		}
+	},
+
+	// Add WMS layer
+	addWms: async ({ request, locals: { pb }, params }) => {
+		const { projectId } = params;
+		const formData = await request.formData();
+		const name = formData.get('name') as string;
+		const url = formData.get('url') as string;
+		const layers = formData.get('layers') as string;
+		const attribution = formData.get('attribution') as string;
+		const format = formData.get('format') as string;
+		const transparent = formData.get('transparent') === 'true';
+		const version = formData.get('version') as string;
+		const layerType = (formData.get('layer_type') as string) || 'overlay';
+
+		if (!name?.trim()) return fail(400, { message: 'Name is required' });
+		if (!url?.trim()) return fail(400, { message: 'URL is required' });
+		if (!layers?.trim()) return fail(400, { message: 'WMS layers parameter is required' });
+
+		try {
+			const config: WmsSourceConfig = { layers: layers.trim() };
+			if (attribution?.trim()) config.attribution = attribution.trim();
+			if (format?.trim()) config.format = format.trim();
+			if (transparent) config.transparent = true;
+			if (version?.trim()) config.version = version.trim();
+
+			await pb.collection('map_layers').create({
+				project_id: projectId,
+				name: name.trim(),
+				source_type: 'wms',
+				layer_type: layerType,
+				url: url.trim(),
+				config,
+				is_active: true
+			});
+
+			return { success: true };
+		} catch (err) {
+			console.error('Error adding WMS layer:', err);
+			return fail(500, { message: 'Failed to add WMS layer' });
 		}
 	},
 
@@ -194,22 +334,25 @@ export const actions: Actions = {
 		}
 
 		try {
+			const layerType = form.data.layer_type as 'base' | 'overlay';
+
 			// If this is marked as base layer, unset other base layers
-			if (form.data.is_base_layer) {
+			if (layerType === 'base') {
 				const existingBase = await pb.collection('map_layers').getFullList({
-					filter: `project_id = "${projectId}" && is_base_layer = true && id != "${id}"`
+					filter: `project_id = "${projectId}" && layer_type = "base" && id != "${id}"`
 				});
 				for (const layer of existingBase) {
-					await pb.collection('map_layers').update(layer.id, { is_base_layer: false });
+					await pb.collection('map_layers').update(layer.id, { layer_type: 'overlay' });
 				}
 			}
 
 			await pb.collection('map_layers').update(id, {
-				source_id: form.data.source_id,
 				name: form.data.name,
+				source_type: form.data.source_type,
+				layer_type: layerType,
+				url: form.data.url || null,
 				display_order: form.data.display_order,
 				visible_to_roles: form.data.visible_to_roles,
-				is_base_layer: form.data.is_base_layer,
 				is_active: form.data.is_active,
 				config: form.data.config
 			});
@@ -221,7 +364,7 @@ export const actions: Actions = {
 		}
 	},
 
-	// Delete map layer (soft delete)
+	// Delete map layer (soft delete via is_active, or hard delete for uploaded)
 	deleteLayer: async ({ request, locals: { pb } }) => {
 		const formData = await request.formData();
 		const id = formData.get('id') as string;
@@ -231,6 +374,18 @@ export const actions: Actions = {
 		}
 
 		try {
+			const layer = await pb.collection('map_layers').getOne<MapLayer>(id);
+
+			// For uploaded layers, clean up tile files
+			if (layer.source_type === 'uploaded') {
+				const tilesDir = path.join(process.cwd(), 'static', 'tiles', id);
+				try {
+					await rm(tilesDir, { recursive: true, force: true });
+				} catch {
+					// Continue even if files don't exist
+				}
+			}
+
 			await pb.collection('map_layers').update(id, { is_active: false });
 			return { success: true };
 		} catch (err) {
@@ -252,14 +407,14 @@ export const actions: Actions = {
 		try {
 			// Unset all base layers for this project
 			const existingBase = await pb.collection('map_layers').getFullList({
-				filter: `project_id = "${projectId}" && is_base_layer = true`
+				filter: `project_id = "${projectId}" && layer_type = "base"`
 			});
 			for (const layer of existingBase) {
-				await pb.collection('map_layers').update(layer.id, { is_base_layer: false });
+				await pb.collection('map_layers').update(layer.id, { layer_type: 'overlay' });
 			}
 
 			// Set new base layer
-			await pb.collection('map_layers').update(id, { is_base_layer: true });
+			await pb.collection('map_layers').update(id, { layer_type: 'base' });
 			return { success: true };
 		} catch (err) {
 			console.error('Error setting base layer:', err);
@@ -402,44 +557,38 @@ export const actions: Actions = {
 			return fail(500, { message: 'Failed to create package' });
 		}
 
-		// Fetch layer details with their sources
+		// Fetch layer details (source data is now inline)
 		try {
-			const layerRecords = await pb.collection('map_layers').getFullList<MapLayerWithSource>({
-				filter: layerIds.map(id => `id = "${id}"`).join(' || '),
-				expand: 'source_id'
+			const layerRecords = await pb.collection('map_layers').getFullList<MapLayer>({
+				filter: layerIds.map(id => `id = "${id}"`).join(' || ')
 			});
 
 			console.log(`[createPackage] Found ${layerRecords.length} layers`);
 
-			// Build tile sources from layers
-			// Accept tile-based source types: 'tile', 'preset' (OSM etc.), 'uploaded' (user's custom tiles)
+			// Build tile sources from layers (source fields are now directly on the layer)
 			const tileSources: TileSource[] = [];
 			const httpSourceTypes = ['tile', 'preset'];
 			for (const layer of layerRecords) {
-				const source = layer.expand?.source_id as MapSource | undefined;
-				console.log(`[createPackage] Layer "${layer.name}": source_type=${source?.source_type}, url=${source?.url}, source_id=${source?.id}`);
+				console.log(`[createPackage] Layer "${layer.name}": source_type=${layer.source_type}, url=${layer.url}`);
 
-				if (!source) continue;
-
-				// Handle uploaded sources (read from filesystem)
-				if (source.source_type === 'uploaded' && source.status === 'completed') {
-					const sourceConfig = source.config as { tile_format?: string } | null;
+				// Handle uploaded layers (read from filesystem)
+				if (layer.source_type === 'uploaded' && layer.status === 'completed') {
+					const layerConfig = layer.config as { tile_format?: string } | null;
 					tileSources.push({
-						id: source.id, // Use source.id to match cached tile layer lookups
+						id: layer.id,
 						name: layer.name,
-						urlTemplate: '', // Not used for uploaded
+						urlTemplate: '',
 						isUploaded: true,
-						sourceId: source.id,
-						tileFormat: sourceConfig?.tile_format || 'png'
+						layerId: layer.id,
+						tileFormat: layerConfig?.tile_format || 'png'
 					});
 				}
 				// Handle HTTP tile sources (tile, preset)
-				else if (httpSourceTypes.includes(source.source_type) && source.url) {
+				else if (httpSourceTypes.includes(layer.source_type) && layer.url) {
 					tileSources.push({
-						id: source.id, // Use source.id to match cached tile layer lookups
+						id: layer.id,
 						name: layer.name,
-						urlTemplate: source.url,
-						subdomains: source.config?.subdomains as string[] | undefined
+						urlTemplate: layer.url
 					});
 				}
 			}

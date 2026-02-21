@@ -106,6 +106,9 @@ export interface BaseTableConfig<TData = any> {
 		onDeleteRow?: (rowId: string) => Promise<void>;
 	};
 
+	// Snippet rendered before the create button in the add-row area
+	createAreaPrefix?: Snippet;
+
 	// Inline row creation
 	inlineRowCreation?: {
 		enabled: boolean;

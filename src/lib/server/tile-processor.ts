@@ -6,7 +6,7 @@
 import { mkdir, rm, readdir, stat, rename } from 'fs/promises';
 import path from 'path';
 import type PocketBase from 'pocketbase';
-import type { UploadedSourceConfig } from '$lib/types/map-sources';
+import type { UploadedSourceConfig } from '$lib/types/map-layer';
 
 // Use dynamic import for unzipper to handle ESM/CJS
 let unzipper: typeof import('unzipper') | null = null;
@@ -46,15 +46,15 @@ function tile2lat(y: number, z: number): number {
  * Process an uploaded tile ZIP file
  */
 export async function processTileUpload(
-	sourceId: string,
+	layerId: string,
 	zipPath: string,
 	pb: PocketBase
 ): Promise<void> {
-	const tilesDir = path.join(process.cwd(), 'static', 'tiles', sourceId);
+	const tilesDir = path.join(process.cwd(), 'static', 'tiles', layerId);
 
 	try {
 		// Update status to processing
-		await pb.collection('map_sources').update(sourceId, {
+		await pb.collection('map_layers').update(layerId, {
 			status: 'processing',
 			progress: 0
 		});
@@ -107,22 +107,22 @@ export async function processTileUpload(
 
 			processedFiles++;
 			const progress = Math.round((processedFiles / totalFiles) * 80); // 0-80% for extraction
-			await pb.collection('map_sources').update(sourceId, { progress });
+			await pb.collection('map_layers').update(layerId, { progress });
 		}
 
 		// Calculate tile statistics
-		await pb.collection('map_sources').update(sourceId, { progress: 85 });
+		await pb.collection('map_layers').update(layerId, { progress: 85 });
 		const stats = await calculateTileStats(tilesDir);
 
 		// Get current config and update with detected zoom
-		const source = await pb.collection('map_sources').getOne(sourceId);
-		const config = (source.config as UploadedSourceConfig) || {};
+		const layer = await pb.collection('map_layers').getOne(layerId);
+		const config = (layer.config as UploadedSourceConfig) || {};
 
 		// Generate tile URL pattern (use authenticated API endpoint)
-		const tileUrl = `/api/tiles/${sourceId}/{z}/{x}/{y}.${config.tile_format || 'png'}`;
+		const tileUrl = `/api/tiles/${layerId}/{z}/{x}/{y}.${config.tile_format || 'png'}`;
 
-		// Update source with completed status
-		await pb.collection('map_sources').update(sourceId, {
+		// Update layer with completed status
+		await pb.collection('map_layers').update(layerId, {
 			status: 'completed',
 			progress: 100,
 			url: tileUrl,
@@ -141,7 +141,7 @@ export async function processTileUpload(
 		console.error('Tile processing error:', err);
 
 		// Update status to failed
-		await pb.collection('map_sources').update(sourceId, {
+		await pb.collection('map_layers').update(layerId, {
 			status: 'failed',
 			error_message: err instanceof Error ? err.message : 'Processing failed'
 		});

@@ -248,25 +248,12 @@
 			}
 		}
 
-		// Download map layers and sources
+		// Download map layers (source data is now inline)
 		downloadProgress = { phase: 'extracting', progress: 95, message: 'Downloading map layers...' };
 		const mapLayers = await pb.collection('map_layers').getFullList({
-			filter: `project_id = "${pkg.project_id}" && is_active = true`,
-			expand: 'source_id'
+			filter: `project_id = "${pkg.project_id}" && is_active = true`
 		});
 		await storeRecords('map_layers', mapLayers);
-
-		// Extract unique sources
-		const sources: { id: string }[] = [];
-		const seenSourceIds = new Set<string>();
-		for (const layer of mapLayers) {
-			const source = (layer as { expand?: { source_id?: { id: string } } }).expand?.source_id;
-			if (source && !seenSourceIds.has(source.id)) {
-				seenSourceIds.add(source.id);
-				sources.push(source);
-			}
-		}
-		await storeRecords('map_sources', sources);
 	}
 
 	/**

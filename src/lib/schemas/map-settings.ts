@@ -22,14 +22,15 @@ export const mapLayerConfigSchema = z.object({
 });
 
 /**
- * Map layer form schema
+ * Map layer form schema (source fields merged in)
  */
 export const mapLayerSchema = z.object({
-	source_id: z.string().min(1, 'Source is required'),
 	name: z.string().min(1, 'Layer name is required').max(255),
+	source_type: z.enum(['tile', 'wms', 'uploaded', 'preset', 'geojson']).default('preset'),
+	layer_type: z.enum(['base', 'overlay']).default('overlay'),
+	url: z.string().max(2000).optional().nullable(),
 	display_order: z.number().int().min(0).default(0),
 	visible_to_roles: z.array(z.string()).default([]),
-	is_base_layer: z.boolean().default(false),
 	is_active: z.boolean().default(true),
 	config: mapLayerConfigSchema.default({})
 });

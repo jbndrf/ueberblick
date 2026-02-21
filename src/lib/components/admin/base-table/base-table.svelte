@@ -37,6 +37,7 @@
 		rowActions,
 		columnManagement,
 		rowManagement,
+		createAreaPrefix,
 		inlineRowCreation,
 		emptyMessage = 'No data found',
 		emptySubMessage,
@@ -659,8 +660,11 @@
 
 		<!-- Add Row Button -->
 		{#if inlineRowCreation?.enabled && !isCreatingRow}
-			<div class="px-2 pb-2">
-				<Button variant="outline" size="sm" onclick={startCreatingRow} class="gap-2">
+			<div class="px-2 pb-2 flex items-center gap-0">
+				{#if createAreaPrefix}
+					{@render createAreaPrefix()}
+				{/if}
+				<Button variant="outline" size="sm" onclick={startCreatingRow} class="gap-2 {createAreaPrefix ? 'rounded-l-none' : ''}">
 					<Plus class="h-4 w-4" />
 					{inlineRowCreation.createButtonLabel || m.commonAdd()}
 				</Button>

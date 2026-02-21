@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { existsSync, createReadStream } from 'fs';
 import { stat } from 'fs/promises';
 import path from 'path';
-import type { MapSource } from '$lib/types/map-sources';
+import type { MapLayer } from '$lib/types/map-layer';
 
 // Content type mapping for tile formats
 const CONTENT_TYPES: Record<string, string> = {
@@ -38,17 +38,17 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 	}
 
 	try {
-		// Fetch source record to verify access and get format
-		const source = await locals.pb.collection('map_sources').getOne<MapSource>(tilesetId);
+		// Fetch layer record to verify access and get format
+		const layer = await locals.pb.collection('map_layers').getOne<MapLayer>(tilesetId);
 
-		// Verify source is completed (for uploaded sources)
-		if (source.source_type === 'uploaded' && source.status !== 'completed') {
-			throw error(404, 'Source not available');
+		// Verify layer is completed (for uploaded layers)
+		if (layer.source_type === 'uploaded' && layer.status !== 'completed') {
+			throw error(404, 'Layer not available');
 		}
 
-		// Get tile format (use extension from URL if provided, otherwise from source config)
-		const sourceConfig = source.config as { tile_format?: string } | null;
-		let format = sourceConfig?.tile_format || 'png';
+		// Get tile format (use extension from URL if provided, otherwise from layer config)
+		const layerConfig = layer.config as { tile_format?: string } | null;
+		let format = layerConfig?.tile_format || 'png';
 		if (yParts.length > 1) {
 			const ext = yParts[1].toLowerCase();
 			if (CONTENT_TYPES[ext]) {

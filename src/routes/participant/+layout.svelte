@@ -160,8 +160,7 @@
 				'tools_edit',
 				'tools_field_tags',
 				'roles',
-				'map_layers',
-				'map_sources'
+				'map_layers'
 			];
 
 			cleanupSyncLoop = startSyncLoop(gateway, syncCollections);

@@ -22,8 +22,7 @@
 		Settings,
 		ChevronRight,
 		UserCircle,
-		LogOut,
-		Layers
+		LogOut
 	} from 'lucide-svelte';
 
 	let { data, children } = $props();
@@ -53,7 +52,6 @@
 	];
 
 	const globalMenuItems = [
-		{ href: '/map-sources', icon: Layers, label: () => m.navMapSources() },
 		{ href: '/rules', icon: Settings, label: () => m.navGlobalRules() }
 	];
 
@@ -212,7 +210,7 @@
 		</Sidebar.Root>
 
 		<!-- Main Content Area -->
-		<Sidebar.Inset>
+		<Sidebar.Inset class="max-h-svh">
 			<!-- Header -->
 			<header class="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background px-6">
 				<Sidebar.Trigger />
@@ -268,7 +266,7 @@
 			</header>
 
 			<!-- Page Content -->
-			<main class="flex-1 p-6">
+			<main class="flex-1 min-h-0 overflow-y-auto p-6">
 				{@render children()}
 			</main>
 		</Sidebar.Inset>

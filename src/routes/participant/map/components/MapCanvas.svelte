@@ -3,25 +3,24 @@
 	import type { Map as LeafletMap, TileLayer, Marker as LeafletMarker } from 'leaflet';
 	import { createCachedTileLayer } from '$lib/components/map/cached-tile-layer';
 
-	interface MapSource {
+	interface MapLayer {
 		id: string;
-		url: string;
+		name: string;
+		layer_type: 'base' | 'overlay';
 		source_type: string;
+		url: string | null;
 		config?: {
 			attribution?: string;
 			minZoom?: number;
 			maxZoom?: number;
-		};
-	}
-
-	interface MapLayer {
-		id: string;
-		name: string;
-		is_base_layer: boolean;
-		source_id: string;
-		expand?: {
-			source_id?: MapSource;
-		};
+			detected_min_zoom?: number;
+			detected_max_zoom?: number;
+			// WMS-specific
+			layers?: string;
+			format?: string;
+			transparent?: boolean;
+			version?: string;
+		} | null;
 	}
 
 	interface MapSettings {
@@ -134,6 +133,14 @@
 		onMapClick
 	}: Props = $props();
 
+	/** Parse a field value that might be a JSON array into individual values */
+	function splitMultiValue(value: string): string[] {
+		if (value.startsWith('[')) {
+			try { return JSON.parse(value); } catch { /* fall through */ }
+		}
+		return [value];
+	}
+
 	// Click vs drag detection
 	let mouseDownPos: { x: number; y: number } | null = null;
 	const CLICK_THRESHOLD = 5;
@@ -186,8 +193,11 @@
 			if (allowedValues) {
 				// This workflow has tag-based filtering active
 				const instanceValue = filterableValues.get(i.id);
-				// If instance has a value for the tagged field and it's not in the visible set, hide it
-				if (instanceValue && !allowedValues.has(instanceValue)) return false;
+				// If instance has a value for the tagged field, check if ANY individual value is visible
+				if (instanceValue) {
+					const values = splitMultiValue(instanceValue);
+					if (!values.some(v => allowedValues.has(v))) return false;
+				}
 				// If instance has no value, keep it (don't filter untagged)
 			}
 			return true;
@@ -206,25 +216,42 @@
 		return layers.find((l) => l.id === id);
 	}
 
-	// Get source from layer (handles expand)
-	function getSourceFromLayer(layer: MapLayer): MapSource | null {
-		return layer.expand?.source_id ?? null;
+	// Compute the global max zoom from all layers
+	function getGlobalMaxZoom(): number {
+		let max = mapSettings?.max_zoom ?? 19;
+		for (const layer of layers) {
+			const layerMax = layer.config?.detected_max_zoom ?? layer.config?.maxZoom;
+			if (layerMax !== undefined && layerMax > max) max = layerMax;
+		}
+		return max;
 	}
 
-	// Create tile layer from source (uses cached tile layer for offline support)
-	function createTileLayer(L: typeof import('leaflet'), source: MapSource): TileLayer {
-		const options = {
-			attribution: source.config?.attribution || defaultAttribution,
-			// Use detected_min/max_zoom (from tile processor) or minZoom/maxZoom (from presets)
-			minZoom: source.config?.detected_min_zoom ?? source.config?.minZoom ?? mapSettings?.min_zoom ?? 1,
-			maxZoom: source.config?.detected_max_zoom ?? source.config?.maxZoom ?? mapSettings?.max_zoom ?? 19
-		};
+	// Create tile layer from a map layer (source fields are inline)
+	function createTileLayerFromLayer(L: typeof import('leaflet'), layer: MapLayer): TileLayer {
+		const config = layer.config;
+		const attribution = config?.attribution || defaultAttribution;
+		const minZoom = config?.detected_min_zoom ?? config?.minZoom ?? mapSettings?.min_zoom ?? 1;
+		const maxNativeZoom = config?.detected_max_zoom ?? config?.maxZoom ?? undefined;
+		const maxZoom = getGlobalMaxZoom();
 
-		// Use cached tile layer which checks IndexedDB first
+		const opts = { attribution, minZoom, maxZoom, ...(maxNativeZoom !== undefined && { maxNativeZoom }) };
+
+		// WMS layers use L.tileLayer.wms()
+		if (layer.source_type === 'wms') {
+			return L.tileLayer.wms(layer.url || '', {
+				layers: config?.layers || '',
+				format: config?.format || 'image/png',
+				transparent: config?.transparent ?? true,
+				version: config?.version || '1.1.1',
+				...opts
+			});
+		}
+
+		// Standard tile layers use cached tile layer (IndexedDB first)
 		return createCachedTileLayer(
-			source.id,
-			source.url || defaultTileUrl,
-			options,
+			layer.id,
+			layer.url || defaultTileUrl,
+			opts,
 			L
 		);
 	}
@@ -243,11 +270,8 @@
 		if (activeBaseLayerId) {
 			const layer = getLayerById(activeBaseLayerId);
 			if (layer) {
-				const source = getSourceFromLayer(layer);
-				if (source) {
-					currentBaseTileLayer = createTileLayer(L, source);
-					currentBaseTileLayer.addTo(map);
-				}
+				currentBaseTileLayer = createTileLayerFromLayer(L, layer);
+				currentBaseTileLayer.addTo(map);
 			}
 		}
 
@@ -256,7 +280,7 @@
 			currentBaseTileLayer = createCachedTileLayer(
 				'default-osm',
 				defaultTileUrl,
-				{ attribution: defaultAttribution },
+				{ attribution: defaultAttribution, maxNativeZoom: 19, maxZoom: getGlobalMaxZoom() },
 				L
 			);
 			currentBaseTileLayer.addTo(map);
@@ -281,21 +305,10 @@
 		for (const id of activeOverlayIds) {
 			if (!overlayTileLayers.has(id)) {
 				const layer = getLayerById(id);
-				console.log('[MapCanvas] Processing overlay id:', id, 'layer:', layer);
 				if (layer) {
-					const source = getSourceFromLayer(layer);
-					console.log('[MapCanvas] Source from layer:', source);
-					if (source) {
-						console.log('[MapCanvas] Creating tile layer with URL:', source.url, 'config:', source.config);
-						const tileLayer = createTileLayer(L, source);
-						tileLayer.addTo(map);
-						overlayTileLayers.set(id, tileLayer);
-						console.log('[MapCanvas] Tile layer added to map');
-					} else {
-						console.warn('[MapCanvas] No source found for layer:', layer);
-					}
-				} else {
-					console.warn('[MapCanvas] Layer not found for id:', id);
+					const tileLayer = createTileLayerFromLayer(L, layer);
+					tileLayer.addTo(map);
+					overlayTileLayers.set(id, tileLayer);
 				}
 			}
 		}
@@ -569,6 +582,7 @@
 		const mapInstance = L.map(mapContainer, {
 			center,
 			zoom,
+			maxZoom: getGlobalMaxZoom(),
 			zoomControl: false,
 			attributionControl: true
 		});

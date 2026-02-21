@@ -682,7 +682,7 @@ export class WorkflowBuilderState {
 			? { from_stage_id: null, to_stage_id: null }
 			: triggerType === 'on_field_change'
 				? { stage_id: null, field_key: null }
-				: { stage_id: null, days: 30 };
+				: { cron: '0 2 * * 1-5', target_stage_id: null };
 
 		const newAutomation: ToolsAutomation = {
 			id: generateId(),

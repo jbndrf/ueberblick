@@ -17,11 +17,15 @@
 	let { conditions, fieldOptions = [], onChange }: Props = $props();
 
 	const OPERATORS: { value: ConditionOperator; label: string }[] = [
-		{ value: 'equals', label: 'equals' },
-		{ value: 'not_equals', label: 'not equals' },
+		{ value: 'equals', label: '=' },
+		{ value: 'not_equals', label: '!=' },
+		{ value: 'gt', label: '>' },
+		{ value: 'gte', label: '>=' },
+		{ value: 'lt', label: '<' },
+		{ value: 'lte', label: '<=' },
+		{ value: 'contains', label: 'contains' },
 		{ value: 'is_empty', label: 'is empty' },
-		{ value: 'is_not_empty', label: 'is not empty' },
-		{ value: 'contains', label: 'contains' }
+		{ value: 'is_not_empty', label: 'is not empty' }
 	];
 
 	const CONDITION_TYPES = [
@@ -30,6 +34,9 @@
 	];
 
 	const STATUS_OPTIONS = ['active', 'completed', 'archived', 'deleted'];
+
+	/** Operators that don't need a comparison value */
+	const UNARY_OPERATORS: ConditionOperator[] = ['is_empty', 'is_not_empty'];
 
 	function getGroup(): ConditionGroup {
 		return conditions ?? { operator: 'AND', conditions: [] };
@@ -67,6 +74,24 @@
 	function updateGroupOperator(op: 'AND' | 'OR') {
 		const group = getGroup();
 		onChange({ ...group, operator: op });
+	}
+
+	function toggleCompareMode(index: number, condition: ConditionLeaf) {
+		if (condition.type !== 'field_value') return;
+		const params = condition.params;
+		if (params.compare_field_key) {
+			// Switch to static value
+			updateCondition(index, {
+				...condition,
+				params: { field_key: params.field_key, operator: params.operator, value: '' }
+			});
+		} else {
+			// Switch to field-to-field
+			updateCondition(index, {
+				...condition,
+				params: { field_key: params.field_key, operator: params.operator, compare_field_key: '' }
+			});
+		}
 	}
 
 	const group = $derived(getGroup());
@@ -142,18 +167,50 @@
 							{/each}
 						</select>
 
-						{#if condition.params.operator !== 'is_empty' && condition.params.operator !== 'is_not_empty'}
-							<Input
-								value={condition.params.value ?? ''}
-								oninput={(e) => {
-									updateCondition(index, {
-										...condition,
-										params: { ...condition.params, value: e.currentTarget.value }
-									});
-								}}
-								placeholder="Value..."
-								class="h-7 text-xs"
-							/>
+						{#if !UNARY_OPERATORS.includes(condition.params.operator)}
+							{@const isFieldCompare = !!condition.params.compare_field_key || condition.params.compare_field_key === ''}
+							<div class="compare-mode-row">
+								<button
+									class="compare-toggle"
+									class:active={!isFieldCompare}
+									onclick={() => { if (isFieldCompare) toggleCompareMode(index, condition); }}
+								>Value</button>
+								<button
+									class="compare-toggle"
+									class:active={isFieldCompare}
+									onclick={() => { if (!isFieldCompare) toggleCompareMode(index, condition); }}
+								>Field</button>
+							</div>
+
+							{#if isFieldCompare}
+								<select
+									class="field-select"
+									value={condition.params.compare_field_key ?? ''}
+									onchange={(e) => {
+										updateCondition(index, {
+											...condition,
+											params: { ...condition.params, compare_field_key: e.currentTarget.value }
+										});
+									}}
+								>
+									<option value="">Select field...</option>
+									{#each fieldOptions as opt}
+										<option value={opt.key}>{opt.label}</option>
+									{/each}
+								</select>
+							{:else}
+								<Input
+									value={condition.params.value ?? ''}
+									oninput={(e) => {
+										updateCondition(index, {
+											...condition,
+											params: { ...condition.params, value: e.currentTarget.value }
+										});
+									}}
+									placeholder="Value..."
+									class="h-7 text-xs"
+								/>
+							{/if}
 						{/if}
 					{:else if condition.type === 'instance_status'}
 						<select
@@ -245,6 +302,29 @@
 
 	.condition-fields select {
 		width: 100%;
+	}
+
+	.compare-mode-row {
+		display: flex;
+		gap: 0.125rem;
+	}
+
+	.compare-toggle {
+		flex: 1;
+		height: 1.5rem;
+		font-size: 0.625rem;
+		border: 1px solid hsl(var(--border));
+		border-radius: 0.25rem;
+		background: hsl(var(--background));
+		color: hsl(var(--muted-foreground));
+		cursor: pointer;
+		transition: all 0.15s;
+	}
+
+	.compare-toggle.active {
+		background: hsl(var(--primary));
+		color: hsl(var(--primary-foreground));
+		border-color: hsl(var(--primary));
 	}
 
 	:global(.add-condition-btn) {

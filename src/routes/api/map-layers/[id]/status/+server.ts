@@ -1,6 +1,6 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import type { MapSource } from '$lib/types/map-sources';
+import type { MapLayer } from '$lib/types/map-layer';
 
 export const GET: RequestHandler = async ({ params, locals: { pb, user } }) => {
 	if (!user) {
@@ -10,19 +10,14 @@ export const GET: RequestHandler = async ({ params, locals: { pb, user } }) => {
 	const { id } = params;
 
 	try {
-		const source = await pb.collection('map_sources').getOne<MapSource>(id);
-
-		// Verify ownership
-		if (source.owner_id !== user.id) {
-			throw error(403, 'Access denied');
-		}
+		const layer = await pb.collection('map_layers').getOne<MapLayer>(id);
 
 		return json({
-			status: source.status,
-			progress: source.progress,
-			tile_count: source.tile_count,
-			error_message: source.error_message,
-			url: source.url
+			status: layer.status,
+			progress: layer.progress,
+			tile_count: layer.tile_count,
+			error_message: layer.error_message,
+			url: layer.url
 		});
 	} catch (err) {
 		console.error('Status check error:', err);

@@ -45,6 +45,7 @@
 		map = L.map(mapContainer, {
 			center: center as LatLngExpression,
 			zoom: zoom,
+			maxZoom: 22,
 			zoomControl: false, // We'll add custom controls
 			attributionControl: true
 		});
@@ -56,11 +57,12 @@
 			})
 			.addTo(map);
 
-		// Add tile layer
+		// Add tile layer with overzooming support
 		tileLayer = L.tileLayer(tileUrl, {
 			attribution: attribution,
 			minZoom: minZoom,
-			maxZoom: maxZoom
+			maxZoom: 22,
+			maxNativeZoom: maxZoom
 		}).addTo(map);
 
 		// Notify parent component

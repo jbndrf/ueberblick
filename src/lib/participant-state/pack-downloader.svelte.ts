@@ -140,8 +140,7 @@ export async function deletePack(packId: string): Promise<void> {
 		'tools_forms',
 		'tools_form_fields',
 		'tools_edit',
-		'map_layers',
-		'map_sources'
+		'map_layers'
 	];
 
 	for (const collection of collections) {

@@ -23,8 +23,8 @@ export interface TileSource {
 	subdomains?: string[];
 	/** For uploaded sources, read from filesystem instead of HTTP */
 	isUploaded?: boolean;
-	/** Source ID for uploaded tiles (to find them in static/tiles/{sourceId}) */
-	sourceId?: string;
+	/** Layer ID for uploaded tiles (to find them in static/tiles/{layerId}) */
+	layerId?: string;
 	/** Tile format for uploaded sources */
 	tileFormat?: string;
 }
@@ -145,7 +145,7 @@ async function downloadTile(
  * Read a tile from the local filesystem (for uploaded sources)
  */
 async function readUploadedTile(
-	sourceId: string,
+	layerId: string,
 	z: number,
 	x: number,
 	y: number,
@@ -155,7 +155,7 @@ async function readUploadedTile(
 		process.cwd(),
 		'static',
 		'tiles',
-		sourceId,
+		layerId,
 		String(z),
 		String(x),
 		`${y}.${format}`
@@ -279,9 +279,9 @@ export async function createTilePackage(options: PackageOptions): Promise<Packag
 				const results = await Promise.all(
 					batch.map(async (coord) => {
 						// For uploaded sources, read from filesystem
-						if (layer.isUploaded && layer.sourceId) {
+						if (layer.isUploaded && layer.layerId) {
 							const result = await readUploadedTile(
-								layer.sourceId,
+								layer.layerId,
 								coord.z,
 								coord.x,
 								coord.y,

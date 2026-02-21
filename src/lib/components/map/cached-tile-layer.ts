@@ -2,7 +2,7 @@
  * Custom Leaflet TileLayer that serves tiles from IndexedDB cache when available.
  *
  * Usage:
- *   const layer = createCachedTileLayer(sourceId, urlTemplate, options);
+ *   const layer = createCachedTileLayer(layerId, urlTemplate, options);
  *   layer.addTo(map);
  *
  * When offline or when tiles are cached, serves from IndexedDB.
@@ -15,20 +15,20 @@ type TileCoords = { x: number; y: number; z: number };
 type DoneCallback = (error: Error | null, tile: HTMLImageElement) => void;
 
 /**
- * Create a cached tile layer for a specific source.
+ * Create a cached tile layer for a specific map layer.
  *
  * In local-first mode, always tries IndexedDB cache first.
  * Falls back to network when online and tile is not cached.
  * Uses navigator.onLine for network detection (no gateway dependency).
  *
- * @param sourceId - The map_sources.id for this layer (used as cache key)
+ * @param layerId - The map_layers.id for this layer (used as cache key)
  * @param urlTemplate - The tile URL template (e.g., "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png")
  * @param options - Standard Leaflet TileLayer options
  * @param leaflet - Leaflet instance (pass L from your component)
  * @returns A Leaflet TileLayer that uses IndexedDB cache
  */
 export function createCachedTileLayer(
-	sourceId: string,
+	layerId: string,
 	urlTemplate: string,
 	options: L.TileLayerOptions | undefined,
 	leaflet: typeof L
@@ -46,7 +46,7 @@ export function createCachedTileLayer(
 			tile.setAttribute('role', 'presentation');
 
 			// Try to load from cache first
-			getTile(sourceId, coords.z, coords.x, coords.y)
+			getTile(layerId, coords.z, coords.x, coords.y)
 				.then((cachedBlob) => {
 					if (cachedBlob) {
 						// Serve from cache
@@ -74,7 +74,7 @@ export function createCachedTileLayer(
 							// Offline: fail gracefully
 							console.log(
 								'[CachedTileLayer] Tile not cached, offline:',
-								`${sourceId}/${coords.z}/${coords.x}/${coords.y}`
+								`${layerId}/${coords.z}/${coords.x}/${coords.y}`
 							);
 							done(new Error('Tile not cached and offline'), tile);
 						}
@@ -84,7 +84,7 @@ export function createCachedTileLayer(
 					// Log actual database errors for debugging
 					console.error(
 						'[CachedTileLayer] Database error for tile',
-						`${sourceId}/${coords.z}/${coords.x}/${coords.y}:`,
+						`${layerId}/${coords.z}/${coords.x}/${coords.y}:`,
 						error
 					);
 					if (navigator.onLine) {
@@ -126,14 +126,14 @@ function loadFromNetwork(
 }
 
 /**
- * Create multiple cached tile layers from map sources
+ * Create multiple cached tile layers from map layers
  *
- * @param sources - Array of map sources with id, url, and config
+ * @param layers - Array of map layers with id, url, and config
  * @param leaflet - Leaflet instance
- * @returns Map of sourceId -> CachedTileLayer
+ * @returns Map of layerId -> CachedTileLayer
  */
 export function createCachedTileLayers(
-	sources: Array<{
+	layers: Array<{
 		id: string;
 		url: string;
 		config?: {
@@ -145,24 +145,24 @@ export function createCachedTileLayers(
 	}>,
 	leaflet: typeof L
 ): Map<string, L.TileLayer> {
-	const layers = new Map<string, L.TileLayer>();
+	const result = new Map<string, L.TileLayer>();
 
-	for (const source of sources) {
+	for (const layer of layers) {
 		const options: L.TileLayerOptions = {
-			subdomains: source.config?.subdomains,
-			attribution: source.config?.attribution,
-			maxZoom: source.config?.maxZoom ?? 19,
-			minZoom: source.config?.minZoom ?? 0,
+			subdomains: layer.config?.subdomains,
+			attribution: layer.config?.attribution,
+			maxZoom: layer.config?.maxZoom ?? 19,
+			minZoom: layer.config?.minZoom ?? 0,
 			crossOrigin: 'anonymous'
 		};
 
 		try {
-			const layer = createCachedTileLayer(source.id, source.url, options, leaflet);
-			layers.set(source.id, layer);
+			const tileLayer = createCachedTileLayer(layer.id, layer.url, options, leaflet);
+			result.set(layer.id, tileLayer);
 		} catch (error) {
-			console.warn(`Failed to create cached layer for source ${source.id}:`, error);
+			console.warn(`Failed to create cached layer for ${layer.id}:`, error);
 		}
 	}
 
-	return layers;
+	return result;
 }

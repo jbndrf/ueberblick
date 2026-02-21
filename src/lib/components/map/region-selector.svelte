@@ -5,8 +5,7 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button';
 	import { Square, Pentagon, Trash2, Check, X } from 'lucide-svelte';
-	import type { MapLayerWithSource } from '$lib/types/map-layer';
-	import type { MapSource } from '$lib/types/map-sources';
+	import type { MapLayer } from '$lib/types/map-layer';
 	import {
 		boundsToPolygon,
 		calculatePolygonAreaKm2,
@@ -20,7 +19,7 @@
 
 	interface Props {
 		open: boolean;
-		mapLayers: MapLayerWithSource[];
+		mapLayers: MapLayer[];
 		mapDefaults: { zoom: number; center: { lat: number; lng: number } };
 		zoomMin: number;
 		zoomMax: number;
@@ -117,14 +116,27 @@
 		});
 
 		// Add base layer from project layers or default OSM
-		const baseLayer = mapLayers.find((l) => l.is_base_layer);
-		const source = baseLayer?.expand?.source_id as MapSource | undefined;
+		const baseLayer = mapLayers.find((l) => l.layer_type === 'base');
 
-		if (source?.url) {
-			L.tileLayer(source.url, {
-				attribution: (source.config as { attribution?: string })?.attribution || '',
-				maxZoom: 19
-			}).addTo(map);
+		if (baseLayer?.url) {
+			const config = baseLayer.config as Record<string, unknown> | undefined;
+			const attribution = (config?.attribution as string) || '';
+
+			if (baseLayer.source_type === 'wms') {
+				L.tileLayer.wms(baseLayer.url, {
+					layers: (config?.layers as string) || '',
+					format: (config?.format as string) || 'image/png',
+					transparent: (config?.transparent as boolean) ?? true,
+					version: (config?.version as string) || '1.1.1',
+					attribution,
+					maxZoom: 19
+				}).addTo(map);
+			} else {
+				L.tileLayer(baseLayer.url, {
+					attribution,
+					maxZoom: 19
+				}).addTo(map);
+			}
 		} else {
 			// Fallback to OSM
 			L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {

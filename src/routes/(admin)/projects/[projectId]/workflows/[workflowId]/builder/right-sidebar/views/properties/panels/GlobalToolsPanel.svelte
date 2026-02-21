@@ -65,7 +65,7 @@
 	const TRIGGER_LABELS: Record<string, string> = {
 		on_transition: 'Transition',
 		on_field_change: 'Field Change',
-		time_based: 'Time Based'
+		scheduled: 'Scheduled'
 	};
 
 	let activeTab = $state('permissions');

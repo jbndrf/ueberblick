@@ -1,8 +1,8 @@
 /**
  * Custom map tile caching for offline use
  *
- * Supports multiple tile sources (base layers + overlays).
- * Stores tiles in IndexedDB with keys: "{sourceId}/{z}/{x}/{y}"
+ * Supports multiple tile layers (base layers + overlays).
+ * Stores tiles in IndexedDB with keys: "{layerId}/{z}/{x}/{y}"
  */
 
 import { getDB, type CachedTile } from './db';
@@ -25,7 +25,7 @@ export interface TileSource {
  * Store a tile in IndexedDB
  */
 export async function storeTile(
-	sourceId: string,
+	layerId: string,
 	z: number,
 	x: number,
 	y: number,
@@ -34,8 +34,8 @@ export async function storeTile(
 ): Promise<void> {
 	const db = await getDB();
 	const tile: CachedTile = {
-		key: `${sourceId}/${z}/${x}/${y}`,
-		sourceId,
+		key: `${layerId}/${z}/${x}/${y}`,
+		layerId,
 		z,
 		x,
 		y,
@@ -50,13 +50,13 @@ export async function storeTile(
  * Get a tile from IndexedDB
  */
 export async function getTile(
-	sourceId: string,
+	layerId: string,
 	z: number,
 	x: number,
 	y: number
 ): Promise<Blob | null> {
 	const db = await getDB();
-	const key = `${sourceId}/${z}/${x}/${y}`;
+	const key = `${layerId}/${z}/${x}/${y}`;
 	const tile = await db.get('tiles', key);
 	return tile?.blob ?? null;
 }
@@ -64,27 +64,27 @@ export async function getTile(
 /**
  * Check if a tile exists in cache
  */
-export async function hasTile(sourceId: string, z: number, x: number, y: number): Promise<boolean> {
+export async function hasTile(layerId: string, z: number, x: number, y: number): Promise<boolean> {
 	const db = await getDB();
-	const key = `${sourceId}/${z}/${x}/${y}`;
+	const key = `${layerId}/${z}/${x}/${y}`;
 	const tile = await db.get('tiles', key);
 	return tile !== undefined;
 }
 
 /**
- * Get all cached tiles for a source
+ * Get all cached tiles for a layer
  */
-export async function getTilesForSource(sourceId: string): Promise<CachedTile[]> {
+export async function getTilesForLayer(layerId: string): Promise<CachedTile[]> {
 	const db = await getDB();
-	return db.getAllFromIndex('tiles', 'by_source', sourceId);
+	return db.getAllFromIndex('tiles', 'by_layer', layerId);
 }
 
 /**
- * Delete all tiles for a source
+ * Delete all tiles for a layer
  */
-export async function deleteTilesForSource(sourceId: string): Promise<number> {
+export async function deleteTilesForLayer(layerId: string): Promise<number> {
 	const db = await getDB();
-	const tiles = await db.getAllKeysFromIndex('tiles', 'by_source', sourceId);
+	const tiles = await db.getAllKeysFromIndex('tiles', 'by_layer', layerId);
 	for (const key of tiles) {
 		await db.delete('tiles', key);
 	}
@@ -106,19 +106,19 @@ export async function clearAllTiles(): Promise<number> {
  */
 export async function getTileCacheStats(): Promise<{
 	totalTiles: number;
-	bySource: Record<string, number>;
+	byLayer: Record<string, number>;
 }> {
 	const db = await getDB();
 	const allTiles = await db.getAll('tiles');
 
-	const bySource: Record<string, number> = {};
+	const byLayer: Record<string, number> = {};
 	for (const tile of allTiles) {
-		bySource[tile.sourceId] = (bySource[tile.sourceId] || 0) + 1;
+		byLayer[tile.layerId] = (byLayer[tile.layerId] || 0) + 1;
 	}
 
 	return {
 		totalTiles: allTiles.length,
-		bySource
+		byLayer
 	};
 }
 

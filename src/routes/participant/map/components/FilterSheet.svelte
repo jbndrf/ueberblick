@@ -78,6 +78,14 @@
 		filter_value_icons?: Record<string, IconConfig>;
 	}
 
+	/** Parse a field value that might be a JSON array into individual values */
+	function splitMultiValue(value: string): string[] {
+		if (value.startsWith('[')) {
+			try { return JSON.parse(value); } catch { /* fall through */ }
+		}
+		return [value];
+	}
+
 	function renderIcon(config: IconConfig | null | undefined, size: number = 16): string | null {
 		if (!config?.svgContent) return null;
 		const color = config.style?.color || '#333';
@@ -229,7 +237,9 @@
 				const countMap = new Map<string, number>();
 				for (const fv of fieldValues) {
 					if (fv.field_key === filterable.fieldId && fv.value && instanceIds.has(fv.instance_id)) {
-						countMap.set(fv.value, (countMap.get(fv.value) ?? 0) + 1);
+						for (const v of splitMultiValue(fv.value)) {
+							countMap.set(v, (countMap.get(v) ?? 0) + 1);
+						}
 					}
 				}
 

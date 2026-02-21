@@ -14,15 +14,13 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Switch } from '$lib/components/ui/switch';
 	import { Badge } from '$lib/components/ui/badge';
-	import { Textarea } from '$lib/components/ui/textarea';
-	import { Map, Plus, Layers, Star, Settings, Package, Download, Trash2, Loader2, MapPin, Pencil } from 'lucide-svelte';
+	import { Map, Plus, Layers, Star, Settings, Package, Loader2, MapPin, Pencil, Upload } from 'lucide-svelte';
 	import { RegionSelector } from '$lib/components/map';
 	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 	import { formatArea, formatTileCount, estimateTileCount, calculatePolygonAreaKm2 } from '$lib/utils/geo-utils';
 	import type { Feature, Polygon } from 'geojson';
 	import { BaseTable, type BaseColumnConfig } from '$lib/components/admin/base-table';
-	import type { MapLayerWithSource, MapLayerConfig } from '$lib/types/map-layer';
-	import type { MapSource } from '$lib/types/map-sources';
+	import { PRESET_SOURCES, type MapLayer, type MapLayerConfig } from '$lib/types/map-layer';
 
 	// Type for offline packages
 	type OfflinePackage = {
@@ -48,12 +46,37 @@
 	let currentTab = $state('layers');
 
 	// Layer dialog state
-	let showCreateLayerDialog = $state(false);
+	let showAddLayerDialog = $state(false);
+	let addLayerMode = $state<'preset' | 'tile' | 'wms' | 'upload'>('preset');
 	let showDeleteLayerDialog = $state(false);
 	let showDefaultsDialog = $state(false);
-	let selectedLayer = $state<MapLayerWithSource | null>(null);
+	let selectedLayer = $state<MapLayer | null>(null);
 	let isSubmitting = $state(false);
 	let isSavingDefaults = $state(false);
+
+	// Upload state
+	let uploadFile = $state<File | null>(null);
+	let uploadTileFormat = $state<'png' | 'jpg' | 'webp'>('png');
+	let uploadName = $state('');
+	let isUploading = $state(false);
+	let uploadLayerId = $state<string | null>(null);
+	let uploadProgress = $state<{ status: string; progress: number } | null>(null);
+
+	// Tile URL form state
+	let tileUrlName = $state('');
+	let tileUrlUrl = $state('');
+	let tileUrlAttribution = $state('');
+	let tileUrlAsBase = $state(false);
+
+	// WMS form state
+	let wmsName = $state('');
+	let wmsUrl = $state('');
+	let wmsLayers = $state('');
+	let wmsAttribution = $state('');
+	let wmsFormat = $state('image/png');
+	let wmsTransparent = $state(true);
+	let wmsVersion = $state('1.1.1');
+	let wmsAsBase = $state(false);
 
 	// Offline packages state
 	let showCreatePackageDialog = $state(false);
@@ -63,7 +86,7 @@
 	let packageFormData = $state({
 		name: '',
 		zoom_min: 10,
-		zoom_max: 17, // OSM max is 19, keep reasonable default
+		zoom_max: 17,
 		region_geojson: '',
 		layers: [] as string[],
 		visible_to_roles: [] as string[]
@@ -89,55 +112,6 @@
 		};
 	});
 
-	function validateGeoJson(value: string): boolean {
-		if (!value.trim()) {
-			packageGeoJsonError = 'GeoJSON is required';
-			return false;
-		}
-		try {
-			const parsed = JSON.parse(value);
-			const polygon = extractPolygon(parsed);
-			if (!polygon) {
-				packageGeoJsonError = 'Must contain a Polygon or MultiPolygon';
-				return false;
-			}
-			packageGeoJsonError = '';
-			return true;
-		} catch {
-			packageGeoJsonError = 'Invalid JSON format';
-			return false;
-		}
-	}
-
-	function extractPolygon(geojson: any): object | null {
-		if (!geojson || typeof geojson !== 'object') return null;
-
-		// Direct Polygon or MultiPolygon geometry
-		if (geojson.type === 'Polygon' || geojson.type === 'MultiPolygon') {
-			return geojson;
-		}
-
-		// Feature with Polygon or MultiPolygon geometry
-		if (geojson.type === 'Feature' && geojson.geometry) {
-			if (geojson.geometry.type === 'Polygon' || geojson.geometry.type === 'MultiPolygon') {
-				return geojson.geometry;
-			}
-		}
-
-		// FeatureCollection - extract first polygon feature
-		if (geojson.type === 'FeatureCollection' && Array.isArray(geojson.features)) {
-			for (const feature of geojson.features) {
-				if (feature.type === 'Feature' && feature.geometry) {
-					if (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon') {
-						return feature.geometry;
-					}
-				}
-			}
-		}
-
-		return null;
-	}
-
 	function resetPackageForm() {
 		packageFormData = {
 			name: '',
@@ -153,8 +127,7 @@
 
 	function openCreatePackageDialog() {
 		resetPackageForm();
-		// Pre-select all active layers
-		packageFormData.layers = data.mapLayers.map((l: MapLayerWithSource) => l.id);
+		packageFormData.layers = data.mapLayers.map((l: MapLayer) => l.id);
 		showCreatePackageDialog = true;
 	}
 
@@ -174,7 +147,6 @@
 
 		isCreatingPackage = true;
 		try {
-			// Use the geometry from the selected region
 			const polygon = selectedRegion.geometry;
 
 			const formData = new FormData();
@@ -343,121 +315,6 @@
 		}
 	});
 
-	// Layer form
-	const {
-		form: layerForm,
-		enhance: layerEnhance,
-		reset: resetLayerForm
-	} = superForm(data.layerForm, {
-		validators: zodClient(mapLayerSchema),
-		dataType: 'json',
-		resetForm: true,
-		onSubmit: () => {
-			isSubmitting = true;
-		},
-		onResult: ({ result }) => {
-			isSubmitting = false;
-			if (result.type === 'success') {
-				toast.success('Layer saved');
-				showCreateLayerDialog = false;
-				resetLayerForm();
-				invalidateAll();
-			} else if (result.type === 'failure') {
-				toast.error(result.data?.message ?? 'Failed to save layer');
-			}
-		}
-	});
-
-	// Get source name from layer
-	function getSourceName(layer: MapLayerWithSource): string {
-		return layer.expand?.source_id?.name || 'Unknown source';
-	}
-
-	// Get source type from layer
-	function getSourceType(layer: MapLayerWithSource): string {
-		const sourceType = layer.expand?.source_id?.source_type;
-		if (!sourceType) return '-';
-		return sourceType.charAt(0).toUpperCase() + sourceType.slice(1);
-	}
-
-	// Handle source selection - auto-fill name
-	function handleSourceSelect(sourceId: string) {
-		if (sourceId) {
-			const source = data.mapSources.find((s: MapSource) => s.id === sourceId);
-			if (source && !$layerForm.name) {
-				$layerForm.name = source.name;
-			}
-		}
-	}
-
-	// Layer management
-	function openCreateLayerDialog() {
-		resetLayerForm();
-		$layerForm = {
-			source_id: '',
-			name: '',
-			display_order: data.mapLayers.length,
-			visible_to_roles: [],
-			is_base_layer: !data.baseLayer,
-			is_active: true,
-			config: { opacity: 1 }
-		};
-		showCreateLayerDialog = true;
-	}
-
-	function openDeleteLayerDialog(layer: MapLayerWithSource) {
-		selectedLayer = layer;
-		showDeleteLayerDialog = true;
-	}
-
-	async function handleDeleteLayer() {
-		if (!selectedLayer) return;
-
-		const formData = new FormData();
-		formData.append('id', selectedLayer.id);
-
-		try {
-			const response = await fetch('?/deleteLayer', {
-				method: 'POST',
-				body: formData
-			});
-
-			const result = await response.json();
-			if (result.type === 'success') {
-				toast.success(m.mapLayerDeleteSuccess());
-				showDeleteLayerDialog = false;
-				selectedLayer = null;
-				invalidateAll();
-			} else {
-				toast.error(m.mapLayerDeleteError());
-			}
-		} catch {
-			toast.error(m.mapLayerDeleteError());
-		}
-	}
-
-	async function setAsBaseLayer(layer: MapLayerWithSource) {
-		const formData = new FormData();
-		formData.append('id', layer.id);
-
-		try {
-			const response = await fetch('?/setBaseLayer', {
-				method: 'POST',
-				body: formData
-			});
-
-			const result = await response.json();
-			if (result.type === 'success') {
-				toast.success('Base layer updated');
-				invalidateAll();
-			} else {
-				toast.error('Failed to set base layer');
-			}
-		} catch {
-			toast.error('Failed to set base layer');
-		}
-	}
-
 	// Get effective map defaults (from base layer config or project defaults)
 	const effectiveDefaults = $derived(() => {
 		if (data.baseLayer?.config) {
@@ -472,8 +329,8 @@
 		return data.mapDefaults;
 	});
 
-	// Layer table columns (reactive to update entityConfig when data changes)
-	const layerColumns = $derived.by((): BaseColumnConfig<MapLayerWithSource>[] => [
+	// Layer table columns
+	const layerColumns = $derived.by((): BaseColumnConfig<MapLayer>[] => [
 		{
 			id: 'name',
 			header: m.mapLayerName(),
@@ -482,16 +339,9 @@
 			capabilities: { sortable: true, filterable: true }
 		},
 		{
-			id: 'source',
-			header: 'Source',
-			accessorFn: (row) => getSourceName(row),
-			fieldType: 'text',
-			capabilities: { sortable: true, filterable: true }
-		},
-		{
 			id: 'source_type',
 			header: 'Type',
-			accessorFn: (row) => getSourceType(row),
+			accessorFn: (row) => row.source_type.charAt(0).toUpperCase() + row.source_type.slice(1),
 			fieldType: 'text',
 			capabilities: { sortable: true, filterable: true }
 		},
@@ -509,7 +359,6 @@
 			id: 'visible_to_roles',
 			header: 'Visible to Roles',
 			accessorFn: (row) => {
-				// Return IDs - the entityConfig handles displaying names
 				if (!row.visible_to_roles || row.visible_to_roles.length === 0) return [];
 				return row.visible_to_roles;
 			},
@@ -541,13 +390,241 @@
 			}
 		},
 		{
-			id: 'is_base_layer',
+			id: 'layer_type',
 			header: 'Base',
-			accessorKey: 'is_base_layer',
+			accessorFn: (row) => row.layer_type === 'base',
 			fieldType: 'boolean',
 			capabilities: { sortable: true, filterable: true }
 		}
 	]);
+
+	// Add preset layer
+	async function handleAddPreset(presetId: string) {
+		isSubmitting = true;
+		try {
+			const formData = new FormData();
+			formData.append('preset_id', presetId);
+			// First preset added becomes base layer
+			const hasBase = data.mapLayers.some((l: MapLayer) => l.layer_type === 'base');
+			formData.append('layer_type', hasBase ? 'overlay' : 'base');
+
+			const response = await fetch('?/addPreset', {
+				method: 'POST',
+				body: formData
+			});
+
+			const result = await response.json();
+			if (result.type === 'success') {
+				toast.success('Layer added');
+				showAddLayerDialog = false;
+				invalidateAll();
+			} else {
+				toast.error(result.data?.message || 'Failed to add layer');
+			}
+		} catch {
+			toast.error('Failed to add layer');
+		} finally {
+			isSubmitting = false;
+		}
+	}
+
+	// Add tile URL layer
+	async function handleAddTile() {
+		if (!tileUrlName.trim() || !tileUrlUrl.trim()) return;
+		isSubmitting = true;
+		try {
+			const formData = new FormData();
+			formData.append('name', tileUrlName);
+			formData.append('url', tileUrlUrl);
+			formData.append('attribution', tileUrlAttribution);
+			formData.append('layer_type', tileUrlAsBase ? 'base' : 'overlay');
+
+			const response = await fetch('?/addTile', {
+				method: 'POST',
+				body: formData
+			});
+
+			const result = await response.json();
+			if (result.type === 'success') {
+				toast.success('Tile layer added');
+				showAddLayerDialog = false;
+				tileUrlName = '';
+				tileUrlUrl = '';
+				tileUrlAttribution = '';
+				tileUrlAsBase = false;
+				invalidateAll();
+			} else {
+				toast.error(result.data?.message || 'Failed to add layer');
+			}
+		} catch {
+			toast.error('Failed to add layer');
+		} finally {
+			isSubmitting = false;
+		}
+	}
+
+	// Add WMS layer
+	async function handleAddWms() {
+		if (!wmsName.trim() || !wmsUrl.trim() || !wmsLayers.trim()) return;
+		isSubmitting = true;
+		try {
+			const formData = new FormData();
+			formData.append('name', wmsName);
+			formData.append('url', wmsUrl);
+			formData.append('layers', wmsLayers);
+			formData.append('attribution', wmsAttribution);
+			formData.append('format', wmsFormat);
+			formData.append('transparent', String(wmsTransparent));
+			formData.append('version', wmsVersion);
+			formData.append('layer_type', wmsAsBase ? 'base' : 'overlay');
+
+			const response = await fetch('?/addWms', {
+				method: 'POST',
+				body: formData
+			});
+
+			const result = await response.json();
+			if (result.type === 'success') {
+				toast.success('WMS layer added');
+				showAddLayerDialog = false;
+				wmsName = '';
+				wmsUrl = '';
+				wmsLayers = '';
+				wmsAttribution = '';
+				wmsFormat = 'image/png';
+				wmsTransparent = true;
+				wmsVersion = '1.1.1';
+				wmsAsBase = false;
+				invalidateAll();
+			} else {
+				toast.error(result.data?.message || 'Failed to add layer');
+			}
+		} catch {
+			toast.error('Failed to add layer');
+		} finally {
+			isSubmitting = false;
+		}
+	}
+
+	// Handle file upload
+	async function handleUpload() {
+		if (!uploadFile || !uploadName.trim()) return;
+		isUploading = true;
+		try {
+			const formData = new FormData();
+			formData.append('name', uploadName);
+			formData.append('tile_format', uploadTileFormat);
+			formData.append('file', uploadFile);
+			formData.append('project_id', data.project.id);
+			formData.append('layer_type', 'overlay');
+
+			const response = await fetch('/api/map-layers/upload', {
+				method: 'POST',
+				body: formData
+			});
+
+			const result = await response.json();
+			if (response.ok) {
+				uploadLayerId = result.id;
+				toast.success('Upload started, processing...');
+				// Poll for progress
+				pollUploadStatus(result.id);
+			} else {
+				toast.error(result.message || 'Upload failed');
+			}
+		} catch {
+			toast.error('Upload failed');
+		} finally {
+			isUploading = false;
+		}
+	}
+
+	async function pollUploadStatus(layerId: string) {
+		const poll = async () => {
+			try {
+				const response = await fetch(`/api/map-layers/${layerId}/status`);
+				const result = await response.json();
+				uploadProgress = { status: result.status, progress: result.progress };
+
+				if (result.status === 'completed') {
+					toast.success('Tile processing complete');
+					uploadFile = null;
+					uploadName = '';
+					uploadLayerId = null;
+					uploadProgress = null;
+					showAddLayerDialog = false;
+					invalidateAll();
+				} else if (result.status === 'failed') {
+					toast.error(result.error_message || 'Processing failed');
+					uploadProgress = null;
+				} else {
+					setTimeout(poll, 2000);
+				}
+			} catch {
+				// Retry
+				setTimeout(poll, 3000);
+			}
+		};
+		poll();
+	}
+
+	function openDeleteLayerDialog(layer: MapLayer) {
+		selectedLayer = layer;
+		showDeleteLayerDialog = true;
+	}
+
+	async function handleDeleteLayer() {
+		if (!selectedLayer) return;
+
+		const formData = new FormData();
+		formData.append('id', selectedLayer.id);
+
+		try {
+			const response = await fetch('?/deleteLayer', {
+				method: 'POST',
+				body: formData
+			});
+
+			const result = await response.json();
+			if (result.type === 'success') {
+				toast.success(m.mapLayerDeleteSuccess());
+				showDeleteLayerDialog = false;
+				selectedLayer = null;
+				invalidateAll();
+			} else {
+				toast.error(m.mapLayerDeleteError());
+			}
+		} catch {
+			toast.error(m.mapLayerDeleteError());
+		}
+	}
+
+	async function setAsBaseLayer(layer: MapLayer) {
+		const formData = new FormData();
+		formData.append('id', layer.id);
+
+		try {
+			const response = await fetch('?/setBaseLayer', {
+				method: 'POST',
+				body: formData
+			});
+
+			const result = await response.json();
+			if (result.type === 'success') {
+				toast.success('Base layer updated');
+				invalidateAll();
+			} else {
+				toast.error('Failed to set base layer');
+			}
+		} catch {
+			toast.error('Failed to set base layer');
+		}
+	}
+
+	// Already-added preset IDs
+	const addedPresetUrls = $derived(
+		new Set(data.mapLayers.map((l: MapLayer) => l.url).filter(Boolean))
+	);
 </script>
 
 <div class="flex flex-col gap-6 min-w-0 w-full">
@@ -601,20 +678,24 @@
 								{/if}
 							</Card.Description>
 						</div>
-						<Button onclick={openCreateLayerDialog} disabled={data.mapSources.length === 0}>
+						<Button onclick={() => (showAddLayerDialog = true)}>
 							<Plus class="mr-2 h-4 w-4" />
 							Add Layer
 						</Button>
 					</div>
 				</Card.Header>
 				<Card.Content>
-					{#if data.mapSources.length === 0}
+					{#if data.mapLayers.length === 0}
 						<div class="flex flex-col items-center justify-center py-12 text-center">
 							<Map class="h-12 w-12 text-muted-foreground mb-4" />
-							<p class="text-lg font-medium">No map sources available</p>
+							<p class="text-lg font-medium">No layers yet</p>
 							<p class="text-muted-foreground mb-4">
-								Add sources in the <a href="/map-sources" class="underline">Map Sources</a> page first
+								Add a preset, tile URL, WMS, or upload tiles to get started
 							</p>
+							<Button onclick={() => (showAddLayerDialog = true)}>
+								<Plus class="mr-2 h-4 w-4" />
+								Add Layer
+							</Button>
 						</div>
 					{:else}
 						<BaseTable
@@ -634,7 +715,7 @@
 										label: 'Set as Base',
 										icon: Star,
 										onClick: setAsBaseLayer,
-										isVisible: (row) => !row.is_base_layer
+										isVisible: (row) => row.layer_type !== 'base'
 									}
 								]
 							}}
@@ -710,119 +791,200 @@
 	</Tabs.Root>
 </div>
 
-<!-- Create Layer Dialog -->
-<Dialog.Root bind:open={showCreateLayerDialog}>
-	<Dialog.Content class="max-w-xl">
-		<Dialog.Header>
+<!-- Add Layer Dialog (absorbs map-sources functionality) -->
+<Dialog.Root bind:open={showAddLayerDialog}>
+	<Dialog.Content class="max-w-2xl max-h-[90vh] flex flex-col">
+		<Dialog.Header class="shrink-0">
 			<Dialog.Title>Add Map Layer</Dialog.Title>
-			<Dialog.Description>Add a layer from your map sources library</Dialog.Description>
+			<Dialog.Description>Choose a preset, enter a URL, or upload tiles</Dialog.Description>
 		</Dialog.Header>
-		<form method="POST" action="?/createLayer" use:layerEnhance class="space-y-4">
-			<div class="space-y-2">
-				<Label for="source_id">Source</Label>
-				<select
-					id="source_id"
-					name="source_id"
-					bind:value={$layerForm.source_id}
-					onchange={(e) => handleSourceSelect(e.currentTarget.value)}
-					class="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-					required
-				>
-					<option value="">-- Select a source --</option>
-					{#each data.mapSources as source}
-						<option value={source.id}>
-							{source.name} ({source.source_type})
-						</option>
+
+		<!-- Mode Tabs -->
+		<div class="flex gap-2 border-b pb-2 mb-4 shrink-0">
+			<Button
+				variant={addLayerMode === 'preset' ? 'default' : 'outline'}
+				size="sm"
+				onclick={() => (addLayerMode = 'preset')}
+			>
+				Presets
+			</Button>
+			<Button
+				variant={addLayerMode === 'tile' ? 'default' : 'outline'}
+				size="sm"
+				onclick={() => (addLayerMode = 'tile')}
+			>
+				Tile URL
+			</Button>
+			<Button
+				variant={addLayerMode === 'wms' ? 'default' : 'outline'}
+				size="sm"
+				onclick={() => (addLayerMode = 'wms')}
+			>
+				WMS
+			</Button>
+			<Button
+				variant={addLayerMode === 'upload' ? 'default' : 'outline'}
+				size="sm"
+				onclick={() => (addLayerMode = 'upload')}
+			>
+				<Upload class="h-4 w-4 mr-1" />
+				Upload
+			</Button>
+		</div>
+
+		<div class="overflow-y-auto flex-1 pr-2">
+			{#if addLayerMode === 'preset'}
+				<!-- Preset Sources -->
+				<div class="grid gap-2">
+					{#each PRESET_SOURCES as preset}
+						<button
+							class="flex items-center justify-between p-3 border rounded-md hover:bg-muted/50 transition-colors text-left w-full disabled:opacity-50"
+							disabled={isSubmitting || addedPresetUrls.has(preset.url)}
+							onclick={() => handleAddPreset(preset.id)}
+						>
+							<div>
+								<div class="font-medium text-sm">{preset.name}</div>
+								<div class="text-xs text-muted-foreground">
+									{preset.sourceType === 'wms' ? 'WMS' : 'Tiles'} -- Zoom {preset.minZoom ?? 0}-{preset.maxZoom ?? 19}
+								</div>
+							</div>
+							{#if addedPresetUrls.has(preset.url)}
+								<Badge variant="outline" class="text-xs">Added</Badge>
+							{:else}
+								<Plus class="h-4 w-4 text-muted-foreground" />
+							{/if}
+						</button>
 					{/each}
-				</select>
-				<p class="text-xs text-muted-foreground">
-					Manage sources in <a href="/map-sources" class="underline">Map Sources</a>
-				</p>
-			</div>
+				</div>
 
-			<div class="space-y-2">
-				<Label for="layer_name">Layer Name</Label>
-				<Input id="layer_name" name="name" bind:value={$layerForm.name} required />
-			</div>
+			{:else if addLayerMode === 'tile'}
+				<!-- Tile URL Form -->
+				<div class="space-y-4">
+					<div class="space-y-2">
+						<Label for="tile_name">Name</Label>
+						<Input id="tile_name" bind:value={tileUrlName} placeholder="My Tile Layer" required />
+					</div>
+					<div class="space-y-2">
+						<Label for="tile_url">Tile URL Template</Label>
+						<Input id="tile_url" bind:value={tileUrlUrl} placeholder="https://example.com/{z}/{x}/{y}.png" required />
+						<p class="text-xs text-muted-foreground">Use {'{z}'}/{'{x}'}/{'{y}'} placeholders</p>
+					</div>
+					<div class="space-y-2">
+						<Label for="tile_attribution">Attribution (optional)</Label>
+						<Input id="tile_attribution" bind:value={tileUrlAttribution} />
+					</div>
+					<div class="flex items-center space-x-2">
+						<Switch id="tile_as_base" bind:checked={tileUrlAsBase} />
+						<Label for="tile_as_base">Set as base layer</Label>
+					</div>
+					<Button onclick={handleAddTile} disabled={isSubmitting || !tileUrlName.trim() || !tileUrlUrl.trim()}>
+						{isSubmitting ? 'Adding...' : 'Add Tile Layer'}
+					</Button>
+				</div>
 
-			<div class="grid grid-cols-2 gap-4">
-				<div class="space-y-2">
-					<Label for="layer_opacity">Opacity</Label>
-					<Input
-						id="layer_opacity"
-						name="config.opacity"
-						type="number"
-						min="0"
-						max="1"
-						step="0.1"
-						bind:value={$layerForm.config.opacity}
-					/>
+			{:else if addLayerMode === 'wms'}
+				<!-- WMS Form -->
+				<div class="space-y-4">
+					<div class="space-y-2">
+						<Label for="wms_name">Name</Label>
+						<Input id="wms_name" bind:value={wmsName} placeholder="My WMS Layer" required />
+					</div>
+					<div class="space-y-2">
+						<Label for="wms_url">WMS URL</Label>
+						<Input id="wms_url" bind:value={wmsUrl} placeholder="https://example.com/wms" required />
+					</div>
+					<div class="space-y-2">
+						<Label for="wms_layers">Layers</Label>
+						<Input id="wms_layers" bind:value={wmsLayers} placeholder="layer_name" required />
+					</div>
+					<div class="grid grid-cols-2 gap-4">
+						<div class="space-y-2">
+							<Label for="wms_format">Format</Label>
+							<Input id="wms_format" bind:value={wmsFormat} />
+						</div>
+						<div class="space-y-2">
+							<Label for="wms_version">Version</Label>
+							<Input id="wms_version" bind:value={wmsVersion} />
+						</div>
+					</div>
+					<div class="space-y-2">
+						<Label for="wms_attribution">Attribution (optional)</Label>
+						<Input id="wms_attribution" bind:value={wmsAttribution} />
+					</div>
+					<div class="flex items-center gap-4">
+						<div class="flex items-center space-x-2">
+							<Switch id="wms_transparent" bind:checked={wmsTransparent} />
+							<Label for="wms_transparent">Transparent</Label>
+						</div>
+						<div class="flex items-center space-x-2">
+							<Switch id="wms_as_base" bind:checked={wmsAsBase} />
+							<Label for="wms_as_base">Base layer</Label>
+						</div>
+					</div>
+					<Button onclick={handleAddWms} disabled={isSubmitting || !wmsName.trim() || !wmsUrl.trim() || !wmsLayers.trim()}>
+						{isSubmitting ? 'Adding...' : 'Add WMS Layer'}
+					</Button>
 				</div>
-				<div class="space-y-2">
-					<Label for="layer_order">Display Order</Label>
-					<Input
-						id="layer_order"
-						name="display_order"
-						type="number"
-						min="0"
-						bind:value={$layerForm.display_order}
-					/>
-				</div>
-			</div>
 
-			<div class="grid grid-cols-2 gap-4">
-				<div class="space-y-2">
-					<Label for="min_zoom">Min Zoom (optional)</Label>
-					<Input
-						id="min_zoom"
-						name="config.min_zoom"
-						type="number"
-						min="0"
-						max="22"
-						bind:value={$layerForm.config.min_zoom}
-						placeholder="0"
-					/>
+			{:else if addLayerMode === 'upload'}
+				<!-- Upload Form -->
+				<div class="space-y-4">
+					<div class="space-y-2">
+						<Label for="upload_name">Name</Label>
+						<Input id="upload_name" bind:value={uploadName} placeholder="My Custom Tiles" required />
+					</div>
+					<div class="space-y-2">
+						<Label>Tile Format</Label>
+						<div class="flex gap-2">
+							{#each ['png', 'jpg', 'webp'] as fmt}
+								<Button
+									variant={uploadTileFormat === fmt ? 'default' : 'outline'}
+									size="sm"
+									onclick={() => (uploadTileFormat = fmt as 'png' | 'jpg' | 'webp')}
+								>
+									{fmt.toUpperCase()}
+								</Button>
+							{/each}
+						</div>
+					</div>
+					<div class="space-y-2">
+						<Label>ZIP File</Label>
+						<Input
+							type="file"
+							accept=".zip"
+							onchange={(e) => {
+								const files = (e.target as HTMLInputElement).files;
+								uploadFile = files?.[0] ?? null;
+								if (uploadFile && !uploadName) {
+									uploadName = uploadFile.name.replace('.zip', '');
+								}
+							}}
+						/>
+						<p class="text-xs text-muted-foreground">ZIP archive with tiles in z/x/y.ext format</p>
+					</div>
+					{#if uploadProgress}
+						<div class="space-y-1">
+							<p class="text-sm">Processing... {uploadProgress.progress}%</p>
+							<div class="w-full bg-muted rounded-full h-2">
+								<div
+									class="bg-primary h-2 rounded-full transition-all"
+									style="width: {uploadProgress.progress}%"
+								></div>
+							</div>
+						</div>
+					{/if}
+					<Button onclick={handleUpload} disabled={isUploading || !uploadFile || !uploadName.trim()}>
+						{#if isUploading}
+							<Loader2 class="mr-2 h-4 w-4 animate-spin" />
+							Uploading...
+						{:else}
+							<Upload class="mr-2 h-4 w-4" />
+							Upload Tiles
+						{/if}
+					</Button>
 				</div>
-				<div class="space-y-2">
-					<Label for="max_zoom">Max Zoom (optional)</Label>
-					<Input
-						id="max_zoom"
-						name="config.max_zoom"
-						type="number"
-						min="0"
-						max="22"
-						bind:value={$layerForm.config.max_zoom}
-						placeholder="22"
-					/>
-				</div>
-			</div>
-
-			<div class="flex items-center gap-6">
-				<div class="flex items-center space-x-2">
-					<Switch id="is_base_layer" name="is_base_layer" bind:checked={$layerForm.is_base_layer} />
-					<Label for="is_base_layer">Base Layer</Label>
-				</div>
-				<div class="flex items-center space-x-2">
-					<Switch id="layer_is_active" name="is_active" bind:checked={$layerForm.is_active} />
-					<Label for="layer_is_active">Active</Label>
-				</div>
-			</div>
-
-			{#if $layerForm.is_base_layer && data.baseLayer}
-				<p class="text-sm text-muted-foreground">
-					This will replace "{data.baseLayer.name}" as the base layer.
-				</p>
 			{/if}
-
-			<Dialog.Footer>
-				<Button type="button" variant="outline" onclick={() => (showCreateLayerDialog = false)}>
-					Cancel
-				</Button>
-				<Button type="submit" disabled={isSubmitting || !$layerForm.source_id}>
-					{isSubmitting ? 'Saving...' : 'Add Layer'}
-				</Button>
-			</Dialog.Footer>
-		</form>
+		</div>
 	</Dialog.Content>
 </Dialog.Root>
 
@@ -896,7 +1058,7 @@
 				{m.mapLayerDeleteConfirmation()}
 				{#if selectedLayer}
 					<strong class="block mt-2">{selectedLayer.name}</strong>
-					{#if selectedLayer.is_base_layer}
+					{#if selectedLayer.layer_type === 'base'}
 						<Badge variant="destructive" class="mt-2">This is the base layer</Badge>
 					{/if}
 				{/if}
@@ -998,7 +1160,7 @@
 								class="h-4 w-4 rounded border-gray-300"
 							/>
 							<span class="text-sm">{layer.name}</span>
-							{#if layer.is_base_layer}
+							{#if layer.layer_type === 'base'}
 								<Badge variant="outline" class="text-xs">Base</Badge>
 							{/if}
 						</label>

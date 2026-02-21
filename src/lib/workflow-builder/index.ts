@@ -52,7 +52,7 @@ export type {
 	TriggerConfig,
 	TransitionTriggerConfig,
 	FieldChangeTriggerConfig,
-	TimeBasedTriggerConfig,
+	ScheduledTriggerConfig,
 	ConditionGroup,
 	ConditionLeaf,
 	ConditionOperator,

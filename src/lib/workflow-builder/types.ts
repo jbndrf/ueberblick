@@ -266,7 +266,7 @@ export interface ToolsEdit {
 // Automation Types
 // =============================================================================
 
-export type TriggerType = 'on_transition' | 'on_field_change' | 'time_based';
+export type TriggerType = 'on_transition' | 'on_field_change' | 'scheduled';
 
 export interface TransitionTriggerConfig {
 	from_stage_id: string | null;
@@ -278,20 +278,39 @@ export interface FieldChangeTriggerConfig {
 	field_key: string | null;
 }
 
-export interface TimeBasedTriggerConfig {
-	stage_id: string | null;
-	days: number;
+export interface ScheduledTriggerConfig {
+	cron: string;
+	target_stage_id: string | null;
+	/** Only target instances inactive for at least this many days (based on last_activity_at). 0 or null = no filter. */
+	inactive_days?: number | null;
 }
 
 export type TriggerConfig =
 	| TransitionTriggerConfig
 	| FieldChangeTriggerConfig
-	| TimeBasedTriggerConfig;
+	| ScheduledTriggerConfig;
 
-export type ConditionOperator = 'equals' | 'not_equals' | 'is_empty' | 'is_not_empty' | 'contains';
+export type ConditionOperator =
+	| 'equals'
+	| 'not_equals'
+	| 'is_empty'
+	| 'is_not_empty'
+	| 'contains'
+	| 'gt'
+	| 'gte'
+	| 'lt'
+	| 'lte';
 
 export type ConditionLeaf =
-	| { type: 'field_value'; params: { field_key: string; operator: ConditionOperator; value?: string } }
+	| {
+			type: 'field_value';
+			params: {
+				field_key: string;
+				operator: ConditionOperator;
+				value?: string;
+				compare_field_key?: string;
+			};
+	  }
 	| { type: 'instance_status'; params: { status: string } };
 
 export interface ConditionGroup {
@@ -301,7 +320,8 @@ export interface ConditionGroup {
 
 export type AutomationAction =
 	| { type: 'set_instance_status'; params: { status: string } }
-	| { type: 'set_field_value'; params: { field_key: string; value: string; stage_id: string } };
+	| { type: 'set_field_value'; params: { field_key: string; value: string; stage_id: string } }
+	| { type: 'set_stage'; params: { stage_id: string } };
 
 export interface ToolsAutomation {
 	id: string;

@@ -43,6 +43,14 @@
 
 	let { data }: Props = $props();
 
+	/** Parse a field value that might be a JSON array (multiple_choice) into individual values */
+	function splitMultiValue(value: string): string[] {
+		if (value.startsWith('[')) {
+			try { return JSON.parse(value); } catch { /* fall through */ }
+		}
+		return [value];
+	}
+
 	const gateway = getParticipantGateway();
 
 	// Map reference
@@ -168,7 +176,7 @@
 			const [layersResult, markersResult, instancesResult, workflowsResult, stagesResult, fieldTagsResult, fieldValuesResult, entryConnectionsResult] = await Promise.all([
 				gateway.collection('map_layers').getFullList({
 					filter: 'is_active = true',
-					expand: 'source_id',
+
 					sort: 'display_order'
 				}),
 				gateway.collection('markers').getFullList({
@@ -216,7 +224,7 @@
 
 			// Initialize layer selection
 			if (!activeBaseLayerId && mapLayers.length) {
-				const firstBase = mapLayers.find((l) => l.is_base_layer);
+				const firstBase = mapLayers.find((l) => l.layer_type === 'base');
 				if (firstBase) activeBaseLayerId = firstBase.id;
 			}
 
@@ -258,7 +266,9 @@
 							const vals = new Set<string>();
 							for (const fv of fieldValuesResult) {
 								if (fv.field_key === mapping.fieldId && fv.value) {
-									vals.add(fv.value);
+									for (const v of splitMultiValue(fv.value)) {
+										vals.add(v);
+									}
 								}
 							}
 							if (vals.size > 0) {

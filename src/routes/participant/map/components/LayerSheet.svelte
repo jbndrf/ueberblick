@@ -5,23 +5,11 @@
 	import { Switch } from '$lib/components/ui/switch';
 	import { Separator } from '$lib/components/ui/separator';
 
-	interface MapSource {
-		id: string;
-		url: string;
-		source_type: string;
-		config?: {
-			attribution?: string;
-		};
-	}
-
 	interface MapLayer {
 		id: string;
 		name: string;
-		is_base_layer: boolean;
-		source_id: string;
-		expand?: {
-			source_id?: MapSource;
-		};
+		layer_type: 'base' | 'overlay';
+		source_type: string;
 	}
 
 	interface Props {
@@ -43,8 +31,8 @@
 	}: Props = $props();
 
 	// Split layers into base and overlay
-	const baseLayers = $derived(layers.filter((l) => l.is_base_layer));
-	const overlayLayers = $derived(layers.filter((l) => !l.is_base_layer));
+	const baseLayers = $derived(layers.filter((l) => l.layer_type === 'base'));
+	const overlayLayers = $derived(layers.filter((l) => l.layer_type !== 'base'));
 
 	function handleBaseLayerChange(value: string) {
 		onBaseLayerChange(value);

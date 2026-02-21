@@ -9,6 +9,7 @@
 	import ActionBuilder from './ActionBuilder.svelte';
 
 	import PropertySection from '../properties/shared/PropertySection.svelte';
+	import { describeCron, validateCron } from '$lib/automation/cron-utils';
 
 	import type {
 		ToolsAutomation,
@@ -16,7 +17,7 @@
 		TriggerConfig,
 		TransitionTriggerConfig,
 		FieldChangeTriggerConfig,
-		TimeBasedTriggerConfig,
+		ScheduledTriggerConfig,
 		ConditionGroup,
 		AutomationAction,
 		WorkflowStage,
@@ -57,7 +58,7 @@
 	const TRIGGER_TYPES: { value: TriggerType; label: string }[] = [
 		{ value: 'on_transition', label: 'On Transition' },
 		{ value: 'on_field_change', label: 'On Field Change' },
-		{ value: 'time_based', label: 'Time Based' }
+		{ value: 'scheduled', label: 'Scheduled (Cron)' }
 	];
 
 	// Local state synced from prop
@@ -81,7 +82,7 @@
 		const defaultConfigs: Record<TriggerType, TriggerConfig> = {
 			on_transition: { from_stage_id: null, to_stage_id: null },
 			on_field_change: { stage_id: null, field_key: null },
-			time_based: { stage_id: null, days: 30 }
+			scheduled: { cron: '0 2 * * 1-5', target_stage_id: null }
 		};
 		onTriggerTypeChange?.(newType);
 		onTriggerConfigChange?.(defaultConfigs[newType]);
@@ -98,10 +99,15 @@
 			? automation.trigger_config as FieldChangeTriggerConfig
 			: null
 	);
-	const timeBasedConfig = $derived(
-		automation.trigger_type === 'time_based'
-			? automation.trigger_config as TimeBasedTriggerConfig
+	const scheduledConfig = $derived(
+		automation.trigger_type === 'scheduled'
+			? automation.trigger_config as ScheduledTriggerConfig
 			: null
+	);
+
+	// Cron validation state
+	const cronValidation = $derived(
+		scheduledConfig ? validateCron(scheduledConfig.cron) : { valid: true }
 	);
 
 	const stageOptionsWithAny: StageOption[] = $derived([
@@ -246,18 +252,18 @@
 				</div>
 			{/if}
 
-			<!-- time_based config -->
-			{#if timeBasedConfig}
+			<!-- scheduled (cron) config -->
+			{#if scheduledConfig}
 				<div class="trigger-config">
 					<div class="field-group">
-						<Label class="text-xs">Stage</Label>
+						<Label class="text-xs">Target Stage</Label>
 						<select
 							class="trigger-select"
-							value={timeBasedConfig.stage_id ?? ''}
+							value={scheduledConfig.target_stage_id ?? ''}
 							onchange={(e) => {
 								onTriggerConfigChange?.({
-									...timeBasedConfig,
-									stage_id: e.currentTarget.value || null
+									...scheduledConfig,
+									target_stage_id: e.currentTarget.value || null
 								});
 							}}
 						>
@@ -265,25 +271,44 @@
 								<option value={s.id}>{s.name}</option>
 							{/each}
 						</select>
+						<span class="help-text">Only run for instances at this stage</span>
 					</div>
 					<div class="field-group">
-						<Label class="text-xs">After (days of no activity)</Label>
+						<Label class="text-xs">Cron Expression</Label>
+						<Input
+							value={scheduledConfig.cron}
+							oninput={(e) => {
+								onTriggerConfigChange?.({
+									...scheduledConfig,
+									cron: e.currentTarget.value
+								});
+							}}
+							placeholder="0 2 * * 1-5"
+							class="h-8 text-sm font-mono"
+						/>
+						{#if cronValidation.valid}
+							<span class="help-text">{describeCron(scheduledConfig.cron)}</span>
+						{:else}
+							<span class="help-text" style="color: hsl(var(--destructive));">{cronValidation.error}</span>
+						{/if}
+					</div>
+					<div class="field-group">
+						<Label class="text-xs">Inactive for (days)</Label>
 						<Input
 							type="number"
-							min={1}
-							value={String(timeBasedConfig.days)}
+							min={0}
+							value={String(scheduledConfig.inactive_days ?? 0)}
 							oninput={(e) => {
 								const days = parseInt(e.currentTarget.value, 10);
-								if (!isNaN(days) && days >= 1) {
-									onTriggerConfigChange?.({
-										...timeBasedConfig,
-										days
-									});
-								}
+								onTriggerConfigChange?.({
+									...scheduledConfig,
+									inactive_days: isNaN(days) || days <= 0 ? null : days
+								});
 							}}
+							placeholder="0"
 							class="h-8 text-sm"
 						/>
-						<span class="help-text">Checked daily at 2:00 AM</span>
+						<span class="help-text">Only target instances with no activity for this many days (0 = no filter)</span>
 					</div>
 				</div>
 			{/if}

@@ -361,48 +361,25 @@ export interface Role {
 }
 
 /**
- * Map source - matches `map_sources` collection
- */
-export interface MapSource {
-	id: string;
-	owner_id: string;
-	name: string;
-	source_type: 'tile' | 'wms' | 'uploaded' | 'preset' | 'geojson';
-	url: string;
-	config: {
-		subdomains?: string[];
-		attribution?: string;
-		maxZoom?: number;
-		minZoom?: number;
-		[key: string]: unknown;
-	} | null;
-	status: 'pending' | 'processing' | 'completed' | 'failed' | null;
-	progress: number | null;
-	error_message: string | null;
-	tile_count: number | null;
-	created: string;
-	updated: string;
-}
-
-/**
- * Map layer - matches `map_layers` collection
+ * Map layer - matches `map_layers` collection (source fields merged in)
  */
 export interface MapLayer {
 	id: string;
 	project_id: string;
-	source_id: string;
 	name: string;
+	source_type: 'tile' | 'wms' | 'uploaded' | 'preset' | 'geojson';
+	layer_type: 'base' | 'overlay';
+	url: string | null;
+	status: 'pending' | 'processing' | 'completed' | 'failed' | null;
+	progress: number;
+	error_message: string | null;
+	tile_count: number | null;
 	display_order: number;
 	visible_to_roles: string[];
-	is_base_layer: boolean;
 	is_active: boolean;
 	config: Record<string, unknown> | null;
 	created: string;
 	updated: string;
-	// Expanded relation (when requested)
-	expand?: {
-		source_id?: MapSource;
-	};
 }
 
 // =============================================================================
