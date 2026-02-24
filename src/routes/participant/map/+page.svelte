@@ -1,17 +1,16 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
+	import { getParticipantGateway, clearCachedSession } from '$lib/participant-state/context.svelte';
 	import {
 		getDownloadProgress,
 		getDownloadCompleteSignal
 	} from '$lib/participant-state';
 	import { onDataChange } from '$lib/participant-state/gateway.svelte';
 	import { Loader2 } from 'lucide-svelte';
-	import { MapCanvas, BottomControlBar, LayerSheet, FilterSheet, WorkflowSelector } from './components';
+	import { MapCanvas, BottomControlBar, LayerSheet, FilterSheet, WorkflowSelector, SettingsSheet } from './components';
 	import { WorkflowInstanceDetailModule, createSelection, type Selection, type Marker } from './modules';
 	import { FormFillTool } from './modules/workflow-instance-detail/tools';
 	import ModuleShell from '$lib/components/module-shell.svelte';
-	import { ToolsMenu } from '$lib/components/map';
 	import type { Map as LeafletMap } from 'leaflet';
 	import { mapNavCallbacks } from './nav-store.svelte';
 
@@ -61,7 +60,7 @@
 	let filterSheetOpen = $state(false);
 	let workflowSelectorOpen = $state(false);
 	let isSelectingCoordinates = $state(false);
-	let toolsMenuOpen = $state(false);
+	let settingsSheetOpen = $state(false);
 
 	// Set up navigation callbacks for header (desktop) navigation
 	onMount(() => {
@@ -69,7 +68,7 @@
 			onLayersClick: () => (layerSheetOpen = true),
 			onFiltersClick: () => (filterSheetOpen = true),
 			onLocationClick: centerOnLocation,
-			onToolsClick: () => (toolsMenuOpen = true),
+			onToolsClick: () => (settingsSheetOpen = true),
 			onWorkflowClick: () => (workflowSelectorOpen = !workflowSelectorOpen)
 		});
 	});
@@ -563,6 +562,7 @@
 
 	async function handleLogout() {
 		try {
+			await clearCachedSession();
 			await fetch('/participant/logout', {
 				method: 'POST',
 				redirect: 'manual'
@@ -596,7 +596,7 @@
 	<BottomControlBar
 		onLayersClick={() => (layerSheetOpen = true)}
 		onFiltersClick={() => (filterSheetOpen = true)}
-		onToolsClick={() => (toolsMenuOpen = true)}
+		onToolsClick={() => (settingsSheetOpen = true)}
 		onLocationClick={centerOnLocation}
 		{workflows}
 		{map}
@@ -670,9 +670,9 @@
 		</ModuleShell>
 	{/if}
 
-	<!-- Tools Menu -->
-	<ToolsMenu
-		bind:open={toolsMenuOpen}
+	<!-- Settings Sheet -->
+	<SettingsSheet
+		bind:open={settingsSheetOpen}
 		participant={data.participant ? {
 			id: data.participant.id,
 			name: String(data.participant.name || data.participant.email || 'Participant'),

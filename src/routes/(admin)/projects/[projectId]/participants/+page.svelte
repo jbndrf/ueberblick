@@ -9,6 +9,7 @@
 	import { UserCog } from 'lucide-svelte';
 	import type { PageData } from './$types';
 	import { BaseTable, type BaseColumnConfig } from '$lib/components/admin/base-table';
+	import QrExportButton from './qr-export-button.svelte';
 	import type { Participant } from './columns';
 	import CustomFieldManagerGeneric, {
 		type FieldConfig
@@ -33,6 +34,7 @@
 	let editRolesDialogOpen = $state(false);
 	let selectedParticipant = $state<Participant | null>(null);
 	let selectedRoleIds = $state<string[]>([]);
+	let selectedParticipants = $state<Participant[]>([]);
 
 	// Create reusable update handlers
 	const updateField = createFieldUpdateHandler('updateField');
@@ -278,9 +280,12 @@
 
 <div class="flex flex-col gap-6 min-w-0 w-full">
 	<!-- Header -->
-	<div>
-		<h1 class="text-3xl font-bold tracking-tight">{m.participantsTitle()}</h1>
-		<p class="text-muted-foreground">{m.participantsDescription()}</p>
+	<div class="flex items-start justify-between">
+		<div>
+			<h1 class="text-3xl font-bold tracking-tight">{m.participantsTitle()}</h1>
+			<p class="text-muted-foreground">{m.participantsDescription()}</p>
+		</div>
+		<QrExportButton selectedParticipants={selectedParticipants.map(p => ({ name: p.name, token: p.token }))} />
 	</div>
 
 	<!-- Base Table -->
@@ -291,6 +296,9 @@
 		{globalFilterFn}
 		enableRowSelection={true}
 		enableShiftSelect={true}
+		onRowSelectionChange={() => {
+			selectedParticipants = tableRef?.getSelectedRows() ?? [];
+		}}
 		showToolbar={true}
 		showEditMode={true}
 		editModeLabel={m.participantsEdit?.() ?? 'Edit mode'}

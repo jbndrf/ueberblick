@@ -98,7 +98,7 @@
 			title="Tools"
 		>
 			<Settings class="h-5 w-5" />
-			<span class="text-[0.625rem]">Tools</span>
+			<span class="text-[0.625rem]">Settings</span>
 		</button>
 	</div>
 {/if}

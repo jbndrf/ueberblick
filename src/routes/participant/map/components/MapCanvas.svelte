@@ -587,13 +587,6 @@
 			attributionControl: true
 		});
 
-		// Add zoom control to bottom right
-		L.control
-			.zoom({
-				position: 'bottomright'
-			})
-			.addTo(mapInstance);
-
 		// Set reactive state - this will trigger the effects
 		leaflet = L;
 		map = mapInstance;

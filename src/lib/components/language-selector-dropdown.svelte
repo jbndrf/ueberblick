@@ -6,8 +6,8 @@
 	let currentLocale = $state(getLocale());
 
 	const languageOptions = [
-		{ value: 'en', label: 'English', flag: '🇬🇧' },
-		{ value: 'de', label: 'Deutsch', flag: '🇩🇪' }
+		{ value: 'en', label: 'English' },
+		{ value: 'de', label: 'Deutsch' }
 	] as const;
 
 	function handleLocaleChange(value: string) {
@@ -16,7 +16,7 @@
 	}
 
 	const currentLanguage = $derived(
-		languageOptions.find((l) => l.value === currentLocale) || languageOptions[0]
+		languageOptions.find((l) => l.value === currentLocale) ?? languageOptions[0]
 	);
 </script>
 
@@ -24,12 +24,10 @@
 	<DropdownMenu.SubTrigger>
 		<Languages class="mr-2 h-4 w-4" />
 		<span>Language</span>
-		<span class="ml-auto text-xs text-muted-foreground">{currentLanguage.flag}</span>
 	</DropdownMenu.SubTrigger>
 	<DropdownMenu.SubContent>
 		{#each languageOptions as option}
 			<DropdownMenu.Item onclick={() => handleLocaleChange(option.value)}>
-				<span class="mr-2">{option.flag}</span>
 				<span>{option.label}</span>
 				{#if currentLocale === option.value}
 					<Check class="ml-auto h-4 w-4" />

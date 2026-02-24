@@ -1,15 +1,10 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import * as m from '$lib/paraglide/messages';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { Button } from '$lib/components/ui/button';
-	import ModeToggle from '$lib/components/mode-toggle.svelte';
-	import FontSizeSelector from '$lib/components/font-size-selector.svelte';
-	import LanguageSelectorDropdown from '$lib/components/language-selector-dropdown.svelte';
-	import { UserCircle, LogOut, Layers, Filter, Navigation, Settings, Plus } from 'lucide-svelte';
+	import { UserCircle, Layers, Filter, Navigation, Settings, Plus } from 'lucide-svelte';
 	import { mapNavCallbacks } from './map/nav-store.svelte';
 	import {
 		createParticipantGateway,
@@ -18,9 +13,7 @@
 	import { setupPersistence } from '$lib/participant-state/persistence.svelte';
 	import {
 		setParticipantGateway,
-		setReferenceData,
 		getCachedSession,
-		clearCachedSession
 	} from '$lib/participant-state/context.svelte';
 	import { startSyncLoop } from '$lib/participant-state/sync.svelte';
 	import { setupRealtime } from '$lib/participant-state/realtime.svelte';
@@ -169,27 +162,6 @@
 			console.error('Failed to initialize gateway:', error);
 		}
 	}
-
-	async function handleSignOut() {
-		try {
-			// Stop sync loop and realtime before logout
-			cleanupSyncLoop?.();
-			cleanupRealtime?.();
-
-			// Clear cached offline session
-			await clearCachedSession();
-			// Call logout endpoint to clear cookie
-			await fetch('/participant/logout', {
-				method: 'POST',
-				redirect: 'manual'
-			});
-		} catch (error) {
-			console.error('Logout error:', error);
-		} finally {
-			// Navigate to login page with full reload
-			await goto('/participant/login', { replaceState: true, invalidateAll: true });
-		}
-	}
 </script>
 
 {#if isLoginPage}
@@ -229,44 +201,10 @@
 			</div>
 
 			{#if data.participant || offlineSession}
-				<DropdownMenu.Root>
-					<DropdownMenu.Trigger>
-						{#snippet child({ props })}
-							<Button variant="ghost" size="icon" {...props}>
-								<UserCircle class="h-5 w-5" />
-								<span class="sr-only">{m.profileAccount()}</span>
-							</Button>
-						{/snippet}
-					</DropdownMenu.Trigger>
-					<DropdownMenu.Content align="end" class="w-56">
-						<DropdownMenu.Label>
-							<div class="flex flex-col space-y-1">
-								<p class="text-sm font-medium leading-none">{m.profileAccount()}</p>
-								{#if data.participant?.email || offlineSession?.email}
-									<p class="text-xs leading-none text-muted-foreground">
-										{data.participant?.email || offlineSession?.email}
-									</p>
-								{/if}
-							</div>
-						</DropdownMenu.Label>
-						<DropdownMenu.Separator />
-
-						<!-- Theme Toggle -->
-						<ModeToggle />
-
-						<!-- Font Size -->
-						<FontSizeSelector />
-
-						<!-- Language Selector -->
-						<LanguageSelectorDropdown />
-
-						<DropdownMenu.Separator />
-						<DropdownMenu.Item onclick={handleSignOut}>
-							<LogOut class="mr-2 h-4 w-4" />
-							{m.profileSignOut()}
-						</DropdownMenu.Item>
-					</DropdownMenu.Content>
-				</DropdownMenu.Root>
+				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onToolsClick?.()}>
+					<UserCircle class="h-5 w-5" />
+					<span class="sr-only">{m.profileAccount()}</span>
+				</Button>
 			{/if}
 		</header>
 
