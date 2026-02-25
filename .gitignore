@@ -62,6 +62,15 @@ yarn-error.log*
 *.local
 .cache
 
+# Deployment tooling
+compose-deployer/
+
+# Temporary files
+tmp/
+
+# Vite PWA dev output
+dev-dist/
+
 # Git credentials
 git_login.md
 
