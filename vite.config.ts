@@ -16,8 +16,8 @@ export default defineConfig({
 			registerType: 'autoUpdate',
 			includeAssets: ['icons/*.png', 'icons/*.svg'],
 			manifest: {
-				name: 'Karte',
-				short_name: 'Karte',
+				name: 'Überblick',
+				short_name: 'Überblick',
 				description: 'Geographic data collection with offline-first capabilities',
 				start_url: '/participant/map',
 				scope: '/',

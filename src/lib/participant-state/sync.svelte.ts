@@ -10,7 +10,7 @@
 import { getPocketBase } from '$lib/pocketbase';
 import { getDB, type CachedRecord, type SyncConflict } from './db';
 import { getFilesForRecord, deleteLocalFilesForRecord, deleteFilesForRecord } from './file-cache';
-import { onDataChange } from './gateway.svelte';
+import { notifyDataChange, onDataChange } from './gateway.svelte';
 import type { ParticipantGateway } from './gateway.svelte';
 import type { SyncProgress } from './types';
 import { generateId, cleanRecord } from './utils';
@@ -420,13 +420,19 @@ async function runSyncCycle(gateway: ParticipantGateway): Promise<void> {
 
 		// 2. Pull remote changes per collection
 		let totalPulled = 0;
+		const changedCollections: string[] = [];
 		for (const collection of syncCollections) {
 			const count = await pullChanges(collection);
+			if (count > 0) changedCollections.push(collection);
 			totalPulled += count;
 		}
 
 		if (totalPulled > 0) {
 			console.log(`Pulled ${totalPulled} changed records`);
+			// Notify UI that data changed so map markers etc. update
+			for (const collection of changedCollections) {
+				notifyDataChange(collection);
+			}
 		}
 
 		// 3. Every 10th cycle, do full deletion detection

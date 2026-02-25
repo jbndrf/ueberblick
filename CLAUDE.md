@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Punktstudio (Karte) is a full-stack application for geographic data collection with offline-first capabilities. It combines a SvelteKit frontend with a PocketBase backend enhanced with SpatiaLite for geospatial queries.
+Überblick is a full-stack application for geographic data collection with offline-first capabilities. The admin interface is called "Überblick Sector" and the participant-facing app is "Überblick". It combines a SvelteKit frontend with a PocketBase backend enhanced with SpatiaLite for geospatial queries.
 
 
 ## Architecture

@@ -41,6 +41,18 @@ export function signOut() {
 }
 
 /**
+ * Reset the PocketBase client singleton.
+ * Call on logout so the next getPocketBase() creates a fresh instance
+ * that loads current cookies instead of reusing stale auth state.
+ */
+export function resetPocketBase(): void {
+	if (pocketbaseClient) {
+		pocketbaseClient.authStore.clear();
+		pocketbaseClient = null;
+	}
+}
+
+/**
  * Get current user
  */
 export function getCurrentUser(): RecordModel | null {

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { browser } from '$app/environment';
 	import * as m from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
@@ -92,6 +92,12 @@
 	let cleanupSyncLoop: (() => void) | null = null;
 	let cleanupRealtime: (() => void) | null = null;
 
+	// Stop background processes when layout unmounts (e.g. navigation away)
+	onDestroy(() => {
+		cleanupSyncLoop?.();
+		cleanupRealtime?.();
+	});
+
 	// Create gateway synchronously if participant is available
 	// This allows $effect in setupPersistence to work during component init
 	if (data.participant) {
@@ -178,7 +184,7 @@
 						<circle cx="12" cy="10" r="3"></circle>
 					</svg>
 				</div>
-				<span class="font-semibold">Karte</span>
+				<span class="font-semibold">Überblick</span>
 			</div>
 
 			<!-- Desktop Navigation (hidden on mobile) -->

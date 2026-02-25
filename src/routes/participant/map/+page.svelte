@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { getParticipantGateway, clearCachedSession } from '$lib/participant-state/context.svelte';
+	import { getParticipantGateway, resetAllParticipantState } from '$lib/participant-state/context.svelte';
 	import {
 		getDownloadProgress,
 		getDownloadCompleteSignal
 	} from '$lib/participant-state';
 	import { onDataChange } from '$lib/participant-state/gateway.svelte';
+	import { resetPocketBase } from '$lib/pocketbase';
+	import { disconnectRealtime } from '$lib/participant-state';
 	import { Loader2 } from 'lucide-svelte';
 	import { MapCanvas, BottomControlBar, LayerSheet, FilterSheet, WorkflowSelector, SettingsSheet } from './components';
 	import { WorkflowInstanceDetailModule, createSelection, type Selection, type Marker } from './modules';
@@ -100,6 +102,7 @@
 
 	// Guard to prevent concurrent loadData() calls (avoids PocketBase auto-cancellation)
 	let loadDataInFlight = false;
+	let pendingReload = false;
 
 	// Layer state
 	let activeBaseLayerId = $state<string | null>(null);
@@ -143,18 +146,27 @@
 		}
 	});
 
-	// Reload when background sync updates data (replaces offline mode signal)
+	// Reload when data changes (local writes, background sync, or realtime events)
 	let cleanupDataChangeListener: (() => void) | null = null;
+	let dataChangeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+	let pendingChangedCollections = new Set<string>();
 
 	onMount(() => {
-		cleanupDataChangeListener = onDataChange((_collection) => {
-			console.log('[map page] Data changed via background sync, reloading...');
-			loadData();
+		cleanupDataChangeListener = onDataChange((collection) => {
+			// Accumulate which collections changed during debounce window
+			pendingChangedCollections.add(collection);
+			if (dataChangeDebounceTimer) clearTimeout(dataChangeDebounceTimer);
+			dataChangeDebounceTimer = setTimeout(() => {
+				const changed = pendingChangedCollections;
+				pendingChangedCollections = new Set();
+				refreshChanged(changed);
+			}, 150);
 		});
 	});
 
 	onDestroy(() => {
 		cleanupDataChangeListener?.();
+		if (dataChangeDebounceTimer) clearTimeout(dataChangeDebounceTimer);
 	});
 
 	async function loadData() {
@@ -164,7 +176,8 @@
 		}
 		// Prevent concurrent calls to avoid PocketBase auto-cancellation
 		if (loadDataInFlight) {
-			console.log('[loadData] Already loading, skipping duplicate request');
+			console.log('[loadData] Already loading, queuing reload');
+			pendingReload = true;
 			return;
 		}
 		loadDataInFlight = true;
@@ -283,6 +296,90 @@
 		} finally {
 			isLoading = false;
 			loadDataInFlight = false;
+			// Process queued reload if data changed while we were loading
+			if (pendingReload) {
+				pendingReload = false;
+				loadData();
+			}
+		}
+	}
+
+	/**
+	 * Targeted refresh: only reload collections that actually changed.
+	 * Avoids re-fetching map_layers/tiles when only workflow data changed.
+	 */
+	async function refreshChanged(changed: Set<string>) {
+		if (!gateway) return;
+
+		console.log('[refreshChanged] Collections:', [...changed]);
+
+		try {
+			const promises: Promise<void>[] = [];
+
+			if (changed.has('map_layers')) {
+				promises.push(
+					gateway.collection('map_layers').getFullList({ filter: 'is_active = true', sort: 'display_order' })
+						.then(result => { mapLayers = result; })
+				);
+			}
+
+			if (changed.has('markers') || changed.has('marker_categories')) {
+				promises.push(
+					gateway.collection('markers').getFullList({ expand: 'category_id' })
+						.then(result => { markers = result; })
+				);
+			}
+
+			if (changed.has('workflow_instances')) {
+				promises.push(
+					gateway.collection('workflow_instances').getFullList({ expand: 'workflow_id' })
+						.then(result => { workflowInstances = result; })
+				);
+			}
+
+			if (changed.has('workflows') || changed.has('workflow_connections')) {
+				promises.push(
+					Promise.all([
+						gateway.collection('workflows').getFullList({ filter: 'is_active = true' }),
+						gateway.collection('workflow_connections').getFullList({ filter: 'from_stage_id = ""' })
+					]).then(([workflowsResult, entryConnectionsResult]) => {
+						const entryLabelByWorkflow = new Map<string, string>();
+						for (const conn of entryConnectionsResult) {
+							const label = (conn.visual_config as any)?.button_label;
+							if (label) entryLabelByWorkflow.set(conn.workflow_id, label);
+						}
+						workflows = (workflowsResult as Workflow[]).map(wf => ({
+							...wf,
+							entry_button_label: entryLabelByWorkflow.get(wf.id) || wf.name
+						}));
+					})
+				);
+			}
+
+			if (changed.has('workflow_stages')) {
+				promises.push(
+					gateway.collection('workflow_stages').getFullList()
+						.then(result => { workflowStages = result; })
+				);
+			}
+
+			if (changed.has('tools_field_tags')) {
+				promises.push(
+					gateway.collection('tools_field_tags').getFullList()
+						.then(result => { fieldTags = result; })
+				);
+			}
+
+			if (changed.has('workflow_instance_field_values')) {
+				promises.push(
+					gateway.collection('workflow_instance_field_values').getFullList()
+						.then(result => { fieldValues = result; })
+				);
+			}
+
+			await Promise.all(promises);
+		} catch (error) {
+			console.error('Failed to refresh changed data:', error);
 		}
 	}
 
@@ -321,6 +418,13 @@
 		}
 		newMap.set(workflowId, updated);
 		visibleTagValues = newMap;
+
+		// Auto-manage parent workflow visibility based on sub-values
+		if (updated.size > 0 && !visibleWorkflowIds.includes(workflowId)) {
+			visibleWorkflowIds = [...visibleWorkflowIds, workflowId];
+		} else if (updated.size === 0 && visibleWorkflowIds.includes(workflowId)) {
+			visibleWorkflowIds = visibleWorkflowIds.filter((x) => x !== workflowId);
+		}
 	}
 
 	/**
@@ -562,7 +666,16 @@
 
 	async function handleLogout() {
 		try {
-			await clearCachedSession();
+			// Stop realtime subscriptions immediately
+			disconnectRealtime();
+
+			// Nuke all participant state (IndexedDB, localStorage, SW caches)
+			await resetAllParticipantState();
+
+			// Reset the PocketBase client singleton so next login starts fresh
+			resetPocketBase();
+
+			// Tell the server to clear auth cookie
 			await fetch('/participant/logout', {
 				method: 'POST',
 				redirect: 'manual'
@@ -570,6 +683,9 @@
 		} catch (error) {
 			console.error('Logout error:', error);
 		}
+
+		// Hard reload ensures all JS module-level state is reset
+		// (sync timers, realtime listeners, gateway singletons, etc.)
 		window.location.href = '/participant/login';
 	}
 </script>

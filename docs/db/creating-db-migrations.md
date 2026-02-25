@@ -5,7 +5,7 @@ wE ARE ONLY WORKIN WITHIN PUNKTSTUDIO CODE. WE LOOK AT ITS CODE AND ITS DATABASE
 
 ## Important Context
 
-- We are working in **punktstudio** project
+- We are working in the **Überblick** project (directory: punktstudio)
 - Database location: `/home/jan/aktuell_10.jan.26/punktstudio/pb/pb_data/data.db`
 - NOT the shared pocketbase at `/home/jan/pocketbase/`
 aktuell_10.jan.26/punktstudio

@@ -8,7 +8,7 @@
 
 import { getPocketBase } from '$lib/pocketbase';
 import { getDB, type CachedRecord } from './db';
-import { onDataChange } from './gateway.svelte';
+import { notifyDataChange } from './gateway.svelte';
 
 // =============================================================================
 // State
@@ -55,7 +55,8 @@ async function handleRealtimeEvent(
 		};
 		await db.put('records', cached);
 
-		// Notify listeners that data changed
+		// Notify gateway listeners (map page etc.) that data changed
+		notifyDataChange(collection);
 		notifyRealtimeChange(collection);
 	} else if (event.action === 'delete') {
 		const existing = await db.get('records', key);
@@ -63,6 +64,7 @@ async function handleRealtimeEvent(
 		// Only delete if it's an unchanged record (don't delete local modifications)
 		if (existing && existing._status === 'unchanged') {
 			await db.delete('records', key);
+			notifyDataChange(collection);
 			notifyRealtimeChange(collection);
 		}
 	}

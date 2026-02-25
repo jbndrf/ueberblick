@@ -7,8 +7,8 @@
 
 import { getContext, setContext } from 'svelte';
 import { createParticipantGateway, type ParticipantGateway } from './gateway.svelte';
-import { setupPersistence, saveReferenceData, loadReferenceData } from './persistence.svelte';
-import { getDB } from './db';
+import { setupPersistence, saveReferenceData, loadReferenceData, clearAllData } from './persistence.svelte';
+import { getDB, closeDB } from './db';
 import type {
 	Workflow,
 	WorkflowStage,
@@ -224,4 +224,36 @@ export function setFullLocalCopyMode(enabled: boolean): void {
 export function getFullLocalCopyMode(): boolean {
 	if (typeof window === 'undefined') return false;
 	return localStorage.getItem(FULL_LOCAL_COPY_KEY) === 'true';
+}
+
+// =============================================================================
+// Full Session Reset (call on logout)
+// =============================================================================
+
+/**
+ * Nuclear cleanup: wipe all participant state so the next login starts fresh.
+ * Clears IndexedDB (all 6 stores), localStorage prefs, and Service Worker caches.
+ */
+export async function resetAllParticipantState(): Promise<void> {
+	// 1. Clear all IndexedDB data (records, tiles, files, op_log, sync_metadata, conflicts)
+	await clearAllData();
+
+	// 2. Clear the offline session cache (belt-and-suspenders, clearAllData already clears records)
+	try { await clearCachedSession(); } catch { /* DB may already be cleared */ }
+
+	// 3. Clear localStorage participant preferences
+	if (typeof window !== 'undefined') {
+		localStorage.removeItem(FULL_LOCAL_COPY_KEY);
+	}
+
+	// 4. Clear Service Worker caches (stale API responses and pages)
+	if (typeof window !== 'undefined' && 'caches' in window) {
+		await Promise.all([
+			caches.delete('api-cache'),
+			caches.delete('pages-cache'),
+		]);
+	}
+
+	// 5. Close the IndexedDB connection so next session opens fresh
+	closeDB();
 }

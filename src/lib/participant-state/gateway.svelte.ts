@@ -64,7 +64,7 @@ export function onDataChange(listener: DataChangeListener): () => void {
 	return () => dataChangeListeners.delete(listener);
 }
 
-function notifyDataChange(collection: string): void {
+export function notifyDataChange(collection: string): void {
 	for (const listener of dataChangeListeners) {
 		try {
 			listener(collection);
@@ -238,6 +238,7 @@ export function createParticipantGateway(participantId: string, projectId: strin
 		const db = await getDB();
 		await db.put('records', record);
 		await updatePendingCount();
+		notifyDataChange(collectionName);
 
 		return cleanRecord(record) as unknown as T;
 	}
@@ -267,6 +268,7 @@ export function createParticipantGateway(participantId: string, projectId: strin
 
 		await db.put('records', updated);
 		await updatePendingCount();
+		notifyDataChange(collectionName);
 
 		return cleanRecord(updated) as unknown as T;
 	}
@@ -386,6 +388,7 @@ export function createParticipantGateway(participantId: string, projectId: strin
 				const db = await getDB();
 				await db.put('records', record);
 				await updatePendingCount();
+				notifyDataChange(name);
 
 				return cleanRecord(record) as unknown as T;
 			},
@@ -417,6 +420,7 @@ export function createParticipantGateway(participantId: string, projectId: strin
 
 				await db.put('records', updated);
 				await updatePendingCount();
+				notifyDataChange(name);
 
 				return cleanRecord(updated) as unknown as T;
 			},
@@ -446,6 +450,7 @@ export function createParticipantGateway(participantId: string, projectId: strin
 				}
 
 				await updatePendingCount();
+				notifyDataChange(name);
 
 				return true;
 			},

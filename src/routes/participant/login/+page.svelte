@@ -123,7 +123,7 @@
 </script>
 
 <svelte:head>
-	<title>{m.participantLoginTitle()} - Karte</title>
+	<title>{m.participantLoginTitle()} - Überblick</title>
 </svelte:head>
 
 <div

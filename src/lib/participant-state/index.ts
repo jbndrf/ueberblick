@@ -12,6 +12,7 @@
 export {
 	createParticipantGateway,
 	onDataChange,
+	notifyDataChange,
 	type ParticipantGateway,
 	type CollectionProxy
 } from './gateway.svelte';
@@ -33,6 +34,8 @@ export {
 	// Full local copy mode (replaces old offline mode toggle)
 	setFullLocalCopyMode,
 	getFullLocalCopyMode,
+	// Full session reset (call on logout)
+	resetAllParticipantState,
 	type ReferenceData
 } from './context.svelte';
 

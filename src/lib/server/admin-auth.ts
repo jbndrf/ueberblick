@@ -1,5 +1,5 @@
 /**
- * Admin authentication utilities for Punktstudio
+ * Admin authentication utilities for Überblick
  * Handles PocketBase superuser authentication
  */
 

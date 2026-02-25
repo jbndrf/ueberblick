@@ -236,7 +236,20 @@
 				currentToolIndex: 0
 			};
 		} else {
-			// No tools - execute transition directly
+			// No tools - log audit trail and execute transition directly
+			const fromStageId = detailState.instance?.current_stage_id as string;
+			await gateway.collection('workflow_instance_tool_usage').create({
+				instance_id: detailState.instanceId,
+				stage_id: fromStageId,
+				executed_by: gateway.participantId,
+				executed_at: new Date().toISOString(),
+				metadata: {
+					action: 'stage_transition',
+					from_stage_id: fromStageId,
+					to_stage_id: connection.to_stage_id,
+					connection_id: connection.id
+				}
+			});
 			await detailState.executeTransition(connection);
 		}
 	}
@@ -872,7 +885,7 @@
 													{:else if metadata.action === 'location_edit'}
 														Location Changed
 													{:else if metadata.action === 'stage_transition'}
-														Stage Advanced
+														Stage Changed
 													{:else}
 														Action
 													{/if}

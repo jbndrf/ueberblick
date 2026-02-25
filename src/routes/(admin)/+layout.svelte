@@ -108,7 +108,7 @@
 						<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
 							<MapPin class="h-5 w-5" />
 						</div>
-						<span class="font-semibold text-lg">Karte</span>
+						<span class="font-semibold text-lg">Überblick Sector</span>
 					</div>
 				</Sidebar.Header>
 

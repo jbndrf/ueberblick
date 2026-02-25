@@ -1,98 +1,75 @@
-# SECTOR + Ueberblick
+# Überblick
 
-Two applications. One platform.
+Kartenbasierte Prozesssteuerung mit Offline-Synchronisation und rollenbasierter Zugriffskontrolle
 
-**SECTOR** is where you build. **Ueberblick** is what your team uses.
+## Zusammenfassung
 
-SECTOR is the administrative application -- a visual workspace where you design spatial workflows, configure forms, set up map layers, define roles, and create automation rules. Everything is drag-and-drop. No code, no developers, no deployment cycles.
+Überblick ist eine offene, selbst hostbare Kartenanwendung zur Abbildung räumlicher Arbeitsabläufe. Die Anwendung richtet sich an Organisationen, die Tätigkeiten im Feld koordinieren bspw. Gebäudemanagement, kommunale Infrastrukturpflege, Bauprojekte, Reinigungsdienste oder Vermessungsarbeiten.
 
-Ueberblick is the field application your participants open on their phone. It reads the workflow configuration from SECTOR and renders a complete, offline-capable map application -- automatically. Change a workflow in SECTOR, and Ueberblick reflects it immediately. No rebuild, no update, no waiting.
-
-Together they form a self-hosted platform for spatial data collection and process management, built for public administrations, facility managers, and field service operations where data needs to be captured reliably in the field -- even without network connectivity.
+Überblick besteht aus zwei Komponenten: einer mobilen Teilnehmeranwendung für den Einsatz vor Ort und Überblick SECTOR (Spatial Engine for Collaboration and Task Orchestration with Role-scoped Data Access). Welche die administrative Konfigurationsoberfläche darstellt. In Überblick SECTOR werden Karten, Workflows, Rollen und Berechtigungen definiert die Teilnehmeranwendung generiert sich daraus automatisch.
 
 ---
 
-## SECTOR -- Define
+## Funktionsumfang
 
-*Spatial Engine for Collection, Task Orchestration & Role management*
+### Kartenverwaltung
 
-### Workflow Builder
+Administratoren laden eigene Kartendaten hoch -- Gebäudegrundrisse, Lagepläne, Katasterkarten oder beliebige georeferenzierte Daten. Überblick unterstützt gängige Geodatenformate und ermöglicht die Darstellung mehrerer Layer übereinander. Teilnehmer können Kartenpakete auf ihr Endgerät herunterladen und vollständig offline nutzen.
 
-Design multi-stage workflows on a visual canvas. Drag stages into position, draw connections between them, attach forms and tools to each transition. Define start stages, intermediate stages, and end stages. Every workflow supports two modes: incident-based and survey-based collection.
+### Workflow-Definition
 
-### Forms
+Arbeitsprozesse werden in Überblick SECTOR als Zustandsmodelle definiert. Jeder Punkt auf der Karte durchläuft festgelegte Stufen. Der Übergang zwischen Stufen wird durch Aktionen ausgelöst -- etwa das Ausfüllen eines Formulars, eine Statusänderung oder eine automatisierte Hintergrundaktion wie der Versand einer E-Mail oder Benachrichtigung. Die gesamte Konfiguration erfolgt visuell über einen Drag-and-Drop-Editor. Programmierkenntnisse sind nicht erforderlich.
 
-10 field types: short text, long text, number, email, date, file upload, dropdown, multiple choice, smart dropdown, and entity selector. Smart dropdowns populate their options dynamically based on other field values -- across stages. Entity selectors let participants pick from custom tables, marker categories, other participants, or roles. Forms support multiple pages, field-level validation (regex, min/max, file type restrictions), and visual layout control (half-width or full-width fields).
+### Rollenbasierte Zugriffskontrolle
 
-### Map Layers
+Überblick trennt Daten strikt nach Rollen. Teilnehmer sehen ausschließlich die Informationen, die für ihre Zuständigkeit relevant sind. Interne Prozesszustände können von externen Ansichten entkoppelt werden -- so bleiben betriebsinterne Abläufe geschützt, während Dienstleister oder Partner nur die für sie bestimmten Daten erhalten.
 
-5 source types: tile services (XYZ), WMS endpoints, GeoJSON, uploaded tile sets, and built-in presets (OpenStreetMap, CartoDB, ESRI Satellite, and more). Each layer supports opacity control, zoom range constraints, custom attribution, and role-based visibility. Upload your own tile sets and SECTOR processes them automatically with bounds detection and progress tracking.
+### Offline-Betrieb und Synchronisation
 
-### Roles & Permissions
+Die Teilnehmeranwendung ist für den Einsatz ohne durchgängige Netzverbindung konzipiert. Nach dem Herunterladen eines Kartenpakets arbeiten Teilnehmer vollständig offline -- in Untergeschossen, auf weitläufigen Geländen oder in Gebieten ohne Mobilfunkabdeckung. Bei Wiederherstellung der Verbindung synchronisiert die Anwendung automatisch alle erfassten Daten mit dem Server. Die Synchronisation erfolgt konfliktfrei über eine eigens entwickelte Sync-Engine.
 
-Access control at every level. Create roles, assign them to participants, then define per role: which stages are visible, which tools are available, which map layers appear, which marker categories show up. Empty role lists default to "visible to all" -- so you start open and restrict as needed.
+### Versionierung und Audit Trail
 
-### Automation Engine
+Sämtliche Änderungen an Datenpunkten und Workflowzuständen werden versioniert und mit Zeitstempel sowie Benutzerkennung protokolliert. Der lückenlose Audit Trail ermöglicht die vollständige Nachvollziehbarkeit aller Vorgänge -- eine Voraussetzung für den Einsatz in regulierten Umgebungen und bei öffentlichen Auftraggebern.
 
-Three trigger types: on stage transition, on field value change, or on a schedule (cron). Build conditions with AND/OR logic and 8 comparison operators. Actions include setting field values, changing instance status, or moving an instance to a different stage. Scheduled automations enforce a 15-minute minimum interval and display human-readable descriptions of the cron expression.
+### Visuelle Konfiguration
 
-### Icon Designer
-
-Design custom marker icons directly in the application. Choose from 8 shapes (circle, square, rounded, hexagon, diamond, star, shield, or none), set colors, borders, and shadows, then place any SVG icon inside. Icons are assigned to workflow stages, marker categories, and individual filter values on the map.
-
-### Custom Tables
-
-Create your own reference data tables with typed columns (text, number, date, boolean). Use them as data sources in entity selector fields -- participants pick from your table data directly inside forms. Tables support role-based visibility and can be populated via CSV import.
+Überblick SECTOR stellt einen visuellen Editor bereit, über den Workflows, Formulare und die gesamte Teilnehmeroberfläche konfiguriert werden. Was in SECTOR definiert wird, rendert die mobile Anwendung automatisch als einsatzfertige Benutzeroberfläche -- angepasst an die jeweilige Rolle des Teilnehmers.
 
 ---
 
-## Ueberblick -- Use
+## Betrieb und Bereitstellung
 
-*The field application that renders itself from your SECTOR configuration.*
+Überblick ist Open Source und kann auf eigener Infrastruktur betrieben werden. Alternativ bieten wir gehostete Instanzen an. Jeder Mandant erhält dabei eine dedizierte Instanz mit eigener Datenbank in einem isolierten Container. Eine Vermischung von Kundendaten findet nicht statt.
 
-### Offline-First
-
-Ueberblick does not require a network connection to operate. Data is captured locally in IndexedDB, queued for upload, and synchronized automatically in the background once connectivity is restored. The sync loop runs every 30 seconds with exponential backoff on failure. Conflicts are detected and surfaced for participant review -- server state and local changes side by side.
-
-### Geographic Packages
-
-Download entire regions for offline use: map tiles, workflow definitions, marker data, and file attachments. Define the area, select zoom levels, pick the layers to include. Participants download the package once and work offline for as long as needed.
-
-### Automatic UI
-
-Everything the participant sees -- the map, the available workflows, the forms, the action buttons, the visible layers, the filter options -- is generated from the SECTOR configuration. There is no separate frontend to build or maintain. Change a workflow in SECTOR, and the participant interface updates on next sync.
-
-### Mobile-Optimized
-
-Ueberblick is built as a Progressive Web App. The participant interface uses bottom sheet navigation with swipe gestures, responsive layouts that adapt between desktop and mobile, and location-aware map controls. Installable on any device, no app store required.
-
-### Spatial Data Collection
-
-Participants create markers on the map, fill multi-page forms, upload files, and progress workflow instances through stages. Every action is tied to a geographic location. Filtering by workflow stage, field values, and marker categories lets participants focus on what matters to them.
-
-### Audit Trail
-
-Every action is logged with timestamp and user attribution. Field changes, stage transitions, tool usage, sync operations -- the complete history of every workflow instance is preserved and traceable.
+Die Anwendung basiert auf PocketBase als Backend und Svelte als Frontend-Framework. Der Betrieb erfordert keine komplexe Infrastruktur -- eine einzelne Serverinstanz genügt.
 
 ---
 
-## Architecture
+## Einsatzbeispiele
 
-| Component | Technology |
-|-----------|-----------|
-| Frontend | SvelteKit 5, Svelte 5, Tailwind CSS 4 |
-| Backend | PocketBase (Go) with SpatiaLite |
-| Offline Storage | IndexedDB |
-| Maps | Leaflet with offline tile support |
-| Workflow Canvas | XYFlow |
-| Forms | sveltekit-superforms + Zod validation |
-| i18n | Paraglide (EN / DE) |
-| Installable | PWA with Workbox |
+**Gebäudereinigung.** Räume werden als Punkte auf dem Gebäudeplan dargestellt. Reinigungskräfte sehen ihre zugewiesenen Bereiche, dokumentieren die Durchführung per Formular und der Auftraggeber erhält den aktuellen Status -- ohne Einblick in interne Personalplanung.
 
-Self-hosted. Single binary backend. No external database required.
+**Kommunale Infrastruktur.** Straßenschäden, Grünflächenpflege oder Spielplatzinspektionen werden räumlich erfasst, mit Workflows versehen und über Rollen an die zuständigen Abteilungen verteilt.
+
+**Bauprojekte.** Gewerke werden auf dem Lageplan verortet, Abnahmen als Workflow-Stufen abgebildet. Der Bauleiter konfiguriert den Prozess in SECTOR, Subunternehmer arbeiten mit Überblick auf der Baustelle -- auch ohne WLAN.
+
+**Vermessung und Feldforschung.** Messpunkte oder Erhebungsstandorte werden auf eigenen Karten markiert. Erfasste Daten synchronisieren automatisch, sobald das Feldteam wieder im Netzbereich ist.
 
 ---
 
-## Getting Started
+## Technische Eckdaten
 
-_Documentation in progress._
+| Eigenschaft | Details |
+|---|---|
+| Lizenz | Open Source |
+| Backend | PocketBase |
+| Frontend | Svelte |
+| Geodaten | GeoJSON, eigene Kartenuploads |
+| Offline | Eigene Sync-Engine, lokale Kartenpakete |
+| Mandantentrennung | Dedizierte Instanzen, isolierte Container |
+| Audit | Vollständige Versionierung mit Zeitstempel und Benutzerkennung |
+
+---
+
+Überblick -- Kartenbasierte Prozesssteuerung. Offline-fähig. Rollenbasiert. Open Source.

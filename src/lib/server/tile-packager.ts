@@ -118,7 +118,7 @@ async function downloadTile(
 			signal,
 			headers: {
 				// Some tile servers require a user agent
-				'User-Agent': 'PunktstudioOfflinePackager/1.0'
+				'User-Agent': 'UeberblickOfflinePackager/1.0'
 			}
 		});
 

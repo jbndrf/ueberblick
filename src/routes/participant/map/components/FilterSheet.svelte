@@ -264,16 +264,18 @@
 	/**
 	 * Handle master workflow toggle: when toggling off, hide all sub-values too.
 	 * When toggling on, show all sub-values.
+	 * Sub-value toggles auto-manage the parent workflow visibility.
 	 */
 	function handleMasterWorkflowToggle(workflowId: string, visible: boolean) {
-		onWorkflowToggle(workflowId, visible);
-
-		// Also toggle all tag values
 		const data = filterableData.get(workflowId);
 		if (data && onTagValueToggle) {
+			// Toggle all sub-values -- parent visibility is auto-managed
 			for (const { value } of data.valueCounts) {
 				onTagValueToggle(workflowId, value, visible);
 			}
+		} else {
+			// No sub-values, just toggle the workflow directly
+			onWorkflowToggle(workflowId, visible);
 		}
 	}
 </script>

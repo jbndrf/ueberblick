@@ -28,7 +28,7 @@
 </script>
 
 <svelte:head>
-	<title>{m.loginTitle()} - Admin Interface</title>
+	<title>{m.loginTitle()} - Überblick Sector</title>
 </svelte:head>
 
 <div class="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-slate-100 to-slate-50 p-4 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
