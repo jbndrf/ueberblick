@@ -14,7 +14,9 @@ export {
 	onDataChange,
 	notifyDataChange,
 	type ParticipantGateway,
-	type CollectionProxy
+	type CollectionProxy,
+	type LiveQuery,
+	type LiveQueryOne
 } from './gateway.svelte';
 
 // =============================================================================
@@ -59,10 +61,10 @@ export {
 export {
 	downloadAll,
 	uploadChanges,
-	enableAutoSync,
 	triggerSync,
-	getSyncProgress,
-	startSyncLoop,
+	setSyncCollections,
+	startPushListener,
+	runCatchUpSync,
 	// Conflict management
 	getConflictsForInstance,
 	getPendingConflicts,
@@ -75,11 +77,7 @@ export {
 
 export {
 	setupRealtime,
-	connect as connectRealtime,
-	disconnect as disconnectRealtime,
-	reconnect as reconnectRealtime,
-	onRealtimeChange,
-	getRealtimeConnected
+	disconnect as disconnectRealtime
 } from './realtime.svelte';
 
 // =============================================================================

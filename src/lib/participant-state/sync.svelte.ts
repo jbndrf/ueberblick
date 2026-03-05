@@ -1,10 +1,11 @@
 /**
  * Sync Engine for Local-First Architecture
  *
- * - Background sync loop: push local changes, pull remote changes
+ * - Push listener: debounced upload on local writes
+ * - Catch-up sync: pull + deletion detection on reconnect/focus
  * - Incremental pull: only fetch records changed since last sync
  * - Conflict detection: server wins, conflicts stored for participant review
- * - Exponential backoff on failure
+ * - No polling loop -- realtime SSE is the primary update mechanism
  */
 
 import { getPocketBase } from '$lib/pocketbase';
@@ -12,40 +13,26 @@ import { getDB, type CachedRecord, type SyncConflict } from './db';
 import { getFilesForRecord, deleteLocalFilesForRecord, deleteFilesForRecord } from './file-cache';
 import { notifyDataChange, onDataChange } from './gateway.svelte';
 import type { ParticipantGateway } from './gateway.svelte';
-import type { SyncProgress } from './types';
 import { generateId, cleanRecord } from './utils';
 
 // =============================================================================
-// Sync Progress State
+// Configuration
 // =============================================================================
 
-let syncProgress = $state<SyncProgress>({
-	status: 'idle',
-	total: 0,
-	completed: 0,
-	failed: 0
-});
-
-export function getSyncProgress(): SyncProgress {
-	return syncProgress;
-}
-
-// =============================================================================
-// Sync Loop Configuration
-// =============================================================================
-
-const BASE_INTERVAL_MS = 30_000; // 30 seconds
-const MAX_INTERVAL_MS = 120_000; // 2 minutes
 const PUSH_DEBOUNCE_MS = 5_000; // 5 seconds after local write
 
-let syncLoopTimer: ReturnType<typeof setTimeout> | null = null;
-let currentInterval = BASE_INTERVAL_MS;
 let syncInProgress = false;
-let pushDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-let syncCycleCount = 0;
 
-// Collections to sync (set during startSyncLoop)
+// Collections to sync (set via setSyncCollections)
 let syncCollections: string[] = [];
+
+/**
+ * Set the list of collections that sync operations work with.
+ * Must be called before startPushListener/runCatchUpSync/triggerSync.
+ */
+export function setSyncCollections(collections: string[]): void {
+	syncCollections = collections;
+}
 
 // =============================================================================
 // Collection Sync Priority
@@ -135,7 +122,6 @@ async function pullChanges(collection: string): Promise<number> {
 
 /**
  * Detect records deleted on server by comparing local IDs with server IDs.
- * Only runs every Nth sync cycle to reduce load.
  */
 async function detectServerDeletions(collection: string): Promise<number> {
 	const pb = getPocketBase();
@@ -188,12 +174,8 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 		return;
 	}
 
-	syncProgress = {
-		status: 'syncing',
-		total: pending.length,
-		completed: 0,
-		failed: 0
-	};
+	let completed = 0;
+	let failed = 0;
 
 	for (const record of pending) {
 		try {
@@ -226,7 +208,7 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 							_serverUpdated: serverRecord.updated as string
 						};
 						await db.put('records', merged);
-						syncProgress.completed++;
+						completed++;
 						continue;
 					}
 				} catch (e) {
@@ -302,37 +284,54 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 				await db.delete('records', record._key);
 			}
 
-			syncProgress.completed++;
+			completed++;
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+			// Ghost push recovery: record was created on server but local status
+			// never updated (e.g. network timeout after server processed request).
+			// Fetch the server copy and reconcile instead of retrying forever.
+			if (record._status === 'new' && errorMessage.includes('must be unique')) {
+				try {
+					const serverRecord = await pb.collection(record._collection).getOne(record.id);
+					const reconciled: CachedRecord = {
+						...serverRecord,
+						id: serverRecord.id as string,
+						_key: record._key,
+						_collection: record._collection,
+						_status: 'unchanged',
+						_serverUpdated: serverRecord.updated as string,
+						_error: undefined,
+						_retryCount: undefined
+					};
+					await db.put('records', reconciled);
+					console.log(`Reconciled duplicate ${record._collection}/${record.id}`);
+					completed++;
+					continue;
+				} catch {
+					// Could not fetch from server -- fall through to normal error handling
+				}
+			}
+
 			console.error(`Failed to sync ${record._collection}/${record.id}:`, errorMessage);
 
 			// Mark as error
-			const failed: CachedRecord = {
+			const failedRecord: CachedRecord = {
 				...record,
 				_status: record._status, // Keep original status
 				_error: errorMessage,
 				_retryCount: (record._retryCount || 0) + 1
 			};
-			await db.put('records', failed);
+			await db.put('records', failedRecord);
 
-			syncProgress.failed++;
-			syncProgress.lastError = errorMessage;
+			failed++;
 		}
 	}
-
-	syncProgress = {
-		...syncProgress,
-		status: syncProgress.failed > 0 ? 'error' : 'completed',
-		lastSyncAt: new Date().toISOString()
-	};
 
 	// Refresh gateway pending count
 	await gateway.updatePendingCount();
 
-	console.log(
-		`Push complete: ${syncProgress.completed} succeeded, ${syncProgress.failed} failed`
-	);
+	console.log(`Push complete: ${completed} succeeded, ${failed} failed`);
 }
 
 // =============================================================================
@@ -402,17 +401,46 @@ export async function resolveConflict(conflictId: string): Promise<void> {
 }
 
 // =============================================================================
-// Full Sync Cycle (Push + Pull)
+// Push Listener (replaces sync loop's push-on-write behavior)
 // =============================================================================
 
 /**
- * Run a full sync cycle: push local changes, then pull remote changes.
+ * Listen for local data changes and push to server after a debounce.
+ * Returns cleanup function.
  */
-async function runSyncCycle(gateway: ParticipantGateway): Promise<void> {
+export function startPushListener(gateway: ParticipantGateway): () => void {
+	let pushDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+	const unsubDataChange = onDataChange(() => {
+		if (pushDebounceTimer) clearTimeout(pushDebounceTimer);
+		pushDebounceTimer = setTimeout(() => {
+			if (navigator.onLine && !syncInProgress) {
+				uploadChanges(gateway);
+			}
+		}, PUSH_DEBOUNCE_MS);
+	});
+
+	return () => {
+		if (pushDebounceTimer) {
+			clearTimeout(pushDebounceTimer);
+			pushDebounceTimer = null;
+		}
+		unsubDataChange();
+	};
+}
+
+// =============================================================================
+// Catch-Up Sync (on reconnect / tab focus)
+// =============================================================================
+
+/**
+ * Run a catch-up sync: push pending changes, pull remote changes, detect deletions.
+ * Called on PB_CONNECT reconnect and on tab regaining focus.
+ */
+export async function runCatchUpSync(gateway: ParticipantGateway): Promise<void> {
 	if (syncInProgress || !navigator.onLine) return;
 
 	syncInProgress = true;
-	syncCycleCount++;
 
 	try {
 		// 1. Push local changes to server
@@ -428,96 +456,37 @@ async function runSyncCycle(gateway: ParticipantGateway): Promise<void> {
 		}
 
 		if (totalPulled > 0) {
-			console.log(`Pulled ${totalPulled} changed records`);
-			// Notify UI that data changed so map markers etc. update
+			console.log(`Catch-up pulled ${totalPulled} changed records`);
 			for (const collection of changedCollections) {
 				notifyDataChange(collection);
 			}
 		}
 
-		// 3. Every 10th cycle, do full deletion detection
-		if (syncCycleCount % 10 === 0) {
-			let totalDeleted = 0;
-			for (const collection of syncCollections) {
-				const count = await detectServerDeletions(collection);
-				totalDeleted += count;
-			}
-			if (totalDeleted > 0) {
-				console.log(`Detected ${totalDeleted} server-side deletions`);
-			}
+		// 3. Detect server deletions
+		let totalDeleted = 0;
+		const deletedCollections: string[] = [];
+		for (const collection of syncCollections) {
+			const count = await detectServerDeletions(collection);
+			if (count > 0) deletedCollections.push(collection);
+			totalDeleted += count;
 		}
 
-		// Success: reset backoff
-		currentInterval = BASE_INTERVAL_MS;
+		if (totalDeleted > 0) {
+			console.log(`Catch-up detected ${totalDeleted} server-side deletions`);
+			for (const collection of deletedCollections) {
+				notifyDataChange(collection);
+			}
+		}
 	} catch (error) {
-		console.error('Sync cycle failed:', error);
-		// Increase backoff interval
-		currentInterval = Math.min(currentInterval * 2, MAX_INTERVAL_MS);
+		console.error('Catch-up sync failed:', error);
 	} finally {
 		syncInProgress = false;
 	}
 }
 
 // =============================================================================
-// Sync Loop Management
+// Manual Sync (Sync Now button)
 // =============================================================================
-
-/**
- * Start the background sync loop.
- * Call this once during gateway initialization.
- */
-export function startSyncLoop(
-	gateway: ParticipantGateway,
-	collections: string[]
-): () => void {
-	syncCollections = collections;
-	currentInterval = BASE_INTERVAL_MS;
-	syncCycleCount = 0;
-
-	function scheduleNext() {
-		syncLoopTimer = setTimeout(async () => {
-			await runSyncCycle(gateway);
-			scheduleNext();
-		}, currentInterval);
-	}
-
-	// Start the loop
-	scheduleNext();
-
-	// Listen for online events to trigger immediate sync
-	const handleOnline = () => {
-		console.log('Network restored, triggering immediate sync');
-		// Cancel scheduled sync and run immediately
-		if (syncLoopTimer) clearTimeout(syncLoopTimer);
-		runSyncCycle(gateway).then(scheduleNext);
-	};
-
-	window.addEventListener('online', handleOnline);
-
-	// Listen for local writes to trigger push within 5 seconds
-	const unsubDataChange = onDataChange(() => {
-		if (pushDebounceTimer) clearTimeout(pushDebounceTimer);
-		pushDebounceTimer = setTimeout(() => {
-			if (navigator.onLine && !syncInProgress) {
-				uploadChanges(gateway);
-			}
-		}, PUSH_DEBOUNCE_MS);
-	});
-
-	// Return cleanup function
-	return () => {
-		if (syncLoopTimer) {
-			clearTimeout(syncLoopTimer);
-			syncLoopTimer = null;
-		}
-		if (pushDebounceTimer) {
-			clearTimeout(pushDebounceTimer);
-			pushDebounceTimer = null;
-		}
-		window.removeEventListener('online', handleOnline);
-		unsubDataChange();
-	};
-}
 
 /**
  * Trigger a full resync (for manual "Sync Now" button).
@@ -563,11 +532,8 @@ export async function triggerSync(gateway: ParticipantGateway): Promise<boolean>
 		if (totalDeleted > 0) {
 			console.log(`Full resync removed ${totalDeleted} records no longer on server`);
 		}
-
-		currentInterval = BASE_INTERVAL_MS;
 	} catch (error) {
 		console.error('Full resync failed:', error);
-		currentInterval = Math.min(currentInterval * 2, MAX_INTERVAL_MS);
 	} finally {
 		syncInProgress = false;
 	}
@@ -589,13 +555,6 @@ export async function downloadAll(
 ): Promise<void> {
 	const pb = getPocketBase();
 	const db = await getDB();
-
-	syncProgress = {
-		status: 'syncing',
-		total: collectionNames.length,
-		completed: 0,
-		failed: 0
-	};
 
 	let totalRecords = 0;
 
@@ -629,31 +588,11 @@ export async function downloadAll(
 			}
 
 			totalRecords += records.length;
-			syncProgress.completed++;
 			console.log(`Downloaded ${records.length} records from ${name}`);
 		} catch (e) {
 			console.log(`Skipped ${name}: ${e instanceof Error ? e.message : 'Unknown error'}`);
-			syncProgress.completed++;
 		}
 	}
 
-	syncProgress = {
-		status: 'completed',
-		total: collectionNames.length,
-		completed: collectionNames.length,
-		failed: 0,
-		lastSyncAt: new Date().toISOString()
-	};
-
 	console.log(`Downloaded ${totalRecords} total records from ${collectionNames.length} collections`);
-}
-
-// =============================================================================
-// Legacy Compat (kept for tools-menu)
-// =============================================================================
-
-export function enableAutoSync(gateway: ParticipantGateway): () => void {
-	// In the new architecture, sync is always running via startSyncLoop.
-	// This is a no-op shim for backward compatibility.
-	return () => {};
 }

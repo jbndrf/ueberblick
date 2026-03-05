@@ -15,7 +15,7 @@
 		setParticipantGateway,
 		getCachedSession,
 	} from '$lib/participant-state/context.svelte';
-	import { startSyncLoop } from '$lib/participant-state/sync.svelte';
+	import { setSyncCollections, startPushListener, runCatchUpSync } from '$lib/participant-state/sync.svelte';
 	import { setupRealtime } from '$lib/participant-state/realtime.svelte';
 
 	// Register service worker for PWA using absolute path.
@@ -88,14 +88,16 @@
 	// Offline session state (for when server is unreachable)
 	let offlineSession = $state<{ participantId: string; projectId: string; email: string } | null>(null);
 
-	// Cleanup functions for sync loop and realtime
-	let cleanupSyncLoop: (() => void) | null = null;
+	// Cleanup functions for push listener, realtime, and visibility listener
+	let cleanupPushListener: (() => void) | null = null;
 	let cleanupRealtime: (() => void) | null = null;
+	let cleanupVisibility: (() => void) | null = null;
 
 	// Stop background processes when layout unmounts (e.g. navigation away)
 	onDestroy(() => {
-		cleanupSyncLoop?.();
+		cleanupPushListener?.();
 		cleanupRealtime?.();
+		cleanupVisibility?.();
 	});
 
 	// Create gateway synchronously if participant is available
@@ -143,9 +145,8 @@
 			gatewayInitialized = true;
 			console.log('Participant gateway initialized');
 
-			// Start background sync loop and realtime subscriptions
 			// Collections to sync (participant-accessible collections)
-			const syncCollections = [
+			const collections = [
 				'markers',
 				'marker_categories',
 				'workflows',
@@ -162,8 +163,35 @@
 				'map_layers'
 			];
 
-			cleanupSyncLoop = startSyncLoop(gateway, syncCollections);
-			cleanupRealtime = setupRealtime(syncCollections);
+			// Set collections for sync module (used by triggerSync, runCatchUpSync)
+			setSyncCollections(collections);
+
+			// Push listener: debounced upload on local writes
+			cleanupPushListener = startPushListener(gateway);
+
+			// Realtime: SSE subscriptions + catch-up on reconnect
+			cleanupRealtime = setupRealtime(collections, () => {
+				runCatchUpSync(gateway);
+			});
+
+			// Catch-up on tab focus (with cooldown)
+			let lastCatchUp = 0;
+			const CATCHUP_COOLDOWN_MS = 30_000;
+
+			const handleVisibility = () => {
+				if (document.visibilityState === 'visible' && navigator.onLine) {
+					const now = Date.now();
+					if (now - lastCatchUp > CATCHUP_COOLDOWN_MS) {
+						lastCatchUp = now;
+						runCatchUpSync(gateway);
+					}
+				}
+			};
+
+			document.addEventListener('visibilitychange', handleVisibility);
+			cleanupVisibility = () => {
+				document.removeEventListener('visibilitychange', handleVisibility);
+			};
 		} catch (error) {
 			console.error('Failed to initialize gateway:', error);
 		}

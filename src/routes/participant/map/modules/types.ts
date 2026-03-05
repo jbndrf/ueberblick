@@ -29,6 +29,7 @@ export interface MarkerSelection {
 export interface WorkflowInstanceSelection {
 	type: 'workflowInstance';
 	instanceId: string;
+	openCount: number;
 }
 
 export type Selection = NoSelection | MarkerSelection | WorkflowInstanceSelection;
@@ -37,10 +38,14 @@ export type Selection = NoSelection | MarkerSelection | WorkflowInstanceSelectio
 // Selection Helpers
 // =============================================================================
 
+let _openCount = 0;
+
 export const createSelection = {
 	none: (): NoSelection => ({ type: 'none' }),
 	marker: (markerId: string): MarkerSelection => ({ type: 'marker', markerId }),
-	workflowInstance: (instanceId: string): WorkflowInstanceSelection => ({ type: 'workflowInstance', instanceId })
+	workflowInstance: (instanceId: string): WorkflowInstanceSelection => ({
+		type: 'workflowInstance', instanceId, openCount: ++_openCount
+	})
 };
 
 // Type guards

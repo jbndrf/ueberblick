@@ -34,11 +34,9 @@
 		/** Exposes whether location editing is active (bindable) */
 		isEditingLocation?: boolean;
 		onClose: () => void;
-		/** Called when instance data is updated (e.g., location changed) so parent can refresh */
-		onInstanceUpdated?: () => void;
 	}
 
-	let { selection, isExpanded = $bindable(false), map = null, isEditingLocation = $bindable(false), onClose, onInstanceUpdated }: Props = $props();
+	let { selection, isExpanded = $bindable(false), map = null, isEditingLocation = $bindable(false), onClose }: Props = $props();
 
 	// ==========================================================================
 	// State
@@ -72,6 +70,7 @@
 
 	$effect(() => {
 		const instanceId = selection.instanceId;
+		const _count = selection.openCount; // Force re-run on re-click of same instance
 		if (!gateway || !instanceId) return;
 
 		const newState = createWorkflowInstanceDetailState(instanceId, gateway);
@@ -556,9 +555,8 @@
 			isLocationPickerActive = false;
 			activeLocationEditTool = null;
 
-			// Refresh state and notify parent
+			// Refresh state (live queries auto-update the map via notifyDataChange)
 			await detailState.refresh();
-			onInstanceUpdated?.();
 		} catch (error) {
 			console.error('Failed to update location:', error);
 		}

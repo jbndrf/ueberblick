@@ -3,7 +3,7 @@
  *
  * When online, subscribes to realtime events for near-instant sync.
  * Updates IndexedDB directly and notifies the UI of changes.
- * Falls back to periodic sync loop when offline or on missed events.
+ * On reconnect (PB_CONNECT), triggers a catch-up sync to fill gaps.
  */
 
 import { getPocketBase } from '$lib/pocketbase';
@@ -17,10 +17,6 @@ import { notifyDataChange } from './gateway.svelte';
 let subscribedCollections: string[] = [];
 let unsubscribeFns: Array<() => void> = [];
 let isConnected = $state(false);
-
-export function getRealtimeConnected(): boolean {
-	return isConnected;
-}
 
 // =============================================================================
 // Record Handling
@@ -57,7 +53,6 @@ async function handleRealtimeEvent(
 
 		// Notify gateway listeners (map page etc.) that data changed
 		notifyDataChange(collection);
-		notifyRealtimeChange(collection);
 	} else if (event.action === 'delete') {
 		const existing = await db.get('records', key);
 
@@ -65,34 +60,8 @@ async function handleRealtimeEvent(
 		if (existing && existing._status === 'unchanged') {
 			await db.delete('records', key);
 			notifyDataChange(collection);
-			notifyRealtimeChange(collection);
 		}
 	}
-}
-
-// Re-use the gateway's data change notification system
-function notifyRealtimeChange(collection: string): void {
-	// The gateway's onDataChange listeners will be notified
-	// We call the same notification mechanism
-	for (const listener of realtimeChangeListeners) {
-		try {
-			listener(collection);
-		} catch (e) {
-			console.error('Realtime change listener error:', e);
-		}
-	}
-}
-
-type RealtimeChangeListener = (collection: string) => void;
-const realtimeChangeListeners = new Set<RealtimeChangeListener>();
-
-/**
- * Subscribe to realtime data changes.
- * Returns unsubscribe function.
- */
-export function onRealtimeChange(listener: RealtimeChangeListener): () => void {
-	realtimeChangeListeners.add(listener);
-	return () => realtimeChangeListeners.delete(listener);
 }
 
 // =============================================================================
@@ -149,27 +118,34 @@ export function disconnect(): void {
 	isConnected = false;
 }
 
-/**
- * Reconnect after network restore.
- * Re-subscribes to all previously connected collections.
- */
-export async function reconnect(): Promise<void> {
-	if (subscribedCollections.length === 0) return;
-
-	const collections = [...subscribedCollections];
-	disconnect();
-	await connect(collections);
-}
-
 // =============================================================================
 // Network-Aware Lifecycle
 // =============================================================================
 
 /**
  * Set up realtime with automatic reconnection on network changes.
+ * Subscribes to PB_CONNECT for catch-up sync on reconnect.
  * Returns cleanup function.
  */
-export function setupRealtime(collections: string[]): () => void {
+export function setupRealtime(
+	collections: string[],
+	onReconnect?: () => void
+): () => void {
+	const pb = getPocketBase();
+
+	// Subscribe to PB_CONNECT for reconnect detection
+	// PB_CONNECT fires on initial connect AND on every reconnect
+	let pbConnectCount = 0;
+	pb.realtime.subscribe('PB_CONNECT', () => {
+		pbConnectCount++;
+		console.log(`PB_CONNECT received (count: ${pbConnectCount})`);
+		isConnected = true;
+		// Skip the very first connect (initial load), only catch up on reconnects
+		if (pbConnectCount > 1 && onReconnect) {
+			onReconnect();
+		}
+	});
+
 	// Connect immediately if online
 	if (navigator.onLine) {
 		connect(collections);
@@ -190,6 +166,7 @@ export function setupRealtime(collections: string[]): () => void {
 
 	return () => {
 		disconnect();
+		pb.realtime.unsubscribe('PB_CONNECT').catch(() => {});
 		window.removeEventListener('online', handleOnline);
 		window.removeEventListener('offline', handleOffline);
 	};

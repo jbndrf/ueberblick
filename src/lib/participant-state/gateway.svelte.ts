@@ -37,6 +37,20 @@ interface ListResult<T> {
 	items: T[];
 }
 
+/** Reactive live query -- records stay up-to-date automatically */
+export interface LiveQuery<T = Record<string, unknown>> {
+	readonly records: T[];
+	readonly loading: boolean;
+	destroy(): void;
+}
+
+/** Reactive live query for a single record */
+export interface LiveQueryOne<T = Record<string, unknown>> {
+	readonly record: T | null;
+	readonly loading: boolean;
+	destroy(): void;
+}
+
 /** Collection proxy interface (matches PocketBase SDK) */
 export interface CollectionProxy<T = Record<string, unknown>> {
 	create(data: Partial<T> | FormData): Promise<T>;
@@ -46,6 +60,8 @@ export interface CollectionProxy<T = Record<string, unknown>> {
 	getList(page?: number, perPage?: number, options?: ListOptions): Promise<ListResult<T>>;
 	getFullList(options?: ListOptions): Promise<T[]>;
 	getFirstListItem(filter: string, options?: { expand?: string; fields?: string }): Promise<T>;
+	live(options?: ListOptions): LiveQuery<T>;
+	liveOne(id: string, options?: { expand?: string; fields?: string }): LiveQueryOne<T>;
 }
 
 // =============================================================================
@@ -609,6 +625,127 @@ export function createParticipantGateway(participantId: string, projectId: strin
 				}
 
 				throw new Error(`No records found in ${name} matching filter: ${filter}`);
+			},
+
+			// -----------------------------------------------------------------
+			// LIVE - Reactive query that auto-updates from IndexedDB
+			// -----------------------------------------------------------------
+			live(options?: ListOptions): LiveQuery<T> {
+				let records = $state<T[]>([]);
+				let loading = $state(true);
+				let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+				async function readFromDB() {
+					const db = await getDB();
+					const all = await db.getAllFromIndex('records', 'by_collection', name);
+					const visible = all.filter((r) => r._status !== 'deleted');
+
+					const result = query(visible, {
+						filter: options?.filter,
+						sort: options?.sort
+					});
+
+					let processed: T[];
+					if (options?.expand) {
+						const expanded = await expandRecords(result, options.expand);
+						processed = expanded.map((r) => cleanRecord(r as unknown as CachedRecord)) as unknown as T[];
+					} else {
+						processed = result.map((r) => cleanRecord(r)) as unknown as T[];
+					}
+
+					records = processed;
+					loading = false;
+				}
+
+				// Initial read from IndexedDB (skip on server -- no IndexedDB)
+				if (typeof window !== 'undefined') {
+					readFromDB();
+
+					// Fire one background fetch on setup if collection has no sync_metadata yet
+					(async () => {
+						const db = await getDB();
+						const meta = await db.get('sync_metadata', name);
+						if (!meta) {
+							backgroundFetchFullList(name, options);
+						}
+					})();
+				}
+
+				// Subscribe to data changes for this collection
+				const unsubscribe = onDataChange((collection) => {
+					if (collection !== name) return;
+					if (debounceTimer) clearTimeout(debounceTimer);
+					debounceTimer = setTimeout(() => {
+						readFromDB();
+					}, 100);
+				});
+
+				return {
+					get records() { return records; },
+					get loading() { return loading; },
+					destroy() {
+						unsubscribe();
+						if (debounceTimer) clearTimeout(debounceTimer);
+					}
+				};
+			},
+
+			// -----------------------------------------------------------------
+			// LIVE ONE - Reactive single-record query
+			// -----------------------------------------------------------------
+			liveOne(id: string, options?: { expand?: string; fields?: string }): LiveQueryOne<T> {
+				let record = $state<T | null>(null);
+				let loading = $state(true);
+				let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+				async function readFromDB() {
+					const db = await getDB();
+					const cached = await db.get('records', `${name}/${id}`);
+
+					if (cached && cached._status !== 'deleted') {
+						if (options?.expand) {
+							const [expanded] = await expandRecords([cached], options.expand);
+							record = cleanRecord(expanded as unknown as CachedRecord) as unknown as T;
+						} else {
+							record = cleanRecord(cached) as unknown as T;
+						}
+					} else {
+						record = null;
+					}
+					loading = false;
+				}
+
+				// Initial read (skip on server -- no IndexedDB)
+				if (typeof window !== 'undefined') {
+					readFromDB();
+
+					// Background fetch if no sync_metadata
+					(async () => {
+						const db = await getDB();
+						const meta = await db.get('sync_metadata', name);
+						if (!meta) {
+							backgroundFetchOne(name, id, options);
+						}
+					})();
+				}
+
+				// Subscribe to data changes
+				const unsubscribe = onDataChange((collection) => {
+					if (collection !== name) return;
+					if (debounceTimer) clearTimeout(debounceTimer);
+					debounceTimer = setTimeout(() => {
+						readFromDB();
+					}, 100);
+				});
+
+				return {
+					get record() { return record; },
+					get loading() { return loading; },
+					destroy() {
+						unsubscribe();
+						if (debounceTimer) clearTimeout(debounceTimer);
+					}
+				};
 			}
 		};
 	}

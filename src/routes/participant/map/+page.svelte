@@ -5,7 +5,6 @@
 		getDownloadProgress,
 		getDownloadCompleteSignal
 	} from '$lib/participant-state';
-	import { onDataChange } from '$lib/participant-state/gateway.svelte';
 	import { resetPocketBase } from '$lib/pocketbase';
 	import { disconnectRealtime } from '$lib/participant-state';
 	import { Loader2 } from 'lucide-svelte';
@@ -92,17 +91,54 @@
 	// Track if location editing is active (from WorkflowInstanceDetailModule)
 	let isEditingLocation = $state(false);
 
-	// Data state - loaded via gateway
-	let mapLayers = $state<any[]>([]);
-	let markers = $state<any[]>([]);
-	let workflowInstances = $state<any[]>([]);
-	let workflows = $state<Workflow[]>([]);
-	let workflowStages = $state<any[]>([]);
-	let isLoading = $state(true);
+	// ==========================================================================
+	// Live Queries -- reactive, auto-updating from IndexedDB
+	// ==========================================================================
 
-	// Guard to prevent concurrent loadData() calls (avoids PocketBase auto-cancellation)
-	let loadDataInFlight = false;
-	let pendingReload = false;
+	const layersLive = gateway.collection('map_layers').live({ filter: 'is_active = true', sort: 'display_order' });
+	const markersLive = gateway.collection('markers').live({ expand: 'category_id' });
+	const instancesLive = gateway.collection('workflow_instances').live({ expand: 'workflow_id' });
+	const workflowsLive = gateway.collection('workflows').live({ filter: 'is_active = true' });
+	const stagesLive = gateway.collection('workflow_stages').live();
+	const fieldTagsLive = gateway.collection('tools_field_tags').live();
+	const fieldValuesLive = gateway.collection('workflow_instance_field_values').live();
+	const connectionsLive = gateway.collection('workflow_connections').live({ filter: 'from_stage_id = ""' });
+
+	// Derived data from live queries
+	const mapLayers = $derived(layersLive.records);
+	const markers = $derived(markersLive.records);
+	const workflowInstances = $derived(instancesLive.records);
+	const workflowStages = $derived(stagesLive.records);
+	const fieldTags = $derived(fieldTagsLive.records);
+	const fieldValues = $derived(fieldValuesLive.records);
+
+	// Workflows with entry labels derived from connections
+	const workflows: Workflow[] = $derived.by(() => {
+		const entryLabelByWorkflow = new Map<string, string>();
+		for (const conn of connectionsLive.records) {
+			const label = (conn.visual_config as any)?.button_label;
+			if (label) entryLabelByWorkflow.set(conn.workflow_id as string, label);
+		}
+		return (workflowsLive.records as Workflow[]).map(wf => ({
+			...wf,
+			entry_button_label: entryLabelByWorkflow.get(wf.id) || wf.name
+		}));
+	});
+
+	// Loading: true until first IndexedDB read completes for key collections
+	const isLoading = $derived(layersLive.loading && markersLive.loading);
+
+	// Cleanup live queries on destroy
+	onDestroy(() => {
+		layersLive.destroy();
+		markersLive.destroy();
+		instancesLive.destroy();
+		workflowsLive.destroy();
+		stagesLive.destroy();
+		fieldTagsLive.destroy();
+		fieldValuesLive.destroy();
+		connectionsLive.destroy();
+	});
 
 	// Layer state
 	let activeBaseLayerId = $state<string | null>(null);
@@ -112,276 +148,164 @@
 	let visibleCategoryIds = $state<string[]>([]);
 	let visibleWorkflowIds = $state<string[]>([]);
 
-	// Field tag data (for filterable sub-sections)
-	let fieldTags = $state<any[]>([]);
-	let fieldValues = $state<any[]>([]);
-
 	// Tag value visibility: workflowId -> Set of visible tag values (all visible by default)
 	let visibleTagValues = $state<Map<string, Set<string>>>(new Map());
+
+	// ==========================================================================
+	// Initialization Effects (run once when data first arrives)
+	// ==========================================================================
+
+	// Initialize default base layer selection
+	$effect(() => {
+		if (!activeBaseLayerId && mapLayers.length) {
+			const firstBase = mapLayers.find((l: any) => l.layer_type === 'base');
+			if (firstBase) activeBaseLayerId = firstBase.id;
+		}
+	});
+
+	// Initialize filters - all categories visible by default
+	$effect(() => {
+		if (visibleCategoryIds.length === 0 && markers.length > 0) {
+			const categoryIds = [...new Set(markers.map((m: any) => m.category_id).filter(Boolean))];
+			visibleCategoryIds = categoryIds;
+		}
+	});
+
+	// Initialize filters - all workflows visible by default
+	$effect(() => {
+		if (visibleWorkflowIds.length === 0 && workflowInstances.length > 0) {
+			const workflowIds = [...new Set(workflowInstances.map((i: any) => i.workflow_id).filter(Boolean))];
+			visibleWorkflowIds = workflowIds;
+		}
+	});
+
+	// Initialize tag value visibility - all values visible by default
+	$effect(() => {
+		if (visibleTagValues.size === 0 && fieldTags.length > 0) {
+			const newMap = new Map<string, Set<string>>();
+			for (const ft of fieldTags) {
+				const mappings = (ft as any).tag_mappings || [];
+				for (const mapping of mappings) {
+					if (mapping.tagType !== 'filterable') continue;
+					const wfId = (ft as any).workflow_id;
+					const filterBy = (mapping.config?.filterBy as string) || 'field';
+
+					if (filterBy === 'stage') {
+						const vals = new Set<string>();
+						for (const inst of workflowInstances) {
+							if ((inst as any).workflow_id === wfId && (inst as any).current_stage_id) {
+								vals.add((inst as any).current_stage_id);
+							}
+						}
+						if (vals.size > 0) {
+							newMap.set(wfId, vals);
+						}
+					} else if (mapping.fieldId) {
+						const vals = new Set<string>();
+						for (const fv of fieldValues) {
+							if ((fv as any).field_key === mapping.fieldId && (fv as any).value) {
+								for (const v of splitMultiValue((fv as any).value)) {
+									vals.add(v);
+								}
+							}
+						}
+						if (vals.size > 0) {
+							newMap.set(wfId, vals);
+						}
+					}
+				}
+			}
+			visibleTagValues = newMap;
+		}
+	});
 
 	// ==========================================================================
 	// Download Progress & Event Signals
 	// ==========================================================================
 
-	// Reactive download progress (always visible when downloading)
 	const downloadProgress = $derived(getDownloadProgress());
 
-	// Event signals for reactive data reload
-	const downloadCompleteSignal = $derived(getDownloadCompleteSignal());
-	// Track previous signal values to detect changes
-	let prevDownloadSignal = 0;
+	// ==========================================================================
+	// Derived Filter Data
+	// ==========================================================================
 
-	// Load data on mount
-	$effect(() => {
-		loadData();
-	});
+	/**
+	 * For each workflow with a "filterable" tag mapping, build a map:
+	 * instanceId -> filter value (stage ID or field value depending on mode)
+	 */
+	const filterableValues = $derived.by(() => {
+		const map = new Map<string, string>();
+		for (const ft of fieldTags) {
+			const mappings = ((ft as any).tag_mappings || []) as Array<{ tagType: string; fieldId: string | null; config: Record<string, unknown> }>;
+			for (const mapping of mappings) {
+				if (mapping.tagType !== 'filterable') continue;
+				const filterBy = (mapping.config?.filterBy as string) || 'field';
 
-	// Reload on download complete
-	$effect(() => {
-		const signal = downloadCompleteSignal;
-		if (signal > prevDownloadSignal) {
-			prevDownloadSignal = signal;
-			console.log('[map page] Download complete signal received, reloading data...');
-			loadData();
-		}
-	});
-
-	// Reload when data changes (local writes, background sync, or realtime events)
-	let cleanupDataChangeListener: (() => void) | null = null;
-	let dataChangeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-	let pendingChangedCollections = new Set<string>();
-
-	onMount(() => {
-		cleanupDataChangeListener = onDataChange((collection) => {
-			// Accumulate which collections changed during debounce window
-			pendingChangedCollections.add(collection);
-			if (dataChangeDebounceTimer) clearTimeout(dataChangeDebounceTimer);
-			dataChangeDebounceTimer = setTimeout(() => {
-				const changed = pendingChangedCollections;
-				pendingChangedCollections = new Set();
-				refreshChanged(changed);
-			}, 150);
-		});
-	});
-
-	onDestroy(() => {
-		cleanupDataChangeListener?.();
-		if (dataChangeDebounceTimer) clearTimeout(dataChangeDebounceTimer);
-	});
-
-	async function loadData() {
-		if (!gateway) {
-			isLoading = false;
-			return;
-		}
-		// Prevent concurrent calls to avoid PocketBase auto-cancellation
-		if (loadDataInFlight) {
-			console.log('[loadData] Already loading, queuing reload');
-			pendingReload = true;
-			return;
-		}
-		loadDataInFlight = true;
-
-		try {
-			isLoading = true;
-			// Load all in parallel (local-first: reads from IndexedDB, background revalidation when online)
-			const [layersResult, markersResult, instancesResult, workflowsResult, stagesResult, fieldTagsResult, fieldValuesResult, entryConnectionsResult] = await Promise.all([
-				gateway.collection('map_layers').getFullList({
-					filter: 'is_active = true',
-
-					sort: 'display_order'
-				}),
-				gateway.collection('markers').getFullList({
-					expand: 'category_id'
-				}),
-				gateway.collection('workflow_instances').getFullList({
-					expand: 'workflow_id'
-				}),
-				gateway.collection('workflows').getFullList({
-					filter: 'is_active = true'
-				}),
-				gateway.collection('workflow_stages').getFullList(),
-				gateway.collection('tools_field_tags').getFullList(),
-				gateway.collection('workflow_instance_field_values').getFullList(),
-				gateway.collection('workflow_connections').getFullList({
-					filter: 'from_stage_id = ""'
-				})
-			]);
-
-			mapLayers = layersResult;
-			markers = markersResult;
-			workflowInstances = instancesResult;
-
-			// Map entry connection button labels onto workflows
-			const entryLabelByWorkflow = new Map<string, string>();
-			for (const conn of entryConnectionsResult) {
-				const label = (conn.visual_config as any)?.button_label;
-				if (label) {
-					entryLabelByWorkflow.set(conn.workflow_id, label);
-				}
-			}
-			workflows = (workflowsResult as Workflow[]).map(wf => ({
-				...wf,
-				entry_button_label: entryLabelByWorkflow.get(wf.id) || wf.name
-			}));
-			workflowStages = stagesResult;
-			fieldTags = fieldTagsResult;
-			fieldValues = fieldValuesResult;
-
-			console.log('[loadData] Loaded map layers:', mapLayers);
-			console.log('[loadData] First layer expand:', mapLayers[0]?.expand);
-			console.log('Loaded markers:', markers.length);
-			console.log('Loaded workflow instances:', workflowInstances.length);
-			console.log('Loaded workflows:', workflows.length);
-
-			// Initialize layer selection
-			if (!activeBaseLayerId && mapLayers.length) {
-				const firstBase = mapLayers.find((l) => l.layer_type === 'base');
-				if (firstBase) activeBaseLayerId = firstBase.id;
-			}
-
-			// Initialize filters - all categories/workflows visible by default
-			if (visibleCategoryIds.length === 0 && markers.length > 0) {
-				// Get unique category IDs from markers
-				const categoryIds = [...new Set(markers.map((m) => m.category_id).filter(Boolean))];
-				visibleCategoryIds = categoryIds;
-			}
-			if (visibleWorkflowIds.length === 0 && workflowInstances.length > 0) {
-				// Get unique workflow IDs from instances
-				const workflowIds = [...new Set(workflowInstances.map((i) => i.workflow_id).filter(Boolean))];
-				visibleWorkflowIds = workflowIds;
-			}
-
-			// Initialize tag value visibility - all values visible by default
-			if (visibleTagValues.size === 0 && fieldTagsResult.length > 0) {
-				const newMap = new Map<string, Set<string>>();
-				for (const ft of fieldTagsResult) {
-					const mappings = ft.tag_mappings || [];
-					for (const mapping of mappings) {
-						if (mapping.tagType !== 'filterable') continue;
-						const wfId = ft.workflow_id;
-						const filterBy = (mapping.config?.filterBy as string) || 'field';
-
-						if (filterBy === 'stage') {
-							// Collect unique stage IDs from instances of this workflow
-							const vals = new Set<string>();
-							for (const inst of instancesResult) {
-								if (inst.workflow_id === wfId && inst.current_stage_id) {
-									vals.add(inst.current_stage_id);
-								}
-							}
-							if (vals.size > 0) {
-								newMap.set(wfId, vals);
-							}
-						} else if (mapping.fieldId) {
-							// Collect all unique values for this field across instances
-							const vals = new Set<string>();
-							for (const fv of fieldValuesResult) {
-								if (fv.field_key === mapping.fieldId && fv.value) {
-									for (const v of splitMultiValue(fv.value)) {
-										vals.add(v);
-									}
-								}
-							}
-							if (vals.size > 0) {
-								newMap.set(wfId, vals);
-							}
+				if (filterBy === 'stage') {
+					for (const inst of workflowInstances) {
+						if ((inst as any).workflow_id === (ft as any).workflow_id && (inst as any).current_stage_id) {
+							map.set((inst as any).id, (inst as any).current_stage_id);
+						}
+					}
+				} else if (mapping.fieldId) {
+					for (const fv of fieldValues) {
+						if ((fv as any).field_key === mapping.fieldId && (fv as any).value) {
+							map.set((fv as any).instance_id, (fv as any).value);
 						}
 					}
 				}
-				visibleTagValues = newMap;
 			}
-		} catch (error) {
-			console.error('Failed to load map data:', error);
-		} finally {
-			isLoading = false;
-			loadDataInFlight = false;
-			// Process queued reload if data changed while we were loading
-			if (pendingReload) {
-				pendingReload = false;
-				loadData();
-			}
+		}
+		return map;
+	});
+
+	// ==========================================================================
+	// Marker Selection & Navigation
+	// ==========================================================================
+
+	const selectableMarkers = $derived(
+		markers.filter((m: any) => visibleCategoryIds.includes(m.category_id) && m.location?.lat && m.location?.lon)
+	);
+
+	const currentIndex = $derived.by(() => {
+		if (selection.type !== 'marker') return -1;
+		return selectableMarkers.findIndex((m: any) => m.id === selection.markerId);
+	});
+
+	const canGoNext = $derived(currentIndex >= 0 && currentIndex < selectableMarkers.length - 1);
+	const canGoPrevious = $derived(currentIndex > 0);
+
+	function handleMarkerClick(marker: any) {
+		selection = createSelection.marker(marker.id);
+	}
+
+	function handleWorkflowInstanceClick(instance: any) {
+		selection = createSelection.workflowInstance(instance.id);
+	}
+
+	function handleSelectionClose() {
+		selection = createSelection.none();
+	}
+
+	function handleNavigateNext() {
+		if (!canGoNext) return;
+		const nextMarker = selectableMarkers[currentIndex + 1];
+		if (nextMarker) {
+			selection = createSelection.marker(nextMarker.id);
 		}
 	}
 
-	/**
-	 * Targeted refresh: only reload collections that actually changed.
-	 * Avoids re-fetching map_layers/tiles when only workflow data changed.
-	 */
-	async function refreshChanged(changed: Set<string>) {
-		if (!gateway) return;
-
-		console.log('[refreshChanged] Collections:', [...changed]);
-
-		try {
-			const promises: Promise<void>[] = [];
-
-			if (changed.has('map_layers')) {
-				promises.push(
-					gateway.collection('map_layers').getFullList({ filter: 'is_active = true', sort: 'display_order' })
-						.then(result => { mapLayers = result; })
-				);
-			}
-
-			if (changed.has('markers') || changed.has('marker_categories')) {
-				promises.push(
-					gateway.collection('markers').getFullList({ expand: 'category_id' })
-						.then(result => { markers = result; })
-				);
-			}
-
-			if (changed.has('workflow_instances')) {
-				promises.push(
-					gateway.collection('workflow_instances').getFullList({ expand: 'workflow_id' })
-						.then(result => { workflowInstances = result; })
-				);
-			}
-
-			if (changed.has('workflows') || changed.has('workflow_connections')) {
-				promises.push(
-					Promise.all([
-						gateway.collection('workflows').getFullList({ filter: 'is_active = true' }),
-						gateway.collection('workflow_connections').getFullList({ filter: 'from_stage_id = ""' })
-					]).then(([workflowsResult, entryConnectionsResult]) => {
-						const entryLabelByWorkflow = new Map<string, string>();
-						for (const conn of entryConnectionsResult) {
-							const label = (conn.visual_config as any)?.button_label;
-							if (label) entryLabelByWorkflow.set(conn.workflow_id, label);
-						}
-						workflows = (workflowsResult as Workflow[]).map(wf => ({
-							...wf,
-							entry_button_label: entryLabelByWorkflow.get(wf.id) || wf.name
-						}));
-					})
-				);
-			}
-
-			if (changed.has('workflow_stages')) {
-				promises.push(
-					gateway.collection('workflow_stages').getFullList()
-						.then(result => { workflowStages = result; })
-				);
-			}
-
-			if (changed.has('tools_field_tags')) {
-				promises.push(
-					gateway.collection('tools_field_tags').getFullList()
-						.then(result => { fieldTags = result; })
-				);
-			}
-
-			if (changed.has('workflow_instance_field_values')) {
-				promises.push(
-					gateway.collection('workflow_instance_field_values').getFullList()
-						.then(result => { fieldValues = result; })
-				);
-			}
-
-			await Promise.all(promises);
-		} catch (error) {
-			console.error('Failed to refresh changed data:', error);
+	function handleNavigatePrevious() {
+		if (!canGoPrevious) return;
+		const prevMarker = selectableMarkers[currentIndex - 1];
+		if (prevMarker) {
+			selection = createSelection.marker(prevMarker.id);
 		}
 	}
+
+	// ==========================================================================
+	// UI Handlers
+	// ==========================================================================
 
 	function handleOverlayToggle(id: string, active: boolean) {
 		if (active) {
@@ -419,90 +343,10 @@
 		newMap.set(workflowId, updated);
 		visibleTagValues = newMap;
 
-		// Auto-manage parent workflow visibility based on sub-values
 		if (updated.size > 0 && !visibleWorkflowIds.includes(workflowId)) {
 			visibleWorkflowIds = [...visibleWorkflowIds, workflowId];
 		} else if (updated.size === 0 && visibleWorkflowIds.includes(workflowId)) {
 			visibleWorkflowIds = visibleWorkflowIds.filter((x) => x !== workflowId);
-		}
-	}
-
-	/**
-	 * For each workflow with a "filterable" tag mapping, build a map:
-	 * instanceId -> filter value (stage ID or field value depending on mode)
-	 */
-	const filterableValues = $derived.by(() => {
-		const map = new Map<string, string>();
-		for (const ft of fieldTags) {
-			const mappings = (ft.tag_mappings || []) as Array<{ tagType: string; fieldId: string | null; config: Record<string, unknown> }>;
-			for (const mapping of mappings) {
-				if (mapping.tagType !== 'filterable') continue;
-				const filterBy = (mapping.config?.filterBy as string) || 'field';
-
-				if (filterBy === 'stage') {
-					// Stage mode: map instanceId -> current_stage_id
-					for (const inst of workflowInstances) {
-						if (inst.workflow_id === ft.workflow_id && inst.current_stage_id) {
-							map.set(inst.id, inst.current_stage_id);
-						}
-					}
-				} else if (mapping.fieldId) {
-					// Field mode: map instanceId -> field value
-					for (const fv of fieldValues) {
-						if (fv.field_key === mapping.fieldId && fv.value) {
-							map.set(fv.instance_id, fv.value);
-						}
-					}
-				}
-			}
-		}
-		return map;
-	});
-
-	// ==========================================================================
-	// Marker Selection & Navigation
-	// ==========================================================================
-
-	// Visible markers for navigation (filtered by category)
-	const selectableMarkers = $derived(
-		markers.filter((m) => visibleCategoryIds.includes(m.category_id) && m.location?.lat && m.location?.lon)
-	);
-
-	// Current selection index
-	const currentIndex = $derived.by(() => {
-		if (selection.type !== 'marker') return -1;
-		return selectableMarkers.findIndex((m) => m.id === selection.markerId);
-	});
-
-	// Navigation capabilities
-	const canGoNext = $derived(currentIndex >= 0 && currentIndex < selectableMarkers.length - 1);
-	const canGoPrevious = $derived(currentIndex > 0);
-
-	function handleMarkerClick(marker: any) {
-		selection = createSelection.marker(marker.id);
-	}
-
-	function handleWorkflowInstanceClick(instance: any) {
-		selection = createSelection.workflowInstance(instance.id);
-	}
-
-	function handleSelectionClose() {
-		selection = createSelection.none();
-	}
-
-	function handleNavigateNext() {
-		if (!canGoNext) return;
-		const nextMarker = selectableMarkers[currentIndex + 1];
-		if (nextMarker) {
-			selection = createSelection.marker(nextMarker.id);
-		}
-	}
-
-	function handleNavigatePrevious() {
-		if (!canGoPrevious) return;
-		const prevMarker = selectableMarkers[currentIndex - 1];
-		if (prevMarker) {
-			selection = createSelection.marker(prevMarker.id);
 		}
 	}
 
@@ -512,8 +356,6 @@
 
 	function handleWorkflowSelect(workflow: Workflow, coordinates?: { lat: number; lng: number }) {
 		console.log('Workflow selected:', workflow, 'Coordinates:', coordinates);
-
-		// Store pending workflow and open form
 		pendingWorkflow = { workflow, coordinates };
 		formFillOpen = true;
 	}
@@ -523,7 +365,6 @@
 
 		const { workflow, coordinates } = pendingWorkflow;
 
-		// Find the start stage for this workflow
 		const stages = workflowStages.filter((s: any) => s.workflow_id === workflow.id);
 		const startStage = stages.find((s: any) => s.stage_type === 'start') || stages[0];
 
@@ -533,10 +374,9 @@
 		}
 
 		try {
-			// Create workflow instance through gateway
 			const instance = await gateway.collection('workflow_instances').create({
 				workflow_id: workflow.id,
-				current_stage_id: startStage.id,
+				current_stage_id: (startStage as any).id,
 				status: 'active',
 				created_by: data.participant.id,
 				location: coordinates ? { lat: coordinates.lat, lon: coordinates.lng } : null,
@@ -545,7 +385,6 @@
 
 			console.log('Workflow instance created:', instance.id);
 
-			// Build list of field values for audit log
 			const fieldEntries = Object.entries(formValues).filter(([_, value]) => value !== null && value !== undefined && value !== '');
 
 			const createdFields = fieldEntries.map(([fieldId, value]) => ({
@@ -555,10 +394,9 @@
 					: typeof value === 'object' ? JSON.stringify(value) : String(value)
 			}));
 
-			// Create tool_usage record for audit trail (instance creation)
 			const toolUsage = await gateway.collection('workflow_instance_tool_usage').create({
 				instance_id: instance.id,
-				stage_id: startStage.id,
+				stage_id: (startStage as any).id,
 				executed_by: gateway.participantId,
 				executed_at: new Date().toISOString(),
 				metadata: {
@@ -568,16 +406,13 @@
 				}
 			}) as { id: string };
 
-			// Save form field values with link to tool_usage
 			for (const [fieldId, value] of fieldEntries) {
-				// Handle file values separately
 				if (Array.isArray(value) && value.length > 0 && value[0] instanceof File) {
-					// File upload - create separate record for each file
 					for (const file of value as File[]) {
 						const formData = new FormData();
 						formData.append('instance_id', instance.id);
 						formData.append('field_key', fieldId);
-						formData.append('stage_id', startStage.id);
+						formData.append('stage_id', (startStage as any).id);
 						formData.append('value', '');
 						formData.append('file_value', file);
 						formData.append('created_by_action', toolUsage.id);
@@ -585,28 +420,25 @@
 						await gateway.collection('workflow_instance_field_values').create(formData);
 					}
 				} else {
-					// Regular value - stringify if needed
 					const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
 
 					await gateway.collection('workflow_instance_field_values').create({
 						instance_id: instance.id,
 						field_key: fieldId,
-						stage_id: startStage.id,
+						stage_id: (startStage as any).id,
 						value: stringValue,
 						created_by_action: toolUsage.id
 					});
 				}
 			}
 
-			// Refresh instances and update visibility filter
-			await refreshWorkflowInstances();
+			// Live queries auto-update via notifyDataChange from gateway.create()
 
 			// Ensure the new workflow type is visible
 			if (!visibleWorkflowIds.includes(workflow.id)) {
 				visibleWorkflowIds = [...visibleWorkflowIds, workflow.id];
 			}
 
-			// Close form and show the new instance
 			formFillOpen = false;
 			pendingWorkflow = null;
 			selection = createSelection.workflowInstance(instance.id);
@@ -622,17 +454,6 @@
 	}
 
 	// ==========================================================================
-	// Refresh Helpers
-	// ==========================================================================
-
-	async function refreshWorkflowInstances() {
-		const instancesResult = await gateway.collection('workflow_instances').getFullList({
-			expand: 'workflow_id'
-		});
-		workflowInstances = instancesResult;
-	}
-
-	// ==========================================================================
 	// Map Handlers
 	// ==========================================================================
 
@@ -641,10 +462,7 @@
 	}
 
 	function handleMapClick() {
-		// Don't close if location editing is active (let LocationEditTool handle clicks)
 		if (isEditingLocation) return;
-
-		// Close sidebar when clicking on empty map area (not dragging)
 		if (selection.type !== 'none') {
 			selection = createSelection.none();
 		}
@@ -666,16 +484,9 @@
 
 	async function handleLogout() {
 		try {
-			// Stop realtime subscriptions immediately
 			disconnectRealtime();
-
-			// Nuke all participant state (IndexedDB, localStorage, SW caches)
 			await resetAllParticipantState();
-
-			// Reset the PocketBase client singleton so next login starts fresh
 			resetPocketBase();
-
-			// Tell the server to clear auth cookie
 			await fetch('/participant/logout', {
 				method: 'POST',
 				redirect: 'manual'
@@ -683,9 +494,6 @@
 		} catch (error) {
 			console.error('Logout error:', error);
 		}
-
-		// Hard reload ensures all JS module-level state is reset
-		// (sync timers, realtime listeners, gateway singletons, etc.)
 		window.location.href = '/participant/login';
 	}
 </script>
@@ -764,7 +572,6 @@
 			bind:isExpanded={sheetExpanded}
 			bind:isEditingLocation
 			onClose={handleSelectionClose}
-			onInstanceUpdated={refreshWorkflowInstances}
 		/>
 	{/if}
 

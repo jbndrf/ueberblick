@@ -16,6 +16,22 @@ module.exports = {
 };
 
 // =============================================================================
+// Autodate Workaround
+// =============================================================================
+
+/**
+ * Bump the `updated` autodate field via raw SQL.
+ * record.set("updated", ...) is silently ignored on autodate fields,
+ * so we must use a direct SQL UPDATE after unsafeWithoutHooks().save().
+ */
+function bumpUpdatedTimestamp(collectionName, recordId) {
+  var now = new Date().toISOString();
+  $app.db().newQuery(
+    'UPDATE "' + collectionName + '" SET updated = {:now} WHERE id = {:id}'
+  ).bind({ now: now, id: recordId }).execute();
+}
+
+// =============================================================================
 // JSON Field Helper
 // =============================================================================
 
@@ -57,6 +73,7 @@ function bumpLastActivity(instanceId) {
     const instance = $app.findRecordById("workflow_instances", instanceId);
     instance.set("last_activity_at", new Date().toISOString());
     $app.unsafeWithoutHooks().save(instance);
+    bumpUpdatedTimestamp("workflow_instances", instanceId);
   } catch (err) {
     console.error("[Automation] Failed to bump last_activity_at for instance", instanceId, err);
   }
@@ -316,6 +333,7 @@ function executeActions(actions, instanceId) {
         const instance = $app.findRecordById("workflow_instances", instanceId);
         instance.set("status", action.params.status);
         noHooksApp.save(instance);
+        bumpUpdatedTimestamp("workflow_instances", instanceId);
         results.push({ type: action.type, params: action.params, success: true });
 
       } else if (action.type === "set_field_value") {
@@ -347,6 +365,7 @@ function executeActions(actions, instanceId) {
           record.set("value", resolvedValue);
           record.set("last_modified_at", new Date().toISOString());
           noHooksApp.save(record);
+          bumpUpdatedTimestamp("workflow_instance_field_values", record.id);
         } else {
           const collection = $app.findCollectionByNameOrId("workflow_instance_field_values");
           const record = new Record(collection);
@@ -367,6 +386,7 @@ function executeActions(actions, instanceId) {
         instance.set("current_stage_id", action.params.stage_id);
         instance.set("last_activity_at", new Date().toISOString());
         noHooksApp.save(instance);
+        bumpUpdatedTimestamp("workflow_instances", instanceId);
         var paramsWithStage = JSON.parse(JSON.stringify(action.params));
         paramsWithStage.from_stage_id = oldStageId;
         results.push({ type: action.type, params: paramsWithStage, success: true });
