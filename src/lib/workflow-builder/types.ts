@@ -311,7 +311,8 @@ export type ConditionLeaf =
 				compare_field_key?: string;
 			};
 	  }
-	| { type: 'instance_status'; params: { status: string } };
+	| { type: 'instance_status'; params: { status: string } }
+	| { type: 'current_stage'; params: { stage_id: string; operator: 'equals' | 'not_equals' } };
 
 export interface ConditionGroup {
 	operator: 'AND' | 'OR';
@@ -320,8 +321,14 @@ export interface ConditionGroup {
 
 export type AutomationAction =
 	| { type: 'set_instance_status'; params: { status: string } }
-	| { type: 'set_field_value'; params: { field_key: string; value: string; stage_id: string } }
+	| { type: 'set_field_value'; params: { field_key: string; value: string } }
 	| { type: 'set_stage'; params: { stage_id: string } };
+
+export interface AutomationStep {
+	name: string;
+	conditions: ConditionGroup | null;
+	actions: AutomationAction[];
+}
 
 export interface ToolsAutomation {
 	id: string;
@@ -329,8 +336,7 @@ export interface ToolsAutomation {
 	name: string;
 	trigger_type: TriggerType;
 	trigger_config: TriggerConfig;
-	conditions: ConditionGroup | null;
-	actions: AutomationAction[];
+	steps: AutomationStep[];
 	is_enabled: boolean;
 }
 

@@ -690,8 +690,7 @@ export class WorkflowBuilderState {
 			name: 'New Automation',
 			trigger_type: triggerType,
 			trigger_config: defaultConfig,
-			conditions: null,
-			actions: [],
+			steps: [{ name: 'Step 1', conditions: null, actions: [] }],
 			is_enabled: true
 		};
 

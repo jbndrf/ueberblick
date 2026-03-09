@@ -12,7 +12,8 @@ module.exports = {
   executeActions,
   logAutomationExecution,
   runAutomation,
-  cronMatchesNow
+  cronMatchesNow,
+  FUNCTIONS
 };
 
 // =============================================================================
@@ -80,14 +81,136 @@ function bumpLastActivity(instanceId) {
 }
 
 // =============================================================================
-// Expression Parser (arithmetic only, no eval)
+// Function Registry
 // =============================================================================
 
 /**
- * Check if a string contains expression syntax (field references like {key}).
+ * Registry of functions available in expressions.
+ * To add a new function, add an entry here. No other code changes needed.
+ *
+ * Each entry: { minArgs, maxArgs, argTypes: ["raw"|"numeric"...], fn: function(args) }
+ * - "numeric" (default): field values are parseFloat'd; sub-expressions evaluate to numbers
+ * - "raw": field values are passed as raw strings (for multi-select JSON arrays etc.)
+ */
+var FUNCTIONS = {
+  count: {
+    minArgs: 1,
+    maxArgs: 1,
+    argTypes: ["raw"],
+    fn: function(args) {
+      var val = args[0];
+      if (val === "" || val === null || val === undefined) return 0;
+      try {
+        var parsed = JSON.parse(val);
+        if (Array.isArray(parsed)) return parsed.length;
+      } catch (e) { /* not JSON */ }
+      if (typeof val === "string" && val.indexOf(",") !== -1) {
+        return val.split(",").length;
+      }
+      return val === "" ? 0 : 1;
+    }
+  },
+  min: {
+    minArgs: 2,
+    maxArgs: 10,
+    argTypes: [],
+    fn: function(args) {
+      var result = args[0];
+      for (var i = 1; i < args.length; i++) {
+        if (args[i] < result) result = args[i];
+      }
+      return result;
+    }
+  },
+  max: {
+    minArgs: 2,
+    maxArgs: 10,
+    argTypes: [],
+    fn: function(args) {
+      var result = args[0];
+      for (var i = 1; i < args.length; i++) {
+        if (args[i] > result) result = args[i];
+      }
+      return result;
+    }
+  },
+  sum: {
+    minArgs: 1,
+    maxArgs: 10,
+    argTypes: [],
+    fn: function(args) {
+      var total = 0;
+      for (var i = 0; i < args.length; i++) total += args[i];
+      return total;
+    }
+  },
+  avg: {
+    minArgs: 1,
+    maxArgs: 10,
+    argTypes: [],
+    fn: function(args) {
+      var total = 0;
+      for (var i = 0; i < args.length; i++) total += args[i];
+      return total / args.length;
+    }
+  },
+  round: {
+    minArgs: 1,
+    maxArgs: 2,
+    argTypes: [],
+    fn: function(args) {
+      var value = args[0];
+      var decimals = args.length > 1 ? args[1] : 0;
+      if (decimals < 0 || decimals > 10) throw new Error("round: decimals must be 0-10");
+      var factor = Math.pow(10, decimals);
+      return Math.round(value * factor) / factor;
+    }
+  },
+  floor: {
+    minArgs: 1,
+    maxArgs: 1,
+    argTypes: [],
+    fn: function(args) { return Math.floor(args[0]); }
+  },
+  ceil: {
+    minArgs: 1,
+    maxArgs: 1,
+    argTypes: [],
+    fn: function(args) { return Math.ceil(args[0]); }
+  },
+  abs: {
+    minArgs: 1,
+    maxArgs: 1,
+    argTypes: [],
+    fn: function(args) { return Math.abs(args[0]); }
+  },
+  if_empty: {
+    minArgs: 2,
+    maxArgs: 2,
+    argTypes: ["raw", "numeric"],
+    fn: function(args) {
+      var rawVal = args[0];
+      var fallback = args[1];
+      if (rawVal === "" || rawVal === null || rawVal === undefined) return fallback;
+      var num = parseFloat(rawVal);
+      return isNaN(num) ? fallback : num;
+    }
+  }
+};
+
+// =============================================================================
+// Expression Parser (arithmetic + functions, no eval)
+// =============================================================================
+
+/**
+ * Check if a string contains expression syntax.
+ * Matches field references like {key} or function calls like count(...).
  */
 function isExpression(value) {
-  return typeof value === "string" && value.indexOf("{") !== -1 && value.indexOf("}") !== -1;
+  if (typeof value !== "string") return false;
+  if (value.indexOf("{") !== -1 && value.indexOf("}") !== -1) return true;
+  if (/[a-z_][a-z0-9_]*\s*\(/.test(value)) return true;
+  return false;
 }
 
 /**
@@ -112,23 +235,36 @@ function lookupFieldValue(instanceId, fieldKey) {
 }
 
 /**
- * Evaluate an arithmetic expression with field references.
- * Grammar: additive = multiplicative (('+' | '-') multiplicative)*
+ * Evaluate an expression with field references and function calls.
+ * Grammar: additive       = multiplicative (('+' | '-') multiplicative)*
  *          multiplicative = unary (('*' | '/') unary)*
- *          unary = '-' unary | primary
- *          primary = NUMBER | FIELD_REF | '(' additive ')'
+ *          unary          = '-' unary | primary
+ *          primary        = NUMBER | FUNC_CALL | FIELD_REF | '(' additive ')'
+ *          FUNC_CALL      = IDENTIFIER '(' arglist ')'
+ *          IDENTIFIER     = [a-z_][a-z0-9_]*
  *
  * Field references: {field_key} resolved via lookupFieldValue()
+ * Functions: looked up in FUNCTIONS registry (count, min, max, round, etc.)
  * Returns the numeric result as a string.
- * Throws on invalid syntax, non-numeric fields, division by zero.
+ * Throws on invalid syntax, non-numeric fields, division by zero, unknown functions.
  */
 function evaluateExpression(expr, instanceId) {
   var pos = 0;
   var str = expr.trim();
+  var depth = 0;
+  var MAX_DEPTH = 20;
 
   function peek() { return pos < str.length ? str[pos] : null; }
   function advance() { return str[pos++]; }
   function skipWhitespace() { while (pos < str.length && (str[pos] === " " || str[pos] === "\t")) pos++; }
+
+  function isIdentStart(ch) {
+    return ch !== null && ((ch >= "a" && ch <= "z") || ch === "_");
+  }
+
+  function isIdentChar(ch) {
+    return ch !== null && ((ch >= "a" && ch <= "z") || (ch >= "0" && ch <= "9") || ch === "_");
+  }
 
   function parseNumber() {
     skipWhitespace();
@@ -141,35 +277,125 @@ function evaluateExpression(expr, instanceId) {
     return num;
   }
 
-  function parseFieldRef() {
-    skipWhitespace();
-    if (peek() !== "{") return null;
+  function extractFieldKey() {
+    if (peek() !== "{") throw new Error("Expected field reference");
     advance();
     var start = pos;
     while (pos < str.length && str[pos] !== "}") pos++;
     if (pos >= str.length) throw new Error("Unclosed field reference");
     var fieldKey = str.substring(start, pos);
     advance();
+    return fieldKey;
+  }
+
+  function parseFieldRef() {
+    skipWhitespace();
+    var fieldKey = extractFieldKey();
     var rawValue = lookupFieldValue(instanceId, fieldKey);
     var num = parseFloat(rawValue);
     if (isNaN(num)) throw new Error("Field '" + fieldKey + "' is not numeric (value: '" + rawValue + "')");
     return num;
   }
 
+  function parseRawFieldRef() {
+    skipWhitespace();
+    var fieldKey = extractFieldKey();
+    return lookupFieldValue(instanceId, fieldKey);
+  }
+
+  function parseArg(funcName, funcDef, argIndex) {
+    var expectedType = (funcDef.argTypes && funcDef.argTypes[argIndex]) || "numeric";
+    if (expectedType === "raw") {
+      skipWhitespace();
+      if (peek() === "{") {
+        return parseRawFieldRef();
+      }
+      var numResult = parseAdditive();
+      return String(numResult);
+    }
+    return parseAdditive();
+  }
+
+  function parseFunctionCall() {
+    var start = pos;
+    while (pos < str.length && isIdentChar(str[pos])) pos++;
+    var name = str.substring(start, pos);
+
+    if (!/^[a-z_][a-z0-9_]*$/.test(name)) {
+      throw new Error("Invalid function name: '" + name + "'");
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(FUNCTIONS, name)) {
+      throw new Error("Unknown function: '" + name + "'");
+    }
+
+    var funcDef = FUNCTIONS[name];
+
+    skipWhitespace();
+    if (peek() !== "(") {
+      throw new Error("Expected '(' after function name '" + name + "'");
+    }
+    advance();
+
+    var args = [];
+    skipWhitespace();
+    if (peek() !== ")") {
+      args.push(parseArg(name, funcDef, 0));
+      while (true) {
+        skipWhitespace();
+        if (peek() !== ",") break;
+        advance();
+        if (args.length >= 10) {
+          throw new Error("Too many arguments for function '" + name + "' (max 10)");
+        }
+        args.push(parseArg(name, funcDef, args.length));
+      }
+    }
+
+    skipWhitespace();
+    if (peek() !== ")") {
+      throw new Error("Expected ')' after arguments to '" + name + "'");
+    }
+    advance();
+
+    if (args.length < funcDef.minArgs) {
+      throw new Error("Function '" + name + "' requires at least " + funcDef.minArgs + " argument(s), got " + args.length);
+    }
+    if (args.length > funcDef.maxArgs) {
+      throw new Error("Function '" + name + "' accepts at most " + funcDef.maxArgs + " argument(s), got " + args.length);
+    }
+
+    return funcDef.fn(args);
+  }
+
   function parsePrimary() {
     skipWhitespace();
+    depth++;
+    if (depth > MAX_DEPTH) throw new Error("Expression too deeply nested (max " + MAX_DEPTH + ")");
+
+    var result;
+
     if (peek() === "(") {
       advance();
-      var val = parseAdditive();
+      result = parseAdditive();
       skipWhitespace();
       if (peek() !== ")") throw new Error("Expected closing parenthesis");
       advance();
-      return val;
+    } else if (peek() === "{") {
+      result = parseFieldRef();
+    } else if (isIdentStart(peek())) {
+      result = parseFunctionCall();
+    } else {
+      var num = parseNumber();
+      if (num !== null) {
+        result = num;
+      } else {
+        throw new Error("Unexpected character: " + (peek() || "end of expression"));
+      }
     }
-    if (peek() === "{") return parseFieldRef();
-    var num = parseNumber();
-    if (num !== null) return num;
-    throw new Error("Unexpected character: " + (peek() || "end of expression"));
+
+    depth--;
+    return result;
   }
 
   function parseUnary() {
@@ -244,6 +470,13 @@ function evaluateConditions(conditionGroup, instanceId) {
     if (condition.type === "instance_status") {
       const currentStatus = instance.get("status");
       result = currentStatus === condition.params.status;
+    } else if (condition.type === "current_stage") {
+      const currentStageId = instance.get("current_stage_id");
+      if (condition.params.operator === "not_equals") {
+        result = currentStageId !== condition.params.stage_id;
+      } else {
+        result = currentStageId === condition.params.stage_id;
+      }
     } else if (condition.type === "field_value") {
       const fieldKey = condition.params.field_key;
       const operator = condition.params.operator;
@@ -367,12 +600,32 @@ function executeActions(actions, instanceId) {
           noHooksApp.save(record);
           bumpUpdatedTimestamp("workflow_instance_field_values", record.id);
         } else {
+          // Resolve stage_id from the field's form attachment, fall back to instance's current stage
+          var stageId = "";
+          try {
+            var fieldRecord = $app.findFirstRecordByFilter("tools_form_fields", 'id = "' + action.params.field_key + '"');
+            if (fieldRecord) {
+              var formRecord = $app.findRecordById("tools_forms", fieldRecord.get("form_id"));
+              if (formRecord.get("stage_id")) {
+                stageId = formRecord.get("stage_id");
+              } else if (formRecord.get("connection_id")) {
+                var conn = $app.findRecordById("workflow_connections", formRecord.get("connection_id"));
+                stageId = conn.get("to_stage_id");
+              }
+            }
+          } catch (err) {
+            // Could not resolve from form, fall back
+          }
+          if (!stageId) {
+            var inst = $app.findRecordById("workflow_instances", instanceId);
+            stageId = inst.get("current_stage_id");
+          }
           const collection = $app.findCollectionByNameOrId("workflow_instance_field_values");
           const record = new Record(collection);
           record.set("instance_id", instanceId);
           record.set("field_key", action.params.field_key);
           record.set("value", resolvedValue);
-          record.set("stage_id", action.params.stage_id);
+          record.set("stage_id", stageId);
           record.set("last_modified_at", new Date().toISOString());
           $app.save(record);
         }
@@ -428,23 +681,31 @@ function logAutomationExecution(instanceId, stageId, automation, actionResults) 
 
 /**
  * Run a single automation against an instance.
+ * Executes steps sequentially -- each step has its own conditions (guard) and actions.
+ * Step 2 can read DB writes from step 1 because lookupFieldValue() queries live.
  */
 function runAutomation(automation, instanceId, stageId) {
-  var parsedConditions = parseJsonField(automation.get("conditions"));
+  var steps = parseJsonField(automation.get("steps"));
+  if (!steps || !Array.isArray(steps) || steps.length === 0) return;
 
-  if (!evaluateConditions(parsedConditions, instanceId)) {
-    return;
+  var allResults = [];
+  for (var i = 0; i < steps.length; i++) {
+    var step = steps[i];
+    if (step.conditions && !evaluateConditions(step.conditions, instanceId)) {
+      continue; // skip step, not entire automation
+    }
+    var actions = step.actions;
+    if (!actions || !Array.isArray(actions) || actions.length === 0) continue;
+    var results = executeActions(actions.slice(0, 5), instanceId);
+    for (var j = 0; j < results.length; j++) {
+      results[j].step_name = step.name || "Step " + (i + 1);
+    }
+    allResults = allResults.concat(results);
   }
-
-  var actions = parseJsonField(automation.get("actions"));
-  if (!actions || !Array.isArray(actions) || actions.length === 0) {
-    return;
+  if (allResults.length > 0) {
+    logAutomationExecution(instanceId, stageId, automation, allResults);
+    console.log("[Automation] Executed '" + automation.get("name") + "' on instance " + instanceId);
   }
-
-  var limitedActions = actions.slice(0, 5);
-  var results = executeActions(limitedActions, instanceId);
-  logAutomationExecution(instanceId, stageId, automation, results);
-  console.log("[Automation] Executed '" + automation.get("name") + "' on instance " + instanceId);
 }
 
 // =============================================================================

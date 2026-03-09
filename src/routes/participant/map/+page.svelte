@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, untrack } from 'svelte';
 	import { getParticipantGateway, resetAllParticipantState } from '$lib/participant-state/context.svelte';
 	import {
 		getDownloadProgress,
@@ -157,7 +157,7 @@
 
 	// Initialize default base layer selection
 	$effect(() => {
-		if (!activeBaseLayerId && mapLayers.length) {
+		if (mapLayers.length && !untrack(() => activeBaseLayerId)) {
 			const firstBase = mapLayers.find((l: any) => l.layer_type === 'base');
 			if (firstBase) activeBaseLayerId = firstBase.id;
 		}
@@ -165,7 +165,7 @@
 
 	// Initialize filters - all categories visible by default
 	$effect(() => {
-		if (visibleCategoryIds.length === 0 && markers.length > 0) {
+		if (markers.length > 0 && untrack(() => visibleCategoryIds.length) === 0) {
 			const categoryIds = [...new Set(markers.map((m: any) => m.category_id).filter(Boolean))];
 			visibleCategoryIds = categoryIds;
 		}
@@ -173,7 +173,7 @@
 
 	// Initialize filters - all workflows visible by default
 	$effect(() => {
-		if (visibleWorkflowIds.length === 0 && workflowInstances.length > 0) {
+		if (workflowInstances.length > 0 && untrack(() => visibleWorkflowIds.length) === 0) {
 			const workflowIds = [...new Set(workflowInstances.map((i: any) => i.workflow_id).filter(Boolean))];
 			visibleWorkflowIds = workflowIds;
 		}
@@ -181,7 +181,7 @@
 
 	// Initialize tag value visibility - all values visible by default
 	$effect(() => {
-		if (visibleTagValues.size === 0 && fieldTags.length > 0) {
+		if (fieldTags.length > 0 && untrack(() => visibleTagValues.size) === 0) {
 			const newMap = new Map<string, Set<string>>();
 			for (const ft of fieldTags) {
 				const mappings = (ft as any).tag_mappings || [];

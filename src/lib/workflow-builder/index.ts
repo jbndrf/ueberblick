@@ -47,6 +47,7 @@ export type {
 	TrackedFieldTag,
 	// Automation types
 	ToolsAutomation,
+	AutomationStep,
 	TrackedAutomation,
 	TriggerType,
 	TriggerConfig,

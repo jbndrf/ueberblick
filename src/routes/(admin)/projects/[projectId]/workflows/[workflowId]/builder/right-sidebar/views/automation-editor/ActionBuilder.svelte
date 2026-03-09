@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import { Plus, Trash2 } from 'lucide-svelte';
+	import { Trash2 } from 'lucide-svelte';
+	import { ExpressionInput } from '$lib/components/expression-input';
 
 	import type { AutomationAction } from '$lib/workflow-builder';
 
@@ -17,22 +17,7 @@
 
 	let { actions, fieldOptions = [], stageOptions = [], onChange }: Props = $props();
 
-	const ACTION_TYPES = [
-		{ value: 'set_instance_status', label: 'Set Instance Status' },
-		{ value: 'set_field_value', label: 'Set Field Value' },
-		{ value: 'set_stage', label: 'Set Stage' }
-	];
-
 	const STATUS_OPTIONS = ['active', 'completed', 'archived', 'deleted'];
-
-	function addAction() {
-		if (actions.length >= 5) return;
-		const newAction: AutomationAction = {
-			type: 'set_instance_status',
-			params: { status: 'archived' }
-		};
-		onChange([...actions, newAction]);
-	}
 
 	function removeAction(index: number) {
 		onChange(actions.filter((_, i) => i !== index));
@@ -50,24 +35,15 @@
 		{#each actions as action, index (index)}
 			<div class="action-row">
 				<div class="action-fields">
-					<select
-						class="action-type-select"
-						value={action.type}
-						onchange={(e) => {
-							const type = e.currentTarget.value;
-							if (type === 'set_instance_status') {
-								updateAction(index, { type: 'set_instance_status', params: { status: 'archived' } });
-							} else if (type === 'set_field_value') {
-								updateAction(index, { type: 'set_field_value', params: { field_key: '', value: '', stage_id: stageOptions[0]?.id ?? '' } });
-							} else if (type === 'set_stage') {
-								updateAction(index, { type: 'set_stage', params: { stage_id: stageOptions[0]?.id ?? '' } });
-							}
-						}}
-					>
-						{#each ACTION_TYPES as at}
-							<option value={at.value}>{at.label}</option>
-						{/each}
-					</select>
+					<span class="action-type-label">
+						{#if action.type === 'set_instance_status'}
+							Set Status
+						{:else if action.type === 'set_field_value'}
+							Set Field Value
+						{:else if action.type === 'set_stage'}
+							Set Stage
+						{/if}
+					</span>
 
 					{#if action.type === 'set_instance_status'}
 						<div class="action-param-row">
@@ -108,38 +84,18 @@
 						</div>
 						<div class="action-param-row">
 							<span class="param-label">Value:</span>
-							<Input
-								value={action.params.value}
-								oninput={(e) => {
-									updateAction(index, {
-										...action,
-										params: { ...action.params, value: e.currentTarget.value }
-									});
-								}}
-								placeholder="Value or expression..."
-								class="h-7 text-xs"
-							/>
 						</div>
-						<span class="expression-help">
-							Expressions: {'{field_key}'} + 1, {'{a}'} - {'{b}'}
-						</span>
-						<div class="action-param-row">
-							<span class="param-label">Stage:</span>
-							<select
-								class="stage-select"
-								value={action.params.stage_id}
-								onchange={(e) => {
-									updateAction(index, {
-										...action,
-										params: { ...action.params, stage_id: e.currentTarget.value }
-									});
-								}}
-							>
-								{#each stageOptions as stage}
-									<option value={stage.id}>{stage.name}</option>
-								{/each}
-							</select>
-						</div>
+						<ExpressionInput
+							value={action.params.value}
+							{fieldOptions}
+							onchange={(v) => {
+								updateAction(index, {
+									...action,
+									params: { ...action.params, value: v }
+								});
+							}}
+							placeholder="Value or expression..."
+						/>
 					{:else if action.type === 'set_stage'}
 						<div class="action-param-row">
 							<span class="param-label">Stage:</span>
@@ -168,13 +124,6 @@
 			</div>
 		{/each}
 	</div>
-
-	{#if actions.length < 5}
-		<Button variant="ghost" size="sm" class="add-action-btn" onclick={addAction}>
-			<Plus class="h-3 w-3 mr-1" />
-			Add Action
-		</Button>
-	{/if}
 </div>
 
 <style>
@@ -208,7 +157,14 @@
 		min-width: 0;
 	}
 
-	.action-type-select,
+	.action-type-label {
+		font-size: 0.625rem;
+		font-weight: 600;
+		color: hsl(var(--primary));
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+	}
+
 	.status-select,
 	.field-select,
 	.stage-select {
@@ -233,16 +189,5 @@
 		color: hsl(var(--muted-foreground));
 		white-space: nowrap;
 		min-width: 3rem;
-	}
-
-	.expression-help {
-		font-size: 0.5625rem;
-		color: hsl(var(--muted-foreground));
-		font-style: italic;
-		padding: 0 0.25rem;
-	}
-
-	:global(.add-action-btn) {
-		align-self: flex-start;
 	}
 </style>

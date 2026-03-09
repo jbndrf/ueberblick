@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import ModuleShell from '$lib/components/module-shell.svelte';
 	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
 	import {
@@ -114,8 +115,10 @@
 	}
 
 	// Sync internal location picker state with bindable prop
+	// Use untrack on the write to avoid a bidirectional binding feedback loop
 	$effect(() => {
-		isEditingLocation = isLocationPickerActive;
+		const active = isLocationPickerActive;
+		untrack(() => { isEditingLocation = active; });
 	});
 
 	// ==========================================================================

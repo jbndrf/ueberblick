@@ -14,8 +14,7 @@ import {
 	RHYTHMUS_ROOMS_EG,
 	RHYTHMUS_ROOMS_OG
 } from './fixtures/reinigung-data';
-
-const PB_URL = process.env.PUBLIC_POCKETBASE_URL || 'http://localhost:8090';
+import { PB_URL, generateToken, createParticipantClient, submitEntryForm } from './seed-helpers';
 
 export interface ReinigungSeedResult {
 	projectId: string;
@@ -30,16 +29,6 @@ export interface ReinigungSeedResult {
 		automations: Array<{ id: string; name: string }>;
 		instances: Array<{ id: string; roomName: string }>;
 	}>;
-}
-
-function generateToken(): string {
-	const timestamp = Date.now().toString(36);
-	const randomPart = Math.random().toString(36).substring(2, 15);
-	const additionalRandom = Math.random().toString(36).substring(2, 8);
-	const array = new Uint8Array(4);
-	crypto.getRandomValues(array);
-	const cryptoRandom = Array.from(array, (byte) => byte.toString(16).padStart(2, '0')).join('');
-	return `${timestamp}-${randomPart}-${additionalRandom}-${cryptoRandom}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -161,7 +150,7 @@ async function createWorkflowShell(
 }
 
 async function createRoomInstances(
-	pb: PocketBase,
+	participantPb: PocketBase,
 	workflowId: string,
 	startStageId: string,
 	participantId: string,
@@ -174,42 +163,14 @@ async function createRoomInstances(
 	const created: Array<{ id: string; roomName: string }> = [];
 	for (const room of rooms) {
 		const coord = ROOM_COORDINATES[room.coordIndex];
-		const location = { lat: coord.lat, lon: coord.lon };
-		const instance = await pb.collection('workflow_instances').create({
-			workflow_id: workflowId,
-			current_stage_id: startStageId,
-			status: 'active',
-			created_by: participantId,
-			location,
-			files: []
+		const { instanceId } = await submitEntryForm(participantPb, {
+			workflowId,
+			startStageId,
+			participantId,
+			location: { lat: coord.lat, lon: coord.lon },
+			fieldValues: room.fieldValues
 		});
-
-		const toolUsage = await pb.collection('workflow_instance_tool_usage').create({
-			instance_id: instance.id,
-			stage_id: startStageId,
-			executed_by: participantId,
-			executed_at: new Date().toISOString(),
-			metadata: {
-				action: 'instance_created',
-				location,
-				created_fields: room.fieldValues.map((fv) => ({
-					field_key: fv.key,
-					value: fv.value
-				}))
-			}
-		});
-
-		for (const fv of room.fieldValues) {
-			await pb.collection('workflow_instance_field_values').create({
-				instance_id: instance.id,
-				field_key: fv.key,
-				value: fv.value,
-				stage_id: startStageId,
-				created_by_action: toolUsage.id
-			});
-		}
-
-		created.push({ id: instance.id, roomName: room.name });
+		created.push({ id: instanceId, roomName: room.name });
 	}
 	return created;
 }
@@ -222,6 +183,7 @@ export async function seedDemoA(): Promise<ReinigungSeedResult> {
 	const pb = new PocketBase(PB_URL);
 	const base = await seedBaseProject(pb, 'Tagesplan');
 	const participantId = base.participants[0].id;
+	const participantPb = await createParticipantClient(base.participants[0].token);
 
 	const workflowResults: ReinigungSeedResult['workflows'] = [];
 
@@ -298,7 +260,7 @@ export async function seedDemoA(): Promise<ReinigungSeedResult> {
 		}));
 
 		const instances = await createRoomInstances(
-			pb,
+			participantPb,
 			shell.id,
 			offenStageId,
 			participantId,
@@ -311,16 +273,19 @@ export async function seedDemoA(): Promise<ReinigungSeedResult> {
 			name: 'Naechtlicher Reset',
 			trigger_type: 'scheduled',
 			trigger_config: {
-				cron: '0 2 * * 1-5',
+				cron: '* * * * *',
 				target_stage_id: erledigtStageId
 			},
-			conditions: null,
-			actions: [
-				{
-					type: 'set_stage',
-					params: { stage_id: offenStageId }
-				}
-			],
+			steps: [{
+				name: 'Main',
+				conditions: null,
+				actions: [
+					{
+						type: 'set_stage',
+						params: { stage_id: offenStageId }
+					}
+				]
+			}],
 			is_enabled: true
 		});
 
@@ -355,6 +320,7 @@ export async function seedDemoB(): Promise<ReinigungSeedResult> {
 	const pb = new PocketBase(PB_URL);
 	const base = await seedBaseProject(pb, 'Rhythmus');
 	const participantId = base.participants[0].id;
+	const participantPb = await createParticipantClient(base.participants[0].token);
 
 	const workflowResults: ReinigungSeedResult['workflows'] = [];
 	const roomSets = [RHYTHMUS_ROOMS_EG, RHYTHMUS_ROOMS_OG];
@@ -431,7 +397,7 @@ export async function seedDemoB(): Promise<ReinigungSeedResult> {
 		}));
 
 		const instances = await createRoomInstances(
-			pb,
+			participantPb,
 			shell.id,
 			offenStageId,
 			participantId,
@@ -447,17 +413,20 @@ export async function seedDemoB(): Promise<ReinigungSeedResult> {
 				cron: '* * * * *',
 				target_stage_id: erledigtStageId
 			},
-			conditions: null,
-			actions: [
-				{
-					type: 'set_field_value',
-					params: {
-						field_key: counterField.id,
-						value: `{${counterField.id}} + 1`,
-						stage_id: erledigtStageId
+			steps: [{
+				name: 'Main',
+				conditions: null,
+				actions: [
+					{
+						type: 'set_field_value',
+						params: {
+							field_key: counterField.id,
+							value: `{${counterField.id}} + 1`,
+							stage_id: erledigtStageId
+						}
 					}
-				}
-			],
+				]
+			}],
 			is_enabled: true
 		});
 
@@ -470,33 +439,36 @@ export async function seedDemoB(): Promise<ReinigungSeedResult> {
 				cron: '* * * * *',
 				target_stage_id: erledigtStageId
 			},
-			conditions: {
-				operator: 'AND',
-				conditions: [
+			steps: [{
+				name: 'Main',
+				conditions: {
+					operator: 'AND',
+					conditions: [
+						{
+							type: 'field_value',
+							params: {
+								field_key: counterField.id,
+								operator: 'gte',
+								compare_field_key: intervallField.id
+							}
+						}
+					]
+				},
+				actions: [
 					{
-						type: 'field_value',
+						type: 'set_stage',
+						params: { stage_id: offenStageId }
+					},
+					{
+						type: 'set_field_value',
 						params: {
 							field_key: counterField.id,
-							operator: 'gte',
-							compare_field_key: intervallField.id
+							value: '0',
+							stage_id: offenStageId
 						}
 					}
 				]
-			},
-			actions: [
-				{
-					type: 'set_stage',
-					params: { stage_id: offenStageId }
-				},
-				{
-					type: 'set_field_value',
-					params: {
-						field_key: counterField.id,
-						value: '0',
-						stage_id: offenStageId
-					}
-				}
-			],
+			}],
 			is_enabled: true
 		});
 
@@ -509,17 +481,20 @@ export async function seedDemoB(): Promise<ReinigungSeedResult> {
 				from_stage_id: offenStageId,
 				to_stage_id: erledigtStageId
 			},
-			conditions: null,
-			actions: [
-				{
-					type: 'set_field_value',
-					params: {
-						field_key: counterField.id,
-						value: '0',
-						stage_id: erledigtStageId
+			steps: [{
+				name: 'Main',
+				conditions: null,
+				actions: [
+					{
+						type: 'set_field_value',
+						params: {
+							field_key: counterField.id,
+							value: '0',
+							stage_id: erledigtStageId
+						}
 					}
-				}
-			],
+				]
+			}],
 			is_enabled: true
 		});
 

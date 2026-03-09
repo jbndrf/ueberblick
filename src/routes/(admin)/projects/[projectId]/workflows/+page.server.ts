@@ -77,9 +77,9 @@ function remapAutomationJson(record: any, idMaps: IdMaps): any {
 		if (triggerConfig.target_stage_id) triggerConfig.target_stage_id = r(triggerConfig.target_stage_id, stageMap);
 	}
 
-	let conditions = record.conditions;
-	if (conditions?.conditions) {
-		conditions = {
+	function remapConditions(conditions: any) {
+		if (!conditions?.conditions) return conditions;
+		return {
 			...conditions,
 			conditions: conditions.conditions.map((c: any) => {
 				if (c.type === 'field_value' && c.params) {
@@ -93,9 +93,8 @@ function remapAutomationJson(record: any, idMaps: IdMaps): any {
 		};
 	}
 
-	let actions = record.actions;
-	if (Array.isArray(actions)) {
-		actions = actions.map((a: any) => {
+	function remapActions(actions: any[]) {
+		return actions.map((a: any) => {
 			if (a.type === 'set_field_value' && a.params) {
 				return {
 					...a,
@@ -113,7 +112,16 @@ function remapAutomationJson(record: any, idMaps: IdMaps): any {
 		});
 	}
 
-	return { ...record, trigger_config: triggerConfig, conditions, actions };
+	let steps = record.steps;
+	if (Array.isArray(steps)) {
+		steps = steps.map((step: any) => ({
+			...step,
+			conditions: remapConditions(step.conditions),
+			actions: Array.isArray(step.actions) ? remapActions(step.actions) : step.actions
+		}));
+	}
+
+	return { ...record, trigger_config: triggerConfig, steps };
 }
 
 function remapFieldTagMappings(record: any, idMaps: IdMaps): any {

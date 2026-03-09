@@ -6,15 +6,18 @@
 	import type { ConditionGroup, ConditionLeaf, ConditionOperator } from '$lib/workflow-builder';
 
 	type FieldOption = { key: string; label: string };
+	type StageOption = { id: string; name: string };
 
 	type Props = {
 		conditions: ConditionGroup | null;
 		/** Available form field keys for field_value conditions */
 		fieldOptions?: FieldOption[];
+		/** Available stages for current_stage conditions */
+		stageOptions?: StageOption[];
 		onChange: (conditions: ConditionGroup | null) => void;
 	};
 
-	let { conditions, fieldOptions = [], onChange }: Props = $props();
+	let { conditions, fieldOptions = [], stageOptions = [], onChange }: Props = $props();
 
 	const OPERATORS: { value: ConditionOperator; label: string }[] = [
 		{ value: 'equals', label: '=' },
@@ -30,7 +33,8 @@
 
 	const CONDITION_TYPES = [
 		{ value: 'field_value', label: 'Field Value' },
-		{ value: 'instance_status', label: 'Instance Status' }
+		{ value: 'instance_status', label: 'Instance Status' },
+		{ value: 'current_stage', label: 'Stage' }
 	];
 
 	const STATUS_OPTIONS = ['active', 'completed', 'archived', 'deleted'];
@@ -125,6 +129,8 @@
 							const type = e.currentTarget.value;
 							if (type === 'field_value') {
 								updateCondition(index, { type: 'field_value', params: { field_key: '', operator: 'equals', value: '' } });
+							} else if (type === 'current_stage') {
+								updateCondition(index, { type: 'current_stage', params: { stage_id: stageOptions[0]?.id ?? '', operator: 'equals' } });
 							} else {
 								updateCondition(index, { type: 'instance_status', params: { status: 'active' } });
 							}
@@ -225,6 +231,35 @@
 						>
 							{#each STATUS_OPTIONS as status}
 								<option value={status}>{status}</option>
+							{/each}
+						</select>
+					{:else if condition.type === 'current_stage'}
+						<select
+							class="operator-field-select"
+							value={condition.params.operator}
+							onchange={(e) => {
+								updateCondition(index, {
+									...condition,
+									params: { ...condition.params, operator: e.currentTarget.value as 'equals' | 'not_equals' }
+								});
+							}}
+						>
+							<option value="equals">=</option>
+							<option value="not_equals">!=</option>
+						</select>
+						<select
+							class="field-select"
+							value={condition.params.stage_id}
+							onchange={(e) => {
+								updateCondition(index, {
+									...condition,
+									params: { ...condition.params, stage_id: e.currentTarget.value }
+								});
+							}}
+						>
+							<option value="">Select stage...</option>
+							{#each stageOptions as stage}
+								<option value={stage.id}>{stage.name}</option>
 							{/each}
 						</select>
 					{/if}

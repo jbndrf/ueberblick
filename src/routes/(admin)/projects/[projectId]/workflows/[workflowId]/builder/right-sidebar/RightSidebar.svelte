@@ -13,7 +13,7 @@
 
 	import type {
 		ToolsForm, ToolsFormField, TrackedFormField, WorkflowStage, ColumnPosition, ToolsEdit, VisualConfig,
-		ToolsAutomation, TriggerType, TriggerConfig, ConditionGroup, AutomationAction,
+		ToolsAutomation, AutomationStep, TriggerType, TriggerConfig,
 		TagMapping
 	} from '$lib/workflow-builder';
 	import type { FormFieldWithValue } from '$lib/components/form-renderer';
@@ -114,8 +114,7 @@
 		onAutomationEnabledChange?: (automationId: string, enabled: boolean) => void;
 		onAutomationTriggerTypeChange?: (automationId: string, triggerType: TriggerType) => void;
 		onAutomationTriggerConfigChange?: (automationId: string, config: TriggerConfig) => void;
-		onAutomationConditionsChange?: (automationId: string, conditions: ConditionGroup | null) => void;
-		onAutomationActionsChange?: (automationId: string, actions: AutomationAction[]) => void;
+		onAutomationStepsChange?: (automationId: string, steps: AutomationStep[]) => void;
 		onAutomationClose?: () => void;
 		// Stage preview handlers
 		onAddConnection?: (fromStageId: string, toStageId: string) => void;
@@ -197,8 +196,7 @@
 		onAutomationEnabledChange,
 		onAutomationTriggerTypeChange,
 		onAutomationTriggerConfigChange,
-		onAutomationConditionsChange,
-		onAutomationActionsChange,
+		onAutomationStepsChange,
 		onAutomationClose,
 		onAddConnection,
 		onAddStageTool,
@@ -292,8 +290,7 @@
 			onEnabledChange={(enabled) => onAutomationEnabledChange?.(selectedAutomation.id, enabled)}
 			onTriggerTypeChange={(tt) => onAutomationTriggerTypeChange?.(selectedAutomation.id, tt)}
 			onTriggerConfigChange={(config) => onAutomationTriggerConfigChange?.(selectedAutomation.id, config)}
-			onConditionsChange={(c) => onAutomationConditionsChange?.(selectedAutomation.id, c)}
-			onActionsChange={(a) => onAutomationActionsChange?.(selectedAutomation.id, a)}
+			onStepsChange={(s) => onAutomationStepsChange?.(selectedAutomation.id, s)}
 			onDelete={() => onDeleteAutomation?.(selectedAutomation.id)}
 			onClose={onAutomationClose}
 		/>

@@ -53,8 +53,7 @@
 		type VisualConfig,
 		type TriggerType,
 		type TriggerConfig,
-		type ConditionGroup,
-		type AutomationAction
+		type AutomationStep
 	} from '$lib/workflow-builder';
 	import type { ToolInstance, FormToolConfig, EditToolConfig, AutomationToolConfig, FieldTagToolConfig } from '$lib/workflow-builder/tools';
 	import { ToolBar } from '$lib/workflow-builder/components';
@@ -1212,12 +1211,8 @@
 		builderState.updateAutomation(automationId, { trigger_config: config });
 	}
 
-	function handleAutomationConditionsChange(automationId: string, conditions: ConditionGroup | null) {
-		builderState.updateAutomation(automationId, { conditions });
-	}
-
-	function handleAutomationActionsChange(automationId: string, actions: AutomationAction[]) {
-		builderState.updateAutomation(automationId, { actions });
+	function handleAutomationStepsChange(automationId: string, steps: AutomationStep[]) {
+		builderState.updateAutomation(automationId, { steps });
 	}
 
 	function handleAutomationClose() {
@@ -1575,8 +1570,7 @@
 			onAutomationEnabledChange={handleAutomationEnabledChange}
 			onAutomationTriggerTypeChange={handleAutomationTriggerTypeChange}
 			onAutomationTriggerConfigChange={handleAutomationTriggerConfigChange}
-			onAutomationConditionsChange={handleAutomationConditionsChange}
-			onAutomationActionsChange={handleAutomationActionsChange}
+			onAutomationStepsChange={handleAutomationStepsChange}
 			onAutomationClose={handleAutomationClose}
 			onAddConnection={handleAddConnectionFromPreview}
 			onAddStageTool={handleAddStageToolFromPreview}
