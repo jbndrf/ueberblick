@@ -258,6 +258,7 @@
 			enabled: true,
 			createButtonLabel: m.rolesCreateRole(),
 			requiredFields: ['name'],
+			excludeFields: ['assigned_participants'],
 			onCreateRow: async (rowData) => {
 				const formData = new FormData();
 				formData.append('name', rowData.name || '');

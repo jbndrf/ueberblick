@@ -6,6 +6,7 @@
 	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 	import MediaGallery from './MediaGallery.svelte';
 	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
+	import { getPocketBase } from '$lib/pocketbase';
 	import { POCKETBASE_URL } from '$lib/config/pocketbase';
 	import { getCachedFileUrlByRecord } from '$lib/participant-state/file-cache';
 	import type {
@@ -137,14 +138,29 @@
 						}));
 					}
 					break;
-				case 'participants':
-					records = await gateway.collection('participants').getFullList();
-					customEntities = records.map((r) => ({
-						id: r.id,
-						label: r.name || r.email || r.id,
-						description: r.email
-					}));
+				case 'participants': {
+					// Check if current participant's role allows self-select or any-select
+					const authRecord = getPocketBase().authStore.record;
+					const myRoles: string[] = authRecord?.role_id || [];
+					const selfRoles: string[] = customTableOptions.self_select_roles || [];
+					const anyRoles: string[] = customTableOptions.any_select_roles || [];
+					const canSelfSelect = myRoles.some((r) => selfRoles.includes(r));
+					const canSelectAny = myRoles.some((r) => anyRoles.includes(r));
+
+					if (canSelfSelect || canSelectAny) {
+						// API rule only returns own record for now; any-select will be
+						// expanded in a follow-up (custom hook endpoint).
+						records = await gateway.collection('participants').getFullList();
+						customEntities = records.map((r) => ({
+							id: r.id,
+							label: r.name || r.email || r.id,
+							description: r.email
+						}));
+					} else {
+						customEntities = [];
+					}
 					break;
+				}
 				case 'roles':
 					records = await gateway.collection('roles').getFullList();
 					customEntities = records.map((r) => ({
@@ -156,14 +172,19 @@
 				case 'custom_table':
 					if (customTableOptions.custom_table_id) {
 						records = await gateway
-							.collection(customTableOptions.custom_table_id)
-							.getFullList();
+							.collection('custom_table_data')
+							.getFullList({
+								filter: `table_id = "${customTableOptions.custom_table_id}"`
+							});
 						const displayField = customTableOptions.display_field || 'name';
-						customEntities = records.map((r) => ({
-							id: r.id,
-							label: r[displayField] || r.id,
-							description: undefined
-						}));
+						customEntities = records.map((r) => {
+							const rowData = typeof r.row_data === 'string' ? JSON.parse(r.row_data) : r.row_data;
+							return {
+								id: r.id,
+								label: rowData?.[displayField] || r.id,
+								description: undefined
+							};
+						});
 					}
 					break;
 			}

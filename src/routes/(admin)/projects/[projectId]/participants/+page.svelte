@@ -337,6 +337,9 @@
 				formData.append('name', rowData.name || '');
 				formData.append('email', rowData.email || '');
 				formData.append('phone', rowData.phone || '');
+				if (rowData.roles && Array.isArray(rowData.roles) && rowData.roles.length > 0) {
+					formData.append('roleIds', JSON.stringify(rowData.roles));
+				}
 
 				const response = await fetch('?/create', {
 					method: 'POST',

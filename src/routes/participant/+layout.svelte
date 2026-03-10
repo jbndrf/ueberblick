@@ -145,23 +145,8 @@
 			gatewayInitialized = true;
 			console.log('Participant gateway initialized');
 
-			// Collections to sync (participant-accessible collections)
-			const collections = [
-				'markers',
-				'marker_categories',
-				'workflows',
-				'workflow_stages',
-				'workflow_connections',
-				'workflow_instances',
-				'workflow_instance_field_values',
-				'workflow_instance_tool_usage',
-				'tools_forms',
-				'tools_form_fields',
-				'tools_edit',
-				'tools_field_tags',
-				'roles',
-				'map_layers'
-			];
+			// Collections to sync -- use dynamic list from server (all non-system collections)
+			const collections = data.collectionNames ?? [];
 
 			// Set collections for sync module (used by triggerSync, runCatchUpSync)
 			setSyncCollections(collections);

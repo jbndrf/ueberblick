@@ -80,7 +80,7 @@ export interface BaseTableConfig<TData = any> {
 		onEdit?: (row: TData) => void;
 		onDelete?: (row: TData) => void;
 		customActions?: Array<{
-			label: string;
+			label: string | ((row: TData) => string);
 			icon?: any;
 			onClick: (row: TData) => void;
 			variant?: 'default' | 'destructive';

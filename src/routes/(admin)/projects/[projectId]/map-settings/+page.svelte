@@ -599,25 +599,26 @@
 		}
 	}
 
-	async function setAsBaseLayer(layer: MapLayer) {
+	async function toggleLayerType(layer: MapLayer) {
 		const formData = new FormData();
 		formData.append('id', layer.id);
 
 		try {
-			const response = await fetch('?/setBaseLayer', {
+			const response = await fetch('?/toggleLayerType', {
 				method: 'POST',
 				body: formData
 			});
 
 			const result = await response.json();
 			if (result.type === 'success') {
-				toast.success('Base layer updated');
+				const newType = layer.layer_type === 'base' ? 'overlay' : 'base';
+				toast.success(`Layer set as ${newType}`);
 				invalidateAll();
 			} else {
-				toast.error('Failed to set base layer');
+				toast.error('Failed to update layer type');
 			}
 		} catch {
-			toast.error('Failed to set base layer');
+			toast.error('Failed to update layer type');
 		}
 	}
 
@@ -671,8 +672,9 @@
 								{m.mapLayersTitle()}
 							</Card.Title>
 							<Card.Description>
-								{#if data.baseLayer}
-									Base layer: <strong>{data.baseLayer.name}</strong>
+								{@const baseLayers = data.mapLayers.filter((l: MapLayer) => l.layer_type === 'base')}
+								{#if baseLayers.length > 0}
+									Base layers: <strong>{baseLayers.map((l: MapLayer) => l.name).join(', ')}</strong>
 								{:else}
 									No base layer configured - add a layer and mark it as base
 								{/if}
@@ -712,10 +714,9 @@
 								onDelete: openDeleteLayerDialog,
 								customActions: [
 									{
-										label: 'Set as Base',
+										label: (row) => row.layer_type === 'base' ? 'Set as Overlay' : 'Set as Base',
 										icon: Star,
-										onClick: setAsBaseLayer,
-										isVisible: (row) => row.layer_type !== 'base'
+										onClick: toggleLayerType
 									}
 								]
 							}}
@@ -799,192 +800,174 @@
 			<Dialog.Description>Choose a preset, enter a URL, or upload tiles</Dialog.Description>
 		</Dialog.Header>
 
-		<!-- Mode Tabs -->
-		<div class="flex gap-2 border-b pb-2 mb-4 shrink-0">
-			<Button
-				variant={addLayerMode === 'preset' ? 'default' : 'outline'}
-				size="sm"
-				onclick={() => (addLayerMode = 'preset')}
-			>
-				Presets
-			</Button>
-			<Button
-				variant={addLayerMode === 'tile' ? 'default' : 'outline'}
-				size="sm"
-				onclick={() => (addLayerMode = 'tile')}
-			>
-				Tile URL
-			</Button>
-			<Button
-				variant={addLayerMode === 'wms' ? 'default' : 'outline'}
-				size="sm"
-				onclick={() => (addLayerMode = 'wms')}
-			>
-				WMS
-			</Button>
-			<Button
-				variant={addLayerMode === 'upload' ? 'default' : 'outline'}
-				size="sm"
-				onclick={() => (addLayerMode = 'upload')}
-			>
-				<Upload class="h-4 w-4 mr-1" />
-				Upload
-			</Button>
-		</div>
+		<Tabs.Root bind:value={addLayerMode} class="flex-1 overflow-hidden flex flex-col">
+			<Tabs.List class="shrink-0">
+				<Tabs.Trigger value="preset">Presets</Tabs.Trigger>
+				<Tabs.Trigger value="tile">Tile URL</Tabs.Trigger>
+				<Tabs.Trigger value="wms">WMS</Tabs.Trigger>
+				<Tabs.Trigger value="upload">
+					<Upload class="h-4 w-4 mr-1" />
+					Upload
+				</Tabs.Trigger>
+			</Tabs.List>
 
-		<div class="overflow-y-auto flex-1 pr-2">
-			{#if addLayerMode === 'preset'}
-				<!-- Preset Sources -->
-				<div class="grid gap-2">
-					{#each PRESET_SOURCES as preset}
-						<button
-							class="flex items-center justify-between p-3 border rounded-md hover:bg-muted/50 transition-colors text-left w-full disabled:opacity-50"
-							disabled={isSubmitting || addedPresetUrls.has(preset.url)}
-							onclick={() => handleAddPreset(preset.id)}
-						>
-							<div>
-								<div class="font-medium text-sm">{preset.name}</div>
-								<div class="text-xs text-muted-foreground">
-									{preset.sourceType === 'wms' ? 'WMS' : 'Tiles'} -- Zoom {preset.minZoom ?? 0}-{preset.maxZoom ?? 19}
+			<div class="overflow-y-auto flex-1 pr-2 pt-4">
+				<Tabs.Content value="preset">
+					<!-- Preset Sources -->
+					<div class="grid gap-2">
+						{#each PRESET_SOURCES as preset}
+							<button
+								class="flex items-center justify-between p-3 border rounded-md hover:bg-muted/50 transition-colors text-left w-full disabled:opacity-50"
+								disabled={isSubmitting || addedPresetUrls.has(preset.url)}
+								onclick={() => handleAddPreset(preset.id)}
+							>
+								<div>
+									<div class="font-medium text-sm">{preset.name}</div>
+									<div class="text-xs text-muted-foreground">
+										{preset.sourceType === 'wms' ? 'WMS' : 'Tiles'} -- Zoom {preset.minZoom ?? 0}-{preset.maxZoom ?? 19}
+									</div>
+								</div>
+								{#if addedPresetUrls.has(preset.url)}
+									<Badge variant="outline" class="text-xs">Added</Badge>
+								{:else}
+									<Plus class="h-4 w-4 text-muted-foreground" />
+								{/if}
+							</button>
+						{/each}
+					</div>
+				</Tabs.Content>
+
+				<Tabs.Content value="tile">
+					<!-- Tile URL Form -->
+					<div class="space-y-4">
+						<div class="space-y-2">
+							<Label for="tile_name">Name</Label>
+							<Input id="tile_name" bind:value={tileUrlName} placeholder="My Tile Layer" required />
+						</div>
+						<div class="space-y-2">
+							<Label for="tile_url">Tile URL Template</Label>
+							<Input id="tile_url" bind:value={tileUrlUrl} placeholder={"https://example.com/{z}/{x}/{y}.png"} required />
+							<p class="text-xs text-muted-foreground">Use {"{z}/{x}/{y}"} placeholders</p>
+						</div>
+						<div class="space-y-2">
+							<Label for="tile_attribution">Attribution (optional)</Label>
+							<Input id="tile_attribution" bind:value={tileUrlAttribution} />
+						</div>
+						<div class="flex items-center space-x-2">
+							<Switch id="tile_as_base" bind:checked={tileUrlAsBase} />
+							<Label for="tile_as_base">Set as base layer</Label>
+						</div>
+						<Button onclick={handleAddTile} disabled={isSubmitting || !tileUrlName.trim() || !tileUrlUrl.trim()}>
+							{isSubmitting ? 'Adding...' : 'Add Tile Layer'}
+						</Button>
+					</div>
+				</Tabs.Content>
+
+				<Tabs.Content value="wms">
+					<!-- WMS Form -->
+					<div class="space-y-4">
+						<div class="space-y-2">
+							<Label for="wms_name">Name</Label>
+							<Input id="wms_name" bind:value={wmsName} placeholder="My WMS Layer" required />
+						</div>
+						<div class="space-y-2">
+							<Label for="wms_url">WMS URL</Label>
+							<Input id="wms_url" bind:value={wmsUrl} placeholder="https://example.com/wms" required />
+						</div>
+						<div class="space-y-2">
+							<Label for="wms_layers">Layers</Label>
+							<Input id="wms_layers" bind:value={wmsLayers} placeholder="layer_name" required />
+						</div>
+						<div class="grid grid-cols-2 gap-4">
+							<div class="space-y-2">
+								<Label for="wms_format">Format</Label>
+								<Input id="wms_format" bind:value={wmsFormat} />
+							</div>
+							<div class="space-y-2">
+								<Label for="wms_version">Version</Label>
+								<Input id="wms_version" bind:value={wmsVersion} />
+							</div>
+						</div>
+						<div class="space-y-2">
+							<Label for="wms_attribution">Attribution (optional)</Label>
+							<Input id="wms_attribution" bind:value={wmsAttribution} />
+						</div>
+						<div class="flex items-center gap-4">
+							<div class="flex items-center space-x-2">
+								<Switch id="wms_transparent" bind:checked={wmsTransparent} />
+								<Label for="wms_transparent">Transparent</Label>
+							</div>
+							<div class="flex items-center space-x-2">
+								<Switch id="wms_as_base" bind:checked={wmsAsBase} />
+								<Label for="wms_as_base">Base layer</Label>
+							</div>
+						</div>
+						<Button onclick={handleAddWms} disabled={isSubmitting || !wmsName.trim() || !wmsUrl.trim() || !wmsLayers.trim()}>
+							{isSubmitting ? 'Adding...' : 'Add WMS Layer'}
+						</Button>
+					</div>
+				</Tabs.Content>
+
+				<Tabs.Content value="upload">
+					<!-- Upload Form -->
+					<div class="space-y-4">
+						<div class="space-y-2">
+							<Label for="upload_name">Name</Label>
+							<Input id="upload_name" bind:value={uploadName} placeholder="My Custom Tiles" required />
+						</div>
+						<div class="space-y-2">
+							<Label>Tile Format</Label>
+							<div class="flex gap-2">
+								{#each ['png', 'jpg', 'webp'] as fmt}
+									<Button
+										variant={uploadTileFormat === fmt ? 'default' : 'outline'}
+										size="sm"
+										onclick={() => (uploadTileFormat = fmt as 'png' | 'jpg' | 'webp')}
+									>
+										{fmt.toUpperCase()}
+									</Button>
+								{/each}
+							</div>
+						</div>
+						<div class="space-y-2">
+							<Label>ZIP File</Label>
+							<Input
+								type="file"
+								accept=".zip"
+								onchange={(e) => {
+									const files = (e.target as HTMLInputElement).files;
+									uploadFile = files?.[0] ?? null;
+									if (uploadFile && !uploadName) {
+										uploadName = uploadFile.name.replace('.zip', '');
+									}
+								}}
+							/>
+							<p class="text-xs text-muted-foreground">ZIP archive with tiles in z/x/y.ext format</p>
+						</div>
+						{#if uploadProgress}
+							<div class="space-y-1">
+								<p class="text-sm">Processing... {uploadProgress.progress}%</p>
+								<div class="w-full bg-muted rounded-full h-2">
+									<div
+										class="bg-primary h-2 rounded-full transition-all"
+										style="width: {uploadProgress.progress}%"
+									></div>
 								</div>
 							</div>
-							{#if addedPresetUrls.has(preset.url)}
-								<Badge variant="outline" class="text-xs">Added</Badge>
-							{:else}
-								<Plus class="h-4 w-4 text-muted-foreground" />
-							{/if}
-						</button>
-					{/each}
-				</div>
-
-			{:else if addLayerMode === 'tile'}
-				<!-- Tile URL Form -->
-				<div class="space-y-4">
-					<div class="space-y-2">
-						<Label for="tile_name">Name</Label>
-						<Input id="tile_name" bind:value={tileUrlName} placeholder="My Tile Layer" required />
-					</div>
-					<div class="space-y-2">
-						<Label for="tile_url">Tile URL Template</Label>
-						<Input id="tile_url" bind:value={tileUrlUrl} placeholder="https://example.com/{z}/{x}/{y}.png" required />
-						<p class="text-xs text-muted-foreground">Use {'{z}'}/{'{x}'}/{'{y}'} placeholders</p>
-					</div>
-					<div class="space-y-2">
-						<Label for="tile_attribution">Attribution (optional)</Label>
-						<Input id="tile_attribution" bind:value={tileUrlAttribution} />
-					</div>
-					<div class="flex items-center space-x-2">
-						<Switch id="tile_as_base" bind:checked={tileUrlAsBase} />
-						<Label for="tile_as_base">Set as base layer</Label>
-					</div>
-					<Button onclick={handleAddTile} disabled={isSubmitting || !tileUrlName.trim() || !tileUrlUrl.trim()}>
-						{isSubmitting ? 'Adding...' : 'Add Tile Layer'}
-					</Button>
-				</div>
-
-			{:else if addLayerMode === 'wms'}
-				<!-- WMS Form -->
-				<div class="space-y-4">
-					<div class="space-y-2">
-						<Label for="wms_name">Name</Label>
-						<Input id="wms_name" bind:value={wmsName} placeholder="My WMS Layer" required />
-					</div>
-					<div class="space-y-2">
-						<Label for="wms_url">WMS URL</Label>
-						<Input id="wms_url" bind:value={wmsUrl} placeholder="https://example.com/wms" required />
-					</div>
-					<div class="space-y-2">
-						<Label for="wms_layers">Layers</Label>
-						<Input id="wms_layers" bind:value={wmsLayers} placeholder="layer_name" required />
-					</div>
-					<div class="grid grid-cols-2 gap-4">
-						<div class="space-y-2">
-							<Label for="wms_format">Format</Label>
-							<Input id="wms_format" bind:value={wmsFormat} />
-						</div>
-						<div class="space-y-2">
-							<Label for="wms_version">Version</Label>
-							<Input id="wms_version" bind:value={wmsVersion} />
-						</div>
-					</div>
-					<div class="space-y-2">
-						<Label for="wms_attribution">Attribution (optional)</Label>
-						<Input id="wms_attribution" bind:value={wmsAttribution} />
-					</div>
-					<div class="flex items-center gap-4">
-						<div class="flex items-center space-x-2">
-							<Switch id="wms_transparent" bind:checked={wmsTransparent} />
-							<Label for="wms_transparent">Transparent</Label>
-						</div>
-						<div class="flex items-center space-x-2">
-							<Switch id="wms_as_base" bind:checked={wmsAsBase} />
-							<Label for="wms_as_base">Base layer</Label>
-						</div>
-					</div>
-					<Button onclick={handleAddWms} disabled={isSubmitting || !wmsName.trim() || !wmsUrl.trim() || !wmsLayers.trim()}>
-						{isSubmitting ? 'Adding...' : 'Add WMS Layer'}
-					</Button>
-				</div>
-
-			{:else if addLayerMode === 'upload'}
-				<!-- Upload Form -->
-				<div class="space-y-4">
-					<div class="space-y-2">
-						<Label for="upload_name">Name</Label>
-						<Input id="upload_name" bind:value={uploadName} placeholder="My Custom Tiles" required />
-					</div>
-					<div class="space-y-2">
-						<Label>Tile Format</Label>
-						<div class="flex gap-2">
-							{#each ['png', 'jpg', 'webp'] as fmt}
-								<Button
-									variant={uploadTileFormat === fmt ? 'default' : 'outline'}
-									size="sm"
-									onclick={() => (uploadTileFormat = fmt as 'png' | 'jpg' | 'webp')}
-								>
-									{fmt.toUpperCase()}
-								</Button>
-							{/each}
-						</div>
-					</div>
-					<div class="space-y-2">
-						<Label>ZIP File</Label>
-						<Input
-							type="file"
-							accept=".zip"
-							onchange={(e) => {
-								const files = (e.target as HTMLInputElement).files;
-								uploadFile = files?.[0] ?? null;
-								if (uploadFile && !uploadName) {
-									uploadName = uploadFile.name.replace('.zip', '');
-								}
-							}}
-						/>
-						<p class="text-xs text-muted-foreground">ZIP archive with tiles in z/x/y.ext format</p>
-					</div>
-					{#if uploadProgress}
-						<div class="space-y-1">
-							<p class="text-sm">Processing... {uploadProgress.progress}%</p>
-							<div class="w-full bg-muted rounded-full h-2">
-								<div
-									class="bg-primary h-2 rounded-full transition-all"
-									style="width: {uploadProgress.progress}%"
-								></div>
-							</div>
-						</div>
-					{/if}
-					<Button onclick={handleUpload} disabled={isUploading || !uploadFile || !uploadName.trim()}>
-						{#if isUploading}
-							<Loader2 class="mr-2 h-4 w-4 animate-spin" />
-							Uploading...
-						{:else}
-							<Upload class="mr-2 h-4 w-4" />
-							Upload Tiles
 						{/if}
-					</Button>
-				</div>
-			{/if}
-		</div>
+						<Button onclick={handleUpload} disabled={isUploading || !uploadFile || !uploadName.trim()}>
+							{#if isUploading}
+								<Loader2 class="mr-2 h-4 w-4 animate-spin" />
+								Uploading...
+							{:else}
+								<Upload class="mr-2 h-4 w-4" />
+								Upload Tiles
+							{/if}
+						</Button>
+					</div>
+				</Tabs.Content>
+			</div>
+		</Tabs.Root>
 	</Dialog.Content>
 </Dialog.Root>
 

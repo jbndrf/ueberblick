@@ -171,11 +171,21 @@
 	async function loadTableColumns(tableId: string) {
 		try {
 			const pb = getPocketBase();
-			const columns = await pb.collection('custom_table_columns').getFullList<CustomTableColumn>({
-				filter: `table_id = "${tableId}"`,
-				sort: 'sort_order'
-			});
-			tableColumns = columns;
+			const [table, columns] = await Promise.all([
+				pb.collection('custom_tables').getOne<CustomTable & { main_column: string }>(tableId),
+				pb.collection('custom_table_columns').getFullList<CustomTableColumn>({
+					filter: `table_id = "${tableId}"`,
+					sort: 'sort_order'
+				})
+			]);
+			// Include the main column as the first option
+			const mainCol: CustomTableColumn = {
+				id: '__main__',
+				column_name: table.main_column,
+				column_type: 'text',
+				sort_order: -1
+			};
+			tableColumns = [mainCol, ...columns];
 		} catch (error) {
 			console.error('Failed to load table columns:', error);
 			tableColumns = [];
@@ -236,7 +246,7 @@
 </script>
 
 <Dialog.Root bind:open onOpenChange={handleOpenChange}>
-	<Dialog.Content class="entity-selector-modal">
+	<Dialog.Content class="entity-selector-modal" interactOutsideBehavior="ignore" onFocusOutside={(e) => e.preventDefault()}>
 		<Dialog.Header>
 			<Dialog.Title>Configure {sourceTypeLabel} Selector</Dialog.Title>
 			<Dialog.Description>
@@ -275,6 +285,7 @@
 						singleSelect={true}
 						bind:selectedIds={selectedTableIds}
 						placeholder="Select a table..."
+						disablePortal
 					/>
 				</div>
 
@@ -290,6 +301,7 @@
 							singleSelect={true}
 							bind:selectedIds={selectedColumnIds}
 							placeholder="Select a column..."
+							disablePortal
 						/>
 					</div>
 				{/if}
@@ -307,6 +319,7 @@
 						singleSelect={true}
 						bind:selectedIds={selectedCategoryIds}
 						placeholder="Select a category..."
+						disablePortal
 					/>
 				</div>
 			{/if}
@@ -323,6 +336,7 @@
 						getOptionDescription={(r) => r.description}
 						bind:selectedIds={selfSelectRoleIds}
 						placeholder="Select roles..."
+						disablePortal
 					/>
 				</div>
 
@@ -336,6 +350,7 @@
 						getOptionDescription={(r) => r.description}
 						bind:selectedIds={anySelectRoleIds}
 						placeholder="Select roles..."
+						disablePortal
 					/>
 				</div>
 			{/if}

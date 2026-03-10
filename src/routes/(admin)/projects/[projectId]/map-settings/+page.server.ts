@@ -394,9 +394,8 @@ export const actions: Actions = {
 		}
 	},
 
-	// Set layer as base layer
-	setBaseLayer: async ({ request, locals: { pb }, params }) => {
-		const { projectId } = params;
+	// Toggle layer type between base and overlay
+	toggleLayerType: async ({ request, locals: { pb } }) => {
 		const formData = await request.formData();
 		const id = formData.get('id') as string;
 
@@ -405,20 +404,13 @@ export const actions: Actions = {
 		}
 
 		try {
-			// Unset all base layers for this project
-			const existingBase = await pb.collection('map_layers').getFullList({
-				filter: `project_id = "${projectId}" && layer_type = "base"`
-			});
-			for (const layer of existingBase) {
-				await pb.collection('map_layers').update(layer.id, { layer_type: 'overlay' });
-			}
-
-			// Set new base layer
-			await pb.collection('map_layers').update(id, { layer_type: 'base' });
+			const layer = await pb.collection('map_layers').getOne(id);
+			const newType = layer.layer_type === 'base' ? 'overlay' : 'base';
+			await pb.collection('map_layers').update(id, { layer_type: newType });
 			return { success: true };
 		} catch (err) {
-			console.error('Error setting base layer:', err);
-			return fail(500, { message: 'Failed to set base layer' });
+			console.error('Error toggling layer type:', err);
+			return fail(500, { message: 'Failed to toggle layer type' });
 		}
 	},
 

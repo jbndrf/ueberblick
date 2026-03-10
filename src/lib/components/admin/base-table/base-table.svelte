@@ -9,7 +9,7 @@
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Button } from '$lib/components/ui/button';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-	import { MoreHorizontal, Pencil, Trash2, Plus } from 'lucide-svelte';
+	import { MoreHorizontal, Pencil, Trash2, Plus, Check, X } from 'lucide-svelte';
 	import DataTableToolbar from '$lib/components/admin/data-table-toolbar.svelte';
 	import DataTableColumnHeader from '$lib/components/admin/data-table-column-header.svelte';
 	import {
@@ -73,6 +73,9 @@
 				}
 			}
 			rowSelection = newSelection;
+			if (onRowSelectionChange) {
+				onRowSelectionChange(rowSelection);
+			}
 		} else {
 			lastSelectedIndex = rowIndex;
 		}
@@ -310,47 +313,46 @@
 	);
 
 	// Inline row creation functions
-	function startCreatingRow() {
-		if (!inlineRowCreation) return;
+	// The empty row is always visible when inlineRowCreation is configured.
+	// isCreatingRow becomes true once the user starts typing into any field.
+	function initNewRowDefaults() {
+		if (!inlineRowCreation) return {};
 		const defaultValues = inlineRowCreation.getDefaultValues?.() || {};
-
-		// Initialize dropdown fields with their first option value
 		for (const col of columns) {
-			if (col.fieldType === 'dropdown' && col.dropdownConfig?.options?.length > 0) {
+			const opts = col.dropdownConfig?.options;
+			if (col.fieldType === 'dropdown' && opts && opts.length > 0) {
 				if (defaultValues[col.id] === undefined) {
-					defaultValues[col.id] = col.dropdownConfig.options[0].value;
+					defaultValues[col.id] = opts[0].value;
 				}
 			}
 		}
-
-		newRowData = { ...defaultValues };
-		isCreatingRow = true;
+		return defaultValues;
 	}
+
+	// Track whether user has started entering data in the creation row
+	const hasNewRowInput = $derived(isCreatingRow);
 
 	function cancelCreatingRow() {
 		isCreatingRow = false;
-		newRowData = {};
+		newRowData = initNewRowDefaults();
 	}
 
 	async function saveNewRow() {
 		if (!inlineRowCreation) return;
 
-		// Validate required fields
 		const requiredFields = inlineRowCreation.requiredFields || [];
 		const missingFields = requiredFields.filter(
 			(fieldId) => !newRowData[fieldId] || newRowData[fieldId] === ''
 		);
 
-		if (missingFields.length > 0) {
-			// Show validation error (you could use toast here)
-			return;
-		}
+		if (missingFields.length > 0) return;
 
 		isSaving = true;
 		try {
 			await inlineRowCreation.onCreateRow(newRowData);
+			// Reset for next entry
 			isCreatingRow = false;
-			newRowData = {};
+			newRowData = initNewRowDefaults();
 		} catch (error) {
 			console.error('Failed to create row:', error);
 		} finally {
@@ -360,7 +362,20 @@
 
 	function updateNewRowField(columnId: string, value: any) {
 		newRowData[columnId] = value;
+		// Activate creation mode on first real input
+		if (!isCreatingRow && value !== '' && value !== null && value !== undefined) {
+			isCreatingRow = true;
+		}
 	}
+
+	// Initialize defaults when inlineRowCreation is available
+	let newRowInitialized = false;
+	$effect(() => {
+		if (inlineRowCreation?.enabled && !newRowInitialized) {
+			newRowInitialized = true;
+			newRowData = initNewRowDefaults();
+		}
+	});
 
 	// Exposed functions
 	export function getSelectedRows() {
@@ -440,7 +455,7 @@
 							{@const Icon = action.icon}
 							<Icon class="mr-2 h-4 w-4" />
 						{/if}
-						{action.label}
+						{typeof action.label === 'function' ? action.label(row.original) : action.label}
 					</DropdownMenu.Item>
 				{/each}
 			{/if}
@@ -456,26 +471,28 @@
 {/snippet}
 
 {#snippet newRowActionsSnippet()}
-	<div class="flex items-center gap-2">
-		<Button
-			variant="ghost"
-			size="sm"
-			onclick={saveNewRow}
-			disabled={isSaving}
-			class="h-8"
-		>
-			{m.commonSave()}
-		</Button>
-		<Button
-			variant="ghost"
-			size="sm"
-			onclick={cancelCreatingRow}
-			disabled={isSaving}
-			class="h-8 text-muted-foreground hover:text-foreground"
-		>
-			{m.commonCancel()}
-		</Button>
-	</div>
+	{#if hasNewRowInput}
+		<div class="flex items-center gap-1">
+			<Button
+				variant="ghost"
+				size="icon"
+				onclick={saveNewRow}
+				disabled={isSaving}
+				class="h-7 w-7 text-muted-foreground hover:text-foreground"
+			>
+				<Check class="h-4 w-4" />
+			</Button>
+			<Button
+				variant="ghost"
+				size="icon"
+				onclick={cancelCreatingRow}
+				disabled={isSaving}
+				class="h-7 w-7 text-muted-foreground hover:text-foreground"
+			>
+				<X class="h-4 w-4" />
+			</Button>
+		</div>
+	{/if}
 {/snippet}
 
 {#snippet newRowTextField(columnId: string, isRequired: boolean)}
@@ -538,6 +555,18 @@
 	/>
 {/snippet}
 
+{#snippet newRowArrayField(columnId: string, entityConfig: any)}
+	<ArrayField
+		value={newRowData[columnId] ?? []}
+		rowId="new-row"
+		editMode={true}
+		onUpdate={async (value) => {
+			updateNewRowField(columnId, value);
+		}}
+		entityConfig={entityConfig}
+	/>
+{/snippet}
+
 <div class="flex flex-col gap-4 min-w-0 w-full">
 	{#if showToolbar}
 		<DataTableToolbar
@@ -559,7 +588,7 @@
 						<Table.Row class="group hover:bg-muted/50">
 							{#each headerGroup.headers as header, index}
 								<Table.Head
-									class="{header.column.id === 'select' ? '!pl-6 !pr-2' : header.column.id === 'actions' ? '!pl-2 !pr-6' : '!px-6'} !py-3 text-sm font-medium text-muted-foreground whitespace-nowrap bg-muted/50 {header.column.id === 'select' ? 'sticky left-0 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] before:absolute before:inset-0 before:bg-card before:-z-10 after:absolute after:inset-0 after:bg-muted/50 after:-z-[9]' : ''} {header.column.id === 'actions' ? 'sticky right-0 z-10 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)] before:absolute before:inset-0 before:bg-card before:-z-10 after:absolute after:inset-0 after:bg-muted/50 after:-z-[9]' : ''}"
+									class="{header.column.id === 'select' ? 'pl-6 pr-2' : header.column.id === 'actions' ? 'pl-2 pr-6' : 'px-6'} py-3 text-sm font-medium text-muted-foreground whitespace-nowrap bg-muted/50 {header.column.id === 'select' ? 'sticky left-0 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] before:absolute before:inset-0 before:bg-card before:-z-10 after:absolute after:inset-0 after:bg-muted/50 after:-z-[9]' : ''} {header.column.id === 'actions' ? 'sticky right-0 z-10 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)] before:absolute before:inset-0 before:bg-card before:-z-10 after:absolute after:inset-0 after:bg-muted/50 after:-z-[9]' : ''}"
 								>
 									{#if !header.isPlaceholder}
 										{#if columnManagement && index === headerGroup.headers.length - 1}
@@ -590,7 +619,7 @@
 					{/each}
 				</Table.Header>
 				<Table.Body>
-					{#if table.getRowModel().rows.length === 0 && !isCreatingRow}
+					{#if table.getRowModel().rows.length === 0 && !inlineRowCreation?.enabled}
 						<Table.Row>
 							<Table.Cell colspan={tableColumns.length} class="px-6 py-12 text-center">
 								<div class="flex flex-col items-center gap-2 text-muted-foreground">
@@ -601,12 +630,13 @@
 								</div>
 							</Table.Cell>
 						</Table.Row>
-					{:else}
+					{/if}
+					{#if table.getRowModel().rows.length > 0}
 						{#each table.getRowModel().rows as row}
 							<Table.Row class="group {row.getIsSelected() ? 'bg-muted/50' : ''}">
 								{#each row.getVisibleCells() as cell}
 									<Table.Cell
-										class="{cell.column.id === 'select' ? '!pl-6 !pr-2' : cell.column.id === 'actions' ? '!pl-2 !pr-6' : '!px-6'} !py-4 {cell.column.id === 'select' ? 'whitespace-nowrap sticky left-0 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] bg-card group-hover:!bg-muted/50' : 'max-w-[300px]'} {cell.column.id === 'actions' ? 'sticky right-0 z-10 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)] bg-card group-hover:!bg-muted/50' : ''} {(cell.column.id === 'select' || cell.column.id === 'actions') && row.getIsSelected() ? '!bg-muted/50' : ''}"
+										class="{cell.column.id === 'select' ? 'pl-6 pr-2' : cell.column.id === 'actions' ? 'pl-2 pr-6' : 'px-6'} py-4 {cell.column.id === 'select' ? 'whitespace-nowrap sticky left-0 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] bg-card group-hover:!bg-muted/50' : 'max-w-[300px]'} {cell.column.id === 'actions' ? 'sticky right-0 z-10 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)] bg-card group-hover:!bg-muted/50' : ''} {(cell.column.id === 'select' || cell.column.id === 'actions') && row.getIsSelected() ? '!bg-muted/50' : ''}"
 									>
 										<FlexRender
 											content={cell.column.columnDef.cell}
@@ -618,23 +648,24 @@
 						{/each}
 					{/if}
 
-					<!-- Inline row creation -->
-					{#if isCreatingRow && inlineRowCreation}
-						<Table.Row class="group bg-accent/30 border-accent">
+					<!-- Always-visible creation row -->
+					{#if inlineRowCreation?.enabled}
+						<Table.Row class="group {hasNewRowInput ? 'bg-accent/10' : 'bg-muted/20'}">
 							{#each tableColumns as column}
 								{@const isRequired =
 									inlineRowCreation.requiredFields?.includes(column.id || '') || false}
 								{@const isExcluded =
 									inlineRowCreation.excludeFields?.includes(column.id || '') || false}
+								{@const isMissingRequired = isRequired && hasNewRowInput && (!newRowData[column.id || ''] || newRowData[column.id || ''] === '')}
 								<Table.Cell
-									class="{column.id === 'select' ? '!pl-6 !pr-2' : column.id === 'actions' ? '!pl-2 !pr-6' : '!px-6'} !py-4 {column.id === 'select' ? 'whitespace-nowrap sticky left-0 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] bg-accent/30' : 'max-w-[300px]'} {column.id === 'actions' ? 'sticky right-0 z-10 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)] bg-accent/30' : ''} {isRequired ? 'ring-2 ring-accent ring-inset' : ''}"
+									class="{column.id === 'select' ? 'pl-6 pr-2' : column.id === 'actions' ? 'pl-2 pr-6' : 'px-6'} py-4 {column.id === 'select' ? 'whitespace-nowrap sticky left-0 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]' : 'max-w-[300px]'} {column.id === 'actions' ? 'sticky right-0 z-10 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)]' : ''} {isMissingRequired ? 'ring-1 ring-inset ring-destructive' : ''} {hasNewRowInput ? 'bg-accent/10' : 'bg-muted/20'}"
 								>
 									{#if column.id === 'select'}
-										<!-- Empty cell for selection checkbox -->
+										<Plus class="h-4 w-4 text-muted-foreground" />
 									{:else if column.id === 'actions'}
 										{@render newRowActionsSnippet()}
 									{:else if isExcluded}
-										<span class="text-muted-foreground text-sm italic">Auto-generated</span>
+										<span class="text-muted-foreground text-xs">auto</span>
 									{:else}
 										{@const col = columns.find((c) => c.id === column.id)}
 										{@const fieldType = col?.fieldType || 'text'}
@@ -648,6 +679,8 @@
 											{@render newRowBooleanField(column.id || '')}
 										{:else if fieldType === 'dropdown'}
 											{@render newRowDropdownField(column.id || '', col?.dropdownConfig)}
+										{:else if fieldType === 'array'}
+											{@render newRowArrayField(column.id || '', col?.entityConfig)}
 										{/if}
 									{/if}
 								</Table.Cell>
@@ -658,17 +691,5 @@
 			</Table.Root>
 		</div>
 
-		<!-- Add Row Button -->
-		{#if inlineRowCreation?.enabled && !isCreatingRow}
-			<div class="px-2 pb-2 flex items-center gap-0">
-				{#if createAreaPrefix}
-					{@render createAreaPrefix()}
-				{/if}
-				<Button variant="outline" size="sm" onclick={startCreatingRow} class="gap-2 {createAreaPrefix ? 'rounded-l-none' : ''}">
-					<Plus class="h-4 w-4" />
-					{inlineRowCreation.createButtonLabel || m.commonAdd()}
-				</Button>
-			</div>
-		{/if}
 	</div>
 </div>

@@ -96,6 +96,7 @@
 	});
 </script>
 
+<div class="admin-theme">
 {#if isLoginPage}
 	{@render children()}
 {:else}
@@ -212,7 +213,7 @@
 		<!-- Main Content Area -->
 		<Sidebar.Inset class="max-h-svh">
 			<!-- Header -->
-			<header class="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background px-6">
+			<header class="sticky top-0 z-10 flex h-10 items-center gap-2 border-b bg-background px-3">
 				<Sidebar.Trigger />
 
 				<!-- Spacer -->
@@ -266,9 +267,10 @@
 			</header>
 
 			<!-- Page Content -->
-			<main class="flex-1 min-h-0 overflow-y-auto p-6">
+			<main class="flex-1 min-h-0 overflow-y-auto p-3">
 				{@render children()}
 			</main>
 		</Sidebar.Inset>
 	</Sidebar.Provider>
 {/if}
+</div>

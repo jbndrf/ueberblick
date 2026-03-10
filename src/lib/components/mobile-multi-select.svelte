@@ -6,13 +6,15 @@
 	import { cn } from '$lib/utils';
 
 	// Portal action to render element in document.body
-	function portal(node: HTMLElement) {
+	function portal(node: HTMLElement, enabled: boolean = true) {
+		if (!enabled) return { destroy() {}, update() {} };
 		const target = document.body;
 		target.appendChild(node);
 		return {
 			destroy() {
 				node.remove();
-			}
+			},
+			update() {}
 		};
 	}
 
@@ -94,6 +96,10 @@
 		 * Use this when you need to handle changes without two-way binding.
 		 */
 		onSelectedIdsChange?: (ids: string[]) => void;
+		/**
+		 * Disable portaling to document.body (useful inside dialogs that are already portaled)
+		 */
+		disablePortal?: boolean;
 	};
 
 	let {
@@ -114,7 +120,8 @@
 		emptyLabel = 'No options found',
 		createHintLabel = 'Press Enter to create',
 		summarizeMultiple = false,
-		onSelectedIdsChange
+		onSelectedIdsChange,
+		disablePortal = false
 	}: Props = $props();
 
 	let isOpen = $state(false);
@@ -557,7 +564,7 @@
 	<!-- MOBILE: Full-screen Modal (portaled to body for full-screen blur) -->
 	{#if isOpen && isMobile}
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="fixed inset-0 z-[100]" onkeydown={handleKeydown} use:portal>
+		<div class="fixed inset-0 z-[100]" onkeydown={handleKeydown} use:portal={!disablePortal}>
 				<!-- Backdrop with blur -->
 				<!-- svelte-ignore a11y_click_events_have_key_events -->
 				<div
@@ -613,7 +620,7 @@
 			style="top: {dropdownPosition.top}px; left: {dropdownPosition.left}px; width: {dropdownPosition.width}px;{openUpward ? ' transform: translateY(-100%);' : ''}"
 			role="listbox"
 			aria-label="Options"
-			use:portal
+			use:portal={!disablePortal}
 		>
 			<!-- Search input with inline badges -->
 			<div class="p-2 border-b border-border sticky top-0 bg-popover">

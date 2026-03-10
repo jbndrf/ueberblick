@@ -98,6 +98,12 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 export const actions: Actions = {
 	create: async ({ request, params, locals: { pb } }) => {
 		const { projectId } = params;
+		const formData = await request.clone().formData();
+		const roleIdsRaw = formData.get('roleIds');
+		let roleIds: string[] = [];
+		if (roleIdsRaw) {
+			try { roleIds = JSON.parse(roleIdsRaw as string); } catch { /* ignore */ }
+		}
 		const form = await superValidate(request, zod(participantSchema));
 
 		if (!form.valid) {
@@ -131,7 +137,8 @@ export const actions: Actions = {
 					token: token,
 					is_active: true,
 					password: token,
-					passwordConfirm: token
+					passwordConfirm: token,
+					...(roleIds.length > 0 ? { role_id: prepareArrayField(roleIds) } : {})
 				});
 
 				// Success
