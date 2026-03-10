@@ -21,6 +21,7 @@
 		workflow_type: 'incident' | 'survey';
 		description?: string;
 		entry_button_label?: string;
+		entry_allowed_roles?: string[];
 		filter_value_icons?: Record<string, any>;
 	}
 
@@ -112,17 +113,23 @@
 	const fieldTags = $derived(fieldTagsLive.records);
 	const fieldValues = $derived(fieldValuesLive.records);
 
-	// Workflows with entry labels derived from connections
+	// Workflows with entry labels derived from connections, filtered by participant role
 	const workflows: Workflow[] = $derived.by(() => {
 		const entryLabelByWorkflow = new Map<string, string>();
 		for (const conn of connectionsLive.records) {
 			const label = (conn.visual_config as any)?.button_label;
 			if (label) entryLabelByWorkflow.set(conn.workflow_id as string, label);
 		}
-		return (workflowsLive.records as Workflow[]).map(wf => ({
-			...wf,
-			entry_button_label: entryLabelByWorkflow.get(wf.id) || wf.name
-		}));
+		const participantRoleId = data.participant.role_id;
+		return (workflowsLive.records as any[])
+			.filter(wf => {
+				const roles = wf.entry_allowed_roles;
+				return !roles || roles.length === 0 || (participantRoleId && roles.includes(participantRoleId));
+			})
+			.map(wf => ({
+				...wf,
+				entry_button_label: entryLabelByWorkflow.get(wf.id) || wf.name
+			}));
 	});
 
 	// Loading: true until first IndexedDB read completes for key collections

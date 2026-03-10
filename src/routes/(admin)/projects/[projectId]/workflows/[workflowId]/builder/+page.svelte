@@ -15,19 +15,10 @@
 
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
-	import { Separator } from '$lib/components/ui/separator';
+
 	import {
 		Save,
-		Undo2,
-		Redo2,
-		ZoomIn,
-		ZoomOut,
-		Maximize2,
-		Download,
-		Upload,
-		Trash2,
 		CircleHelp,
-		Workflow,
 		Loader2
 	} from 'lucide-svelte';
 
@@ -1387,52 +1378,6 @@
 					<Save class="h-4 w-4 mr-2" />
 					Save{builderState.isDirty ? '*' : ''}
 				{/if}
-			</Button>
-
-			<Separator orientation="vertical" class="h-6" />
-
-			<Button variant="ghost" size="icon" class="h-8 w-8" title="Undo">
-				<Undo2 class="h-4 w-4" />
-			</Button>
-			<Button variant="ghost" size="icon" class="h-8 w-8" title="Redo">
-				<Redo2 class="h-4 w-4" />
-			</Button>
-
-			<Separator orientation="vertical" class="h-6" />
-
-			<Button variant="ghost" size="icon" class="h-8 w-8" title="Zoom In">
-				<ZoomIn class="h-4 w-4" />
-			</Button>
-			<Button variant="ghost" size="icon" class="h-8 w-8" title="Zoom Out">
-				<ZoomOut class="h-4 w-4" />
-			</Button>
-			<Button variant="ghost" size="icon" class="h-8 w-8" title="Fit to View">
-				<Maximize2 class="h-4 w-4" />
-			</Button>
-
-			<Separator orientation="vertical" class="h-6" />
-
-			<Button variant="ghost" size="sm">
-				<Download class="h-4 w-4 mr-2" />
-				Export
-			</Button>
-			<Button variant="ghost" size="sm">
-				<Upload class="h-4 w-4 mr-2" />
-				Import
-			</Button>
-
-			<Separator orientation="vertical" class="h-6" />
-
-			<Button variant="ghost" size="sm">
-				<Workflow class="h-4 w-4 mr-2" />
-				Data Flow
-			</Button>
-
-			<Separator orientation="vertical" class="h-6" />
-
-			<Button variant="ghost" size="sm" class="text-destructive hover:text-destructive">
-				<Trash2 class="h-4 w-4 mr-2" />
-				Clear
 			</Button>
 		</div>
 
