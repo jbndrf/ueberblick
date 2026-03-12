@@ -13,6 +13,7 @@
 		type Connection
 	} from '@xyflow/svelte';
 
+	import { onMount } from 'svelte';
 	import type { StageData } from './context-sidebar';
 
 	interface Props {
@@ -22,8 +23,6 @@
 		edgeTypes?: EdgeTypes;
 		hasStartStage: boolean;
 		connectingFrom: string | null;
-		onNodesChange: (nodes: Node[]) => void;
-		onEdgesChange: (edges: Edge[]) => void;
 		onPaneClick: () => void;
 		onNodeClick: (params: { node: Node }) => void;
 		onEdgeClick: (params: { edge: Edge }) => void;
@@ -39,8 +38,6 @@
 		edgeTypes,
 		hasStartStage,
 		connectingFrom,
-		onNodesChange,
-		onEdgesChange,
 		onPaneClick,
 		onNodeClick,
 		onEdgeClick,
@@ -49,8 +46,13 @@
 		onConnect
 	}: Props = $props();
 
-	// Access SvelteFlow context for coordinate transformations
-	const { screenToFlowPosition } = useSvelteFlow();
+	// Access SvelteFlow context for coordinate transformations and viewport control
+	const { screenToFlowPosition, fitView } = useSvelteFlow();
+
+	// Fit view once on mount instead of using the reactive fitView prop
+	onMount(() => {
+		setTimeout(() => fitView(), 50);
+	});
 
 	// Handle drop on canvas - now with correct coordinate transformation
 	function onDrop(event: DragEvent) {
@@ -107,7 +109,6 @@
 		bind:edges
 		{nodeTypes}
 		{edgeTypes}
-		fitView
 		onpaneclick={onPaneClick}
 		onnodeclick={onNodeClick}
 		onedgeclick={onEdgeClick}

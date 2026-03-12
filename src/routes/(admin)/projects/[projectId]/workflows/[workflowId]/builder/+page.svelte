@@ -208,8 +208,8 @@
 			id: stage.id,
 			type: 'stage',
 			position: {
-				x: stage.position_x || 100,
-				y: stage.position_y || 100
+				x: stage.position_x ?? 100,
+				y: stage.position_y ?? 100
 			},
 			data: {
 				title: stage.stage_name,
@@ -326,11 +326,15 @@
 		});
 
 		// Generate entry marker nodes (positioned relative to their target stages)
+		// Preserve existing entry marker positions, only calculate fresh for new markers
 		const entryMarkerNodes = entryConnectionsToMarkerNodes(
 			_connections.map((c) => c.data),
 			_stages.map((s) => s.data),
 			currentPositions
-		);
+		).map((node) => {
+			const currentPos = currentPositions.get(node.id);
+			return currentPos ? { ...node, position: currentPos } : node;
+		});
 
 		nodes = [...stageNodes, ...entryMarkerNodes];
 	});
@@ -360,7 +364,7 @@
 
 		const updatedNodes = untrack(() => nodes).map(n => {
 			const shouldSelect = n.id === selectedNodeId;
-			if (n.selected === shouldSelect) return n;
+			if (!!n.selected === shouldSelect) return n;
 			return { ...n, selected: shouldSelect };
 		});
 		if (updatedNodes.some((n, i) => n !== untrack(() => nodes)[i])) {
@@ -1426,8 +1430,6 @@
 					{edgeTypes}
 					{hasStartStage}
 					{connectingFrom}
-					onNodesChange={(n) => (nodes = n)}
-					onEdgesChange={(e) => (edges = e)}
 					{onPaneClick}
 					{onNodeClick}
 					{onEdgeClick}
