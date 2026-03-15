@@ -6,6 +6,15 @@
 # Set default body size limit if not provided
 export BODY_SIZE_LIMIT="${BODY_SIZE_LIMIT:-50M}"
 
+# PocketBase admin UI: expose or deny based on EXPOSE_PB_ADMIN env var
+if [ "${EXPOSE_PB_ADMIN}" = "true" ]; then
+  cp /etc/nginx/nginx-pb-admin.conf /etc/nginx/conf.d/pb-admin.conf
+  echo "PocketBase admin UI: EXPOSED via /_/"
+else
+  echo 'location /_/ { return 404; }' > /etc/nginx/conf.d/pb-admin.conf
+  echo "PocketBase admin UI: BLOCKED"
+fi
+
 # Start Node.js in background
 node build/index.js &
 NODE_PID=$!

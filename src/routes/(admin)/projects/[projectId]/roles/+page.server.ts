@@ -6,6 +6,243 @@ import { zod } from 'sveltekit-superforms/adapters';
 import { createUpdateFieldAction, createDeleteAction } from '$lib/server/crud-actions';
 import type PocketBase from 'pocketbase';
 
+type StagePermissions = {
+	id: string;
+	name: string;
+	order: number;
+	visibleToRoles: string[];
+	connections: Array<{ id: string; actionName: string; allowedRoles: string[] }>;
+	forms: Array<{ id: string; name: string; allowedRoles: string[]; fromConnection: boolean }>;
+	editTools: Array<{ id: string; name: string; allowedRoles: string[] }>;
+};
+
+type WorkflowPermissions = {
+	id: string;
+	name: string;
+	workflowType: string;
+	isActive: boolean;
+	privateInstances: boolean;
+	visibleToRoles: string[];
+	entryAllowedRoles: string[];
+	stages: StagePermissions[];
+	globalTools: Array<{ id: string; name: string; allowedRoles: string[] }>;
+};
+
+type EntityPermissions = {
+	id: string;
+	name: string;
+	visibleToRoles: string[];
+};
+
+async function loadPermissionsData(pb: PocketBase, projectId: string) {
+	const [workflows, customTables, markerCategories, mapLayers, offlinePackages] =
+		await Promise.all([
+			pb.collection('workflows').getFullList({
+				filter: `project_id = "${projectId}"`,
+				fields: 'id,name,workflow_type,is_active,visible_to_roles,entry_allowed_roles,private_instances',
+				sort: 'name'
+			}),
+			pb.collection('custom_tables').getFullList({
+				filter: `project_id = "${projectId}"`,
+				fields: 'id,display_name,visible_to_roles',
+				sort: 'display_name'
+			}),
+			pb.collection('marker_categories').getFullList({
+				filter: `project_id = "${projectId}"`,
+				fields: 'id,name,visible_to_roles',
+				sort: 'name'
+			}),
+			pb.collection('map_layers').getFullList({
+				filter: `project_id = "${projectId}"`,
+				fields: 'id,name,visible_to_roles',
+				sort: 'name'
+			}),
+			pb.collection('offline_packages').getFullList({
+				filter: `project_id = "${projectId}"`,
+				fields: 'id,name,visible_to_roles',
+				sort: 'name'
+			})
+		]);
+
+	const workflowIds = workflows.map((w) => w.id);
+	let stages: any[] = [];
+	let connections: any[] = [];
+	let forms: any[] = [];
+	let editTools: any[] = [];
+
+	if (workflowIds.length > 0) {
+		const wfFilter = workflowIds.map((id) => `workflow_id = "${id}"`).join(' || ');
+
+		[stages, connections, forms] = await Promise.all([
+			pb.collection('workflow_stages').getFullList({
+				filter: wfFilter,
+				fields: 'id,workflow_id,stage_name,stage_order,visible_to_roles',
+				sort: 'stage_order'
+			}),
+			pb.collection('workflow_connections').getFullList({
+				filter: wfFilter,
+				fields: 'id,workflow_id,action_name,allowed_roles,from_stage_id'
+			}),
+			pb.collection('tools_forms').getFullList({
+				filter: wfFilter,
+				fields: 'id,workflow_id,name,allowed_roles,connection_id,stage_id'
+			})
+		]);
+
+		const connectionIds = connections.map((c) => c.id);
+		const stageIds = stages.map((s) => s.id);
+
+		if (connectionIds.length > 0 || stageIds.length > 0) {
+			const editToolFilters: string[] = [];
+			if (connectionIds.length > 0) {
+				editToolFilters.push(
+					connectionIds.map((id) => `connection_id = "${id}"`).join(' || ')
+				);
+			}
+			if (stageIds.length > 0) {
+				editToolFilters.push(
+					stageIds.map((id) => `stage_id ?= "${id}"`).join(' || ')
+				);
+			}
+			editTools = await pb.collection('tools_edit').getFullList({
+				filter: editToolFilters.join(' || '),
+				fields: 'id,name,allowed_roles,connection_id,stage_id,is_global'
+			});
+		}
+	}
+
+	// Index connections by from_stage_id
+	const connectionsByFromStage = new Map<string, any[]>();
+	for (const c of connections) {
+		if (c.from_stage_id) {
+			const arr = connectionsByFromStage.get(c.from_stage_id) || [];
+			arr.push(c);
+			connectionsByFromStage.set(c.from_stage_id, arr);
+		}
+	}
+
+	// Index forms by stage_id and connection_id
+	const formsByStage = new Map<string, any[]>();
+	for (const f of forms) {
+		if (f.connection_id) {
+			// connection-attached forms are covered by the connection row
+		} else if (f.stage_id) {
+			const arr = formsByStage.get(f.stage_id) || [];
+			arr.push(f);
+			formsByStage.set(f.stage_id, arr);
+		}
+	}
+
+	// Index edit tools
+	const editToolsByStage = new Map<string, any[]>();
+	const globalEditTools: any[] = [];
+	for (const et of editTools) {
+		if (et.is_global) {
+			globalEditTools.push(et);
+			continue;
+		}
+		if (et.connection_id) {
+			// connection-attached edit tools are covered by the connection row
+		}
+		if (et.stage_id) {
+			const stageIdList = Array.isArray(et.stage_id) ? et.stage_id : [et.stage_id];
+			for (const sid of stageIdList) {
+				const arr = editToolsByStage.get(sid) || [];
+				arr.push(et);
+				editToolsByStage.set(sid, arr);
+			}
+		}
+	}
+
+	// Build workflow permissions with full hierarchy
+	const workflowPermissions: WorkflowPermissions[] = workflows.map((wf) => {
+		const wfStages = (stages.filter((s) => s.workflow_id === wf.id) || [])
+			.sort((a: any, b: any) => (a.stage_order ?? 0) - (b.stage_order ?? 0));
+
+		const stagePerms: StagePermissions[] = wfStages.map((stage: any) => {
+			const stageConnections = connectionsByFromStage.get(stage.id) || [];
+			const stageForms: StagePermissions['forms'] = [];
+			for (const f of formsByStage.get(stage.id) || []) {
+				stageForms.push({
+					id: f.id,
+					name: f.name as string,
+					allowedRoles: f.allowed_roles || [],
+					fromConnection: false
+				});
+			}
+			const stageEditTools: StagePermissions['editTools'] = [];
+			for (const et of editToolsByStage.get(stage.id) || []) {
+				stageEditTools.push({
+					id: et.id,
+					name: et.name as string,
+					allowedRoles: et.allowed_roles || []
+				});
+			}
+
+			return {
+				id: stage.id,
+				name: stage.stage_name as string,
+				order: stage.stage_order as number,
+				visibleToRoles: stage.visible_to_roles || [],
+				connections: stageConnections.map((c: any) => ({
+					id: c.id,
+					actionName: c.action_name as string,
+					allowedRoles: c.allowed_roles || []
+				})),
+				forms: stageForms,
+				editTools: stageEditTools
+			};
+		});
+
+		const wfGlobalTools = globalEditTools
+			.filter((et) => {
+				const stageIdList = Array.isArray(et.stage_id) ? et.stage_id : [et.stage_id];
+				return stageIdList.some((sid: string) => wfStages.some((s: any) => s.id === sid));
+			})
+			.map((et) => ({
+				id: et.id,
+				name: et.name as string,
+				allowedRoles: et.allowed_roles || []
+			}));
+
+		return {
+			id: wf.id,
+			name: wf.name as string,
+			workflowType: wf.workflow_type as string,
+			isActive: wf.is_active as boolean,
+			privateInstances: (wf.private_instances as boolean) || false,
+			visibleToRoles: (wf.visible_to_roles as string[]) || [],
+			entryAllowedRoles: (wf.entry_allowed_roles as string[]) || [],
+			stages: stagePerms,
+			globalTools: wfGlobalTools
+		};
+	});
+
+	return {
+		permWorkflows: workflowPermissions,
+		permTables: customTables.map((t) => ({
+			id: t.id,
+			name: t.display_name as string,
+			visibleToRoles: (t.visible_to_roles as string[]) || []
+		})) as EntityPermissions[],
+		permCategories: markerCategories.map((c) => ({
+			id: c.id,
+			name: c.name as string,
+			visibleToRoles: (c.visible_to_roles as string[]) || []
+		})) as EntityPermissions[],
+		permLayers: mapLayers.map((l) => ({
+			id: l.id,
+			name: l.name as string,
+			visibleToRoles: (l.visible_to_roles as string[]) || []
+		})) as EntityPermissions[],
+		permPackages: offlinePackages.map((p) => ({
+			id: p.id,
+			name: p.name as string,
+			visibleToRoles: (p.visible_to_roles as string[]) || []
+		})) as EntityPermissions[]
+	};
+}
+
 /**
  * Cleanup before deleting a role - remove role from all participants and visibility settings
  */
@@ -81,10 +318,14 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 		// Create form for adding/editing roles
 		const form = await superValidate(zod(roleSchema));
 
+		// Load permissions data in parallel
+		const permissions = await loadPermissionsData(pb, projectId);
+
 		return {
 			roles: roles || [],
 			participants: participants || [],
-			form
+			form,
+			...permissions
 		};
 	} catch (err) {
 		console.error('Error loading roles:', err);
@@ -213,6 +454,54 @@ export const actions: Actions = {
 		} catch (err) {
 			console.error('Error updating participant roles:', err);
 			return fail(500, { message: 'Failed to update participant roles' });
+		}
+	},
+
+	toggleRole: async ({ request, locals: { pb } }) => {
+		const formData = await request.formData();
+		const collection = formData.get('collection') as string;
+		const recordId = formData.get('recordId') as string;
+		const field = formData.get('field') as string;
+		const roleId = formData.get('roleId') as string;
+		const allRoleIds: string[] = JSON.parse(formData.get('allRoleIds') as string);
+
+		const ALLOWED_TOGGLES: Record<string, string[]> = {
+			workflows: ['visible_to_roles', 'entry_allowed_roles'],
+			workflow_stages: ['visible_to_roles'],
+			workflow_connections: ['allowed_roles'],
+			tools_forms: ['allowed_roles'],
+			tools_edit: ['allowed_roles'],
+			custom_tables: ['visible_to_roles'],
+			marker_categories: ['visible_to_roles'],
+			map_layers: ['visible_to_roles'],
+			offline_packages: ['visible_to_roles']
+		};
+
+		if (!ALLOWED_TOGGLES[collection]?.includes(field)) {
+			return fail(400, { message: 'Invalid collection/field' });
+		}
+
+		try {
+			const record = await pb.collection(collection).getOne(recordId);
+			const currentRoles: string[] = record[field] || [];
+			const hasRole = currentRoles.includes(roleId);
+
+			let newRoles: string[];
+			if (currentRoles.length === 0) {
+				newRoles = allRoleIds.filter((id) => id !== roleId);
+			} else if (hasRole) {
+				newRoles = currentRoles.filter((id) => id !== roleId);
+				if (newRoles.length >= allRoleIds.length) newRoles = [];
+			} else {
+				newRoles = [...currentRoles, roleId];
+				if (allRoleIds.every((id) => newRoles.includes(id))) newRoles = [];
+			}
+
+			await pb.collection(collection).update(recordId, { [field]: newRoles });
+			return { success: true };
+		} catch (err) {
+			console.error('Error toggling role:', err);
+			return fail(500, { message: 'Failed to toggle role' });
 		}
 	},
 

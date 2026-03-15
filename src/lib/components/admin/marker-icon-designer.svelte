@@ -4,18 +4,24 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { toast } from 'svelte-sonner';
-	import { X, Upload } from 'lucide-svelte';
-
-	type MarkerShape = 'none' | 'pin';
+	import { X, Upload, FileCode, Shapes } from 'lucide-svelte';
+	import {
+		ICON_TEMPLATES,
+		BADGE_TEMPLATES,
+		compositeIconSvg,
+		type SvgIconTemplate,
+		type BadgeTemplate
+	} from '$lib/utils/svg-icon-templates';
+	import { validateSvg } from '$lib/utils/svg-validator';
 
 	interface IconStyle {
 		size: number;
-		color: string; // This is the pin color when shape='pin', icon color when shape='none'
+		color: string;
 		borderWidth: number;
 		borderColor: string;
 		backgroundColor: string;
 		shadow: boolean;
-		shape: MarkerShape;
+		shape: string;
 	}
 
 	interface IconConfig {
@@ -38,34 +44,79 @@
 
 	let { initialConfig, onSave, onCancel }: Props = $props();
 
-	const DEFAULT_STYLE: IconStyle = {
-		size: 64,
-		color: '#2563eb',
-		borderWidth: 2,
-		borderColor: '#ffffff',
-		backgroundColor: '#ffffff',
-		shadow: false,
-		shape: 'none'
-	};
+	// ── State ────────────────────────────────────────────────────────
 
-	let svgContent = $state(initialConfig?.svgContent || '');
-	let style = $state<IconStyle>(initialConfig?.style || { ...DEFAULT_STYLE });
-	let fileInput: HTMLInputElement;
-	let uploadedFilename = $state('');
+	let sourceTab = $state<'templates' | 'custom'>('templates');
+	let selectedTemplate = $state<SvgIconTemplate | null>(null);
+	let iconColor = $state(initialConfig?.style?.color || '#2563eb');
+	let iconSize = $state(initialConfig?.style?.size || 32);
+	let selectedBadge = $state<BadgeTemplate | null>(null);
 
-	function handlePaste(event: ClipboardEvent) {
-		const text = event.clipboardData?.getData('text');
-		if (text && text.trim().startsWith('<svg')) {
-			svgContent = text.trim();
-			uploadedFilename = '';
-			toast.success('SVG pasted');
+	// Custom SVG state
+	let customSvgContent = $state('');
+	let customFilename = $state('');
+
+	// Init from existing config
+	if (initialConfig?.svgContent) {
+		sourceTab = 'custom';
+		customSvgContent = initialConfig.svgContent;
+	}
+
+	// ── Derived ──────────────────────────────────────────────────────
+
+	let hasIcon = $derived(
+		sourceTab === 'templates' ? selectedTemplate !== null : customSvgContent.trim().length > 0
+	);
+
+	let previewSvg = $derived.by(() => {
+		if (!hasIcon) return '';
+
+		if (sourceTab === 'templates' && selectedTemplate) {
+			return compositeIconSvg({
+				mainSvg: selectedTemplate.path,
+				isFullSvg: false,
+				mainColor: iconColor,
+				bgShape: 'none',
+				bgColor: 'transparent',
+				size: iconSize,
+				badge: selectedBadge ?? undefined
+			});
+		}
+
+		if (sourceTab === 'custom' && customSvgContent.trim()) {
+			return compositeIconSvg({
+				mainSvg: customSvgContent.trim(),
+				isFullSvg: true,
+				mainColor: iconColor,
+				bgShape: 'none',
+				bgColor: 'transparent',
+				size: iconSize,
+				badge: selectedBadge ?? undefined
+			});
+		}
+
+		return '';
+	});
+
+	// ── Handlers ─────────────────────────────────────────────────────
+
+	function selectTemplate(template: SvgIconTemplate) {
+		selectedTemplate = template;
+	}
+
+	function toggleBadge(badge: BadgeTemplate) {
+		if (selectedBadge?.id === badge.id) {
+			selectedBadge = null;
+		} else {
+			selectedBadge = badge;
 		}
 	}
+
+	let fileInput: HTMLInputElement;
 
 	async function handleFileUpload(event: Event) {
 		const input = event.target as HTMLInputElement;
 		const file = input.files?.[0];
-
 		if (!file) return;
 
 		if (!file.name.endsWith('.svg')) {
@@ -73,34 +124,55 @@
 			return;
 		}
 
-		try {
-			const text = await file.text();
-			if (text.trim().startsWith('<svg')) {
-				svgContent = text.trim();
-				uploadedFilename = file.name;
-				toast.success('SVG uploaded');
-			} else {
-				toast.error('Invalid SVG file');
-			}
-		} catch (error) {
-			toast.error('Error reading file');
+		const text = await file.text();
+		const result = validateSvg(text, file.size);
+		if (result.valid) {
+			customSvgContent = text.trim();
+			customFilename = file.name;
+			toast.success('SVG uploaded');
+		} else {
+			toast.error(result.error || 'Invalid SVG');
+		}
+	}
+
+	function handlePaste(event: ClipboardEvent) {
+		const text = event.clipboardData?.getData('text');
+		if (text && text.trim().startsWith('<svg')) {
+			customSvgContent = text.trim();
+			customFilename = '';
 		}
 	}
 
 	async function handleSave() {
-		if (!svgContent.trim()) {
-			toast.error('Please provide SVG content');
+		if (!hasIcon || !previewSvg) {
+			toast.error('Please select or provide an icon');
 			return;
 		}
 
 		const config: IconConfig = {
 			type: 'svg',
-			svgContent: svgContent.trim(),
-			style,
+			svgContent: previewSvg,
+			style: {
+				size: iconSize,
+				color: iconColor,
+				borderWidth: 0,
+				borderColor: 'transparent',
+				backgroundColor: 'transparent',
+				shadow: false,
+				shape: 'none'
+			},
 			metadata: {
-				source: uploadedFilename ? 'file-upload' : 'code-input',
-				fileSize: svgContent.length,
-				filename: uploadedFilename || 'pasted-svg.svg',
+				source:
+					sourceTab === 'templates'
+						? `template:${selectedTemplate?.id}`
+						: customFilename
+							? 'file-upload'
+							: 'code-input',
+				fileSize: previewSvg.length,
+				filename:
+					sourceTab === 'templates'
+						? `${selectedTemplate?.id}.svg`
+						: customFilename || 'custom.svg',
 				uploadDate: new Date().toISOString()
 			}
 		};
@@ -108,73 +180,20 @@
 		if (onSave) {
 			try {
 				await onSave(config);
-				toast.success('Icon saved successfully');
-			} catch (error) {
+				toast.success('Icon saved');
+			} catch {
 				toast.error('Error saving icon');
 			}
 		}
 	}
-
-	function getMarkerShapeSVG(shape: MarkerShape, size: number): string {
-		// Scale factors based on original 32x40 viewBox
-		const scaleX = size / 32;
-		const scaleY = (size * 1.25) / 40;
-
-		if (shape === 'pin') {
-			// Use the exact pin shape from the example, scaled to size
-			return `
-				<!-- Marker shadow -->
-				<ellipse cx="${16 * scaleX}" cy="${37 * scaleY}" rx="${8 * scaleX}" ry="${3 * scaleY}" fill="rgba(0,0,0,0.2)"/>
-
-				<!-- Main marker shape -->
-				<path d="M${16 * scaleX} ${2 * scaleY}
-				         C${9.373 * scaleX} ${2 * scaleY} ${4 * scaleX} ${7.373 * scaleY} ${4 * scaleX} ${14 * scaleY}
-				         C${4 * scaleX} ${22 * scaleY} ${16 * scaleX} ${36 * scaleY} ${16 * scaleX} ${36 * scaleY}
-				         S${28 * scaleX} ${22 * scaleY} ${28 * scaleX} ${14 * scaleY}
-				         C${28 * scaleX} ${7.373 * scaleY} ${22.627 * scaleX} ${2 * scaleY} ${16 * scaleX} ${2 * scaleY} Z"
-				      fill="${style.color}"
-				      stroke="${style.borderColor}"
-				      stroke-width="${style.borderWidth}"/>
-
-				<!-- Inner circle for icon background -->
-				<circle cx="${16 * scaleX}" cy="${14 * scaleY}" r="${10 * scaleX}" fill="#ffffff" opacity="0.9"/>
-			`;
-		}
-
-		return '';
-	}
-
-	function getIconPlacement(shape: MarkerShape, size: number) {
-		if (shape === 'pin') {
-			// Icon goes in the circular part of the pin (where the text was)
-			// Original circle: cx=16, cy=14, r=10 in 32x40 viewBox
-			const scaleX = size / 32;
-			const scaleY = (size * 1.25) / 40;
-			const iconSize = 16 * scaleX; // Diameter of circle is 20, use 80% = 16
-			const x = (16 * scaleX) - (iconSize / 2);
-			const y = (14 * scaleY) - (iconSize / 2);
-			return { x, y, width: iconSize, height: iconSize };
-		} else {
-			// Default placement for other shapes
-			const iconSize = size * 0.6;
-			const x = (size - iconSize) / 2;
-			const y = (size - iconSize) / 2;
-			return { x, y, width: iconSize, height: iconSize };
-		}
-	}
-
-	let isValid = $derived(svgContent.trim().length > 0);
-	let previewUrl = $derived(
-		svgContent ? `data:image/svg+xml;base64,${btoa(svgContent)}` : null
-	);
 </script>
 
-<div class="flex h-full max-h-[85vh] w-full max-w-7xl flex-col gap-6 rounded-lg border bg-background p-6">
+<div class="flex h-full max-h-[85vh] w-full max-w-4xl flex-col gap-4 rounded-lg border bg-background p-6">
 	<!-- Header -->
 	<div class="flex items-center justify-between">
 		<div>
-			<h2 class="text-2xl font-semibold">Marker Icon Designer</h2>
-			<p class="text-sm text-muted-foreground">Paste SVG code and configure display properties</p>
+			<h2 class="text-xl font-semibold">Icon Designer</h2>
+			<p class="text-sm text-muted-foreground">Choose a template or provide custom SVG</p>
 		</div>
 		{#if onCancel}
 			<Button variant="ghost" size="icon" onclick={onCancel}>
@@ -183,194 +202,170 @@
 		{/if}
 	</div>
 
-	<!-- Main Content -->
-	<div class="grid flex-1 grid-cols-2 gap-6 overflow-hidden">
-		<!-- Left: SVG Input & Style Controls -->
-		<div class="flex flex-col gap-4 overflow-auto">
-			<!-- SVG Import Options -->
-			<div class="space-y-3">
-				<Label>Import SVG</Label>
-
-				<!-- File Upload -->
-				<div class="flex gap-2">
-					<input
-						bind:this={fileInput}
-						type="file"
-						accept=".svg"
-						onchange={handleFileUpload}
-						class="hidden"
-					/>
-					<Button
-						type="button"
-						variant="outline"
-						onclick={() => fileInput.click()}
-						class="flex-1"
-					>
-						<Upload class="mr-2 h-4 w-4" />
-						Upload SVG File
-					</Button>
-					{#if uploadedFilename}
-						<div class="flex items-center gap-2 text-xs text-muted-foreground">
-							{uploadedFilename}
-						</div>
-					{/if}
-				</div>
-
-				<!-- SVG Code Textarea -->
-				<Textarea
-					id="svg-input"
-					bind:value={svgContent}
-					onpaste={handlePaste}
-					placeholder="Or paste your SVG code here..."
-					class="font-mono text-xs"
-					rows={8}
-				/>
-				<p class="text-xs text-muted-foreground">Upload a file or paste SVG code directly</p>
-			</div>
-
-			<!-- Display Mode -->
-			<div class="space-y-2">
-				<Label for="shape">Display Mode</Label>
-				<select
-					id="shape"
-					bind:value={style.shape}
-					class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+	<!-- Main content -->
+	<div class="grid flex-1 grid-cols-[1fr_auto] gap-6 overflow-hidden">
+		<!-- Left: Controls -->
+		<div class="flex flex-col gap-4 overflow-y-auto pr-2">
+			<!-- Source tabs -->
+			<div class="flex gap-2">
+				<Button
+					variant={sourceTab === 'templates' ? 'default' : 'outline'}
+					size="sm"
+					onclick={() => (sourceTab = 'templates')}
 				>
-					<option value="none">Standalone SVG</option>
-					<option value="pin">Icon in Pin Marker</option>
-				</select>
+					<Shapes class="mr-2 h-4 w-4" />
+					Templates
+				</Button>
+				<Button
+					variant={sourceTab === 'custom' ? 'default' : 'outline'}
+					size="sm"
+					onclick={() => (sourceTab = 'custom')}
+				>
+					<FileCode class="mr-2 h-4 w-4" />
+					Custom SVG
+				</Button>
 			</div>
 
-			<!-- Style Controls -->
-			<div class="grid grid-cols-2 gap-4">
+			<!-- Templates grid -->
+			{#if sourceTab === 'templates'}
 				<div class="space-y-2">
-					<Label for="size">Size (px)</Label>
-					<Input id="size" type="number" bind:value={style.size} min={16} max={256} />
-				</div>
-
-				{#if style.shape === 'pin'}
-					<div class="space-y-2">
-						<Label for="color">Pin Color</Label>
-						<div class="flex gap-2">
-							<Input id="color" type="color" bind:value={style.color} class="h-10 w-20" />
-							<Input type="text" bind:value={style.color} class="flex-1 font-mono text-xs" />
-						</div>
-					</div>
-
-					<div class="space-y-2">
-						<Label for="border-width">Border Width (px)</Label>
-						<Input
-							id="border-width"
-							type="number"
-							bind:value={style.borderWidth}
-							min={0}
-							max={10}
-						/>
-					</div>
-
-					<div class="space-y-2">
-						<Label for="border-color">Border Color</Label>
-						<div class="flex gap-2">
-							<Input
-								id="border-color"
-								type="color"
-								bind:value={style.borderColor}
-								class="h-10 w-20"
-							/>
-							<Input type="text" bind:value={style.borderColor} class="flex-1 font-mono text-xs" />
-						</div>
-					</div>
-				{/if}
-			</div>
-		</div>
-
-		<!-- Right: Live Preview -->
-		<div class="flex flex-col gap-4">
-			<Label>Preview</Label>
-			<div
-				class="flex flex-1 items-center justify-center rounded-lg border-2 border-dashed bg-muted/20 p-8"
-			>
-				{#if previewUrl}
-					{#if style.shape === 'none'}
-						<!-- Standalone SVG -->
-						<div
-							class="flex items-center justify-center"
-							style:width="{style.size}px"
-							style:height="{style.size}px"
-						>
-							<img src={previewUrl} alt="Icon preview" style:width="100%" style:height="100%" />
-						</div>
-					{:else}
-						<!-- Icon in Marker Shape -->
-						{@const placement = getIconPlacement(style.shape, style.size)}
-						<svg
-							width={style.size}
-							height={style.shape === 'pin' ? style.size * 1.25 : style.size}
-							viewBox="0 0 {style.size} {style.shape === 'pin' ? style.size * 1.25 : style.size}"
-						>
-							{@html getMarkerShapeSVG(style.shape, style.size)}
-							<image
-								href={previewUrl}
-								x={placement.x}
-								y={placement.y}
-								width={placement.width}
-								height={placement.height}
-							/>
-						</svg>
-					{/if}
-				{:else}
-					<p class="text-sm text-muted-foreground">Upload or paste SVG to see preview</p>
-				{/if}
-			</div>
-
-			<!-- Preview at different sizes -->
-			{#if previewUrl}
-				<div class="space-y-2">
-					<Label>Preview at Different Sizes</Label>
-					<div class="flex items-end gap-4 rounded-lg border bg-muted/10 p-4">
-						{#each [24, 32, 48, 64] as previewSize}
-							<div class="flex flex-col items-center gap-1">
-								{#if style.shape === 'none'}
-									<!-- Standalone SVG at different sizes -->
-									<div
-										class="flex items-center justify-center"
-										style:width="{previewSize}px"
-										style:height="{previewSize}px"
-									>
-										<img src={previewUrl} alt="Icon {previewSize}px" style:width="100%" style:height="100%" />
-									</div>
-								{:else}
-									<!-- Icon in Marker at different sizes -->
-									{@const smallPlacement = getIconPlacement(style.shape, previewSize)}
-									<svg
-										width={previewSize}
-										height={style.shape === 'pin' ? previewSize * 1.25 : previewSize}
-										viewBox="0 0 {previewSize} {style.shape === 'pin' ? previewSize * 1.25 : previewSize}"
-									>
-										{@html getMarkerShapeSVG(style.shape, previewSize)}
-										<image
-											href={previewUrl}
-											x={smallPlacement.x}
-											y={smallPlacement.y}
-											width={smallPlacement.width}
-											height={smallPlacement.height}
-										/>
+					<Label>Choose an icon</Label>
+					<div class="grid grid-cols-5 gap-2">
+						{#each ICON_TEMPLATES as template}
+							<button
+								type="button"
+								onclick={() => selectTemplate(template)}
+								class="flex flex-col items-center gap-1 rounded-lg border-2 p-2.5 transition-all hover:scale-105
+									{selectedTemplate?.id === template.id
+									? 'border-primary bg-primary/10'
+									: 'border-border hover:border-primary/50'}"
+								title={template.label}
+							>
+								<div class="h-7 w-7 text-foreground">
+									<svg viewBox="0 0 24 24" width="28" height="28">
+										{@html template.path}
 									</svg>
-								{/if}
-								<span class="text-xs text-muted-foreground">{previewSize}px</span>
-							</div>
+								</div>
+								<span class="text-[10px] text-muted-foreground">{template.label}</span>
+							</button>
 						{/each}
 					</div>
 				</div>
+			{:else}
+				<!-- Custom SVG -->
+				<div class="space-y-3">
+					<div class="flex gap-2">
+						<input
+							bind:this={fileInput}
+							type="file"
+							accept=".svg"
+							onchange={handleFileUpload}
+							class="hidden"
+						/>
+						<Button variant="outline" size="sm" onclick={() => fileInput.click()}>
+							<Upload class="mr-2 h-4 w-4" />
+							Upload SVG
+						</Button>
+						{#if customFilename}
+							<span class="flex items-center text-xs text-muted-foreground">
+								{customFilename}
+							</span>
+						{/if}
+					</div>
+					<Textarea
+						bind:value={customSvgContent}
+						onpaste={handlePaste}
+						placeholder="Or paste SVG code here..."
+						class="font-mono text-xs"
+						rows={6}
+					/>
+				</div>
 			{/if}
+
+			<!-- Icon Color -->
+			<div class="space-y-2">
+				<Label>Icon Color</Label>
+				<div class="flex items-center gap-2">
+					<input
+						type="color"
+						value={iconColor}
+						oninput={(e) => (iconColor = (e.target as HTMLInputElement).value)}
+						class="h-9 w-12 cursor-pointer rounded border border-border"
+					/>
+					<Input
+						type="text"
+						bind:value={iconColor}
+						class="h-9 w-28 font-mono text-xs"
+					/>
+				</div>
+			</div>
+
+			<!-- Size -->
+			<div class="space-y-2">
+				<Label>Size (px)</Label>
+				<Input
+					type="number"
+					bind:value={iconSize}
+					min={8}
+					max={128}
+					class="h-9 w-24"
+				/>
+			</div>
+
+			<!-- Badge -->
+			<div class="space-y-2">
+				<Label>Badge (optional)</Label>
+				<div class="flex flex-wrap gap-1.5">
+					<button
+						type="button"
+						onclick={() => (selectedBadge = null)}
+						class="flex h-9 items-center gap-1.5 rounded-md border-2 px-2.5 text-xs font-medium transition-all
+							{selectedBadge === null
+							? 'border-primary bg-primary text-primary-foreground'
+							: 'border-border hover:border-primary/50'}"
+					>
+						None
+					</button>
+					{#each BADGE_TEMPLATES as badge}
+						<button
+							type="button"
+							onclick={() => toggleBadge(badge)}
+							class="flex h-9 items-center gap-1.5 rounded-md border-2 px-2.5 text-xs font-medium transition-all
+								{selectedBadge?.id === badge.id
+								? 'border-primary bg-primary/10'
+								: 'border-border hover:border-primary/50'}"
+							title={badge.label}
+						>
+							<svg viewBox="0 0 24 24" width="16" height="16" style="color: {badge.color}">
+								{@html badge.path}
+							</svg>
+							{badge.label}
+						</button>
+					{/each}
+				</div>
+			</div>
+		</div>
+
+		<!-- Right: Preview -->
+		<div class="flex w-48 flex-col gap-3">
+			<Label>Preview</Label>
+			<div
+				class="flex flex-1 items-center justify-center rounded-lg border-2 border-dashed bg-muted/20 p-4"
+			>
+				{#if previewSvg}
+					{@html previewSvg}
+				{:else}
+					<p class="text-center text-xs text-muted-foreground">Select an icon to preview</p>
+				{/if}
+			</div>
 		</div>
 	</div>
 
-	<!-- Footer Actions -->
-	<div class="flex justify-end gap-3 border-t pt-4">
+	<!-- Footer -->
+	<div class="flex justify-end gap-3 border-t pt-3">
 		{#if onCancel}
 			<Button variant="outline" onclick={onCancel}>Cancel</Button>
 		{/if}
-		<Button onclick={handleSave} disabled={!isValid}>Save Icon</Button>
+		<Button onclick={handleSave} disabled={!hasIcon}>Save Icon</Button>
 	</div>
 </div>

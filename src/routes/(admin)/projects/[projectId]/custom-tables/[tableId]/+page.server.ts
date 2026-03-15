@@ -47,16 +47,24 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 			...(columns || [])
 		];
 
-		// Fetch table data
-		const tableData = await pb.collection('custom_table_data').getFullList({
-			filter: `table_id = "${tableId}"`,
-			sort: '-created'
-		});
+		// Fetch table data and roles in parallel
+		const [tableData, roles] = await Promise.all([
+			pb.collection('custom_table_data').getFullList({
+				filter: `table_id = "${tableId}"`,
+				sort: '-created'
+			}),
+			pb.collection('roles').getFullList({
+				filter: `project_id = "${projectId}"`,
+				fields: 'id,name',
+				sort: 'name'
+			})
+		]);
 
 		return {
 			customTable,
 			columns: allColumns,
-			tableData: tableData || []
+			tableData: tableData || [],
+			roles: roles || []
 		};
 	} catch (err) {
 		console.error('Error loading table:', err);
@@ -65,6 +73,36 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 };
 
 export const actions: Actions = {
+	updateTableMeta: async ({ request, params, locals: { pb } }) => {
+		const { tableId } = params;
+		const formData = await request.formData();
+		const field = formData.get('field') as string;
+		const value = formData.get('value') as string;
+
+		if (!field) {
+			return fail(400, { message: 'Field name is required' });
+		}
+
+		const allowedFields = ['display_name', 'description', 'visible_to_roles'];
+		if (!allowedFields.includes(field)) {
+			return fail(400, { message: 'Invalid field' });
+		}
+
+		try {
+			let parsedValue: any = value;
+			if (field === 'visible_to_roles') {
+				parsedValue = value ? JSON.parse(value) : [];
+			}
+			await pb.collection('custom_tables').update(tableId, {
+				[field]: parsedValue
+			});
+			return { success: true };
+		} catch (err) {
+			console.error('Error updating table metadata:', err);
+			return fail(500, { message: 'Failed to update table' });
+		}
+	},
+
 	createColumn: async ({ request, params, locals: { pb } }) => {
 		const { tableId } = params;
 		const formData = await request.formData();

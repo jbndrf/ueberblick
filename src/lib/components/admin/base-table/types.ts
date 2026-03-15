@@ -39,6 +39,7 @@ export interface BaseColumnConfig<TData = any> {
 		availableEntities?: any[];
 		allowCreate?: boolean;
 		onCreateEntity?: (name: string) => Promise<any>;
+		singleSelect?: boolean;
 	};
 	// For boolean toggles
 	booleanConfig?: {

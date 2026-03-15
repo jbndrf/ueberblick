@@ -34,11 +34,18 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 		// Parse fields from JSONB array
 		const fields = Array.isArray(category.fields) ? category.fields : [];
 
-		// Fetch markers for this category
-		const markersRaw = await pb.collection('markers').getFullList({
-			filter: `category_id = "${categoryId}"`,
-			sort: '-created'
-		});
+		// Fetch markers and roles in parallel
+		const [markersRaw, roles] = await Promise.all([
+			pb.collection('markers').getFullList({
+				filter: `category_id = "${categoryId}"`,
+				sort: '-created'
+			}),
+			pb.collection('roles').getFullList({
+				filter: `project_id = "${projectId}"`,
+				fields: 'id,name',
+				sort: 'name'
+			})
+		]);
 
 		// Normalize markers to parse JSON array fields from TEXT columns
 		const markers = normalizeRecords(markersRaw, 'markers');
@@ -46,7 +53,8 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 		return {
 			category,
 			fields,
-			markers: markers || []
+			markers: markers || [],
+			roles: roles || []
 		};
 	} catch (err) {
 		console.error('Error fetching marker category:', err);
@@ -55,6 +63,59 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 };
 
 export const actions: Actions = {
+	updateCategoryMeta: async ({ request, params, locals: { pb } }) => {
+		const { categoryId } = params;
+		const formData = await request.formData();
+		const field = formData.get('field') as string;
+		const value = formData.get('value') as string;
+
+		if (!field) {
+			return fail(400, { message: 'Field name is required' });
+		}
+
+		const allowedFields = ['name', 'description', 'visible_to_roles'];
+		if (!allowedFields.includes(field)) {
+			return fail(400, { message: 'Invalid field' });
+		}
+
+		try {
+			let parsedValue: any = value;
+			if (field === 'visible_to_roles') {
+				parsedValue = value ? JSON.parse(value) : [];
+			}
+			await pb.collection('marker_categories').update(categoryId, {
+				[field]: parsedValue
+			});
+			return { success: true };
+		} catch (err) {
+			console.error('Error updating category metadata:', err);
+			return fail(500, { message: 'Failed to update category' });
+		}
+	},
+
+	updateIconConfig: async ({ request, params, locals: { pb } }) => {
+		const { categoryId } = params;
+		const formData = await request.formData();
+		const iconConfigJson = formData.get('iconConfig') as string;
+
+		let iconConfig;
+		try {
+			iconConfig = iconConfigJson ? JSON.parse(iconConfigJson) : {};
+		} catch {
+			return fail(400, { message: 'Invalid icon config JSON' });
+		}
+
+		try {
+			await pb.collection('marker_categories').update(categoryId, {
+				icon_config: iconConfig
+			});
+			return { success: true };
+		} catch (err) {
+			console.error('Error updating icon config:', err);
+			return fail(500, { message: 'Failed to update icon config' });
+		}
+	},
+
 	createField: async ({ request, params, locals: { pb } }) => {
 		const { categoryId } = params;
 		const formData = await request.formData();

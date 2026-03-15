@@ -59,61 +59,6 @@ export const COLOR_PRESETS = {
 	]
 };
 
-export const STYLE_PRESETS: Record<string, MarkerStyle> = {
-	default: DEFAULT_MARKER_STYLE,
-	minimal: {
-		shape: 'none',
-		iconColor: '#2563EB',
-		backgroundColor: 'transparent',
-		size: 32,
-		borderWidth: 0,
-		borderColor: 'transparent',
-		dropShadow: false,
-		shadowOffsetX: 0,
-		shadowOffsetY: 0,
-		shadowBlur: 0,
-		shadowOpacity: 0
-	},
-	bold: {
-		shape: 'circle',
-		iconColor: '#FFFFFF',
-		backgroundColor: '#DC2626',
-		size: 40,
-		borderWidth: 3,
-		borderColor: '#991B1B',
-		dropShadow: true,
-		shadowOffsetX: 0,
-		shadowOffsetY: 3,
-		shadowBlur: 6,
-		shadowOpacity: 0.3
-	},
-	soft: {
-		shape: 'rounded',
-		iconColor: '#6366F1',
-		backgroundColor: '#E0E7FF',
-		size: 36,
-		borderWidth: 0,
-		borderColor: 'transparent',
-		dropShadow: true,
-		shadowOffsetX: 0,
-		shadowOffsetY: 2,
-		shadowBlur: 8,
-		shadowOpacity: 0.15
-	},
-	outlined: {
-		shape: 'hexagon',
-		iconColor: '#0D9488',
-		backgroundColor: 'transparent',
-		size: 36,
-		borderWidth: 2,
-		borderColor: '#0D9488',
-		dropShadow: false,
-		shadowOffsetX: 0,
-		shadowOffsetY: 0,
-		shadowBlur: 0,
-		shadowOpacity: 0
-	}
-};
 
 /**
  * Generates SVG clip-path for different marker shapes
@@ -158,22 +103,6 @@ export function getShapeLabel(shape: MarkerShape): string {
 	return labels[shape];
 }
 
-/**
- * Gets icon representation for shape picker
- */
-export function getShapeIcon(shape: MarkerShape): string {
-	const icons: Record<MarkerShape, string> = {
-		none: '○',
-		circle: '●',
-		square: '■',
-		rounded: '▢',
-		hexagon: '⬡',
-		diamond: '◆',
-		star: '★',
-		shield: '🛡'
-	};
-	return icons[shape];
-}
 
 /**
  * Generates CSS filter for drop shadow

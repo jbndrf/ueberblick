@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "ueberblick": {
+      "command": "node",
+      "args": ["mcp-server/dist/index.js"],
+      "env": {
+        "PB_URL": "http://localhost:8090",
+        "POCKETBASE_ADMIN_EMAIL": "admin@example.com",
+        "POCKETBASE_ADMIN_PASSWORD": "changeme123"
+      }
+    }
+  }
+}

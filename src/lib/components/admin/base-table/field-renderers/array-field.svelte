@@ -17,6 +17,7 @@
 			availableEntities?: any[];
 			allowCreate?: boolean;
 			onCreateEntity?: (name: string) => Promise<any>;
+			singleSelect?: boolean;
 		};
 		emptyText?: string;
 	}
@@ -103,6 +104,7 @@
 				getOptionDescription={entityConfig.getEntityDescription}
 				allowCreate={entityConfig.allowCreate ?? false}
 				onCreateOption={entityConfig.onCreateEntity}
+				singleSelect={entityConfig.singleSelect ?? false}
 				placeholder="Select or search..."
 			/>
 		{:else}

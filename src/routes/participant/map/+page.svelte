@@ -120,11 +120,13 @@
 			const label = (conn.visual_config as any)?.button_label;
 			if (label) entryLabelByWorkflow.set(conn.workflow_id as string, label);
 		}
-		const participantRoleId = data.participant.role_id;
+		const participantRoleIds: string[] = Array.isArray(data.participant.role_id)
+			? data.participant.role_id
+			: data.participant.role_id ? [data.participant.role_id] : [];
 		return (workflowsLive.records as any[])
 			.filter(wf => {
 				const roles = wf.entry_allowed_roles;
-				return !roles || roles.length === 0 || (participantRoleId && roles.includes(participantRoleId));
+				return !roles || roles.length === 0 || participantRoleIds.some(rid => roles.includes(rid));
 			})
 			.map(wf => ({
 				...wf,

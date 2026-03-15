@@ -6,7 +6,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
-	import { ArrowLeft, RefreshCw, Upload } from 'lucide-svelte';
+	import { RefreshCw, Upload, Palette } from 'lucide-svelte';
 	import { toast } from 'svelte-sonner';
 	import type { PageData } from './$types';
 	import { BaseTable, type BaseColumnConfig } from '$lib/components/admin/base-table';
@@ -16,6 +16,8 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Input } from '$lib/components/ui/input';
 	import { Checkbox } from '$lib/components/ui/checkbox';
+	import DataViewerHeader from '$lib/components/admin/data-viewer-header.svelte';
+	import MarkerIconDesigner from '$lib/components/admin/marker-icon-designer.svelte';
 
 	type MarkerRow = {
 		id: string;
@@ -41,6 +43,7 @@
 	let replaceData = $state(false);
 	let csvFile = $state<File | null>(null);
 	let importing = $state(false);
+	let iconDesignerOpen = $state(false);
 
 	const fieldConfig: FieldConfig = {
 		tableName: 'marker_categories',
@@ -200,6 +203,47 @@
 		toast.error(message);
 	}
 
+	async function updateMeta(field: string, value: any) {
+		const formData = new FormData();
+		formData.append('field', field);
+		formData.append('value', typeof value === 'string' ? value : JSON.stringify(value));
+
+		const response = await fetch('?/updateCategoryMeta', {
+			method: 'POST',
+			body: formData
+		});
+
+		const result = await response.json();
+		if (result.type === 'success') {
+			await invalidateAll();
+		} else {
+			toast.error('Failed to update');
+		}
+	}
+
+	async function handleIconSave(config: any) {
+		try {
+			const formData = new FormData();
+			formData.append('iconConfig', JSON.stringify(config));
+
+			const response = await fetch('?/updateIconConfig', {
+				method: 'POST',
+				body: formData
+			});
+
+			const result = await response.json();
+			if (result.type === 'success') {
+				iconDesignerOpen = false;
+				await invalidateAll();
+				toast.success('Icon configuration saved');
+			} else {
+				toast.error('Failed to save icon configuration');
+			}
+		} catch (error) {
+			toast.error('Error saving icon configuration');
+		}
+	}
+
 	async function handleImportCSV() {
 		if (!csvFile) {
 			toast.error(m.csvImportSelectFile());
@@ -236,38 +280,32 @@
 	}
 </script>
 
-<div class="flex flex-col gap-6 min-w-0 w-full">
-	<!-- Header with Back Button -->
-	<div class="flex items-center gap-4">
-		<Button
-			variant="outline"
-			size="sm"
-			href="/projects/{$page.params.projectId}/marker-categories"
-		>
-			<ArrowLeft class="mr-2 h-4 w-4" />
-			Back to Categories
-		</Button>
-	</div>
-
-	<!-- Page Header -->
-	<div class="flex items-center justify-between">
-		<div>
-			<h1 class="text-3xl font-bold tracking-tight">
-				{data.category.name}
-			</h1>
-			<p class="text-muted-foreground">Manage markers and custom fields for this category</p>
-		</div>
-		<div class="flex gap-2">
-			<Button variant="outline" onclick={() => (importDialogOpen = true)}>
+<div class="flex flex-col gap-4 min-w-0 w-full">
+	<!-- Entity Header -->
+	<DataViewerHeader
+		name={data.category.name}
+		description={data.category.description || ''}
+		visibleToRoles={data.category.visible_to_roles || []}
+		roles={data.roles}
+		onNameChange={(value) => updateMeta('name', value)}
+		onDescriptionChange={(value) => updateMeta('description', value)}
+		onRolesChange={(value) => updateMeta('visible_to_roles', value)}
+	>
+		{#snippet actions()}
+			<Button variant="outline" size="sm" onclick={() => (iconDesignerOpen = true)}>
+				<Palette class="mr-2 h-4 w-4" />
+				Icon
+			</Button>
+			<Button variant="outline" size="sm" onclick={() => (importDialogOpen = true)}>
 				<Upload class="mr-2 h-4 w-4" />
 				{m.csvImportButton()}
 			</Button>
-			<Button variant="outline" onclick={() => invalidateAll()}>
+			<Button variant="outline" size="sm" onclick={() => invalidateAll()}>
 				<RefreshCw class="mr-2 h-4 w-4" />
 				{m.customTableEditRefresh()}
 			</Button>
-		</div>
-	</div>
+		{/snippet}
+	</DataViewerHeader>
 
 	<!-- Base Table -->
 	<BaseTable
@@ -438,3 +476,19 @@
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>
+
+<!-- Icon Designer Modal -->
+{#if iconDesignerOpen}
+	<div class="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm" onclick={() => {
+		iconDesignerOpen = false;
+	}}></div>
+	<div class="fixed left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%]">
+		<MarkerIconDesigner
+			initialConfig={data.category.icon_config as any}
+			onSave={handleIconSave}
+			onCancel={() => {
+				iconDesignerOpen = false;
+			}}
+		/>
+	</div>
+{/if}

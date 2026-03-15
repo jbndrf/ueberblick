@@ -6,7 +6,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
-	import { ArrowLeft, Plus, RefreshCw, Upload } from 'lucide-svelte';
+	import { RefreshCw, Upload } from 'lucide-svelte';
 	import { toast } from 'svelte-sonner';
 	import type { PageData } from './$types';
 	import { BaseTable, type BaseColumnConfig } from '$lib/components/admin/base-table';
@@ -16,6 +16,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Input } from '$lib/components/ui/input';
 	import { Checkbox } from '$lib/components/ui/checkbox';
+	import DataViewerHeader from '$lib/components/admin/data-viewer-header.svelte';
 
 	type CustomTableRow = {
 		id: string;
@@ -159,40 +160,48 @@
 			importing = false;
 		}
 	}
+
+	async function updateMeta(field: string, value: any) {
+		const formData = new FormData();
+		formData.append('field', field);
+		formData.append('value', typeof value === 'string' ? value : JSON.stringify(value));
+
+		const response = await fetch('?/updateTableMeta', {
+			method: 'POST',
+			body: formData
+		});
+
+		const result = await response.json();
+		if (result.type === 'success') {
+			await invalidateAll();
+		} else {
+			toast.error('Failed to update');
+		}
+	}
 </script>
 
-<div class="flex flex-col gap-6 min-w-0 w-full">
-	<!-- Header with Back Button -->
-	<div class="flex items-center gap-4">
-		<Button
-			variant="outline"
-			size="sm"
-			href="/projects/{$page.params.projectId}/custom-tables"
-		>
-			<ArrowLeft class="mr-2 h-4 w-4" />
-			{m.customTableEditBackToTables()}
-		</Button>
-	</div>
-
-	<!-- Page Header -->
-	<div class="flex items-center justify-between">
-		<div>
-			<h1 class="text-3xl font-bold tracking-tight">
-				{m.customTableEditTitle({ tableName: data.customTable.display_name })}
-			</h1>
-			<p class="text-muted-foreground">{m.customTableEditDescription()}</p>
-		</div>
-		<div class="flex gap-2">
-			<Button variant="outline" onclick={() => (importDialogOpen = true)}>
+<div class="flex flex-col gap-4 min-w-0 w-full">
+	<!-- Entity Header -->
+	<DataViewerHeader
+		name={data.customTable.display_name}
+		description={data.customTable.description || ''}
+		visibleToRoles={data.customTable.visible_to_roles || []}
+		roles={data.roles}
+		onNameChange={(value) => updateMeta('display_name', value)}
+		onDescriptionChange={(value) => updateMeta('description', value)}
+		onRolesChange={(value) => updateMeta('visible_to_roles', value)}
+	>
+		{#snippet actions()}
+			<Button variant="outline" size="sm" onclick={() => (importDialogOpen = true)}>
 				<Upload class="mr-2 h-4 w-4" />
 				{m.csvImportButton()}
 			</Button>
-			<Button variant="outline" onclick={() => invalidateAll()}>
+			<Button variant="outline" size="sm" onclick={() => invalidateAll()}>
 				<RefreshCw class="mr-2 h-4 w-4" />
 				{m.customTableEditRefresh()}
 			</Button>
-		</div>
-	</div>
+		{/snippet}
+	</DataViewerHeader>
 
 	<!-- Base Table -->
 	<BaseTable

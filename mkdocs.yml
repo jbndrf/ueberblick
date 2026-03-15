@@ -1,0 +1,89 @@
+site_name: Ueberblick Docs
+site_description: Dokumentation fuer Ueberblick -- Geodaten-Erfassung mit Offline-Support
+repo_url: https://github.com/your-org/punktstudio
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  language: de
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Dunkelmodus
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Hellmodus
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.indexes
+    - search.highlight
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - tables
+  - attr_list
+
+nav:
+  - Start: index.md
+  - Sector Guide: ueberblick-sector-guide.md
+
+  - Handbuch:
+    - handbuch/index.md
+    - Projekte: handbuch/projekte.md
+    - Rollen & Teilnehmer: handbuch/rollen-und-teilnehmer.md
+    - Workflows: handbuch/workflows.md
+    - Tools: handbuch/tools.md
+    - Formulare: handbuch/formulare.md
+    - Karten: handbuch/karten.md
+    - Offline & Sync: handbuch/offline-und-sync.md
+    - Automatisierungen: handbuch/automatisierungen.md
+    - Zugriffskontrolle: handbuch/zugriffskontrolle.md
+    - Custom Tables: handbuch/custom-tables.md
+
+  - Tutorials:
+    - tutorials/index.md
+    - Projekt einrichten: tutorials/01-projekt-einrichten.md
+    - Erster Workflow: tutorials/02-erster-workflow.md
+    - Formulare & Tools: tutorials/03-formulare-und-tools.md
+    - Automatisierungen: tutorials/04-automatisierungen.md
+
+  - Entwicklung:
+    - dev/index.md
+    - Architektur: dev/architecture.md
+    - Getting Started: dev/getting-started.md
+    - Konventionen: dev/conventions.md
+    - Gotchas: dev/gotchas.md
+    - Erweitern:
+      - dev/extending/index.md
+      - Neue Admin-Seite: dev/extending/new-admin-page.md
+      - Neues Tool: dev/extending/new-tool.md
+      - Neuer Formularfeld-Typ: dev/extending/new-form-field-type.md
+      - Neue Teilnehmer-Ansicht: dev/extending/new-participant-view.md
+      - Gateway: dev/extending/gateway-usage.md
+      - Workflow-Builder Views: dev/extending/workflow-builder-views.md
+    - Datenbank:
+      - Migrationen: dev/db/migrations.md
+      - Schema-Referenz: dev/db/schema-reference.md
+
+  - Intern:
+    - internal/history.md
+    - internal/claude-workflow-instructions.md

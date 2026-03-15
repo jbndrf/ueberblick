@@ -431,6 +431,100 @@
 		return null;
 	}
 
+	// Entity lookup maps for resolving IDs in history display
+	// Keyed by field ID -> Map of entity ID -> label
+	let historyEntityMaps = $state<Record<string, Map<string, string>>>({});
+
+	// Load entity maps for all custom_table_selector fields
+	$effect(() => {
+		if (!detailState?.formFields || !gateway) return;
+		const selectorFields = detailState.formFields.filter(
+			(f) => f.field_type === 'custom_table_selector' && f.field_options
+		);
+		if (selectorFields.length === 0) return;
+
+		loadHistoryEntityMaps(selectorFields);
+	});
+
+	async function loadHistoryEntityMaps(fields: any[]) {
+		if (!gateway) return;
+		const maps: Record<string, Map<string, string>> = {};
+
+		for (const field of fields) {
+			const opts = typeof field.field_options === 'string'
+				? JSON.parse(field.field_options)
+				: field.field_options;
+			if (!opts) continue;
+
+			try {
+				let records: any[] = [];
+				const entityMap = new Map<string, string>();
+
+				switch (opts.source_type) {
+					case 'participants':
+						records = await gateway.collection('participants').getFullList();
+						for (const r of records) entityMap.set(r.id, r.name || r.email || r.id);
+						break;
+					case 'roles':
+						records = await gateway.collection('roles').getFullList();
+						for (const r of records) entityMap.set(r.id, r.name || r.id);
+						break;
+					case 'custom_table':
+						if (opts.custom_table_id) {
+							records = await gateway.collection('custom_table_data').getFullList({
+								filter: `table_id = "${opts.custom_table_id}"`
+							});
+							const displayField = opts.display_field || 'name';
+							for (const r of records) {
+								const rowData = typeof r.row_data === 'string' ? JSON.parse(r.row_data) : r.row_data;
+								entityMap.set(r.id, rowData?.[displayField] || r.id);
+							}
+						}
+						break;
+					case 'marker_category':
+						if (opts.marker_category_id) {
+							records = await gateway.collection('markers').getFullList({
+								filter: `category_id = "${opts.marker_category_id}"`
+							});
+							for (const r of records) entityMap.set(r.id, r.title || r.id);
+						}
+						break;
+				}
+
+				maps[field.id] = entityMap;
+			} catch (err) {
+				console.error(`Failed to load entities for field ${field.id}:`, err);
+			}
+		}
+
+		historyEntityMaps = maps;
+	}
+
+	// Format a history field value for display, resolving IDs where possible
+	function formatHistoryValue(value: any, fieldKey?: string): string {
+		if (value == null || value === '') return '(empty)';
+
+		// Parse JSON string to array if needed
+		let parsed = value;
+		if (typeof parsed === 'string' && parsed.startsWith('[')) {
+			try { parsed = JSON.parse(parsed); } catch { /* keep as string */ }
+		}
+
+		// Resolve entity IDs if we have a lookup map for this field
+		if (fieldKey && historyEntityMaps[fieldKey]) {
+			const entityMap = historyEntityMaps[fieldKey];
+			if (Array.isArray(parsed)) {
+				return parsed.map((id) => entityMap.get(String(id)) || String(id)).join(', ');
+			}
+			const resolved = entityMap.get(String(parsed));
+			if (resolved) return resolved;
+		}
+
+		// For dropdown/multiple_choice, values are already labels
+		if (Array.isArray(parsed)) return parsed.join(', ');
+		return String(parsed);
+	}
+
 	async function handleEditSave(values: Record<string, unknown>) {
 		if (!activeEditTool || !detailState || !gateway) return;
 
@@ -544,7 +638,9 @@
 				executed_at: new Date().toISOString(),
 				metadata: {
 					action: 'location_edit',
-					before: detailState.instance?.location,
+					before: detailState.instance?.location
+						? { lat: detailState.instance.location.lat, lon: detailState.instance.location.lon }
+						: null,
 					after: { lat: coordinates.lat, lon: coordinates.lng }
 				}
 			});
@@ -870,9 +966,9 @@
 							{:else}
 								{#each detailState.toolUsageHistory as entry, index (entry.id)}
 									{@const metadata = entry.metadata}
-									{@const executedBy = entry.expand?.executed_by?.name || entry.expand?.executed_by?.email || 'Unknown'}
+									{@const executedBy = metadata.action === 'admin_edit' ? 'Admin' : (entry.expand?.executed_by?.name || entry.expand?.executed_by?.email || 'Unknown')}
 									{@const executedAt = new Date(entry.executed_at).toLocaleString()}
-									{@const itemCount = (metadata.action === 'form_fill' || metadata.action === 'instance_created') ? metadata.created_fields?.length : metadata.action === 'edit' ? metadata.changes?.length : 1}
+									{@const itemCount = (metadata.action === 'form_fill' || metadata.action === 'instance_created') ? metadata.created_fields?.length : (metadata.action === 'edit' || metadata.action === 'admin_edit') ? metadata.changes?.length : 1}
 									<details class="group border rounded-lg overflow-hidden" data-testid="history-entry">
 										<summary class="flex items-center justify-between p-3 cursor-pointer hover:bg-muted/50 select-none">
 											<div class="flex items-center gap-2">
@@ -883,6 +979,8 @@
 														Form Submitted
 													{:else if metadata.action === 'edit'}
 														Fields Edited
+													{:else if metadata.action === 'admin_edit'}
+														Admin Edit
 													{:else if metadata.action === 'location_edit'}
 														Location Changed
 													{:else if metadata.action === 'stage_transition'}
@@ -915,7 +1013,7 @@
 														{@const fieldDef = detailState.formFields.find(f => f.id === field.field_key)}
 														<div class="flex gap-2">
 															<span class="text-muted-foreground">{fieldDef?.field_label || field.field_key}:</span>
-															<span class="font-medium truncate">{field.value}</span>
+															<span class="font-medium truncate">{formatHistoryValue(field.value, field.field_key)}</span>
 														</div>
 													{/each}
 												</div>
@@ -927,7 +1025,7 @@
 														{@const fieldDef = detailState.formFields.find(f => f.id === field.field_key)}
 														<div class="flex gap-2">
 															<span class="text-muted-foreground">{fieldDef?.field_label || field.field_key}:</span>
-															<span class="font-medium truncate">{field.value}</span>
+															<span class="font-medium truncate">{formatHistoryValue(field.value, field.field_key)}</span>
 														</div>
 													{/each}
 												</div>
@@ -940,9 +1038,25 @@
 														<div class="space-y-0.5">
 															<span class="text-muted-foreground">{fieldDef?.field_label || change.field_key}:</span>
 															<div class="flex items-center gap-2 text-xs">
-																<span class="line-through text-muted-foreground">{change.before || '(empty)'}</span>
+																<span class="line-through text-muted-foreground">{formatHistoryValue(change.before, change.field_key)}</span>
 																<span class="text-muted-foreground">-></span>
-																<span class="font-medium">{change.after}</span>
+																<span class="font-medium">{formatHistoryValue(change.after, change.field_key)}</span>
+															</div>
+														</div>
+													{/each}
+												</div>
+											{/if}
+
+											{#if metadata.action === 'admin_edit' && metadata.changes}
+												<div class="text-sm space-y-1">
+													{#each metadata.changes as change}
+														{@const fieldDef = detailState.formFields.find(f => f.id === change.field_key)}
+														<div class="space-y-0.5">
+															<span class="text-muted-foreground">{fieldDef?.field_label || change.field_key}:</span>
+															<div class="flex items-center gap-2 text-xs">
+																<span class="line-through text-muted-foreground">{formatHistoryValue(change.before, change.field_key)}</span>
+																<span class="text-muted-foreground">-></span>
+																<span class="font-medium">{formatHistoryValue(change.after, change.field_key)}</span>
 															</div>
 														</div>
 													{/each}

@@ -392,7 +392,7 @@ export function createParticipantGateway(participantId: string, projectId: strin
 				const now = new Date().toISOString();
 
 				const record: CachedRecord = {
-					...(data as Record<string, unknown>),
+					...JSON.parse(JSON.stringify(data)),
 					id,
 					created: now,
 					updated: now,
@@ -429,7 +429,7 @@ export function createParticipantGateway(participantId: string, projectId: strin
 				const now = new Date().toISOString();
 				const updated: CachedRecord = {
 					...existing,
-					...(data as Record<string, unknown>),
+					...JSON.parse(JSON.stringify(data)),
 					updated: now,
 					_status: existing._status === 'new' ? 'new' : 'modified'
 				};
