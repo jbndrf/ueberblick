@@ -1,7 +1,12 @@
 # Project History (Archaeological Notes)
 
-Generated from analysis of all 31 commits (Jan 11 -- Mar 5, 2026).
+Generated from analysis of all commits (Jan 11 -- Mar 15, 2026).
 This is an internal reference file, not user-facing documentation.
+
+**Note:** Git history was rewritten on 2026-03-15 for open-source launch. Junk commits
+were squashed (37 -> 28), messages reworded for clarity, and personal/dev files removed.
+Original commit hashes from before the rewrite no longer exist. The hashes in this
+document reflect the rewritten history.
 
 ---
 
@@ -52,8 +57,15 @@ Key sub-milestones:
 - **e1943f5**: Rebrand to "Ueberblick" / "Ueberblick Sector". CI/CD via GitHub Actions (Docker build + push to GHCR).
 - **25609bf**: Automation engine v3 (moved to separate `automation.js`). E2E seed for "Reinigung" demo (TAGESPLAN/RHYTHMUS workflows). Participant state context refactored.
 
-### Phase 6: Current (Mar 5, commit 7568263)
-- **7568263** ("ff"): Gateway gets `live()` and `liveOne()` methods -- reactive queries backed by IndexedDB with debouncing. Realtime simplified (PB_CONNECT triggers catch-up sync). Sync API surface reduced (removed enableAutoSync, getSyncProgress, startSyncLoop; added setSyncCollections, startPushListener, runCatchUpSync). Autodate workaround in automation.js using raw SQL.
+### Phase 6: Gateway & Sync (Mar 5)
+- Gateway gets `live()` and `liveOne()` methods -- reactive queries backed by IndexedDB with debouncing. Realtime simplified (PB_CONNECT triggers catch-up sync). Sync API surface reduced (removed enableAutoSync, getSyncProgress, startSyncLoop; added setSyncCollections, startPushListener, runCatchUpSync). Autodate workaround in automation.js using raw SQL.
+
+### Phase 7: Stabilization & Pre-launch (Mar 10--15)
+- **Automation steps**: New step-based automation execution model, E2E seed fixtures for testing, workflow builder improvements.
+- **Admin theme**: Base table component improvements, map settings refinements, participant UI polish.
+- **Access control**: FAB filtered by `entry_allowed_roles`, non-functional toolbar buttons removed.
+- **Workflow builder**: Node positioning fixes, batch request limit increased.
+- **Pre-launch cleanup**: Documentation overhaul (handbuch, tutorials, dev docs), marker icon designer consolidation, role management page, custom table improvements.
 
 ---
 
@@ -186,6 +198,46 @@ Key sub-milestones:
 
 ---
 
+## Development Patterns and Evolution
+
+### State Management
+Svelte 5 runes (`$state`, `$derived`, `$effect`) adopted from day one. No migration from stores -- the project was greenfield Svelte 5. The tracked-item pattern (entities with `_status` flags) emerged in the workflow builder and became the standard for batch-save operations.
+
+### Component Architecture Evolution
+The participant UI went through three distinct architecture patterns in ~2 months:
+1. **Module-sidebar** (Jan 17): Side panel for detail views
+2. **Module-shell** (Jan 18): Replaced sidebar with shell container
+3. **Tool-based** (Jan 18+): Tools as first-class entities within workflow instance detail
+
+### Offline Architecture (3 stages)
+1. **None** (Jan 11--13): Server-only, no offline consideration
+2. **Attempted** (Jan 14--29): `src/lib/offline/` directory with basic caching, pack downloader. Admin-to-participant pack management.
+3. **Full local-first** (Jan 30): Complete rewrite to IndexedDB-first with background sync. Old offline system deleted entirely. Gateway pattern for data access.
+
+### Automation Engine Rewrites
+Three complete rewrites in 6 days:
+1. **v1** (Feb 20): Basic triggers/conditions/actions in PocketBase hooks
+2. **v2** (Feb 23): Added arithmetic expression parser, field-to-field comparisons, cron scheduling
+3. **v3** (Feb 26): Moved to separate `automation.js`, stabilized trigger/action model
+
+### Legacy Code Lifecycle
+Imported 50k+ lines of vanilla JS admin frontend as reference code in the initial commit. Used as patterns/inspiration while building the SvelteKit equivalent. Progressively deleted across Jan 14, Jan 30, and Feb 24. Fully gone by Feb 24.
+
+### Permission Model (5 evolutionary layers)
+1. Go security middleware (Jan 11, deleted Jan 14)
+2. PocketBase API rules (Jan 14)
+3. Role-based stage/field visibility (Jan 17)
+4. Entry roles for workflow initiation (Mar 10)
+5. `workflow_visible_to_roles` for workflow-level access (Mar 15)
+
+### Migration Patterns
+47 migrations, small and focused. Each migration typically handles one concern (add a field, create a collection, adjust rules). No mega-migrations.
+
+### Testing
+E2E infrastructure added Jan 17 (Playwright, seed database, page objects, permission matrix test). Never wired to CI -- the GitHub Actions workflow only builds Docker images.
+
+---
+
 ## Commit Frequency & Development Patterns
 
 - Jan 11--13: Intense burst (10 commits in 3 days) -- workflow builder from zero to functional
@@ -194,7 +246,9 @@ Key sub-milestones:
 - Jan 23--30: Offline-first transition (5 commits, massive deletions of legacy code)
 - Feb 2--4: Polish (2 commits)
 - Feb 20--25: Automation engine + map refactor + QR + rebrand (6 commits)
-- Mar 5: Latest -- live queries and sync simplification
+- Mar 5: Live queries and sync simplification (1 commit)
+- Mar 10--12: Stabilization sprint (4 commits -- automation steps, admin theme, access control, builder fixes)
+- Mar 15: Pre-launch cleanup (1 commit -- docs, marker icons, roles, custom tables)
 
 The project shows a pattern of building features rapidly, then consolidating/rewriting. The automation engine is the clearest example (3 rewrites in 6 days). The participant-state/sync system has also been significantly refactored multiple times.
 
@@ -254,3 +308,5 @@ Documentation audit performed against current source code (2026-03-05). Every cl
 |------|-------|--------|
 | 2026-03-05 | Initial audit | Full documentation suite created from codebase analysis of all 31 commits. Corrections applied (Go version, Vite proxy specifics, E2E seed auth collection). Missing systems documented (SvelteKit API routes, server utilities). |
 | 2026-03-05 | Branding fix (README, ARCHITECTURE, CONTRIBUTING) | Replaced "Ueberblick" with "Überblick" throughout all three docs to match actual source code branding (see commit e1943f5). |
+| 2026-03-15 | History rewrite for open-source launch | Squashed 37 commits to 28 (fixup junk commits), rewrote all commit messages for clarity, removed personal/dev files from tracking. Original history preserved in backup. |
+| 2026-03-15 | Extended coverage | Added Phase 7 (Mar 10--15 commits), Development Patterns section. |

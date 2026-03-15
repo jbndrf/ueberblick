@@ -85,3 +85,13 @@ static/tiles
 
 # Python venv (mkdocs)
 .venv/
+
+# Personal/local config
+.mcp.json
+.claude/settings.local.json
+
+# Generated/cached
+project.inlang/cache/
+
+# Doc review artifacts
+*_reviewed.md

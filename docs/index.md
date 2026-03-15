@@ -14,4 +14,4 @@
 | [Handbuch](handbuch/) | Kompakte Einzelreferenz zu jedem Konzept |
 | [Tutorials](tutorials/) | Schritt-fuer-Schritt Anleitungen |
 | [Entwicklung](dev/) | Architektur, Konventionen, Erweiterbarkeit |
-| [Intern](internal/history.md) | Projekthistorie, Claude-Anweisungen |
+| [Intern](internal/history.md) | Projekthistorie |
