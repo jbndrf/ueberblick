@@ -92,6 +92,7 @@ static/tiles
 
 # Generated/cached
 project.inlang/cache/
+stress-tests/results/
 
 # Doc review artifacts
 *_reviewed.md
