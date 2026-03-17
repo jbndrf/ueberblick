@@ -96,6 +96,7 @@
 	// Live Queries -- reactive, auto-updating from IndexedDB
 	// ==========================================================================
 
+	const projectLive = gateway.collection('projects').live();
 	const layersLive = gateway.collection('map_layers').live({ filter: 'is_active = true', sort: 'display_order' });
 	const markersLive = gateway.collection('markers').live({ expand: 'category_id' });
 	const instancesLive = gateway.collection('workflow_instances').live({ expand: 'workflow_id' });
@@ -106,12 +107,28 @@
 	const connectionsLive = gateway.collection('workflow_connections').live({ filter: 'from_stage_id = ""' });
 
 	// Derived data from live queries
+	const project = $derived(projectLive.records[0]);
 	const mapLayers = $derived(layersLive.records);
 	const markers = $derived(markersLive.records);
 	const workflowInstances = $derived(instancesLive.records);
 	const workflowStages = $derived(stagesLive.records);
 	const fieldTags = $derived(fieldTagsLive.records);
 	const fieldValues = $derived(fieldValuesLive.records);
+
+	// Map settings: base layer config takes priority, then project defaults
+	const mapSettings = $derived.by(() => {
+		const baseLayer = mapLayers.find((l: any) => l.layer_type === 'base');
+		const baseConfig = baseLayer?.config as any;
+		const projectDefaults = (project?.settings as any)?.map_defaults;
+
+		const center_lat = baseConfig?.default_center?.lat ?? projectDefaults?.center?.lat;
+		const center_lon = baseConfig?.default_center?.lng ?? projectDefaults?.center?.lng;
+		const default_zoom = baseConfig?.default_zoom ?? projectDefaults?.zoom;
+
+		if (center_lat == null && center_lon == null && default_zoom == null) return undefined;
+
+		return { center_lat, center_lon, default_zoom };
+	});
 
 	// Workflows with entry labels derived from connections, filtered by participant role
 	const workflows: Workflow[] = $derived.by(() => {
@@ -139,6 +156,7 @@
 
 	// Cleanup live queries on destroy
 	onDestroy(() => {
+		projectLive.destroy();
 		layersLive.destroy();
 		markersLive.destroy();
 		instancesLive.destroy();
@@ -512,6 +530,7 @@
 		layers={mapLayers}
 		{activeBaseLayerId}
 		{activeOverlayIds}
+		{mapSettings}
 		{markers}
 		{visibleCategoryIds}
 		{workflowInstances}
