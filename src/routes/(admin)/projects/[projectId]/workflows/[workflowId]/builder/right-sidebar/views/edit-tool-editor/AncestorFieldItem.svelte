@@ -7,11 +7,8 @@
 		field: ToolsFormField;
 		isSelected: boolean;
 		onToggle?: () => void;
-		/** Show pre-fill toggle (protocol tool context) */
 		showPrefillToggle?: boolean;
-		/** Whether pre-fill is enabled for this field (default: true) */
 		prefillEnabled?: boolean;
-		/** Callback when pre-fill toggle changes */
 		onTogglePrefill?: () => void;
 	};
 
@@ -130,4 +127,5 @@
 	.prefill-toggle.prefill-off:hover {
 		background: hsl(var(--accent));
 	}
+
 </style>

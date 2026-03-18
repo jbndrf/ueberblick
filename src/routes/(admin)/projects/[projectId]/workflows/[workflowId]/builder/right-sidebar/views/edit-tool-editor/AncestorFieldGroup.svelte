@@ -11,11 +11,8 @@
 		selectedFieldIds: string[];
 		onToggleField?: (fieldId: string) => void;
 		defaultOpen?: boolean;
-		/** Show pre-fill toggle on each field (protocol tool context) */
 		showPrefillToggle?: boolean;
-		/** Pre-fill config: field ID -> boolean (default true) */
 		prefillConfig?: Record<string, boolean>;
-		/** Callback when pre-fill toggle changes for a field */
 		onTogglePrefill?: (fieldId: string) => void;
 	};
 
@@ -107,7 +104,7 @@
 						isSelected={selectedFieldIds.includes(field.id)}
 						onToggle={() => onToggleField?.(field.id)}
 						{showPrefillToggle}
-						prefillEnabled={prefillConfig[field.id] ?? true}
+						prefillEnabled={prefillConfig[field.id] !== false}
 						onTogglePrefill={() => onTogglePrefill?.(field.id)}
 					/>
 				{/each}

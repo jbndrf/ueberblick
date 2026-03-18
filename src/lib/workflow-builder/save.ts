@@ -46,6 +46,9 @@ export async function saveWorkflow(
 		changes.editTools.new.length > 0 ||
 		changes.editTools.modified.length > 0 ||
 		changes.editTools.deleted.length > 0 ||
+		changes.protocolTools.new.length > 0 ||
+		changes.protocolTools.modified.length > 0 ||
+		changes.protocolTools.deleted.length > 0 ||
 		changes.automations.new.length > 0 ||
 		changes.automations.modified.length > 0 ||
 		changes.automations.deleted.length > 0;
@@ -56,6 +59,7 @@ export async function saveWorkflow(
 		forms: { new: changes.forms.new.length, modified: changes.forms.modified.length, deleted: changes.forms.deleted.length },
 		formFields: { new: changes.formFields.new.length, modified: changes.formFields.modified.length, deleted: changes.formFields.deleted.length },
 		editTools: { new: changes.editTools.new.length, modified: changes.editTools.modified.length, deleted: changes.editTools.deleted.length },
+		protocolTools: { new: changes.protocolTools.new.length, modified: changes.protocolTools.modified.length, deleted: changes.protocolTools.deleted.length },
 		automations: { new: changes.automations.new.length, modified: changes.automations.modified.length, deleted: changes.automations.deleted.length }
 	});
 
@@ -133,7 +137,20 @@ export async function saveWorkflow(
 		}
 
 		// =======================================================================
-		// 6. Automations
+		// 6. Protocol Tools
+		// =======================================================================
+		for (const tool of changes.protocolTools.new) {
+			batch.collection('tools_protocol').create(tool);
+		}
+		for (const tool of changes.protocolTools.modified) {
+			batch.collection('tools_protocol').update(tool.id, tool);
+		}
+		for (const toolId of changes.protocolTools.deleted) {
+			batch.collection('tools_protocol').delete(toolId);
+		}
+
+		// =======================================================================
+		// 7. Automations
 		// =======================================================================
 		for (const automation of changes.automations.new) {
 			batch.collection('tools_automation').create(automation);

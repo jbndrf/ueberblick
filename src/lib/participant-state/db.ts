@@ -77,6 +77,7 @@ export interface CachedRecord {
 	_collection: string; // collection name
 	_status: 'unchanged' | 'new' | 'modified' | 'deleted';
 	_serverUpdated?: string; // server's `updated` timestamp at last pull (for conflict detection)
+	_syncingAt?: number; // timestamp when push started (prevents duplicate submissions)
 	_error?: string;
 	_retryCount?: number;
 	id: string;

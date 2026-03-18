@@ -54,6 +54,7 @@ export interface ToolForm {
 	stage_id: string;
 	name: string;
 	description: string;
+	tool_order?: number;
 	allowed_roles: string[];
 	visual_config?: Record<string, unknown>;
 }
@@ -83,12 +84,25 @@ export interface ToolEdit {
 	stage_id: string[];
 	name: string;
 	editable_fields: string[];
-	edit_mode: 'form_fields' | 'location' | 'protocol';
+	edit_mode: 'form_fields' | 'location';
 	is_global: boolean;
+	tool_order?: number;
 	allowed_roles: string[];
 	visual_config?: Record<string, unknown>;
-	protocol_form_id?: string;
+}
+
+export interface ToolProtocol {
+	id: string;
+	connection_id?: string;
+	stage_id: string[];
+	is_global: boolean;
+	name: string;
+	editable_fields: string[];
 	prefill_config?: Record<string, boolean>;
+	protocol_form_id?: string;
+	tool_order?: number;
+	allowed_roles: string[];
+	visual_config?: Record<string, unknown>;
 }
 
 export interface DisplayFieldValue {
@@ -101,8 +115,8 @@ export interface DisplayFieldValue {
 }
 
 export interface ToolQueueItem {
-	type: 'form' | 'edit';
-	tool: ToolForm | ToolEdit;
+	type: 'form' | 'edit' | 'protocol';
+	tool: ToolForm | ToolEdit | ToolProtocol;
 }
 
 export interface ActionButton {
@@ -166,6 +180,7 @@ export class WorkflowInstanceDetailState {
 	forms = $state<ToolForm[]>([]);
 	formFields = $state<FormField[]>([]);
 	editTools = $state<ToolEdit[]>([]);
+	protocolTools = $state<ToolProtocol[]>([]);
 	toolUsageHistory = $state<ToolUsageRecord[]>([]);
 
 	// UI state
@@ -249,7 +264,7 @@ export class WorkflowInstanceDetailState {
 			const workflowId = instanceResult.workflow_id as string;
 
 			// Now load all related data in parallel
-			const [stagesResult, connectionsResult, fieldValuesResult, formsResult, formFieldsResult, editToolsResult, toolUsageResult] = await Promise.all([
+			const [stagesResult, connectionsResult, fieldValuesResult, formsResult, formFieldsResult, editToolsResult, protocolToolsResult, toolUsageResult] = await Promise.all([
 				this.gateway.collection('workflow_stages').getFullList({
 					filter: `workflow_id = "${workflowId}"`,
 					sort: 'stage_order'
@@ -265,6 +280,7 @@ export class WorkflowInstanceDetailState {
 				}),
 				this.gateway.collection('tools_form_fields').getFullList(),
 				this.gateway.collection('tools_edit').getFullList(),
+				this.gateway.collection('tools_protocol').getFullList(),
 				this.gateway.collection('workflow_instance_tool_usage').getFullList({
 					filter: `instance_id = "${this.instanceId}"`,
 					sort: '-executed_at',
@@ -296,6 +312,14 @@ export class WorkflowInstanceDetailState {
 				if (connectionIds.includes(e.connection_id)) return true;
 				// Include if attached to any stage in this workflow (stage_id is now an array)
 				if (e.stage_id && e.stage_id.some(sid => stageIds.includes(sid))) return true;
+				return false;
+			});
+
+			// Filter protocol tools: exclude global (automation-only), keep stage/connection-attached
+			this.protocolTools = (protocolToolsResult as unknown as ToolProtocol[]).filter(p => {
+				if (p.is_global) return false;
+				if (p.connection_id && connectionIds.includes(p.connection_id)) return true;
+				if (p.stage_id && p.stage_id.some(sid => stageIds.includes(sid))) return true;
 				return false;
 			});
 
@@ -514,37 +538,52 @@ export class WorkflowInstanceDetailState {
 		return result;
 	}
 
-	/**
-	 * Get form fields for a specific protocol form.
-	 * Used by ProtocolTool to load the protocol-specific fields.
-	 */
-	getProtocolFormFields(protocolFormId: string): FormField[] {
-		return this.formFields
-			.filter(f => f.form_id === protocolFormId)
-			.sort((a, b) => {
-				const pageA = a.page ?? 0;
-				const pageB = b.page ?? 0;
-				if (pageA !== pageB) return pageA - pageB;
-				const rowA = a.row_index ?? 0;
-				const rowB = b.row_index ?? 0;
-				if (rowA !== rowB) return rowA - rowB;
-				return (a.field_order ?? 0) - (b.field_order ?? 0);
-			});
-	}
-
 	// ==========================================================================
 	// Tool Helpers
 	// ==========================================================================
 
-	/** Get tools for a connection */
+	/** Get protocol tools available for a specific stage (attached directly to stage, not connection) */
+	getProtocolToolsForStage(stageId: string): ToolProtocol[] {
+		return this.protocolTools.filter(p => {
+			if (p.connection_id) return false;
+			if (!p.stage_id || p.stage_id.length === 0) return false;
+			return p.stage_id.includes(stageId);
+		});
+	}
+
+	/** Get protocol tools for a specific connection */
+	getProtocolToolsForConnection(connectionId: string): ToolProtocol[] {
+		return this.protocolTools.filter(p => p.connection_id === connectionId);
+	}
+
+	/** Get form fields for a protocol form, sorted by page/row/order */
+	getProtocolFormFields(protocolFormId: string): FormField[] {
+		const form = this.forms.find(f => f.id === protocolFormId);
+		if (!form) return [];
+
+		return this.formFields
+			.filter(f => f.form_id === protocolFormId)
+			.sort((a, b) => {
+				if ((a.page ?? 1) !== (b.page ?? 1)) return (a.page ?? 1) - (b.page ?? 1);
+				if ((a.row_index ?? 0) !== (b.row_index ?? 0)) return (a.row_index ?? 0) - (b.row_index ?? 0);
+				const posOrder = { left: 0, right: 1, full: 2 };
+				return (posOrder[a.column_position ?? 'full'] ?? 2) - (posOrder[b.column_position ?? 'full'] ?? 2);
+			});
+	}
+
+	/** Get tools for a connection, sorted by tool_order */
 	getToolsForConnection(connectionId: string): ToolQueueItem[] {
 		const connectionForms = this.forms.filter(f => f.connection_id === connectionId);
 		const connectionEditTools = this.editTools.filter(e => e.connection_id === connectionId);
+		const connectionProtocolTools = this.protocolTools.filter(p => p.connection_id === connectionId);
 
-		return [
+		const allTools: ToolQueueItem[] = [
 			...connectionForms.map(f => ({ type: 'form' as const, tool: f })),
-			...connectionEditTools.map(e => ({ type: 'edit' as const, tool: e }))
+			...connectionEditTools.map(e => ({ type: 'edit' as const, tool: e })),
+			...connectionProtocolTools.map(p => ({ type: 'protocol' as const, tool: p }))
 		];
+
+		return allTools.sort((a, b) => (a.tool.tool_order ?? 0) - (b.tool.tool_order ?? 0));
 	}
 
 	// ==========================================================================

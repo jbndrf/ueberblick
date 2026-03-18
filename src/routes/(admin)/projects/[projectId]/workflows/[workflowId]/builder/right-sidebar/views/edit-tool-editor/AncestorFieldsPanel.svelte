@@ -16,11 +16,11 @@
 		selectedFieldIds: string[];
 		/** Callback when field selection changes */
 		onToggleField?: (fieldId: string) => void;
-		/** Show pre-fill toggle on each field (protocol tool context) */
+		/** Whether to show prefill toggle on selected fields */
 		showPrefillToggle?: boolean;
-		/** Pre-fill config: field ID -> boolean (default true) */
+		/** Per-field prefill config (field_id -> enabled) */
 		prefillConfig?: Record<string, boolean>;
-		/** Callback when pre-fill toggle changes for a field */
+		/** Callback when prefill toggle is clicked */
 		onTogglePrefill?: (fieldId: string) => void;
 	};
 

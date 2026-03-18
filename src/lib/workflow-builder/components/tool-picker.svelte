@@ -9,11 +9,17 @@
 		onSelectTool: (toolType: string) => void;
 		/** Currently selected tool type (for highlighting) */
 		selectedToolType?: string;
+		/** Optional filter: only show these tool types */
+		allowedToolTypes?: string[];
 	};
 
-	let { attachmentTarget, onSelectTool, selectedToolType }: Props = $props();
+	let { attachmentTarget, onSelectTool, selectedToolType, allowedToolTypes }: Props = $props();
 
-	const tools = $derived(toolRegistry.getToolsFor(attachmentTarget));
+	const tools = $derived.by(() => {
+		const all = toolRegistry.getToolsFor(attachmentTarget);
+		if (!allowedToolTypes) return all;
+		return all.filter(t => allowedToolTypes.includes(t.toolType));
+	});
 
 	const sectionTitle = $derived(
 		attachmentTarget === 'global' ? 'Global Tools' :

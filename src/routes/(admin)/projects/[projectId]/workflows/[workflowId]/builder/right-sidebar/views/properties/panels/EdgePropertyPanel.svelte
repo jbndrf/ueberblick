@@ -13,7 +13,7 @@
 	import PropertySection from '../shared/PropertySection.svelte';
 
 	import { toolRegistry } from '$lib/workflow-builder/tools';
-	import type { ToolsForm, ToolsEdit, VisualConfig } from '$lib/workflow-builder';
+	import type { ToolsForm, ToolsEdit, ToolsProtocol, VisualConfig } from '$lib/workflow-builder';
 
 	type Role = {
 		id: string;
@@ -29,6 +29,8 @@
 		connectionForms?: ToolsForm[];
 		/** Connection-attached edit tools */
 		connectionEditTools?: ToolsEdit[];
+		/** Connection-attached protocol tools */
+		connectionProtocolTools?: ToolsProtocol[];
 		onRename?: (edgeId: string, newName: string) => void;
 		onDelete?: (edgeId: string) => void;
 		onRolesChange?: (edgeId: string, roleIds: string[]) => void;
@@ -47,6 +49,7 @@
 		roles,
 		connectionForms = [],
 		connectionEditTools = [],
+		connectionProtocolTools = [],
 		onRename,
 		onDelete,
 		onRolesChange,
@@ -60,8 +63,16 @@
 	const isEntryConnection = $derived(edge.data?.isEntry === true);
 	const isEditAction = $derived(!isEntryConnection && edge.source === edge.target);
 
-	// All connected tools
-	const hasConnectedTools = $derived(connectionForms.length > 0 || connectionEditTools.length > 0);
+	// All connected tools merged and sorted by tool_order
+	const sortedTools = $derived.by(() => {
+		const all: Array<{ type: string; id: string; name: string; tool_order: number }> = [
+			...connectionForms.map(f => ({ type: 'form', id: f.id, name: f.name, tool_order: f.tool_order ?? 0 })),
+			...connectionEditTools.map(e => ({ type: 'edit', id: e.id, name: e.name, tool_order: e.tool_order ?? 0 })),
+			...connectionProtocolTools.map(p => ({ type: 'protocol', id: p.id, name: p.name, tool_order: p.tool_order ?? 0 }))
+		];
+		return all.sort((a, b) => a.tool_order - b.tool_order);
+	});
+	const hasConnectedTools = $derived(sortedTools.length > 0);
 
 	// Local state for editing
 	let actionName = $state(typeof edge.label === 'string' ? edge.label : 'Action');
@@ -215,40 +226,14 @@
 						<p class="empty-text">No tools attached to this connection.</p>
 					{:else}
 						<div class="tools-list">
-							{#each connectionForms as form (form.id)}
-								{@const ToolIcon = getToolIcon('form')}
-								{@const iconColor = getToolColor('form')}
+							{#each sortedTools as tool (tool.id)}
+								{@const ToolIcon = getToolIcon(tool.type)}
+								{@const iconColor = getToolColor(tool.type)}
 								<div class="tool-item">
 									<button
 										class="tool-info"
 										type="button"
-										onclick={() => onSelectTool?.('form', form.id)}
-									>
-										<div class="tool-icon" style="--icon-color: {iconColor}">
-											{#if ToolIcon}
-												<ToolIcon class="icon" />
-											{/if}
-										</div>
-										<span class="tool-name">{form.name}</span>
-									</button>
-									<button
-										class="delete-btn"
-										type="button"
-										onclick={() => onDeleteTool?.('form', form.id)}
-										title="Delete tool"
-									>
-										<Trash2 class="h-3.5 w-3.5" />
-									</button>
-								</div>
-							{/each}
-							{#each connectionEditTools as tool (tool.id)}
-								{@const ToolIcon = getToolIcon('edit')}
-								{@const iconColor = getToolColor('edit')}
-								<div class="tool-item">
-									<button
-										class="tool-info"
-										type="button"
-										onclick={() => onSelectTool?.('edit', tool.id)}
+										onclick={() => onSelectTool?.(tool.type, tool.id)}
 									>
 										<div class="tool-icon" style="--icon-color: {iconColor}">
 											{#if ToolIcon}
@@ -260,7 +245,7 @@
 									<button
 										class="delete-btn"
 										type="button"
-										onclick={() => onDeleteTool?.('edit', tool.id)}
+										onclick={() => onDeleteTool?.(tool.type, tool.id)}
 										title="Delete tool"
 									>
 										<Trash2 class="h-3.5 w-3.5" />

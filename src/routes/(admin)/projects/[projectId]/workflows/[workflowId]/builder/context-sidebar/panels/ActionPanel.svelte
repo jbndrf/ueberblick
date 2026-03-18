@@ -9,9 +9,11 @@
 		onEditAction: () => void;
 		onDeleteAction: () => void;
 		onAddProgressTool: (toolType: string) => void;
+		/** Optional filter: only show these tool types */
+		allowedToolTypes?: string[];
 	};
 
-	let { context, onAddProgressTool }: Props = $props();
+	let { context, onAddProgressTool, allowedToolTypes }: Props = $props();
 
 	const isEditAction = $derived(context.action.source === context.action.target);
 	const actionLabel = $derived((context.action.label as string) || 'Unnamed Action');
@@ -28,7 +30,7 @@
 
 	<!-- Connection Tools -->
 	<div class="panel-content">
-		<ToolPicker attachmentTarget="connection" onSelectTool={onAddProgressTool} />
+		<ToolPicker attachmentTarget="connection" onSelectTool={onAddProgressTool} {allowedToolTypes} />
 	</div>
 </div>
 

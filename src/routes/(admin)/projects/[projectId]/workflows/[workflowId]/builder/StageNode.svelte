@@ -4,11 +4,19 @@
 	import { ToolBar } from '$lib/workflow-builder/components';
 	import type { ToolInstance } from '$lib/workflow-builder/tools';
 
+	type RegionInfo = {
+		id: string;
+		name: string;
+		color: string;
+	};
+
 	type StageData = {
 		title: string;
 		key: string;
 		stageType: 'start' | 'intermediate' | 'end';
 		maxHours?: number | null;
+		/** Protocol regions this stage belongs to */
+		regions?: RegionInfo[];
 		/** Stage actions attached to this stage */
 		tools?: ToolInstance[];
 		/** Currently selected tool ID */
@@ -41,6 +49,8 @@
 	};
 
 	const config = $derived(typeConfig[data.stageType] || typeConfig.intermediate);
+	const regions = $derived(data.regions ?? []);
+	const inRegion = $derived(regions.length > 0);
 </script>
 
 <div
@@ -49,6 +59,7 @@
 	class:node-start={data.stageType === 'start'}
 	class:node-intermediate={data.stageType === 'intermediate'}
 	class:node-end={data.stageType === 'end'}
+	class:in-region={inRegion}
 >
 	<!-- Input handle - all stages have target handles (start stages receive entry connections) -->
 	<Handle
@@ -75,6 +86,18 @@
 				<span class="stage-hours">{data.maxHours}h</span>
 			{/if}
 		</div>
+
+		{#if inRegion}
+			<div class="region-indicators">
+				{#each regions as region (region.id)}
+					<span
+						class="region-dot"
+						style="background: {region.color};"
+						title={region.name}
+					></span>
+				{/each}
+			</div>
+		{/if}
 
 		<!-- Stage Actions ToolBar -->
 		{#if selected || tools.length > 0}
@@ -190,6 +213,34 @@
 
 	.node-end :global(.stage-header svg) {
 		color: rgb(236 72 153);
+	}
+
+	/* Region highlight */
+	.stage-node.in-region {
+		box-shadow:
+			0 1px 2px oklch(0 0 0 / 0.04),
+			0 4px 8px oklch(0 0 0 / 0.06),
+			inset 0 0 0 1px oklch(0.55 0.15 160 / 0.15);
+	}
+
+	:global(.dark) .stage-node.in-region {
+		box-shadow:
+			0 1px 2px oklch(0 0 0 / 0.2),
+			0 4px 12px oklch(0 0 0 / 0.3),
+			inset 0 0 0 1px oklch(0.55 0.15 160 / 0.2);
+	}
+
+	.region-indicators {
+		display: flex;
+		gap: 0.25rem;
+		align-items: center;
+	}
+
+	.region-dot {
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		opacity: 0.7;
 	}
 
 	/* Content styles */

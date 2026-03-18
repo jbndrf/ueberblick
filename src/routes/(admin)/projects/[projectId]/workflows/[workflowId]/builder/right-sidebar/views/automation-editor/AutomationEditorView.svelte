@@ -13,7 +13,8 @@
 		ToolsAutomation,
 		AutomationStep,
 		TriggerType,
-		TriggerConfig
+		TriggerConfig,
+		ExecutionMode
 	} from '$lib/workflow-builder';
 
 	type StageOption = { id: string; name: string };
@@ -28,6 +29,7 @@
 		onTriggerTypeChange?: (triggerType: TriggerType) => void;
 		onTriggerConfigChange?: (config: TriggerConfig) => void;
 		onStepsChange?: (steps: AutomationStep[]) => void;
+		onExecutionModeChange?: (mode: ExecutionMode) => void;
 		onDelete?: () => void;
 		onClose?: () => void;
 	};
@@ -41,6 +43,7 @@
 		onTriggerTypeChange,
 		onTriggerConfigChange,
 		onStepsChange,
+		onExecutionModeChange,
 		onDelete,
 		onClose
 	}: Props = $props();
@@ -211,6 +214,22 @@
 				</div>
 			</div>
 
+			<!-- Execution Mode -->
+			<div class="field-group">
+				<Label class="text-xs">Execution Mode</Label>
+				<select
+					class="execution-mode-select"
+					value={automation.execution_mode || 'run_all'}
+					onchange={(e) => onExecutionModeChange?.(e.currentTarget.value as ExecutionMode)}
+				>
+					<option value="run_all">Run all matching steps</option>
+					<option value="first_match">Stop at first match</option>
+				</select>
+				{#if (automation.execution_mode || 'run_all') === 'first_match'}
+					<span class="mode-hint">Steps act as a priority list -- only the first matching step executes.</span>
+				{/if}
+			</div>
+
 			<!-- Steps -->
 			<div class="section">
 				<span class="section-title">Steps</span>
@@ -366,5 +385,22 @@
 		padding: 1rem;
 		border-top: 1px solid hsl(var(--border));
 		margin-top: 0.5rem;
+	}
+
+	.execution-mode-select {
+		height: 2rem;
+		width: 100%;
+		font-size: 0.8125rem;
+		border: 1px solid hsl(var(--border));
+		border-radius: 0.375rem;
+		padding: 0 0.5rem;
+		background: hsl(var(--background));
+		color: hsl(var(--foreground));
+	}
+
+	.mode-hint {
+		font-size: 0.6875rem;
+		color: hsl(var(--muted-foreground));
+		line-height: 1.3;
 	}
 </style>

@@ -130,13 +130,13 @@ const automationTool: ToolDefinition = {
 	defaultColor: '#F59E0B'
 };
 
-// Protocol tool - recurring data collection with snapshot
+// Protocol tool - recurring data collection with snapshot archiving
 const protocolTool: ToolDefinition = {
 	toolType: 'protocol',
 	displayName: 'Protocol',
 	description: 'Recurring data collection with snapshot archiving',
 	icon: ClipboardList,
-	attachableTo: ['stage'],
+	attachableTo: ['stage', 'connection', 'global'],
 	defaultColor: '#059669'
 };
 

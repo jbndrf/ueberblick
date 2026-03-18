@@ -66,9 +66,26 @@
 		if (fd.type === 'custom_table_selector' && fd.resolvedEntities) {
 			return fd.resolvedEntities;
 		}
-		// dropdown/multiple_choice: use inline options from field_options
 		const opts = fd.fieldOptions;
 		if (!opts) return [];
+		// smart_dropdown: collect all options from all conditional mappings
+		if (fd.type === 'smart_dropdown' && Array.isArray(opts.mappings)) {
+			const seen = new Set<string>();
+			const entities: Array<{ id: string; label: string }> = [];
+			for (const mapping of opts.mappings) {
+				if (Array.isArray(mapping.options)) {
+					for (const o of mapping.options) {
+						const label = o.label || o.value || o.id;
+						if (!seen.has(label)) {
+							seen.add(label);
+							entities.push({ id: label, label });
+						}
+					}
+				}
+			}
+			return entities;
+		}
+		// dropdown/multiple_choice: use inline options from field_options
 		if (Array.isArray(opts.options)) {
 			return opts.options.map((o: any) => ({
 				id: o.value || o.label || o.id,

@@ -27,7 +27,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 		}
 
 		// Load workflow builder data - these collections may not exist yet
-		const [stages, connections, forms, formFields, editTools, automations, fieldTags, roles] = await Promise.all([
+		const [stages, connections, forms, formFields, editTools, protocolTools, automations, fieldTags, roles] = await Promise.all([
 			safeGetFullList(pb, 'workflow_stages', {
 				filter: `workflow_id = "${workflowId}"`,
 				sort: 'stage_order'
@@ -36,12 +36,19 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 				filter: `workflow_id = "${workflowId}"`
 			}),
 			safeGetFullList(pb, 'tools_forms', {
-				filter: `workflow_id = "${workflowId}"`
+				filter: `workflow_id = "${workflowId}"`,
+				sort: 'tool_order'
 			}),
 			safeGetFullList(pb, 'tools_form_fields', {
 				sort: 'field_order'
 			}),
-			safeGetFullList(pb, 'tools_edit', {}),
+			safeGetFullList(pb, 'tools_edit', {
+				sort: 'tool_order'
+			}),
+			safeGetFullList(pb, 'tools_protocol', {
+				filter: `workflow_id = "${workflowId}"`,
+				sort: 'tool_order'
+			}),
 			safeGetFullList(pb, 'tools_automation', {
 				filter: `workflow_id = "${workflowId}"`
 			}),
@@ -73,6 +80,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 			forms,
 			formFields: workflowFormFields,
 			editTools: workflowEditTools,
+			protocolTools,
 			automations,
 			fieldTags,
 			roles
@@ -124,6 +132,7 @@ export const actions: Actions = {
 			forms: { new: any[]; modified: any[]; deleted: string[] };
 			formFields: { new: any[]; modified: any[]; deleted: string[] };
 			editTools: { new: any[]; modified: any[]; deleted: string[] };
+			protocolTools?: { new: any[]; modified: any[]; deleted: string[] };
 			automations: { new: any[]; modified: any[]; deleted: string[] };
 			fieldTags?: { new: any[]; modified: any[]; deleted: string[] };
 		};
@@ -192,7 +201,20 @@ export const actions: Actions = {
 				batch.collection('tools_edit').delete(toolId);
 			}
 
-			// 6. Automations
+			// 6. Protocol Tools
+			if (changes.protocolTools) {
+				for (const tool of changes.protocolTools.new) {
+					batch.collection('tools_protocol').create(tool);
+				}
+				for (const tool of changes.protocolTools.modified) {
+					batch.collection('tools_protocol').update(tool.id, tool);
+				}
+				for (const toolId of changes.protocolTools.deleted) {
+					batch.collection('tools_protocol').delete(toolId);
+				}
+			}
+
+			// 7. Automations
 			if (changes.automations) {
 				for (const automation of changes.automations.new) {
 					batch.collection('tools_automation').create(automation);

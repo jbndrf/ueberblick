@@ -165,9 +165,13 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 	const db = await getDB();
 
 	// Get all pending records (new, modified, deleted)
+	// Filter out records currently being synced (in-flight lock < 60s old)
+	const SYNC_LOCK_TTL = 60_000;
+	const now = Date.now();
 	const allRecords = await db.getAll('records');
 	const pending = allRecords
 		.filter((r) => ['new', 'modified', 'deleted'].includes(r._status))
+		.filter((r) => !r._syncingAt || (now - r._syncingAt) > SYNC_LOCK_TTL)
 		.sort((a, b) => getSyncPriority(a._collection) - getSyncPriority(b._collection));
 
 	if (pending.length === 0) {
@@ -218,6 +222,43 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 			}
 
 			if (record._status === 'new' || record._status === 'modified') {
+				// Dedup check for tool_usage: if this is a retry (stale lock expired),
+				// check if the server already has this record from a previous attempt
+				if (collection === 'workflow_instance_tool_usage' && record._status === 'new') {
+					try {
+						const executedAt = record.executed_at as string;
+						const instanceId = record.instance_id as string;
+						if (executedAt && instanceId) {
+							const existing = await pb.collection(collection).getFirstListItem(
+								`instance_id = "${instanceId}" && executed_at = "${executedAt}"`
+							);
+							if (existing) {
+								// Ghost push -- reconcile with server copy
+								const reconciled: CachedRecord = {
+									...existing,
+									id: existing.id as string,
+									_key: record._key,
+									_collection: collection,
+									_status: 'unchanged',
+									_serverUpdated: existing.updated as string,
+									_error: undefined,
+									_retryCount: undefined
+								};
+								await db.put('records', reconciled);
+								console.log(`Deduped ${collection}/${id} (matched server ${existing.id})`);
+								completed++;
+								continue;
+							}
+						}
+					} catch {
+						// Not found on server -- proceed with create
+					}
+				}
+
+				// Mark record as in-flight to prevent duplicate submissions
+				record._syncingAt = Date.now();
+				await db.put('records', record);
+
 				// Check for associated file blobs that need to be uploaded
 				const localFiles = (await getFilesForRecord(id)).filter((f) => f.source === 'local');
 
@@ -267,6 +308,26 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 					_retryCount: undefined
 				};
 				await db.put('records', synced);
+
+				// After pushing field_values, refresh _serverUpdated on the parent
+				// workflow_instance. PocketBase hooks bump instance.updated via
+				// bumpLastActivity(), which would cause false conflict detection
+				// if the instance is still pending in this batch.
+				if (collection === 'workflow_instance_field_values' && record.instance_id) {
+					const instanceKey = `workflow_instances/${record.instance_id}`;
+					const instanceRecord = await db.get('records', instanceKey);
+					if (instanceRecord && instanceRecord._status !== 'unchanged') {
+						try {
+							const serverInstance = await pb.collection('workflow_instances').getOne(
+								record.instance_id as string
+							);
+							instanceRecord._serverUpdated = serverInstance.updated as string;
+							await db.put('records', instanceRecord);
+						} catch {
+							// Instance might not exist on server yet
+						}
+					}
+				}
 			} else if (record._status === 'deleted') {
 				// Delete from PocketBase
 				try {
@@ -315,10 +376,11 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 
 			console.error(`Failed to sync ${record._collection}/${record.id}:`, errorMessage);
 
-			// Mark as error
+			// Mark as error, clear sync lock so it can be retried
 			const failedRecord: CachedRecord = {
 				...record,
 				_status: record._status, // Keep original status
+				_syncingAt: undefined,
 				_error: errorMessage,
 				_retryCount: (record._retryCount || 0) + 1
 			};

@@ -195,6 +195,91 @@ var FUNCTIONS = {
       var num = parseFloat(rawVal);
       return isNaN(num) ? fallback : num;
     }
+  },
+
+  // -------------------------------------------------------------------------
+  // Date functions
+  // -------------------------------------------------------------------------
+
+  /**
+   * today() -- returns today's date as ISO string "YYYY-MM-DD".
+   * No arguments. Result is a string (stored as field value via set_field_value).
+   */
+  today: {
+    minArgs: 0,
+    maxArgs: 0,
+    argTypes: [],
+    fn: function() {
+      return new Date().toISOString().slice(0, 10);
+    }
+  },
+
+  /**
+   * date_add(date_string, amount, unit)
+   * Adds days or months to a date.
+   * - unit 0 = days, unit 1 = months
+   * - date_string: raw field value in ISO format (YYYY-MM-DD or full ISO)
+   * Returns ISO date string "YYYY-MM-DD".
+   */
+  date_add: {
+    minArgs: 3,
+    maxArgs: 3,
+    argTypes: ["raw", "numeric", "numeric"],
+    fn: function(args) {
+      var dateStr = args[0];
+      var amount = args[1];
+      var unit = args[2];
+      if (!dateStr || typeof dateStr !== "string") throw new Error("date_add: first argument must be a date string");
+      var d = new Date(dateStr);
+      if (isNaN(d.getTime())) throw new Error("date_add: invalid date '" + dateStr + "'");
+      if (unit === 0) {
+        d.setDate(d.getDate() + amount);
+      } else if (unit === 1) {
+        d.setMonth(d.getMonth() + amount);
+      } else {
+        throw new Error("date_add: unit must be 0 (days) or 1 (months), got " + unit);
+      }
+      return d.toISOString().slice(0, 10);
+    }
+  },
+
+  /**
+   * days_between(date1, date2)
+   * Returns the number of days between two dates (positive if date2 > date1).
+   * Both arguments are raw field values in ISO format.
+   */
+  days_between: {
+    minArgs: 2,
+    maxArgs: 2,
+    argTypes: ["raw", "raw"],
+    fn: function(args) {
+      var d1 = new Date(args[0]);
+      var d2 = new Date(args[1]);
+      if (isNaN(d1.getTime())) throw new Error("days_between: invalid date '" + args[0] + "'");
+      if (isNaN(d2.getTime())) throw new Error("days_between: invalid date '" + args[1] + "'");
+      var diffMs = d2.getTime() - d1.getTime();
+      return Math.round(diffMs / 86400000);
+    }
+  },
+
+  /**
+   * days_until(date_string)
+   * Returns days from today until the given date.
+   * Positive = future, negative = overdue.
+   */
+  days_until: {
+    minArgs: 1,
+    maxArgs: 1,
+    argTypes: ["raw"],
+    fn: function(args) {
+      var target = new Date(args[0]);
+      if (isNaN(target.getTime())) throw new Error("days_until: invalid date '" + args[0] + "'");
+      var today = new Date();
+      today.setHours(0, 0, 0, 0);
+      target.setHours(0, 0, 0, 0);
+      var diffMs = target.getTime() - today.getTime();
+      return Math.round(diffMs / 86400000);
+    }
   }
 };
 
@@ -440,6 +525,8 @@ function evaluateExpression(expr, instanceId) {
   skipWhitespace();
   if (pos < str.length) throw new Error("Unexpected trailing characters: " + str.substring(pos));
 
+  // Date functions return strings directly (e.g. "2026-09-18")
+  if (typeof result === "string") return result;
   if (Number.isInteger(result)) return String(result);
   return String(Math.round(result * 1000000) / 1000000);
 }
@@ -449,9 +536,34 @@ function evaluateExpression(expr, instanceId) {
 // =============================================================================
 
 /**
+ * Resolve special date placeholders in condition compare values.
+ * Supports: $today, $today+N, $today-N (where N is number of days).
+ * Returns the original value unchanged if not a date placeholder.
+ */
+function resolveCompareValue(value) {
+  if (typeof value !== "string") return value;
+  if (value === "$today") return new Date().toISOString().slice(0, 10);
+  var match = value.match(/^\$today([+-]\d+)$/);
+  if (match) {
+    var d = new Date();
+    d.setDate(d.getDate() + parseInt(match[1], 10));
+    return d.toISOString().slice(0, 10);
+  }
+  return value;
+}
+
+/**
+ * Check if a string looks like an ISO date (YYYY-MM-DD...).
+ */
+function isISODate(val) {
+  return typeof val === "string" && /^\d{4}-\d{2}-\d{2}/.test(val);
+}
+
+/**
  * Evaluate a condition group against an instance.
  * Supports: equals, not_equals, is_empty, is_not_empty, contains,
- *           gt, gte, lt, lte (numeric), and field-to-field comparison.
+ *           gt, gte, lt, lte (numeric or date), and field-to-field comparison.
+ * Compare values support $today, $today+N, $today-N placeholders.
  * @param {object} conditionGroup - { operator: "AND"|"OR", conditions: [...] }
  * @param {string} instanceId
  * @returns {boolean}
@@ -487,7 +599,7 @@ function evaluateConditions(conditionGroup, instanceId) {
       if (condition.params.compare_field_key) {
         compareValue = lookupFieldValue(instanceId, condition.params.compare_field_key);
       } else {
-        compareValue = condition.params.value || "";
+        compareValue = resolveCompareValue(condition.params.value || "");
       }
 
       switch (operator) {
@@ -507,27 +619,43 @@ function evaluateConditions(conditionGroup, instanceId) {
           result = fieldValue.indexOf(compareValue) !== -1;
           break;
         case "gt": {
-          const a = parseFloat(fieldValue);
-          const b = parseFloat(compareValue);
-          result = !isNaN(a) && !isNaN(b) && a > b;
+          if (isISODate(fieldValue) && isISODate(compareValue)) {
+            result = fieldValue > compareValue;
+          } else {
+            const a = parseFloat(fieldValue);
+            const b = parseFloat(compareValue);
+            result = !isNaN(a) && !isNaN(b) && a > b;
+          }
           break;
         }
         case "gte": {
-          const a = parseFloat(fieldValue);
-          const b = parseFloat(compareValue);
-          result = !isNaN(a) && !isNaN(b) && a >= b;
+          if (isISODate(fieldValue) && isISODate(compareValue)) {
+            result = fieldValue >= compareValue;
+          } else {
+            const a = parseFloat(fieldValue);
+            const b = parseFloat(compareValue);
+            result = !isNaN(a) && !isNaN(b) && a >= b;
+          }
           break;
         }
         case "lt": {
-          const a = parseFloat(fieldValue);
-          const b = parseFloat(compareValue);
-          result = !isNaN(a) && !isNaN(b) && a < b;
+          if (isISODate(fieldValue) && isISODate(compareValue)) {
+            result = fieldValue < compareValue;
+          } else {
+            const a = parseFloat(fieldValue);
+            const b = parseFloat(compareValue);
+            result = !isNaN(a) && !isNaN(b) && a < b;
+          }
           break;
         }
         case "lte": {
-          const a = parseFloat(fieldValue);
-          const b = parseFloat(compareValue);
-          result = !isNaN(a) && !isNaN(b) && a <= b;
+          if (isISODate(fieldValue) && isISODate(compareValue)) {
+            result = fieldValue <= compareValue;
+          } else {
+            const a = parseFloat(fieldValue);
+            const b = parseFloat(compareValue);
+            result = !isNaN(a) && !isNaN(b) && a <= b;
+          }
           break;
         }
         default:
@@ -688,10 +816,13 @@ function runAutomation(automation, instanceId, stageId) {
   var steps = parseJsonField(automation.get("steps"));
   if (!steps || !Array.isArray(steps) || steps.length === 0) return;
 
+  var executionMode = automation.get("execution_mode") || "run_all";
+
   var allResults = [];
   for (var i = 0; i < steps.length; i++) {
     var step = steps[i];
-    if (step.conditions && !evaluateConditions(step.conditions, instanceId)) {
+    var conditionsMatch = !step.conditions || evaluateConditions(step.conditions, instanceId);
+    if (!conditionsMatch) {
       continue; // skip step, not entire automation
     }
     var actions = step.actions;
@@ -701,6 +832,7 @@ function runAutomation(automation, instanceId, stageId) {
       results[j].step_name = step.name || "Step " + (i + 1);
     }
     allResults = allResults.concat(results);
+    if (executionMode === "first_match") break; // stop after first matching step
   }
   if (allResults.length > 0) {
     logAutomationExecution(instanceId, stageId, automation, allResults);

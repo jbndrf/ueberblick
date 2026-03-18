@@ -23,12 +23,15 @@ export type {
 	TrackedForm,
 	TrackedFormField,
 	TrackedEditTool,
+	TrackedProtocolTool,
 	StageType,
 	FieldType,
 	ColumnPosition,
 	ItemStatus,
 	TrackedItem,
 	EditMode,
+	// Protocol tool types
+	ToolsProtocol,
 	// Field option types
 	FieldOption,
 	TextValidation,
@@ -57,7 +60,8 @@ export type {
 	ConditionGroup,
 	ConditionLeaf,
 	ConditionOperator,
-	AutomationAction
+	AutomationAction,
+	ExecutionMode
 } from './types';
 
 // Save

@@ -5,7 +5,7 @@
 	import StagePropertyPanel from './panels/StagePropertyPanel.svelte';
 	import EdgePropertyPanel from './panels/EdgePropertyPanel.svelte';
 
-	import type { ToolsEdit, ToolsForm, VisualConfig } from '$lib/workflow-builder';
+	import type { ToolsEdit, ToolsForm, ToolsProtocol, VisualConfig } from '$lib/workflow-builder';
 
 	type Role = {
 		id: string;
@@ -24,6 +24,8 @@
 		connectionForms?: ToolsForm[];
 		/** Connection-attached edit tools (for edge property panel) */
 		connectionEditTools?: ToolsEdit[];
+		/** Connection-attached protocol tools (for edge property panel) */
+		connectionProtocolTools?: ToolsProtocol[];
 		onStageRename?: (stageId: string, newName: string) => void;
 		onStageDelete?: (stageId: string) => void;
 		onStageRolesChange?: (stageId: string, roleIds: string[]) => void;
@@ -51,6 +53,7 @@
 		stageEditTools = [],
 		connectionForms = [],
 		connectionEditTools = [],
+		connectionProtocolTools = [],
 		onStageRename,
 		onStageDelete,
 		onStageRolesChange,
@@ -116,6 +119,7 @@
 			{roles}
 			{connectionForms}
 			{connectionEditTools}
+			{connectionProtocolTools}
 			onRename={onEdgeRename}
 			onDelete={onEdgeDelete}
 			onRolesChange={onEdgeRolesChange}

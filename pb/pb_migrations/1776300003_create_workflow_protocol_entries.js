@@ -1,9 +1,9 @@
-// pb_migrations/1776300000_create_workflow_protocol_entries.js
+// pb_migrations/1776300003_create_workflow_protocol_entries.js
 // Creates the workflow_protocol_entries collection for storing protocol snapshots.
 migrate((app) => {
   const instancesId = app.findCollectionByNameOrId("workflow_instances").id;
   const stagesId = app.findCollectionByNameOrId("workflow_stages").id;
-  const toolsEditId = app.findCollectionByNameOrId("tools_edit").id;
+  const toolsProtocolId = app.findCollectionByNameOrId("tools_protocol").id;
   const participantsId = app.findCollectionByNameOrId("participants").id;
 
   const relStatusFilter = `instance_id.status != "deleted" && instance_id.status != "archived"`;
@@ -53,29 +53,32 @@ migrate((app) => {
       {
         name: "tool_id",
         type: "relation",
-        required: true,
-        collectionId: toolsEditId,
+        collectionId: toolsProtocolId,
         maxSelect: 1,
       },
       {
-        name: "executed_by",
+        name: "recorded_by",
         type: "relation",
         collectionId: participantsId,
         maxSelect: 1,
       },
       {
-        name: "executed_at",
+        name: "recorded_at",
         type: "date",
         required: true,
       },
       {
-        name: "values",
+        name: "snapshot",
         type: "json",
         required: true,
       },
       {
-        name: "content_hash",
+        name: "snapshot_hash",
         type: "text",
+      },
+      {
+        name: "field_values",
+        type: "json",
       },
       {
         name: "files",

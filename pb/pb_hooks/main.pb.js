@@ -193,6 +193,131 @@ onRecordAfterUpdateSuccess((e) => {
 }, "workflow_instances");
 
 // =============================================================================
+// Global protocol: auto-snapshot on region exit
+// =============================================================================
+// When an instance leaves a region (set of stages defined by a global protocol tool),
+// find when it entered this region (the stage_transition into the region), collect
+// all tool_usage from that moment until now, and write a protocol entry.
+// Handles cyclic workflows: only captures the most recent visit to the region.
+
+onRecordAfterUpdateSuccess((e) => {
+  const auto = require(`${__hooks}/automation.js`);
+  const original = e.record.original();
+  if (!original) { e.next(); return; }
+
+  const oldStageId = original.get("current_stage_id");
+  const newStageId = e.record.get("current_stage_id");
+  if (oldStageId === newStageId) { e.next(); return; }
+
+  const workflowId = e.record.get("workflow_id");
+  const instanceId = e.record.id;
+
+  try {
+    const globalProtocols = $app.findRecordsByFilter(
+      "tools_protocol",
+      'workflow_id = "' + workflowId + '" && is_global = true',
+      "",
+      50
+    );
+
+    for (const protocol of globalProtocols) {
+      const regionStageIds = protocol.get("stage_id") || [];
+      if (!Array.isArray(regionStageIds) || regionStageIds.length === 0) continue;
+
+      var wasInRegion = regionStageIds.indexOf(oldStageId) !== -1;
+      var nowOutside = regionStageIds.indexOf(newStageId) === -1;
+      if (!wasInRegion || !nowOutside) continue;
+
+      // Find the entry point: most recent stage_transition INTO the region from outside.
+      // Walk tool_usage backwards (sorted -executed_at) looking for a stage_transition
+      // where metadata.to_stage_id is in the region and metadata.from_stage_id is NOT.
+      var allUsage = [];
+      try {
+        allUsage = $app.findRecordsByFilter(
+          "workflow_instance_tool_usage",
+          'instance_id = "' + instanceId + '"',
+          "-executed_at",
+          1000
+        );
+      } catch (err) { /* no records */ }
+
+      var entryTimestamp = null;
+      for (var i = 0; i < allUsage.length; i++) {
+        var meta = auto.parseJsonField(allUsage[i].get("metadata"));
+        if (!meta || meta.action !== "stage_transition") continue;
+        var toInRegion = regionStageIds.indexOf(meta.to_stage_id) !== -1;
+        var fromOutside = regionStageIds.indexOf(meta.from_stage_id) === -1;
+        if (toInRegion && fromOutside) {
+          entryTimestamp = allUsage[i].get("executed_at");
+          break;
+        }
+      }
+
+      // If no entry transition found, this might be the start stage -- use instance creation time
+      if (!entryTimestamp) {
+        try {
+          var instance = $app.findRecordById("workflow_instances", instanceId);
+          entryTimestamp = instance.get("created");
+        } catch (err) {
+          continue;
+        }
+      }
+
+      // Collect all tool_usage from entry timestamp onwards, chronological order
+      var spanUsage = [];
+      try {
+        spanUsage = $app.findRecordsByFilter(
+          "workflow_instance_tool_usage",
+          'instance_id = "' + instanceId + '" && executed_at >= "' + entryTimestamp + '"',
+          "executed_at",
+          1000
+        );
+      } catch (err) { /* no records */ }
+
+      var auditLog = [];
+      for (var j = 0; j < spanUsage.length; j++) {
+        var rec = spanUsage[j];
+        auditLog.push({
+          id: rec.id,
+          stage_id: rec.get("stage_id"),
+          executed_by: rec.get("executed_by"),
+          executed_at: rec.get("executed_at"),
+          metadata: auto.parseJsonField(rec.get("metadata"))
+        });
+      }
+
+      var snapshotJson = JSON.stringify(auditLog);
+
+      var hashHex = "";
+      try {
+        hashHex = $security.sha256(snapshotJson);
+      } catch (err) {
+        console.error("[Protocol] SHA-256 failed:", err);
+      }
+
+      var collection = $app.findCollectionByNameOrId("workflow_protocol_entries");
+      var entry = new Record(collection);
+      entry.set("instance_id", instanceId);
+      entry.set("stage_id", oldStageId);
+      entry.set("tool_id", protocol.id);
+      entry.set("recorded_at", new Date().toISOString());
+      entry.set("snapshot", snapshotJson);
+      entry.set("snapshot_hash", hashHex);
+      entry.set("field_values", {});
+      $app.save(entry);
+
+      console.log("[Protocol] Global '" + protocol.get("name") + "' on instance " + instanceId + " (" + auditLog.length + " audit entries, entered at " + entryTimestamp + ")");
+    }
+  } catch (err) {
+    if (("" + err).indexOf("Missing collection") === -1) {
+      console.error("[Protocol] Global protocol error:", err);
+    }
+  }
+
+  e.next();
+}, "workflow_instances");
+
+// =============================================================================
 // on_field_change trigger
 // =============================================================================
 

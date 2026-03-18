@@ -19,6 +19,8 @@
 		onEditAction: () => void;
 		onDeleteAction: () => void;
 		onAddProgressTool: (toolType: string) => void;
+		/** Optional filter for connection tool types */
+		allowedConnectionToolTypes?: string[];
 		// Callbacks for FieldPanel
 		onToggleRequired: () => void;
 		onMoveFieldUp: () => void;
@@ -41,6 +43,7 @@
 		onEditAction,
 		onDeleteAction,
 		onAddProgressTool,
+		allowedConnectionToolTypes,
 		onToggleRequired,
 		onMoveFieldUp,
 		onMoveFieldDown,
@@ -67,6 +70,7 @@
 			{onEditAction}
 			{onDeleteAction}
 			{onAddProgressTool}
+			allowedToolTypes={allowedConnectionToolTypes}
 		/>
 	{:else if context.type === 'field'}
 		<FieldPanel

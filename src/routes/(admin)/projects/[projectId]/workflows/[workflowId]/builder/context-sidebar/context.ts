@@ -42,8 +42,7 @@ export type EditToolContextData = {
 // Protocol tool context data
 export type ProtocolToolContextData = {
 	protocolToolId: string;
-	/** Stage or global this protocol tool is attached to */
-	attachedTo: { type: 'stage'; stageId: string } | { type: 'global' };
+	attachedTo: { type: 'connection'; connectionId: string } | { type: 'stage'; stageId: string } | { type: 'global' };
 };
 
 // Add tool picker context (shows tool picker in context sidebar)

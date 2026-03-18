@@ -74,11 +74,10 @@ export interface AutomationToolConfig {
 }
 
 /**
- * Protocol tool config - recurring data collection with snapshot
+ * Protocol tool config - recurring data collection with snapshot archiving
  */
 export interface ProtocolToolConfig {
 	toolType: 'protocol';
-	/** Button label */
 	buttonLabel: string;
 }
 

@@ -46,6 +46,7 @@ type WorkflowExport = {
 	forms: any[];
 	form_fields: any[];
 	edit_tools: any[];
+	protocol_tools: any[];
 	automations: any[];
 	field_tags: any[];
 };
@@ -233,6 +234,23 @@ export const WORKFLOW_LAYERS: DuplicationLayer[] = [
 					(Array.isArray(e.stage_id) && e.stage_id.some((sid: string) => stageOldIds.has(sid)))
 			);
 		},
+		remap: { connection_id: 'workflow_connections' },
+		remapArrays: { stage_id: 'workflow_stages', editable_fields: 'tools_form_fields' },
+		roleFields: ['allowed_roles'],
+	},
+	{
+		collection: 'tools_protocol',
+		loadRecords: async (pb, _wfId, idMaps) => {
+			const connOldIds = new Set(idMaps['workflow_connections']?.keys() ?? []);
+			const stageOldIds = new Set(idMaps['workflow_stages']?.keys() ?? []);
+			if (connOldIds.size === 0 && stageOldIds.size === 0) return [];
+			const all = await pb.collection('tools_protocol').getFullList();
+			return all.filter(
+				(p: any) =>
+					(p.connection_id && connOldIds.has(p.connection_id)) ||
+					(Array.isArray(p.stage_id) && p.stage_id.some((sid: string) => stageOldIds.has(sid)))
+			);
+		},
 		remap: { connection_id: 'workflow_connections', protocol_form_id: 'tools_forms' },
 		remapArrays: { stage_id: 'workflow_stages', editable_fields: 'tools_form_fields' },
 		roleFields: ['allowed_roles'],
@@ -404,6 +422,7 @@ export async function exportProjectSchema(
 
 		// Load edit tools by connection/stage references
 		let editTools: any[] = [];
+		let protocolTools: any[] = [];
 		if (connections.length > 0 || stages.length > 0) {
 			const connIds = new Set(connections.map((c: any) => c.id));
 			const stageIds = new Set(stages.map((s: any) => s.id));
@@ -412,6 +431,13 @@ export async function exportProjectSchema(
 				(e: any) =>
 					connIds.has(e.connection_id) ||
 					(Array.isArray(e.stage_id) && e.stage_id.some((sid: string) => stageIds.has(sid)))
+			);
+
+			const allProtocolTools = await pb.collection('tools_protocol').getFullList();
+			protocolTools = allProtocolTools.filter(
+				(p: any) =>
+					(p.connection_id && connIds.has(p.connection_id)) ||
+					(Array.isArray(p.stage_id) && p.stage_id.some((sid: string) => stageIds.has(sid)))
 			);
 		}
 
@@ -422,6 +448,7 @@ export async function exportProjectSchema(
 			forms: forms.map(stripSystemFields),
 			form_fields: formFields.map(stripSystemFields),
 			edit_tools: editTools.map(stripSystemFields),
+			protocol_tools: protocolTools.map(stripSystemFields),
 			automations: automations.map(stripSystemFields),
 			field_tags: fieldTags.map(stripSystemFields),
 		});
@@ -706,6 +733,30 @@ export async function importProjectSchema(
 			}
 			data.id = newId;
 			await pb.collection('tools_edit').create(data);
+		}
+
+		// Protocol tools
+		for (const proto of (wfExport.protocol_tools || [])) {
+			const newId = generateId();
+			const data = { ...proto };
+			delete data.id;
+			if (data.connection_id) data.connection_id = connMap.get(data.connection_id) ?? data.connection_id;
+			if (data.protocol_form_id) data.protocol_form_id = formMap.get(data.protocol_form_id) ?? data.protocol_form_id;
+			if (Array.isArray(data.stage_id)) {
+				data.stage_id = data.stage_id.map((id: string) => stageMap.get(id) ?? id);
+			}
+			if (Array.isArray(data.editable_fields)) {
+				data.editable_fields = data.editable_fields.map(
+					(id: string) => fieldMap.get(id) ?? id
+				);
+			}
+			if (Array.isArray(data.allowed_roles)) {
+				data.allowed_roles = data.allowed_roles.map(
+					(id: string) => roleMap.get(id) ?? id
+				);
+			}
+			data.id = newId;
+			await pb.collection('tools_protocol').create(data);
 		}
 
 		// Automations

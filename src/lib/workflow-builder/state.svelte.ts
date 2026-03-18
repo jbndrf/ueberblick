@@ -12,6 +12,7 @@ import type {
 	ToolsForm,
 	ToolsFormField,
 	ToolsEdit,
+	ToolsProtocol,
 	ToolsAutomation,
 	ToolsFieldTag,
 	TagMapping,
@@ -20,13 +21,15 @@ import type {
 	TrackedForm,
 	TrackedFormField,
 	TrackedEditTool,
+	TrackedProtocolTool,
 	TrackedAutomation,
 	TrackedFieldTag,
 	StageType,
 	ItemStatus,
 	TriggerType,
 	TriggerConfig,
-	TransitionTriggerConfig
+	TransitionTriggerConfig,
+	ExecutionMode
 } from './types';
 
 // =============================================================================
@@ -45,6 +48,7 @@ export class WorkflowBuilderState {
 	forms = $state<TrackedForm[]>([]);
 	formFields = $state<TrackedFormField[]>([]);
 	editTools = $state<TrackedEditTool[]>([]);
+	protocolTools = $state<TrackedProtocolTool[]>([]);
 	automations = $state<TrackedAutomation[]>([]);
 	fieldTags = $state<TrackedFieldTag[]>([]);
 
@@ -55,6 +59,7 @@ export class WorkflowBuilderState {
 			this.forms.some((f) => f.status !== 'unchanged') ||
 			this.formFields.some((f) => f.status !== 'unchanged') ||
 			this.editTools.some((e) => e.status !== 'unchanged') ||
+			this.protocolTools.some((p) => p.status !== 'unchanged') ||
 			this.automations.some((a) => a.status !== 'unchanged') ||
 			this.fieldTags.some((ft) => ft.status !== 'unchanged')
 	);
@@ -65,6 +70,7 @@ export class WorkflowBuilderState {
 	visibleForms = $derived(this.forms.filter((f) => f.status !== 'deleted'));
 	visibleFormFields = $derived(this.formFields.filter((f) => f.status !== 'deleted'));
 	visibleEditTools = $derived(this.editTools.filter((e) => e.status !== 'deleted'));
+	visibleProtocolTools = $derived(this.protocolTools.filter((p) => p.status !== 'deleted'));
 	visibleAutomations = $derived(this.automations.filter((a) => a.status !== 'deleted'));
 
 	// Derived: has start stage
@@ -87,6 +93,7 @@ export class WorkflowBuilderState {
 		forms?: ToolsForm[];
 		formFields?: ToolsFormField[];
 		editTools?: ToolsEdit[];
+		protocolTools?: ToolsProtocol[];
 		automations?: ToolsAutomation[];
 		fieldTags?: ToolsFieldTag[];
 	}) {
@@ -152,6 +159,12 @@ export class WorkflowBuilderState {
 			original: structuredClone(e)
 		}));
 
+		this.protocolTools = (data.protocolTools || []).map((p) => ({
+			data: p,
+			status: 'unchanged' as ItemStatus,
+			original: structuredClone(p)
+		}));
+
 		this.automations = (data.automations || []).map((a) => ({
 			data: a,
 			status: 'unchanged' as ItemStatus,
@@ -202,6 +215,8 @@ export class WorkflowBuilderState {
 				}
 			}
 		}
+		// Note: global protocol tools are NOT auto-synced -- their stage_ids
+		// define a region boundary, manually configured by the admin.
 
 		return newStage;
 	}
@@ -295,6 +310,27 @@ export class WorkflowBuilderState {
 			}
 		}
 
+		// Handle protocol tools with array-based stage_id
+		for (const tool of this.protocolTools) {
+			if (tool.status === 'deleted') continue;
+			const stageIds = tool.data.stage_id;
+			if (!stageIds || !stageIds.includes(id)) continue;
+
+			if (tool.data.is_global) {
+				tool.data.stage_id = stageIds.filter((sid) => sid !== id);
+				if (tool.status === 'unchanged') {
+					tool.status = 'modified';
+				}
+			} else if (stageIds.length === 1) {
+				this.deleteProtocolTool(tool.data.id);
+			} else {
+				tool.data.stage_id = stageIds.filter((sid) => sid !== id);
+				if (tool.status === 'unchanged') {
+					tool.status = 'modified';
+				}
+			}
+		}
+
 		if (stage.status === 'new') {
 			// Never saved, remove from array
 			this.stages = this.stages.filter((s) => s.data.id !== id);
@@ -362,6 +398,11 @@ export class WorkflowBuilderState {
 			this.deleteEditTool(tool.data.id);
 		}
 
+		const relatedProtocolTools = this.protocolTools.filter((p) => p.data.connection_id === id);
+		for (const tool of relatedProtocolTools) {
+			this.deleteProtocolTool(tool.data.id);
+		}
+
 		if (conn.status === 'new') {
 			this.connections = this.connections.filter((c) => c.data.id !== id);
 		} else {
@@ -377,15 +418,27 @@ export class WorkflowBuilderState {
 	// Form Operations
 	// =========================================================================
 
+	/** Get the next tool_order value for a connection's tools */
+	private getNextToolOrder(connectionId: string): number {
+		const existing = [
+			...this.getFormsForConnection(connectionId),
+			...this.getEditToolsForConnection(connectionId),
+			...this.getProtocolToolsForConnection(connectionId)
+		];
+		return Math.max(-1, ...existing.map(t => t.data.tool_order ?? 0)) + 1;
+	}
+
 	addForm(target: { connectionId: string } | { stageId: string }): ToolsForm {
 		const isStageAttached = 'stageId' in target;
+		const connectionId = 'connectionId' in target ? target.connectionId : undefined;
 
 		const newForm: ToolsForm = {
 			id: generateId(),
 			workflow_id: this.workflowId,
-			connection_id: 'connectionId' in target ? target.connectionId : undefined,
+			connection_id: connectionId,
 			stage_id: isStageAttached ? target.stageId : undefined,
 			name: 'New Form',
+			...(connectionId && { tool_order: this.getNextToolOrder(connectionId) }),
 			// Stage-attached forms need their own config; connection-attached forms inherit
 			...(isStageAttached && {
 				allowed_roles: [],
@@ -444,21 +497,6 @@ export class WorkflowBuilderState {
 	getFormsForStage(stageId: string): TrackedForm[] {
 		const protocolFormIds = this.getProtocolFormIds();
 		return this.visibleForms.filter((f) => f.data.stage_id === stageId && !protocolFormIds.has(f.data.id));
-	}
-
-	/**
-	 * Get the set of form IDs used as protocol forms.
-	 * These are excluded from regular form listings since they're
-	 * only accessed through their parent protocol tool.
-	 */
-	private getProtocolFormIds(): Set<string> {
-		const ids = new Set<string>();
-		for (const tool of this.visibleEditTools) {
-			if (tool.data.edit_mode === 'protocol' && tool.data.protocol_form_id) {
-				ids.add(tool.data.protocol_form_id);
-			}
-		}
-		return ids;
 	}
 
 	// =========================================================================
@@ -554,15 +592,17 @@ export class WorkflowBuilderState {
 
 	addEditTool(target: { connectionId: string } | { stageId: string }): ToolsEdit {
 		const isStageAttached = 'stageId' in target;
+		const connectionId = 'connectionId' in target ? target.connectionId : undefined;
 
 		const newEditTool: ToolsEdit = {
 			id: generateId(),
-			connection_id: 'connectionId' in target ? target.connectionId : undefined,
+			connection_id: connectionId,
 			stage_id: isStageAttached ? [target.stageId] : undefined,
 			name: 'Edit Fields',
 			editable_fields: [],
 			edit_mode: 'form_fields',
 			is_global: false,
+			...(connectionId && { tool_order: this.getNextToolOrder(connectionId) }),
 			// Stage-attached edit tools need their own config; connection-attached tools inherit
 			...(isStageAttached && {
 				allowed_roles: [],
@@ -623,6 +663,8 @@ export class WorkflowBuilderState {
 				}
 			}
 		}
+		// Note: global protocol tools are NOT auto-synced -- their stage_ids
+		// define a region boundary, manually configured by the admin.
 	}
 
 	updateEditTool(id: string, updates: Partial<ToolsEdit>) {
@@ -663,7 +705,6 @@ export class WorkflowBuilderState {
 	 */
 	getEditToolsForStage(stageId: string): TrackedEditTool[] {
 		return this.visibleEditTools.filter((e) => {
-			if (e.data.edit_mode === 'protocol') return false;
 			const stageIds = e.data.stage_id;
 			if (!stageIds || stageIds.length === 0) return false;
 			return stageIds.includes(stageId);
@@ -676,7 +717,6 @@ export class WorkflowBuilderState {
 	 */
 	getNonGlobalEditToolsForStage(stageId: string): TrackedEditTool[] {
 		return this.visibleEditTools.filter((e) => {
-			if (e.data.edit_mode === 'protocol') return false;
 			if (e.data.is_global) return false;
 			const stageIds = e.data.stage_id;
 			if (!stageIds || stageIds.length === 0) return false;
@@ -691,57 +731,103 @@ export class WorkflowBuilderState {
 		return this.visibleEditTools.filter((e) => e.data.is_global);
 	}
 
-	/**
-	 * Get protocol tools for a specific stage (includes global protocol tools).
-	 */
-	getProtocolToolsForStage(stageId: string): TrackedEditTool[] {
-		return this.visibleEditTools.filter((e) => {
-			if (e.data.edit_mode !== 'protocol') return false;
-			const stageIds = e.data.stage_id;
-			if (!stageIds || stageIds.length === 0) return false;
-			return stageIds.includes(stageId);
-		});
-	}
+	// =========================================================================
+	// Protocol Tool Operations
+	// =========================================================================
 
-	/**
-	 * Get only non-global protocol tools for a specific stage.
-	 */
-	getNonGlobalProtocolToolsForStage(stageId: string): TrackedEditTool[] {
-		return this.visibleEditTools.filter((e) => {
-			if (e.data.edit_mode !== 'protocol') return false;
-			if (e.data.is_global) return false;
-			const stageIds = e.data.stage_id;
-			if (!stageIds || stageIds.length === 0) return false;
-			return stageIds.includes(stageId);
-		});
-	}
+	addProtocolTool(opts: { stageId?: string; connectionId?: string; isGlobal?: boolean }): ToolsProtocol {
+		// Global protocol tools = region definitions, start with empty stage_ids
+		// (admin picks which stages form the region)
+		const stageId = opts.isGlobal
+			? []
+			: opts.stageId ? [opts.stageId] : [];
 
-	/**
-	 * Add a protocol tool attached to a stage.
-	 */
-	addProtocolTool(stageId: string): ToolsEdit {
-		const newTool: ToolsEdit = {
+		const isStageAttached = !opts.connectionId && !opts.isGlobal;
+
+		const newProtocolTool: ToolsProtocol = {
 			id: generateId(),
-			connection_id: undefined,
-			stage_id: [stageId],
-			name: 'Protocol',
+			workflow_id: this.workflowId,
+			connection_id: opts.connectionId,
+			stage_id: stageId,
+			is_global: opts.isGlobal ?? false,
+			name: opts.isGlobal ? 'Protocol Region' : 'Protocol',
 			editable_fields: [],
-			edit_mode: 'protocol',
-			is_global: false,
-			allowed_roles: [],
-			visual_config: {
-				button_label: 'Protocol',
-			},
-			protocol_form_id: undefined,
 			prefill_config: {},
+			allowed_roles: [],
+			...(opts.connectionId && { tool_order: this.getNextToolOrder(opts.connectionId) }),
+			...(isStageAttached && {
+				visual_config: {
+					button_label: 'Protocol',
+				}
+			})
 		};
 
-		this.editTools.push({
-			data: newTool,
+		this.protocolTools.push({
+			data: newProtocolTool,
 			status: 'new'
 		});
 
-		return newTool;
+		return newProtocolTool;
+	}
+
+	updateProtocolTool(id: string, updates: Partial<ToolsProtocol>) {
+		const tool = this.protocolTools.find((p) => p.data.id === id);
+		if (!tool) return;
+
+		Object.assign(tool.data, updates);
+
+		if (tool.status === 'unchanged') {
+			if (!deepEqual(tool.data, tool.original)) {
+				tool.status = 'modified';
+			}
+		}
+	}
+
+	deleteProtocolTool(id: string) {
+		const tool = this.protocolTools.find((p) => p.data.id === id);
+		if (!tool) return;
+
+		if (tool.status === 'new') {
+			this.protocolTools = this.protocolTools.filter((p) => p.data.id !== id);
+		} else {
+			tool.status = 'deleted';
+		}
+	}
+
+	getProtocolToolById(id: string): TrackedProtocolTool | undefined {
+		return this.protocolTools.find((p) => p.data.id === id);
+	}
+
+	/**
+	 * Get non-global protocol tools for a stage (for stage toolbars).
+	 * Global protocol tools (regions) are shown in the global toolbar only.
+	 */
+	getProtocolToolsForStage(stageId: string): TrackedProtocolTool[] {
+		return this.visibleProtocolTools.filter((p) => {
+			if (p.data.is_global) return false;
+			if (p.data.connection_id) return false;
+			const stageIds = p.data.stage_id;
+			if (!stageIds || stageIds.length === 0) return false;
+			return stageIds.includes(stageId);
+		});
+	}
+
+	getProtocolToolsForConnection(connectionId: string): TrackedProtocolTool[] {
+		return this.visibleProtocolTools.filter((p) => p.data.connection_id === connectionId);
+	}
+
+	getGlobalProtocolTools(): TrackedProtocolTool[] {
+		return this.visibleProtocolTools.filter((p) => p.data.is_global);
+	}
+
+	getProtocolFormIds(): Set<string> {
+		const ids = new Set<string>();
+		for (const tool of this.visibleProtocolTools) {
+			if (tool.data.protocol_form_id) {
+				ids.add(tool.data.protocol_form_id);
+			}
+		}
+		return ids;
 	}
 
 	// =========================================================================
@@ -761,6 +847,7 @@ export class WorkflowBuilderState {
 			name: 'New Automation',
 			trigger_type: triggerType,
 			trigger_config: defaultConfig,
+			execution_mode: 'run_all',
 			steps: [{ name: 'Step 1', conditions: null, actions: [] }],
 			is_enabled: true
 		};
@@ -1185,6 +1272,7 @@ export class WorkflowBuilderState {
 		this.forms = this.forms.filter((f) => f.status !== 'deleted');
 		this.formFields = this.formFields.filter((f) => f.status !== 'deleted');
 		this.editTools = this.editTools.filter((e) => e.status !== 'deleted');
+		this.protocolTools = this.protocolTools.filter((p) => p.status !== 'deleted');
 		this.automations = this.automations.filter((a) => a.status !== 'deleted');
 		this.fieldTags = this.fieldTags.filter((ft) => ft.status !== 'deleted');
 
@@ -1207,6 +1295,10 @@ export class WorkflowBuilderState {
 			field.original = $state.snapshot(field.data);
 		}
 		for (const tool of this.editTools) {
+			tool.status = 'unchanged';
+			tool.original = $state.snapshot(tool.data);
+		}
+		for (const tool of this.protocolTools) {
 			tool.status = 'unchanged';
 			tool.original = $state.snapshot(tool.data);
 		}
@@ -1254,6 +1346,11 @@ export class WorkflowBuilderState {
 				new: this.editTools.filter((e) => e.status === 'new').map((e) => $state.snapshot(e.data)),
 				modified: this.editTools.filter((e) => e.status === 'modified').map((e) => $state.snapshot(e.data)),
 				deleted: this.editTools.filter((e) => e.status === 'deleted').map((e) => e.data.id)
+			},
+			protocolTools: {
+				new: this.protocolTools.filter((p) => p.status === 'new').map((p) => $state.snapshot(p.data)),
+				modified: this.protocolTools.filter((p) => p.status === 'modified').map((p) => $state.snapshot(p.data)),
+				deleted: this.protocolTools.filter((p) => p.status === 'deleted').map((p) => p.data.id)
 			},
 			automations: {
 				new: this.automations.filter((a) => a.status === 'new').map((a) => $state.snapshot(a.data)),

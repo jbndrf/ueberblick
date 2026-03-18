@@ -40,14 +40,15 @@
 		type ToolsForm,
 		type ToolsFormField,
 		type ToolsEdit,
+		type ToolsProtocol,
 		type ToolsAutomation,
 		type VisualConfig,
 		type TriggerType,
 		type TriggerConfig,
 		type AutomationStep,
-		type EditMode
+		type ExecutionMode
 	} from '$lib/workflow-builder';
-	import type { ToolInstance, FormToolConfig, EditToolConfig, AutomationToolConfig, FieldTagToolConfig } from '$lib/workflow-builder/tools';
+	import type { ToolInstance, FormToolConfig, EditToolConfig, AutomationToolConfig, ProtocolToolConfig, FieldTagToolConfig } from '$lib/workflow-builder/tools';
 	import { ToolBar } from '$lib/workflow-builder/components';
 	import type { ColumnPosition } from '$lib/workflow-builder';
 	import { deserialize } from '$app/forms';
@@ -70,6 +71,7 @@
 			forms: data.forms,
 			formFields: data.formFields,
 			editTools: data.editTools,
+			protocolTools: data.protocolTools,
 			automations: data.automations,
 			fieldTags: data.fieldTags
 		});
@@ -173,12 +175,28 @@
 	}
 
 	/**
+	 * Convert protocol tools to ToolInstances for display on canvas
+	 */
+	function protocolToolsToToolInstances(protocolTools: { data: ToolsProtocol }[]): ToolInstance[] {
+		return protocolTools.map((tool, index) => ({
+			id: tool.data.id,
+			toolType: 'protocol',
+			config: {
+				toolType: 'protocol',
+				buttonLabel: tool.data.name || 'Protocol'
+			} as ProtocolToolConfig,
+			order: index + 200 // Offset to keep forms and edit tools first
+		}));
+	}
+
+	/**
 	 * Get all tools for a connection
 	 */
 	function getToolsForConnection(connectionId: string): ToolInstance[] {
 		const forms = builderState.getFormsForConnection(connectionId);
 		const editTools = builderState.getEditToolsForConnection(connectionId);
-		return [...formsToToolInstances(forms), ...editToolsToToolInstances(editTools)];
+		const protocolTools = builderState.getProtocolToolsForConnection(connectionId);
+		return [...formsToToolInstances(forms), ...editToolsToToolInstances(editTools), ...protocolToolsToToolInstances(protocolTools)];
 	}
 
 	/**
@@ -187,20 +205,8 @@
 	function getToolsForStage(stageId: string): ToolInstance[] {
 		const forms = builderState.getFormsForStage(stageId);
 		const editTools = builderState.getNonGlobalEditToolsForStage(stageId);
-		const protocolTools = builderState.getNonGlobalProtocolToolsForStage(stageId);
-		return [
-			...formsToToolInstances(forms),
-			...editToolsToToolInstances(editTools),
-			...protocolTools.map((tool, index) => ({
-				id: tool.data.id,
-				toolType: 'protocol',
-				config: {
-					toolType: 'protocol' as const,
-					buttonLabel: tool.data.name || 'Protocol'
-				},
-				order: index + 200
-			}))
-		];
+		const protocolTools = builderState.getProtocolToolsForStage(stageId);
+		return [...formsToToolInstances(forms), ...editToolsToToolInstances(editTools), ...protocolToolsToToolInstances(protocolTools)];
 	}
 
 	// ==========================================================================
@@ -217,6 +223,25 @@
 	};
 
 	// Convert state stages to xyflow nodes
+	// Pre-defined region colors for visual distinction
+	const regionColors = ['#059669', '#7c3aed', '#d97706', '#dc2626', '#0891b2', '#be185d'];
+
+	function getRegionsForStage(stageId: string): Array<{ id: string; name: string; color: string }> {
+		const globalProtocols = builderState.getGlobalProtocolTools();
+		const result: Array<{ id: string; name: string; color: string }> = [];
+		for (let i = 0; i < globalProtocols.length; i++) {
+			const tool = globalProtocols[i];
+			if (tool.data.stage_id?.includes(stageId)) {
+				result.push({
+					id: tool.data.id,
+					name: tool.data.name,
+					color: regionColors[i % regionColors.length]
+				});
+			}
+		}
+		return result;
+	}
+
 	function stagesToNodes(stages: WorkflowStage[]): Node[] {
 		return stages.map((stage) => ({
 			id: stage.id,
@@ -230,6 +255,7 @@
 				key: stage.id.slice(0, 8), // Short ID for display
 				stageType: stage.stage_type,
 				visible_to_roles: stage.visible_to_roles || [],
+				regions: getRegionsForStage(stage.id),
 				tools: getToolsForStage(stage.id),
 				onSelectTool: (toolId: string) => handleSelectStageTool(stage.id, toolId),
 				onAddTool: () => handleAddStageToolClick(stage.id)
@@ -272,9 +298,21 @@
 
 	// Convert state connections to xyflow edges (including entry connections)
 	function connectionsToEdges(connections: WorkflowConnection[], highlighted: Set<string>): Edge[] {
+		// Detect bidirectional pairs (A->B and B->A)
+		const pairKeys = new Set<string>();
+		for (const conn of connections) {
+			if (conn.from_stage_id && conn.from_stage_id !== conn.to_stage_id) {
+				const reverseKey = `${conn.to_stage_id}->${conn.from_stage_id}`;
+				if (connections.some(c => c.from_stage_id === conn.to_stage_id && c.to_stage_id === conn.from_stage_id)) {
+					pairKeys.add(`${conn.from_stage_id}->${conn.to_stage_id}`);
+				}
+			}
+		}
+
 		return connections.map((conn) => {
 			const isEntryConnection = !conn.from_stage_id;
 			const isSelfLoop = !isEntryConnection && conn.from_stage_id === conn.to_stage_id;
+			const isBidirectional = !isEntryConnection && !isSelfLoop && pairKeys.has(`${conn.from_stage_id}->${conn.to_stage_id}`);
 			const isHighlighted = highlighted.has(conn.id);
 
 			const classes = [
@@ -297,6 +335,7 @@
 				data: {
 					tools: getToolsForConnection(conn.id),
 					isSelfLoop,
+					isBidirectional,
 					isEntry: isEntryConnection,
 					onSelectTool: (toolId: string) => handleSelectConnectionTool(conn.id, toolId),
 					onAddTool: () => handleAddProgressToolForEdge(conn.id),
@@ -326,6 +365,7 @@
 		// Access these to create dependency
 		const _forms = builderState.visibleForms;
 		const _editTools = builderState.visibleEditTools;
+		const _protocolTools = builderState.visibleProtocolTools;
 		const _stages = builderState.visibleStages;
 		const _connections = builderState.visibleConnections;
 
@@ -357,6 +397,7 @@
 		// Access these to create dependency - force re-run when tools change
 		const _forms = builderState.visibleForms;
 		const _editTools = builderState.visibleEditTools;
+		const _protocolTools = builderState.visibleProtocolTools;
 		const _connections = builderState.visibleConnections;
 		const _highlighted = highlightedEdgeIds;
 
@@ -450,16 +491,18 @@
 	});
 
 	// Protocol tool editor derived state
-	const selectedProtocolTool = $derived.by((): ToolsEdit | null => {
+	const selectedProtocolTool = $derived.by((): ToolsProtocol | null => {
 		if (selectionContext.type !== 'protocolTool') return null;
-		const tool = builderState.getEditToolById(selectionContext.protocolToolId);
+		const tool = builderState.getProtocolToolById(selectionContext.protocolToolId);
 		return tool?.data ?? null;
 	});
 
 	// Ancestor fields for protocol tool configuration
 	const protocolToolAncestorFields = $derived.by(() => {
 		if (selectionContext.type !== 'protocolTool') return [];
-		if (selectionContext.attachedTo.type === 'stage') {
+		if (selectionContext.attachedTo.type === 'connection') {
+			return builderState.getAncestorFormFields(selectionContext.attachedTo.connectionId);
+		} else if (selectionContext.attachedTo.type === 'stage') {
 			return builderState.getAncestorFormFieldsForStage(selectionContext.attachedTo.stageId);
 		} else if (selectionContext.attachedTo.type === 'global') {
 			return builderState.getAllFormFields();
@@ -467,10 +510,10 @@
 		return [];
 	});
 
-	// Protocol form field count (for the editor preview)
-	const protocolFormFieldCount = $derived.by(() => {
+	// Protocol form field count (number of fields in the linked protocol form)
+	const protocolFormFieldCount = $derived.by((): number => {
 		if (selectionContext.type !== 'protocolTool') return 0;
-		const tool = builderState.getEditToolById(selectionContext.protocolToolId);
+		const tool = builderState.getProtocolToolById(selectionContext.protocolToolId);
 		if (!tool?.data.protocol_form_id) return 0;
 		return builderState.getFieldsForForm(tool.data.protocol_form_id).length;
 	});
@@ -494,6 +537,25 @@
 		if (selectionContext.type !== 'action') return [];
 		const tools = builderState.getEditToolsForConnection(selectionContext.actionId);
 		return tools.map(t => t.data);
+	});
+
+	// Connection protocol tools for property view (when a connection/action is selected)
+	const connectionProtocolTools = $derived.by((): ToolsProtocol[] => {
+		if (selectionContext.type !== 'action') return [];
+		const tools = builderState.getProtocolToolsForConnection(selectionContext.actionId);
+		return tools.map(t => t.data);
+	});
+
+	// Allowed tool types for the selected connection (entry connections only allow 'form')
+	const allowedConnectionToolTypes = $derived.by((): string[] | undefined => {
+		if (selectionContext.type !== 'action') return undefined;
+		const connection = builderState.getConnectionById(selectionContext.actionId);
+		if (connection && !connection.data.from_stage_id) {
+			// Entry connection: only allow form, and only if none exists yet
+			const existingForms = builderState.getFormsForConnection(selectionContext.actionId);
+			return existingForms.length > 0 ? [] : ['form'];
+		}
+		return undefined; // No restriction for non-entry connections
 	});
 
 	// Global edit tools (is_global=true, available on all stages)
@@ -724,6 +786,16 @@
 			} satisfies EditToolConfig,
 			order: index
 		}));
+		const globalProtocolTools = builderState.getGlobalProtocolTools();
+		const protocolInstances: ToolInstance[] = globalProtocolTools.map((tool, index) => ({
+			id: tool.data.id,
+			toolType: 'protocol',
+			config: {
+				toolType: 'protocol' as const,
+				buttonLabel: tool.data.name
+			} satisfies ProtocolToolConfig,
+			order: editInstances.length + index
+		}));
 		const automationInstances: ToolInstance[] = automations.map((a, index) => ({
 			id: a.id,
 			toolType: 'automation',
@@ -731,10 +803,10 @@
 				toolType: 'automation' as const,
 				buttonLabel: a.name
 			} satisfies AutomationToolConfig,
-			order: editInstances.length + index
+			order: editInstances.length + protocolInstances.length + index
 		}));
 		const ft = builderState.getFieldTagForWorkflow();
-		const result: ToolInstance[] = [...editInstances, ...automationInstances];
+		const result: ToolInstance[] = [...editInstances, ...protocolInstances, ...automationInstances];
 		if (ft) {
 			result.push({
 				id: '__field_tags__',
@@ -889,8 +961,8 @@
 		} else if (toolType === 'edit') {
 			builderState.addEditTool({ stageId: selectedStageId });
 		} else if (toolType === 'protocol') {
-			const newTool = builderState.addProtocolTool(selectedStageId);
-			selectionContext = createContext.protocolTool(newTool.id, { type: 'stage', stageId: selectedStageId });
+			const tool = builderState.addProtocolTool({ stageId: selectedStageId });
+			selectionContext = createContext.protocolTool(tool.id, { type: 'stage', stageId: selectedStageId });
 		}
 	}
 
@@ -898,12 +970,25 @@
 		if (selectionContext.type === 'action') {
 			const connectionId = selectionContext.actionId;
 
+			// Check if this is an entry connection (only allows 1 form, no other tools)
+			const connection = builderState.getConnectionById(connectionId);
+			const isEntry = connection && !connection.data.from_stage_id;
+
+			if (isEntry) {
+				if (toolType !== 'form') return;
+				const existingForms = builderState.getFormsForConnection(connectionId);
+				if (existingForms.length > 0) return;
+			}
+
 			if (toolType === 'form') {
 				// Create a new form attached to this connection
 				builderState.addForm({ connectionId });
 			} else if (toolType === 'edit') {
 				// Create a new edit tool attached to this connection
 				builderState.addEditTool({ connectionId });
+			} else if (toolType === 'protocol') {
+				const tool = builderState.addProtocolTool({ connectionId });
+				selectionContext = createContext.protocolTool(tool.id, { type: 'connection', connectionId });
 			}
 		}
 	}
@@ -937,7 +1022,7 @@
 			return;
 		}
 
-		const protocolTool = protocolTools.find(e => e.data.id === toolId);
+		const protocolTool = protocolTools.find(p => p.data.id === toolId);
 		if (protocolTool) {
 			selectionContext = createContext.protocolTool(toolId, { type: 'stage', stageId });
 		}
@@ -950,6 +1035,7 @@
 		// Find the tool to determine its type
 		const forms = builderState.getFormsForConnection(connectionId);
 		const editTools = builderState.getEditToolsForConnection(connectionId);
+		const protocolTools = builderState.getProtocolToolsForConnection(connectionId);
 
 		const form = forms.find(f => f.data.id === toolId);
 		if (form) {
@@ -960,6 +1046,12 @@
 		const editTool = editTools.find(e => e.data.id === toolId);
 		if (editTool) {
 			selectionContext = createContext.editTool(toolId, { type: 'connection', connectionId });
+			return;
+		}
+
+		const protocolTool = protocolTools.find(p => p.data.id === toolId);
+		if (protocolTool) {
+			selectionContext = createContext.protocolTool(toolId, { type: 'connection', connectionId });
 		}
 	}
 
@@ -1112,7 +1204,7 @@
 		builderState.updateEditTool(editToolId, { editable_fields: fieldIds });
 	}
 
-	function handleEditToolEditModeChange(editToolId: string, editMode: EditMode) {
+	function handleEditToolEditModeChange(editToolId: string, editMode: 'form_fields' | 'location') {
 		builderState.updateEditTool(editToolId, { edit_mode: editMode });
 	}
 
@@ -1127,43 +1219,44 @@
 
 	// Protocol tool editor handlers
 	function handleProtocolToolNameChange(toolId: string, name: string) {
-		builderState.updateEditTool(toolId, { name });
+		builderState.updateProtocolTool(toolId, { name });
 	}
 
 	function handleProtocolToolFieldsChange(toolId: string, fieldIds: string[]) {
-		builderState.updateEditTool(toolId, { editable_fields: fieldIds });
+		builderState.updateProtocolTool(toolId, { editable_fields: fieldIds });
 	}
 
 	function handleProtocolToolPrefillConfigChange(toolId: string, config: Record<string, boolean>) {
-		builderState.updateEditTool(toolId, { prefill_config: config });
+		builderState.updateProtocolTool(toolId, { prefill_config: config });
+	}
+
+	function handleProtocolToolStageIdsChange(toolId: string, stageIds: string[]) {
+		builderState.updateProtocolTool(toolId, { stage_id: stageIds });
 	}
 
 	function handleEditProtocolForm(toolId: string) {
-		const tool = builderState.getEditToolById(toolId);
+		const tool = builderState.getProtocolToolById(toolId);
 		if (!tool) return;
 
 		if (tool.data.protocol_form_id) {
-			// Open existing protocol form in FormEditorView
-			const attachedTo = tool.data.stage_id?.[0]
-				? { type: 'stage' as const, stageId: tool.data.stage_id[0] }
-				: { type: 'stage' as const, stageId: '' };
-			selectionContext = createContext.form(tool.data.protocol_form_id, attachedTo);
+			// Open existing protocol form
+			selectionContext = createContext.form(tool.data.protocol_form_id, { type: 'stage', stageId: tool.data.stage_id?.[0] || '' });
 		} else {
-			// Create a new protocol form
-			const stageId = tool.data.stage_id?.[0] || '';
+			// Create a new form and link it to the protocol tool
+			const stageId = tool.data.stage_id?.[0];
 			const newForm = builderState.addForm({ stageId });
 			builderState.updateForm(newForm.id, { name: `${tool.data.name} Form` });
-			builderState.updateEditTool(toolId, { protocol_form_id: newForm.id });
-			selectionContext = createContext.form(newForm.id, { type: 'stage', stageId });
+			builderState.updateProtocolTool(toolId, { protocol_form_id: newForm.id });
+			selectionContext = createContext.form(newForm.id, { type: 'stage', stageId: stageId || '' });
 		}
 	}
 
-	function handleProtocolToolClose() {
+	function handleProtocolToolDelete(toolId: string) {
+		builderState.deleteProtocolTool(toolId);
 		selectionContext = createContext.none();
 	}
 
-	function handleProtocolToolDelete(toolId: string) {
-		builderState.deleteEditTool(toolId);
+	function handleProtocolToolClose() {
 		selectionContext = createContext.none();
 	}
 
@@ -1193,6 +1286,8 @@
 				selectionContext = createContext.editTool(toolId, { type: 'connection', connectionId: selectionContext.actionId });
 			} else if (toolType === 'form') {
 				selectionContext = createContext.form(toolId, { type: 'connection', connectionId: selectionContext.actionId });
+			} else if (toolType === 'protocol') {
+				selectionContext = createContext.protocolTool(toolId, { type: 'connection', connectionId: selectionContext.actionId });
 			}
 		}
 	}
@@ -1203,6 +1298,8 @@
 			builderState.deleteForm(toolId);
 		} else if (toolType === 'edit') {
 			builderState.deleteEditTool(toolId);
+		} else if (toolType === 'protocol') {
+			builderState.deleteProtocolTool(toolId);
 		}
 	}
 
@@ -1216,6 +1313,9 @@
 		if (toolType === 'edit') {
 			const tool = builderState.addGlobalEditTool('form_fields');
 			selectionContext = createContext.editTool(tool.id, { type: 'global' });
+		} else if (toolType === 'protocol') {
+			const tool = builderState.addProtocolTool({ isGlobal: true });
+			selectionContext = createContext.protocolTool(tool.id, { type: 'global' });
 		} else if (toolType === 'automation') {
 			const automation = builderState.addAutomation('on_transition');
 			selectionContext = createContext.automation(automation.id);
@@ -1230,13 +1330,18 @@
 			selectionContext = createContext.fieldTags();
 			return;
 		}
-		// Check if it's an automation or edit tool
+		// Check if it's an automation, protocol tool, or edit tool
 		const isAutomation = builderState.getAutomationById(toolId);
 		if (isAutomation) {
 			selectionContext = createContext.automation(toolId);
-		} else {
-			selectionContext = createContext.editTool(toolId, { type: 'global' });
+			return;
 		}
+		const isProtocol = builderState.getProtocolToolById(toolId);
+		if (isProtocol) {
+			selectionContext = createContext.protocolTool(toolId, { type: 'global' });
+			return;
+		}
+		selectionContext = createContext.editTool(toolId, { type: 'global' });
 	}
 
 	function handleGlobalToolsLabelClick() {
@@ -1246,11 +1351,16 @@
 	function handleDeleteGlobalTool(toolType: string, toolId: string) {
 		if (toolType === 'edit') {
 			builderState.deleteEditTool(toolId);
+		} else if (toolType === 'protocol') {
+			builderState.deleteProtocolTool(toolId);
 		} else if (toolType === 'field_tag') {
 			builderState.deleteFieldTag();
 		}
 		// If we were viewing this tool, go back to global tools panel
 		if (selectionContext.type === 'editTool' && selectionContext.editToolId === toolId) {
+			selectionContext = createContext.globalTools();
+		}
+		if (selectionContext.type === 'protocolTool' && selectionContext.protocolToolId === toolId) {
 			selectionContext = createContext.globalTools();
 		}
 		if (selectionContext.type === 'fieldTags') {
@@ -1300,6 +1410,10 @@
 
 	function handleAutomationStepsChange(automationId: string, steps: AutomationStep[]) {
 		builderState.updateAutomation(automationId, { steps });
+	}
+
+	function handleAutomationExecutionModeChange(automationId: string, execution_mode: ExecutionMode) {
+		builderState.updateAutomation(automationId, { execution_mode });
 	}
 
 	function handleAutomationClose() {
@@ -1374,8 +1488,8 @@
 		} else if (toolType === 'edit') {
 			builderState.addEditTool({ stageId });
 		} else if (toolType === 'protocol') {
-			const newTool = builderState.addProtocolTool(stageId);
-			selectionContext = createContext.protocolTool(newTool.id, { type: 'stage', stageId });
+			const tool = builderState.addProtocolTool({ stageId });
+			selectionContext = createContext.protocolTool(tool.id, { type: 'stage', stageId });
 		}
 	}
 
@@ -1455,6 +1569,8 @@
 				selectionContext = createContext.form(toolId, { type: 'stage', stageId: selectionContext.stageId });
 			} else if (toolType === 'edit') {
 				selectionContext = createContext.editTool(toolId, { type: 'stage', stageId: selectionContext.stageId });
+			} else if (toolType === 'protocol') {
+				selectionContext = createContext.protocolTool(toolId, { type: 'stage', stageId: selectionContext.stageId });
 			}
 		}
 	}
@@ -1506,6 +1622,7 @@
 			onEditAction={handleEditAction}
 			onDeleteAction={handleDeleteAction}
 			onAddProgressTool={handleAddProgressTool}
+			{allowedConnectionToolTypes}
 			onToggleRequired={handleToggleRequired}
 			onMoveFieldUp={handleMoveFieldUp}
 			onMoveFieldDown={handleMoveFieldDown}
@@ -1559,9 +1676,13 @@
 			{ancestorFields}
 			{selectedEditTool}
 			{editToolAncestorFields}
+			{selectedProtocolTool}
+			{protocolToolAncestorFields}
+			{protocolFormFieldCount}
 			{stageEditTools}
 			{connectionForms}
 			{connectionEditTools}
+			{connectionProtocolTools}
 			globalEditTools={globalEditTools.map(t => t.data)}
 			{automations}
 			{selectedAutomation}
@@ -1603,12 +1724,11 @@
 			onEditToolEditModeChange={handleEditToolEditModeChange}
 			onEditToolDelete={handleEditToolDelete}
 			onEditToolClose={handleEditToolClose}
-			{selectedProtocolTool}
-			{protocolToolAncestorFields}
-			{protocolFormFieldCount}
+			allStages={builderState.visibleStages.map(s => s.data)}
 			onProtocolToolNameChange={handleProtocolToolNameChange}
 			onProtocolToolFieldsChange={handleProtocolToolFieldsChange}
 			onProtocolToolPrefillConfigChange={handleProtocolToolPrefillConfigChange}
+			onProtocolToolStageIdsChange={handleProtocolToolStageIdsChange}
 			onEditProtocolForm={handleEditProtocolForm}
 			onProtocolToolDelete={handleProtocolToolDelete}
 			onProtocolToolClose={handleProtocolToolClose}
@@ -1622,6 +1742,7 @@
 			onAutomationTriggerTypeChange={handleAutomationTriggerTypeChange}
 			onAutomationTriggerConfigChange={handleAutomationTriggerConfigChange}
 			onAutomationStepsChange={handleAutomationStepsChange}
+			onAutomationExecutionModeChange={handleAutomationExecutionModeChange}
 			onAutomationClose={handleAutomationClose}
 			onAddConnection={handleAddConnectionFromPreview}
 			onAddStageTool={handleAddStageToolFromPreview}

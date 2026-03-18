@@ -59,6 +59,7 @@ export interface ToolsForm {
 	stage_id?: string;
 	name: string;
 	description?: string;
+	tool_order?: number;
 	/**
 	 * Allowed roles for this form.
 	 * - If connection_id is set: IGNORED (inherited from connection.allowed_roles)
@@ -220,7 +221,7 @@ export interface ToolsFormField {
 // Edit Tool Types
 // =============================================================================
 
-export type EditMode = 'form_fields' | 'location' | 'protocol';
+export type EditMode = 'form_fields' | 'location';
 
 export interface ToolsEdit {
 	id: string;
@@ -232,6 +233,7 @@ export interface ToolsEdit {
 	 */
 	stage_id?: string[];
 	name: string;
+	tool_order?: number;
 	/**
 	 * Fields that can be edited by this tool.
 	 * Only used when edit_mode='form_fields'.
@@ -260,23 +262,32 @@ export interface ToolsEdit {
 	 * - If stage_id is set: USED (defines the button appearance)
 	 */
 	visual_config?: VisualConfig;
-	/**
-	 * Form ID for protocol-specific fields (only used when edit_mode='protocol').
-	 * References a tools_forms record whose fields define the protocol section.
-	 */
+}
+
+// =============================================================================
+// Protocol Tool Types
+// =============================================================================
+
+export interface ToolsProtocol {
+	id: string;
+	workflow_id: string;
+	connection_id?: string;
+	stage_id: string[];
+	is_global: boolean;
+	name: string;
+	tool_order?: number;
+	editable_fields: string[];
+	prefill_config: Record<string, boolean>;
 	protocol_form_id?: string;
-	/**
-	 * Pre-fill configuration per field.
-	 * Keys are field IDs, values are booleans. Default is true (pre-fill).
-	 * Set to false to leave a field empty (e.g. inspection date).
-	 * Applies to both edit fields and protocol form fields.
-	 */
-	prefill_config?: Record<string, boolean>;
+	allowed_roles: string[];
+	visual_config?: VisualConfig;
 }
 
 // =============================================================================
 // Automation Types
 // =============================================================================
+
+export type ExecutionMode = 'run_all' | 'first_match';
 
 export type TriggerType = 'on_transition' | 'on_field_change' | 'scheduled';
 
@@ -348,6 +359,7 @@ export interface ToolsAutomation {
 	name: string;
 	trigger_type: TriggerType;
 	trigger_config: TriggerConfig;
+	execution_mode: ExecutionMode;
 	steps: AutomationStep[];
 	is_enabled: boolean;
 }
@@ -390,5 +402,6 @@ export type TrackedConnection = TrackedItem<WorkflowConnection>;
 export type TrackedForm = TrackedItem<ToolsForm>;
 export type TrackedFormField = TrackedItem<ToolsFormField>;
 export type TrackedEditTool = TrackedItem<ToolsEdit>;
+export type TrackedProtocolTool = TrackedItem<ToolsProtocol>;
 export type TrackedAutomation = TrackedItem<ToolsAutomation>;
 export type TrackedFieldTag = TrackedItem<ToolsFieldTag>;

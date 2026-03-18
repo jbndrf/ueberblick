@@ -13,9 +13,9 @@
 	import { StagePreviewView, type StageAction, type TimelineStage, type IncomingFormGroup } from './views/stage-preview';
 
 	import type {
-		ToolsForm, ToolsFormField, TrackedFormField, WorkflowStage, ColumnPosition, ToolsEdit, VisualConfig,
-		ToolsAutomation, AutomationStep, TriggerType, TriggerConfig,
-		TagMapping, EditMode
+		ToolsForm, ToolsFormField, TrackedFormField, WorkflowStage, ColumnPosition, ToolsEdit, ToolsProtocol, VisualConfig,
+		ToolsAutomation, AutomationStep, TriggerType, TriggerConfig, ExecutionMode,
+		TagMapping
 	} from '$lib/workflow-builder';
 	import type { FormFieldWithValue } from '$lib/components/form-renderer';
 
@@ -44,10 +44,15 @@
 		// Edit tool editor props
 		selectedEditTool?: ToolsEdit | null;
 		editToolAncestorFields?: AncestorFieldGroup[];
+		// Protocol tool editor props
+		selectedProtocolTool?: ToolsProtocol | null;
+		protocolToolAncestorFields?: AncestorFieldGroup[];
+		protocolFormFieldCount?: number;
 		// Stage/Connection/Global tools for property views
 		stageEditTools?: ToolsEdit[];
 		connectionForms?: ToolsForm[];
 		connectionEditTools?: ToolsEdit[];
+		connectionProtocolTools?: ToolsProtocol[];
 		globalEditTools?: ToolsEdit[];
 		// Automation props
 		automations?: ToolsAutomation[];
@@ -101,17 +106,15 @@
 		// Edit tool editor handlers
 		onEditToolNameChange?: (editToolId: string, name: string) => void;
 		onEditToolFieldsChange?: (editToolId: string, fieldIds: string[]) => void;
-		onEditToolEditModeChange?: (editToolId: string, editMode: EditMode) => void;
+		onEditToolEditModeChange?: (editToolId: string, editMode: 'form_fields' | 'location') => void;
 		onEditToolDelete?: (editToolId: string) => void;
 		onEditToolClose?: () => void;
-		// Protocol tool editor props
-		selectedProtocolTool?: ToolsEdit | null;
-		protocolToolAncestorFields?: AncestorFieldGroup[];
-		protocolFormFieldCount?: number;
 		// Protocol tool editor handlers
+		allStages?: WorkflowStage[];
 		onProtocolToolNameChange?: (toolId: string, name: string) => void;
 		onProtocolToolFieldsChange?: (toolId: string, fieldIds: string[]) => void;
 		onProtocolToolPrefillConfigChange?: (toolId: string, config: Record<string, boolean>) => void;
+		onProtocolToolStageIdsChange?: (toolId: string, stageIds: string[]) => void;
 		onEditProtocolForm?: (toolId: string) => void;
 		onProtocolToolDelete?: (toolId: string) => void;
 		onProtocolToolClose?: () => void;
@@ -127,6 +130,7 @@
 		onAutomationTriggerTypeChange?: (automationId: string, triggerType: TriggerType) => void;
 		onAutomationTriggerConfigChange?: (automationId: string, config: TriggerConfig) => void;
 		onAutomationStepsChange?: (automationId: string, steps: AutomationStep[]) => void;
+		onAutomationExecutionModeChange?: (automationId: string, mode: ExecutionMode) => void;
 		onAutomationClose?: () => void;
 		// Stage preview handlers
 		onAddConnection?: (fromStageId: string, toStageId: string) => void;
@@ -155,9 +159,13 @@
 		ancestorFields = [],
 		selectedEditTool = null,
 		editToolAncestorFields = [],
+		selectedProtocolTool = null,
+		protocolToolAncestorFields = [],
+		protocolFormFieldCount = 0,
 		stageEditTools = [],
 		connectionForms = [],
 		connectionEditTools = [],
+		connectionProtocolTools = [],
 		globalEditTools = [],
 		automations = [],
 		selectedAutomation = null,
@@ -199,12 +207,11 @@
 		onEditToolEditModeChange,
 		onEditToolDelete,
 		onEditToolClose,
-		selectedProtocolTool = null,
-		protocolToolAncestorFields = [],
-		protocolFormFieldCount = 0,
+		allStages = [],
 		onProtocolToolNameChange,
 		onProtocolToolFieldsChange,
 		onProtocolToolPrefillConfigChange,
+		onProtocolToolStageIdsChange,
 		onEditProtocolForm,
 		onProtocolToolDelete,
 		onProtocolToolClose,
@@ -218,6 +225,7 @@
 		onAutomationTriggerTypeChange,
 		onAutomationTriggerConfigChange,
 		onAutomationStepsChange,
+		onAutomationExecutionModeChange,
 		onAutomationClose,
 		onAddConnection,
 		onAddStageTool,
@@ -300,11 +308,13 @@
 		<ProtocolToolEditorView
 			protocolTool={selectedProtocolTool}
 			ancestorFields={protocolToolAncestorFields}
-			{protocolFormFieldCount}
+			formFieldCount={protocolFormFieldCount}
+			{allStages}
 			onNameChange={(name) => onProtocolToolNameChange?.(selectedProtocolTool.id, name)}
 			onFieldsChange={(fieldIds) => onProtocolToolFieldsChange?.(selectedProtocolTool.id, fieldIds)}
 			onPrefillConfigChange={(config) => onProtocolToolPrefillConfigChange?.(selectedProtocolTool.id, config)}
-			onEditProtocolForm={() => onEditProtocolForm?.(selectedProtocolTool.id)}
+			onStageIdsChange={(stageIds) => onProtocolToolStageIdsChange?.(selectedProtocolTool.id, stageIds)}
+			onEditForm={() => onEditProtocolForm?.(selectedProtocolTool.id)}
 			onDelete={() => onProtocolToolDelete?.(selectedProtocolTool.id)}
 			onClose={onProtocolToolClose}
 		/>
@@ -327,6 +337,7 @@
 			onTriggerTypeChange={(tt) => onAutomationTriggerTypeChange?.(selectedAutomation.id, tt)}
 			onTriggerConfigChange={(config) => onAutomationTriggerConfigChange?.(selectedAutomation.id, config)}
 			onStepsChange={(s) => onAutomationStepsChange?.(selectedAutomation.id, s)}
+			onExecutionModeChange={(mode) => onAutomationExecutionModeChange?.(selectedAutomation.id, mode)}
 			onDelete={() => onDeleteAutomation?.(selectedAutomation.id)}
 			onClose={onAutomationClose}
 		/>
@@ -381,6 +392,7 @@
 			{stageEditTools}
 			{connectionForms}
 			{connectionEditTools}
+			{connectionProtocolTools}
 			{onStageRename}
 			{onStageDelete}
 			{onStageRolesChange}
