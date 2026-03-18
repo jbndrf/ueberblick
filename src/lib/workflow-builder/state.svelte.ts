@@ -442,7 +442,23 @@ export class WorkflowBuilderState {
 	}
 
 	getFormsForStage(stageId: string): TrackedForm[] {
-		return this.visibleForms.filter((f) => f.data.stage_id === stageId);
+		const protocolFormIds = this.getProtocolFormIds();
+		return this.visibleForms.filter((f) => f.data.stage_id === stageId && !protocolFormIds.has(f.data.id));
+	}
+
+	/**
+	 * Get the set of form IDs used as protocol forms.
+	 * These are excluded from regular form listings since they're
+	 * only accessed through their parent protocol tool.
+	 */
+	private getProtocolFormIds(): Set<string> {
+		const ids = new Set<string>();
+		for (const tool of this.visibleEditTools) {
+			if (tool.data.edit_mode === 'protocol' && tool.data.protocol_form_id) {
+				ids.add(tool.data.protocol_form_id);
+			}
+		}
+		return ids;
 	}
 
 	// =========================================================================
@@ -647,6 +663,7 @@ export class WorkflowBuilderState {
 	 */
 	getEditToolsForStage(stageId: string): TrackedEditTool[] {
 		return this.visibleEditTools.filter((e) => {
+			if (e.data.edit_mode === 'protocol') return false;
 			const stageIds = e.data.stage_id;
 			if (!stageIds || stageIds.length === 0) return false;
 			return stageIds.includes(stageId);
@@ -659,6 +676,7 @@ export class WorkflowBuilderState {
 	 */
 	getNonGlobalEditToolsForStage(stageId: string): TrackedEditTool[] {
 		return this.visibleEditTools.filter((e) => {
+			if (e.data.edit_mode === 'protocol') return false;
 			if (e.data.is_global) return false;
 			const stageIds = e.data.stage_id;
 			if (!stageIds || stageIds.length === 0) return false;
@@ -671,6 +689,59 @@ export class WorkflowBuilderState {
 	 */
 	getGlobalEditTools(): TrackedEditTool[] {
 		return this.visibleEditTools.filter((e) => e.data.is_global);
+	}
+
+	/**
+	 * Get protocol tools for a specific stage (includes global protocol tools).
+	 */
+	getProtocolToolsForStage(stageId: string): TrackedEditTool[] {
+		return this.visibleEditTools.filter((e) => {
+			if (e.data.edit_mode !== 'protocol') return false;
+			const stageIds = e.data.stage_id;
+			if (!stageIds || stageIds.length === 0) return false;
+			return stageIds.includes(stageId);
+		});
+	}
+
+	/**
+	 * Get only non-global protocol tools for a specific stage.
+	 */
+	getNonGlobalProtocolToolsForStage(stageId: string): TrackedEditTool[] {
+		return this.visibleEditTools.filter((e) => {
+			if (e.data.edit_mode !== 'protocol') return false;
+			if (e.data.is_global) return false;
+			const stageIds = e.data.stage_id;
+			if (!stageIds || stageIds.length === 0) return false;
+			return stageIds.includes(stageId);
+		});
+	}
+
+	/**
+	 * Add a protocol tool attached to a stage.
+	 */
+	addProtocolTool(stageId: string): ToolsEdit {
+		const newTool: ToolsEdit = {
+			id: generateId(),
+			connection_id: undefined,
+			stage_id: [stageId],
+			name: 'Protocol',
+			editable_fields: [],
+			edit_mode: 'protocol',
+			is_global: false,
+			allowed_roles: [],
+			visual_config: {
+				button_label: 'Protocol',
+			},
+			protocol_form_id: undefined,
+			prefill_config: {},
+		};
+
+		this.editTools.push({
+			data: newTool,
+			status: 'new'
+		});
+
+		return newTool;
 	}
 
 	// =========================================================================

@@ -7,6 +7,7 @@
 	import GlobalToolsPanel from './views/properties/panels/GlobalToolsPanel.svelte';
 	import { FormEditorView } from './views/form-editor';
 	import { EditToolEditorView } from './views/edit-tool-editor';
+	import { ProtocolToolEditorView } from './views/protocol-tool-editor';
 	import { FieldTagEditorView } from './views/field-tag-editor';
 	import { AutomationEditorView } from './views/automation-editor';
 	import { StagePreviewView, type StageAction, type TimelineStage, type IncomingFormGroup } from './views/stage-preview';
@@ -14,7 +15,7 @@
 	import type {
 		ToolsForm, ToolsFormField, TrackedFormField, WorkflowStage, ColumnPosition, ToolsEdit, VisualConfig,
 		ToolsAutomation, AutomationStep, TriggerType, TriggerConfig,
-		TagMapping
+		TagMapping, EditMode
 	} from '$lib/workflow-builder';
 	import type { FormFieldWithValue } from '$lib/components/form-renderer';
 
@@ -100,9 +101,20 @@
 		// Edit tool editor handlers
 		onEditToolNameChange?: (editToolId: string, name: string) => void;
 		onEditToolFieldsChange?: (editToolId: string, fieldIds: string[]) => void;
-		onEditToolEditModeChange?: (editToolId: string, editMode: 'form_fields' | 'location') => void;
+		onEditToolEditModeChange?: (editToolId: string, editMode: EditMode) => void;
 		onEditToolDelete?: (editToolId: string) => void;
 		onEditToolClose?: () => void;
+		// Protocol tool editor props
+		selectedProtocolTool?: ToolsEdit | null;
+		protocolToolAncestorFields?: AncestorFieldGroup[];
+		protocolFormFieldCount?: number;
+		// Protocol tool editor handlers
+		onProtocolToolNameChange?: (toolId: string, name: string) => void;
+		onProtocolToolFieldsChange?: (toolId: string, fieldIds: string[]) => void;
+		onProtocolToolPrefillConfigChange?: (toolId: string, config: Record<string, boolean>) => void;
+		onEditProtocolForm?: (toolId: string) => void;
+		onProtocolToolDelete?: (toolId: string) => void;
+		onProtocolToolClose?: () => void;
 		// Global tools handlers (for GlobalToolsPanel - reuses onToolRolesChange/onToolVisualConfigChange)
 		onGlobalToolDelete?: (toolType: string, toolId: string) => void;
 		// Automation handlers
@@ -187,6 +199,15 @@
 		onEditToolEditModeChange,
 		onEditToolDelete,
 		onEditToolClose,
+		selectedProtocolTool = null,
+		protocolToolAncestorFields = [],
+		protocolFormFieldCount = 0,
+		onProtocolToolNameChange,
+		onProtocolToolFieldsChange,
+		onProtocolToolPrefillConfigChange,
+		onEditProtocolForm,
+		onProtocolToolDelete,
+		onProtocolToolClose,
 		onGlobalToolDelete,
 		onSelectAutomation,
 		onAddAutomation,
@@ -221,6 +242,9 @@
 	// Edit tool editor mode
 	const isEditToolEditor = $derived(context.type === 'editTool');
 
+	// Protocol tool editor mode
+	const isProtocolToolEditor = $derived(context.type === 'protocolTool');
+
 	// Global tools panel mode
 	const isGlobalToolsPanel = $derived(context.type === 'globalTools');
 
@@ -238,11 +262,11 @@
 
 	// Any other selection that isn't handled by dedicated views
 	const hasSelection = $derived(
-		context.type !== 'none' && context.type !== 'form' && context.type !== 'editTool' && context.type !== 'globalTools' && context.type !== 'automation' && context.type !== 'fieldTags' && !isStagePreview
+		context.type !== 'none' && context.type !== 'form' && context.type !== 'editTool' && context.type !== 'protocolTool' && context.type !== 'globalTools' && context.type !== 'automation' && context.type !== 'fieldTags' && !isStagePreview
 	);
 </script>
 
-<aside class="right-sidebar" class:wide={isFormEditor || isEditToolEditor || isStagePreview} class:expanded={isFormEditor && paletteExpanded}>
+<aside class="right-sidebar" class:wide={isFormEditor || isEditToolEditor || isProtocolToolEditor || isStagePreview} class:expanded={isFormEditor && paletteExpanded}>
 	{#if isFormEditor && selectedForm}
 		<FormEditorView
 			form={selectedForm}
@@ -271,6 +295,18 @@
 			onEditModeChange={(editMode) => onEditToolEditModeChange?.(selectedEditTool.id, editMode)}
 			onDelete={() => onEditToolDelete?.(selectedEditTool.id)}
 			onClose={onEditToolClose}
+		/>
+	{:else if isProtocolToolEditor && selectedProtocolTool}
+		<ProtocolToolEditorView
+			protocolTool={selectedProtocolTool}
+			ancestorFields={protocolToolAncestorFields}
+			{protocolFormFieldCount}
+			onNameChange={(name) => onProtocolToolNameChange?.(selectedProtocolTool.id, name)}
+			onFieldsChange={(fieldIds) => onProtocolToolFieldsChange?.(selectedProtocolTool.id, fieldIds)}
+			onPrefillConfigChange={(config) => onProtocolToolPrefillConfigChange?.(selectedProtocolTool.id, config)}
+			onEditProtocolForm={() => onEditProtocolForm?.(selectedProtocolTool.id)}
+			onDelete={() => onProtocolToolDelete?.(selectedProtocolTool.id)}
+			onClose={onProtocolToolClose}
 		/>
 	{:else if isFieldTagEditor}
 		<FieldTagEditorView

@@ -7,9 +7,22 @@
 		field: ToolsFormField;
 		isSelected: boolean;
 		onToggle?: () => void;
+		/** Show pre-fill toggle (protocol tool context) */
+		showPrefillToggle?: boolean;
+		/** Whether pre-fill is enabled for this field (default: true) */
+		prefillEnabled?: boolean;
+		/** Callback when pre-fill toggle changes */
+		onTogglePrefill?: () => void;
 	};
 
-	let { field, isSelected, onToggle }: Props = $props();
+	let {
+		field,
+		isSelected,
+		onToggle,
+		showPrefillToggle = false,
+		prefillEnabled = true,
+		onTogglePrefill
+	}: Props = $props();
 
 	const Icon = $derived(fieldTypeIcons[field.field_type] || Type);
 </script>
@@ -24,6 +37,17 @@
 			{/if}
 		</span>
 	</div>
+	{#if showPrefillToggle && isSelected}
+		<button
+			type="button"
+			class="prefill-toggle"
+			class:prefill-off={!prefillEnabled}
+			onclick={(e) => { e.stopPropagation(); onTogglePrefill?.(); }}
+			title={prefillEnabled ? 'Pre-fill enabled (click to disable)' : 'Pre-fill disabled (click to enable)'}
+		>
+			{prefillEnabled ? 'prefill' : 'no prefill'}
+		</button>
+	{/if}
 	<div class="field-type-icon">
 		<Icon class="h-3 w-3" />
 	</div>
@@ -77,5 +101,33 @@
 		background: hsl(var(--muted));
 		border-radius: 0.25rem;
 		color: hsl(var(--muted-foreground));
+	}
+
+	.prefill-toggle {
+		flex-shrink: 0;
+		font-size: 0.5625rem;
+		font-weight: 500;
+		padding: 0.0625rem 0.25rem;
+		border-radius: 0.1875rem;
+		border: 1px solid hsl(var(--border));
+		background: hsl(var(--primary) / 0.1);
+		color: hsl(var(--primary));
+		cursor: pointer;
+		transition: all 0.15s ease;
+		white-space: nowrap;
+	}
+
+	.prefill-toggle:hover {
+		background: hsl(var(--primary) / 0.2);
+	}
+
+	.prefill-toggle.prefill-off {
+		background: hsl(var(--muted));
+		color: hsl(var(--muted-foreground));
+		border-color: hsl(var(--border));
+	}
+
+	.prefill-toggle.prefill-off:hover {
+		background: hsl(var(--accent));
 	}
 </style>

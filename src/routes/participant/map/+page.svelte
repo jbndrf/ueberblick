@@ -190,19 +190,25 @@
 		}
 	});
 
-	// Initialize filters - all categories visible by default
+	// Keep all categories with markers visible by default
 	$effect(() => {
-		if (markers.length > 0 && untrack(() => visibleCategoryIds.length) === 0) {
-			const categoryIds = [...new Set(markers.map((m: any) => m.category_id).filter(Boolean))];
-			visibleCategoryIds = categoryIds;
+		if (markers.length === 0) return;
+		const currentIds = untrack(() => visibleCategoryIds);
+		const allCategoryIds = [...new Set(markers.map((m: any) => m.category_id).filter(Boolean))];
+		const missing = allCategoryIds.filter((id) => !currentIds.includes(id));
+		if (missing.length > 0) {
+			visibleCategoryIds = [...currentIds, ...missing];
 		}
 	});
 
-	// Initialize filters - all workflows visible by default
+	// Keep all workflows with instances visible by default
 	$effect(() => {
-		if (workflowInstances.length > 0 && untrack(() => visibleWorkflowIds.length) === 0) {
-			const workflowIds = [...new Set(workflowInstances.map((i: any) => i.workflow_id).filter(Boolean))];
-			visibleWorkflowIds = workflowIds;
+		if (workflowInstances.length === 0) return;
+		const currentIds = untrack(() => visibleWorkflowIds);
+		const allWorkflowIds = [...new Set(workflowInstances.map((i: any) => i.workflow_id).filter(Boolean))];
+		const missing = allWorkflowIds.filter((id) => !currentIds.includes(id));
+		if (missing.length > 0) {
+			visibleWorkflowIds = [...currentIds, ...missing];
 		}
 	});
 
@@ -243,6 +249,68 @@
 				}
 			}
 			visibleTagValues = newMap;
+		}
+	});
+
+	// Auto-add new filter values AND workflows as visible
+	// Handles: new instance for existing stage, instance moves to new stage,
+	// first-ever instance for a workflow that had no instances before
+	$effect(() => {
+		if (fieldTags.length === 0 || workflowInstances.length === 0) return;
+		const currentTagValues = untrack(() => visibleTagValues);
+		const currentWorkflowIds = untrack(() => visibleWorkflowIds);
+
+		let tagChanged = false;
+		const newMap = new Map(currentTagValues);
+		const newWorkflowIds = [...currentWorkflowIds];
+
+		for (const ft of fieldTags) {
+			const mappings = (ft as any).tag_mappings || [];
+			for (const mapping of mappings) {
+				if (mapping.tagType !== 'filterable') continue;
+				const wfId = (ft as any).workflow_id;
+				const filterBy = (mapping.config?.filterBy as string) || 'field';
+				const existing = newMap.get(wfId) ?? new Set<string>();
+
+				if (filterBy === 'stage') {
+					for (const inst of workflowInstances) {
+						if ((inst as any).workflow_id === wfId && (inst as any).current_stage_id) {
+							if (!existing.has((inst as any).current_stage_id)) {
+								const updated = new Set(newMap.get(wfId) ?? existing);
+								updated.add((inst as any).current_stage_id);
+								newMap.set(wfId, updated);
+								tagChanged = true;
+							}
+						}
+					}
+				} else if (mapping.fieldId) {
+					for (const fv of fieldValues) {
+						if ((fv as any).field_key === mapping.fieldId && (fv as any).value) {
+							for (const v of splitMultiValue((fv as any).value)) {
+								if (!existing.has(v)) {
+									const updated = new Set(newMap.get(wfId) ?? existing);
+									updated.add(v);
+									newMap.set(wfId, updated);
+									tagChanged = true;
+								}
+							}
+						}
+					}
+				}
+
+				// Ensure the workflow is in visibleWorkflowIds if it has visible tag values
+				const finalSet = newMap.get(wfId);
+				if (finalSet && finalSet.size > 0 && !newWorkflowIds.includes(wfId)) {
+					newWorkflowIds.push(wfId);
+				}
+			}
+		}
+
+		if (tagChanged) {
+			visibleTagValues = newMap;
+		}
+		if (newWorkflowIds.length !== currentWorkflowIds.length) {
+			visibleWorkflowIds = newWorkflowIds;
 		}
 	});
 

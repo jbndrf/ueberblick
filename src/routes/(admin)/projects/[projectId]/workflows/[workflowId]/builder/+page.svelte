@@ -44,7 +44,8 @@
 		type VisualConfig,
 		type TriggerType,
 		type TriggerConfig,
-		type AutomationStep
+		type AutomationStep,
+		type EditMode
 	} from '$lib/workflow-builder';
 	import type { ToolInstance, FormToolConfig, EditToolConfig, AutomationToolConfig, FieldTagToolConfig } from '$lib/workflow-builder/tools';
 	import { ToolBar } from '$lib/workflow-builder/components';
@@ -186,7 +187,20 @@
 	function getToolsForStage(stageId: string): ToolInstance[] {
 		const forms = builderState.getFormsForStage(stageId);
 		const editTools = builderState.getNonGlobalEditToolsForStage(stageId);
-		return [...formsToToolInstances(forms), ...editToolsToToolInstances(editTools)];
+		const protocolTools = builderState.getNonGlobalProtocolToolsForStage(stageId);
+		return [
+			...formsToToolInstances(forms),
+			...editToolsToToolInstances(editTools),
+			...protocolTools.map((tool, index) => ({
+				id: tool.data.id,
+				toolType: 'protocol',
+				config: {
+					toolType: 'protocol' as const,
+					buttonLabel: tool.data.name || 'Protocol'
+				},
+				order: index + 200
+			}))
+		];
 	}
 
 	// ==========================================================================
@@ -433,6 +447,32 @@
 			return builderState.getAllFormFields();
 		}
 		return [];
+	});
+
+	// Protocol tool editor derived state
+	const selectedProtocolTool = $derived.by((): ToolsEdit | null => {
+		if (selectionContext.type !== 'protocolTool') return null;
+		const tool = builderState.getEditToolById(selectionContext.protocolToolId);
+		return tool?.data ?? null;
+	});
+
+	// Ancestor fields for protocol tool configuration
+	const protocolToolAncestorFields = $derived.by(() => {
+		if (selectionContext.type !== 'protocolTool') return [];
+		if (selectionContext.attachedTo.type === 'stage') {
+			return builderState.getAncestorFormFieldsForStage(selectionContext.attachedTo.stageId);
+		} else if (selectionContext.attachedTo.type === 'global') {
+			return builderState.getAllFormFields();
+		}
+		return [];
+	});
+
+	// Protocol form field count (for the editor preview)
+	const protocolFormFieldCount = $derived.by(() => {
+		if (selectionContext.type !== 'protocolTool') return 0;
+		const tool = builderState.getEditToolById(selectionContext.protocolToolId);
+		if (!tool?.data.protocol_form_id) return 0;
+		return builderState.getFieldsForForm(tool.data.protocol_form_id).length;
 	});
 
 	// Stage edit tools for property view (when a stage is selected)
@@ -845,11 +885,12 @@
 		if (!selectedStageId) return;
 
 		if (toolType === 'form') {
-			// Create a new form attached to this stage
 			builderState.addForm({ stageId: selectedStageId });
 		} else if (toolType === 'edit') {
-			// Create a new edit tool attached to this stage
 			builderState.addEditTool({ stageId: selectedStageId });
+		} else if (toolType === 'protocol') {
+			const newTool = builderState.addProtocolTool(selectedStageId);
+			selectionContext = createContext.protocolTool(newTool.id, { type: 'stage', stageId: selectedStageId });
 		}
 	}
 
@@ -882,6 +923,7 @@
 		// Find the tool to determine its type
 		const forms = builderState.getFormsForStage(stageId);
 		const editTools = builderState.getEditToolsForStage(stageId);
+		const protocolTools = builderState.getProtocolToolsForStage(stageId);
 
 		const form = forms.find(f => f.data.id === toolId);
 		if (form) {
@@ -892,6 +934,12 @@
 		const editTool = editTools.find(e => e.data.id === toolId);
 		if (editTool) {
 			selectionContext = createContext.editTool(toolId, { type: 'stage', stageId });
+			return;
+		}
+
+		const protocolTool = protocolTools.find(e => e.data.id === toolId);
+		if (protocolTool) {
+			selectionContext = createContext.protocolTool(toolId, { type: 'stage', stageId });
 		}
 	}
 
@@ -1064,7 +1112,7 @@
 		builderState.updateEditTool(editToolId, { editable_fields: fieldIds });
 	}
 
-	function handleEditToolEditModeChange(editToolId: string, editMode: 'form_fields' | 'location') {
+	function handleEditToolEditModeChange(editToolId: string, editMode: EditMode) {
 		builderState.updateEditTool(editToolId, { edit_mode: editMode });
 	}
 
@@ -1074,6 +1122,48 @@
 
 	function handleEditToolDelete(editToolId: string) {
 		builderState.deleteEditTool(editToolId);
+		selectionContext = createContext.none();
+	}
+
+	// Protocol tool editor handlers
+	function handleProtocolToolNameChange(toolId: string, name: string) {
+		builderState.updateEditTool(toolId, { name });
+	}
+
+	function handleProtocolToolFieldsChange(toolId: string, fieldIds: string[]) {
+		builderState.updateEditTool(toolId, { editable_fields: fieldIds });
+	}
+
+	function handleProtocolToolPrefillConfigChange(toolId: string, config: Record<string, boolean>) {
+		builderState.updateEditTool(toolId, { prefill_config: config });
+	}
+
+	function handleEditProtocolForm(toolId: string) {
+		const tool = builderState.getEditToolById(toolId);
+		if (!tool) return;
+
+		if (tool.data.protocol_form_id) {
+			// Open existing protocol form in FormEditorView
+			const attachedTo = tool.data.stage_id?.[0]
+				? { type: 'stage' as const, stageId: tool.data.stage_id[0] }
+				: { type: 'stage' as const, stageId: '' };
+			selectionContext = createContext.form(tool.data.protocol_form_id, attachedTo);
+		} else {
+			// Create a new protocol form
+			const stageId = tool.data.stage_id?.[0] || '';
+			const newForm = builderState.addForm({ stageId });
+			builderState.updateForm(newForm.id, { name: `${tool.data.name} Form` });
+			builderState.updateEditTool(toolId, { protocol_form_id: newForm.id });
+			selectionContext = createContext.form(newForm.id, { type: 'stage', stageId });
+		}
+	}
+
+	function handleProtocolToolClose() {
+		selectionContext = createContext.none();
+	}
+
+	function handleProtocolToolDelete(toolId: string) {
+		builderState.deleteEditTool(toolId);
 		selectionContext = createContext.none();
 	}
 
@@ -1094,6 +1184,8 @@
 				selectionContext = createContext.editTool(toolId, { type: 'stage', stageId: selectionContext.stageId });
 			} else if (toolType === 'form') {
 				selectionContext = createContext.form(toolId, { type: 'stage', stageId: selectionContext.stageId });
+			} else if (toolType === 'protocol') {
+				selectionContext = createContext.protocolTool(toolId, { type: 'stage', stageId: selectionContext.stageId });
 			}
 		} else if (selectionContext.type === 'action') {
 			// Tool on a connection
@@ -1281,6 +1373,9 @@
 			builderState.addForm({ stageId });
 		} else if (toolType === 'edit') {
 			builderState.addEditTool({ stageId });
+		} else if (toolType === 'protocol') {
+			const newTool = builderState.addProtocolTool(stageId);
+			selectionContext = createContext.protocolTool(newTool.id, { type: 'stage', stageId });
 		}
 	}
 
@@ -1508,6 +1603,15 @@
 			onEditToolEditModeChange={handleEditToolEditModeChange}
 			onEditToolDelete={handleEditToolDelete}
 			onEditToolClose={handleEditToolClose}
+			{selectedProtocolTool}
+			{protocolToolAncestorFields}
+			{protocolFormFieldCount}
+			onProtocolToolNameChange={handleProtocolToolNameChange}
+			onProtocolToolFieldsChange={handleProtocolToolFieldsChange}
+			onProtocolToolPrefillConfigChange={handleProtocolToolPrefillConfigChange}
+			onEditProtocolForm={handleEditProtocolForm}
+			onProtocolToolDelete={handleProtocolToolDelete}
+			onProtocolToolClose={handleProtocolToolClose}
 			onGlobalToolDelete={handleDeleteGlobalTool}
 			onSelectAutomation={handleSelectAutomation}
 			onAddAutomation={handleAddAutomation}

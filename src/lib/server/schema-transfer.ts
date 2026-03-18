@@ -233,7 +233,7 @@ export const WORKFLOW_LAYERS: DuplicationLayer[] = [
 					(Array.isArray(e.stage_id) && e.stage_id.some((sid: string) => stageOldIds.has(sid)))
 			);
 		},
-		remap: { connection_id: 'workflow_connections' },
+		remap: { connection_id: 'workflow_connections', protocol_form_id: 'tools_forms' },
 		remapArrays: { stage_id: 'workflow_stages', editable_fields: 'tools_form_fields' },
 		roleFields: ['allowed_roles'],
 	},

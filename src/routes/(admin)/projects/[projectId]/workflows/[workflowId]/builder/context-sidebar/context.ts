@@ -39,6 +39,13 @@ export type EditToolContextData = {
 	attachedTo: { type: 'connection'; connectionId: string } | { type: 'stage'; stageId: string } | { type: 'global' };
 };
 
+// Protocol tool context data
+export type ProtocolToolContextData = {
+	protocolToolId: string;
+	/** Stage or global this protocol tool is attached to */
+	attachedTo: { type: 'stage'; stageId: string } | { type: 'global' };
+};
+
 // Add tool picker context (shows tool picker in context sidebar)
 export type AddToolContextData = {
 	/** Where to attach the new tool */
@@ -53,6 +60,7 @@ export type SelectionContext =
 	| { type: 'field'; fieldId: string; field: FormFieldData; stageId: string }
 	| { type: 'form'; formId: string; attachedTo: FormContextData['attachedTo'] }
 	| { type: 'editTool'; editToolId: string; attachedTo: EditToolContextData['attachedTo'] }
+	| { type: 'protocolTool'; protocolToolId: string; attachedTo: ProtocolToolContextData['attachedTo'] }
 	| { type: 'addTool'; attachedTo: AddToolContextData['attachedTo'] }
 	| { type: 'globalTools' }
 	| { type: 'automation'; automationId: string }
@@ -93,6 +101,15 @@ export const createContext = {
 	): SelectionContext => ({
 		type: 'editTool',
 		editToolId,
+		attachedTo
+	}),
+
+	protocolTool: (
+		protocolToolId: string,
+		attachedTo: ProtocolToolContextData['attachedTo']
+	): SelectionContext => ({
+		type: 'protocolTool',
+		protocolToolId,
 		attachedTo
 	}),
 
@@ -150,6 +167,12 @@ export function isAutomationContext(
 	ctx: SelectionContext
 ): ctx is Extract<SelectionContext, { type: 'automation' }> {
 	return ctx.type === 'automation';
+}
+
+export function isProtocolToolContext(
+	ctx: SelectionContext
+): ctx is Extract<SelectionContext, { type: 'protocolTool' }> {
+	return ctx.type === 'protocolTool';
 }
 
 export function isFieldTagsContext(

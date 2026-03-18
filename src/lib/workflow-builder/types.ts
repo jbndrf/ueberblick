@@ -220,7 +220,7 @@ export interface ToolsFormField {
 // Edit Tool Types
 // =============================================================================
 
-export type EditMode = 'form_fields' | 'location';
+export type EditMode = 'form_fields' | 'location' | 'protocol';
 
 export interface ToolsEdit {
 	id: string;
@@ -260,6 +260,18 @@ export interface ToolsEdit {
 	 * - If stage_id is set: USED (defines the button appearance)
 	 */
 	visual_config?: VisualConfig;
+	/**
+	 * Form ID for protocol-specific fields (only used when edit_mode='protocol').
+	 * References a tools_forms record whose fields define the protocol section.
+	 */
+	protocol_form_id?: string;
+	/**
+	 * Pre-fill configuration per field.
+	 * Keys are field IDs, values are booleans. Default is true (pre-fill).
+	 * Set to false to leave a field empty (e.g. inspection date).
+	 * Applies to both edit fields and protocol form fields.
+	 */
+	prefill_config?: Record<string, boolean>;
 }
 
 // =============================================================================

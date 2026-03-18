@@ -74,6 +74,15 @@ export interface AutomationToolConfig {
 }
 
 /**
+ * Protocol tool config - recurring data collection with snapshot
+ */
+export interface ProtocolToolConfig {
+	toolType: 'protocol';
+	/** Button label */
+	buttonLabel: string;
+}
+
+/**
  * Field tag tool config - semantic tagging for form fields
  */
 export interface FieldTagToolConfig {
@@ -84,7 +93,7 @@ export interface FieldTagToolConfig {
 // Tool Config Union
 // =============================================================================
 
-export type ToolConfig = FormToolConfig | EditToolConfig | AutomationToolConfig | FieldTagToolConfig;
+export type ToolConfig = FormToolConfig | EditToolConfig | AutomationToolConfig | ProtocolToolConfig | FieldTagToolConfig;
 
 // =============================================================================
 // Type Guards

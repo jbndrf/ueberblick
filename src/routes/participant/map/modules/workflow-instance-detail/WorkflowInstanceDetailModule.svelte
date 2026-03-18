@@ -15,7 +15,7 @@
 	import * as Card from '$lib/components/ui/card';
 	import * as Tabs from '$lib/components/ui/tabs';
 	import { MapPin, Clock, ChevronDown } from 'lucide-svelte';
-	import { FormFillTool, EditFieldsTool, ViewFieldsTool, LocationEditTool, ConflictResolutionTool } from './tools';
+	import { FormFillTool, EditFieldsTool, ViewFieldsTool, LocationEditTool, ConflictResolutionTool, ProtocolTool } from './tools';
 	import { getConflictsForInstance, resolveConflict } from '$lib/participant-state/sync.svelte';
 	import type { SyncConflict } from '$lib/participant-state/db';
 	import { getPocketBase } from '$lib/pocketbase';
@@ -58,6 +58,7 @@
 
 	let activeToolFlow = $state<ActiveToolFlow | null>(null);
 	let activeEditTool = $state<ToolEdit | null>(null);
+	let activeProtocolTool = $state<ToolEdit | null>(null);
 	let isLocationPickerActive = $state(false);
 	let activeLocationEditTool = $state<ToolEdit | null>(null);
 
@@ -79,6 +80,7 @@
 		activeTab = 'overview';
 		activeToolFlow = null;
 		activeEditTool = null;
+		activeProtocolTool = null;
 		isLocationPickerActive = false;
 		activeLocationEditTool = null;
 		showConflictTool = false;
@@ -145,6 +147,9 @@
 		if (activeEditTool) {
 			return activeEditTool.name || 'Edit';
 		}
+		if (activeProtocolTool) {
+			return activeProtocolTool.name || 'Protocol';
+		}
 		if (activeLocationEditTool) {
 			return activeLocationEditTool.name || 'Edit Location';
 		}
@@ -206,6 +211,7 @@
 		isOpen = false;
 		activeToolFlow = null;
 		activeEditTool = null;
+		activeProtocolTool = null;
 		onClose();
 	}
 
@@ -263,6 +269,9 @@
 			isLocationPickerActive = true;
 			// Close sheet so user has full map view for location editing
 			isOpen = false;
+		} else if (editTool.edit_mode === 'protocol') {
+			// Protocol mode
+			activeProtocolTool = editTool;
 		} else {
 			// Form fields edit mode
 			activeEditTool = editTool;
@@ -623,6 +632,184 @@
 	}
 
 	// ==========================================================================
+	// Protocol Tool Handlers
+	// ==========================================================================
+
+	async function handleProtocolSave(editValues: Record<string, unknown>, protocolValues: Record<string, unknown>) {
+		if (!activeProtocolTool || !detailState || !gateway) return;
+
+		const currentStageId = detailState.instance?.current_stage_id as string;
+		const executedAt = new Date().toISOString();
+
+		// Build field lookup from both regular and protocol form fields
+		const allFormFields = [
+			...detailState.getFormFieldsForReachedStages(),
+			...(activeProtocolTool.protocol_form_id
+				? detailState.getProtocolFormFields(activeProtocolTool.protocol_form_id)
+				: [])
+		];
+		const fieldLookup = new Map(allFormFields.map(f => [f.id, f]));
+
+		try {
+			// Collect all files for the protocol entry record
+			const collectedFiles: File[] = [];
+
+			// Build deterministic snapshot including ALL available fields (filled or not)
+			const allEntries = { ...editValues, ...protocolValues };
+			const snapshotFields: Array<Record<string, unknown>> = [];
+
+			// Iterate over all form fields (not just submitted values) so empty fields are recorded too
+			const allFieldIds = allFormFields.map(f => f.id).sort();
+
+			for (const fieldId of allFieldIds) {
+				const fieldDef = fieldLookup.get(fieldId)!;
+				const fieldName = fieldDef.field_label;
+				const fieldType = fieldDef.field_type;
+				const value = allEntries[fieldId];
+
+				if (Array.isArray(value) && value.length > 0 && value[0] instanceof File) {
+					const files = value as File[];
+					collectedFiles.push(...files);
+					snapshotFields.push({
+						id: fieldId,
+						name: fieldName,
+						type: fieldType,
+						images_added: files.length
+					});
+				} else if (value !== null && value !== undefined && value !== '') {
+					const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+					snapshotFields.push({
+						id: fieldId,
+						name: fieldName,
+						type: fieldType,
+						value: stringValue
+					});
+				} else {
+					snapshotFields.push({
+						id: fieldId,
+						name: fieldName,
+						type: fieldType,
+						value: null
+					});
+				}
+			}
+
+			const snapshot = {
+				fields: snapshotFields,
+				instance_id: detailState.instanceId,
+				stage_id: currentStageId,
+				tool_id: activeProtocolTool.id,
+				executed_by: gateway.participantId,
+				executed_at: executedAt
+			};
+
+			// Deterministic JSON with sorted keys at every level
+			function sortedStringify(obj: unknown): string {
+				if (obj === null || typeof obj !== 'object') return JSON.stringify(obj);
+				if (Array.isArray(obj)) return '[' + obj.map(sortedStringify).join(',') + ']';
+				const sorted = Object.keys(obj as Record<string, unknown>).sort();
+				return '{' + sorted.map(k => JSON.stringify(k) + ':' + sortedStringify((obj as Record<string, unknown>)[k])).join(',') + '}';
+			}
+			const canonicalJson = sortedStringify(snapshot);
+
+			// SHA-256 hash
+			const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonicalJson));
+			const contentHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+			// 1. Create protocol entry (snapshot + files)
+			let protocolEntry: { id: string };
+			if (collectedFiles.length > 0) {
+				const formData = new FormData();
+				formData.append('instance_id', detailState.instanceId);
+				formData.append('stage_id', currentStageId);
+				formData.append('tool_id', activeProtocolTool.id);
+				formData.append('executed_by', gateway.participantId);
+				formData.append('executed_at', executedAt);
+				formData.append('values', canonicalJson);
+				formData.append('content_hash', contentHash);
+				for (const file of collectedFiles) {
+					formData.append('files', file);
+				}
+				protocolEntry = await gateway.collection('workflow_protocol_entries').create(formData as any) as { id: string };
+			} else {
+				protocolEntry = await gateway.collection('workflow_protocol_entries').create({
+					instance_id: detailState.instanceId,
+					stage_id: currentStageId,
+					tool_id: activeProtocolTool.id,
+					executed_by: gateway.participantId,
+					executed_at: executedAt,
+					values: canonicalJson,
+					content_hash: contentHash
+				}) as { id: string };
+			}
+
+			// 2. Create tool_usage record (audit trail)
+			const toolUsage = await gateway.collection('workflow_instance_tool_usage').create({
+				instance_id: detailState.instanceId,
+				stage_id: currentStageId,
+				executed_by: gateway.participantId,
+				executed_at: executedAt,
+				metadata: {
+					action: 'protocol',
+					protocol_entry_id: protocolEntry.id
+				}
+			}) as { id: string };
+
+			// 3. Update field_values for edit fields that changed
+			for (const [fieldId, value] of Object.entries(editValues)) {
+				if (value === null || value === undefined || value === '') continue;
+
+				const existing = detailState.fieldValues.find(fv => fv.field_key === fieldId);
+				const fieldStageId = getStageIdForField(fieldId) || currentStageId;
+
+				if (Array.isArray(value) && value.length > 0 && value[0] instanceof File) {
+					for (const file of value as File[]) {
+						const formData = new FormData();
+						formData.append('instance_id', detailState.instanceId);
+						formData.append('field_key', fieldId);
+						formData.append('stage_id', fieldStageId);
+						formData.append('value', '');
+						formData.append('file_value', file);
+						formData.append('created_by_action', toolUsage.id);
+						await gateway.collection('workflow_instance_field_values').create(formData as any);
+					}
+				} else {
+					const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+
+					if (existing) {
+						if (existing.value !== stringValue) {
+							await gateway.collection('workflow_instance_field_values').update(existing.id, {
+								value: stringValue,
+								last_modified_by_action: toolUsage.id,
+								last_modified_at: new Date().toISOString()
+							});
+						}
+					} else {
+						await gateway.collection('workflow_instance_field_values').create({
+							instance_id: detailState.instanceId,
+							field_key: fieldId,
+							stage_id: fieldStageId,
+							value: stringValue,
+							created_by_action: toolUsage.id
+						});
+					}
+				}
+			}
+
+			// Refresh state and close
+			await detailState.refresh();
+			activeProtocolTool = null;
+		} catch (error) {
+			console.error('Failed to save protocol:', error);
+			throw error;
+		}
+	}
+
+	function handleProtocolCancel() {
+		activeProtocolTool = null;
+	}
+
+	// ==========================================================================
 	// Location Edit Handlers
 	// ==========================================================================
 
@@ -782,6 +969,18 @@
 				initialActiveStageId={detailState.activeStageTab}
 				onSave={handleEditSave}
 				onCancel={handleEditCancel}
+			/>
+		{:else if activeProtocolTool && detailState}
+			<ProtocolTool
+				protocolTool={activeProtocolTool}
+				instanceId={detailState.instanceId}
+				existingFieldValues={detailState.fieldValues}
+				formFields={detailState.getFormFieldsForReachedStages()}
+				protocolFormFields={activeProtocolTool.protocol_form_id
+					? detailState.getProtocolFormFields(activeProtocolTool.protocol_form_id)
+					: []}
+				onSave={handleProtocolSave}
+				onCancel={handleProtocolCancel}
 			/>
 		{:else}
 			<!-- Normal detail view with tabs -->
@@ -972,7 +1171,7 @@
 									<details class="group border rounded-lg overflow-hidden" data-testid="history-entry">
 										<summary class="flex items-center justify-between p-3 cursor-pointer hover:bg-muted/50 select-none">
 											<div class="flex items-center gap-2">
-												<span class="text-xs font-medium px-2 py-0.5 rounded-full {metadata.action === 'instance_created' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : metadata.action === 'stage_transition' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' : 'bg-muted'}">
+												<span class="text-xs font-medium px-2 py-0.5 rounded-full {metadata.action === 'instance_created' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : metadata.action === 'stage_transition' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' : metadata.action === 'protocol' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200' : 'bg-muted'}">
 													{#if metadata.action === 'instance_created'}
 														Instance Created
 													{:else if metadata.action === 'form_fill'}
@@ -985,6 +1184,8 @@
 														Location Changed
 													{:else if metadata.action === 'stage_transition'}
 														Stage Changed
+													{:else if metadata.action === 'protocol'}
+														Protocol
 													{:else}
 														Action
 													{/if}
@@ -1092,6 +1293,12 @@
 														<span class="text-muted-foreground">-></span>
 														<span class="font-medium">{toStage?.stage_name || 'Unknown'}</span>
 													</div>
+												</div>
+											{/if}
+
+											{#if metadata.action === 'protocol'}
+												<div class="text-sm">
+													<span class="text-xs text-muted-foreground">Protocol recorded</span>
 												</div>
 											{/if}
 										</div>

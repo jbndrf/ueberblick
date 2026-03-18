@@ -83,10 +83,12 @@ export interface ToolEdit {
 	stage_id: string[];
 	name: string;
 	editable_fields: string[];
-	edit_mode: 'form_fields' | 'location';
+	edit_mode: 'form_fields' | 'location' | 'protocol';
 	is_global: boolean;
 	allowed_roles: string[];
 	visual_config?: Record<string, unknown>;
+	protocol_form_id?: string;
+	prefill_config?: Record<string, boolean>;
 }
 
 export interface DisplayFieldValue {
@@ -125,7 +127,7 @@ export interface ToolUsageRecord {
 	executed_by: string;
 	executed_at: string;
 	metadata: {
-		action: 'instance_created' | 'form_fill' | 'edit' | 'location_edit' | 'stage_transition';
+		action: 'instance_created' | 'form_fill' | 'edit' | 'location_edit' | 'stage_transition' | 'protocol';
 		location?: { lat: number; lon: number } | null;
 		created_fields?: Array<{ field_key: string; value: string }>;
 		changes?: Array<{ field_key: string; before: string | null; after: string }>;
@@ -135,6 +137,8 @@ export interface ToolUsageRecord {
 		from_stage_id?: string;
 		to_stage_id?: string;
 		connection_id?: string;
+		// Protocol specific
+		protocol_entry_id?: string;
 	};
 	created: string;
 	// Expanded relations
@@ -508,6 +512,24 @@ export class WorkflowInstanceDetailState {
 		}
 
 		return result;
+	}
+
+	/**
+	 * Get form fields for a specific protocol form.
+	 * Used by ProtocolTool to load the protocol-specific fields.
+	 */
+	getProtocolFormFields(protocolFormId: string): FormField[] {
+		return this.formFields
+			.filter(f => f.form_id === protocolFormId)
+			.sort((a, b) => {
+				const pageA = a.page ?? 0;
+				const pageB = b.page ?? 0;
+				if (pageA !== pageB) return pageA - pageB;
+				const rowA = a.row_index ?? 0;
+				const rowB = b.row_index ?? 0;
+				if (rowA !== rowB) return rowA - rowB;
+				return (a.field_order ?? 0) - (b.field_order ?? 0);
+			});
 	}
 
 	// ==========================================================================

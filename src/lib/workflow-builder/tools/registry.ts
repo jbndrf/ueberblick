@@ -10,7 +10,7 @@
  * 3. The UI will automatically show it in the right places based on attachableTo
  */
 
-import { FileText, Edit3, Tag, Zap } from 'lucide-svelte';
+import { FileText, Edit3, Tag, Zap, ClipboardList } from 'lucide-svelte';
 import type { ToolDefinition, AttachmentTarget } from './types';
 
 // =============================================================================
@@ -130,9 +130,20 @@ const automationTool: ToolDefinition = {
 	defaultColor: '#F59E0B'
 };
 
+// Protocol tool - recurring data collection with snapshot
+const protocolTool: ToolDefinition = {
+	toolType: 'protocol',
+	displayName: 'Protocol',
+	description: 'Recurring data collection with snapshot archiving',
+	icon: ClipboardList,
+	attachableTo: ['stage'],
+	defaultColor: '#059669'
+};
+
 // Register the built-in tools
 toolRegistry.register(formTool);
 toolRegistry.register(editTool);
+toolRegistry.register(protocolTool);
 toolRegistry.register(fieldTagTool);
 toolRegistry.register(automationTool);
 
@@ -140,4 +151,4 @@ toolRegistry.register(automationTool);
 // Export individual tool definitions for direct access if needed
 // =============================================================================
 
-export { formTool, editTool, fieldTagTool, automationTool };
+export { formTool, editTool, protocolTool, fieldTagTool, automationTool };

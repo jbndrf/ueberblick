@@ -16,9 +16,22 @@
 		selectedFieldIds: string[];
 		/** Callback when field selection changes */
 		onToggleField?: (fieldId: string) => void;
+		/** Show pre-fill toggle on each field (protocol tool context) */
+		showPrefillToggle?: boolean;
+		/** Pre-fill config: field ID -> boolean (default true) */
+		prefillConfig?: Record<string, boolean>;
+		/** Callback when pre-fill toggle changes for a field */
+		onTogglePrefill?: (fieldId: string) => void;
 	};
 
-	let { ancestorFields, selectedFieldIds, onToggleField }: Props = $props();
+	let {
+		ancestorFields,
+		selectedFieldIds,
+		onToggleField,
+		showPrefillToggle = false,
+		prefillConfig = {},
+		onTogglePrefill
+	}: Props = $props();
 
 	// Group by stage for better organization
 	const groupedByStage = $derived.by(() => {
@@ -59,6 +72,9 @@
 							fields={formGroup.fields}
 							{selectedFieldIds}
 							{onToggleField}
+							{showPrefillToggle}
+							{prefillConfig}
+							{onTogglePrefill}
 						/>
 					{/each}
 				</div>
