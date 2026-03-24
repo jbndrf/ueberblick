@@ -266,8 +266,8 @@ export class WorkflowInstanceDetailState {
 
 			const workflowId = instanceResult.workflow_id as string;
 
-			// Now load all related data in parallel
-			const [stagesResult, connectionsResult, fieldValuesResult, formsResult, formFieldsResult, editToolsResult, protocolToolsResult, toolUsageResult] = await Promise.all([
+			// Phase 1: Load core data that depends only on workflowId/instanceId
+			const [stagesResult, connectionsResult, fieldValuesResult, formsResult, toolUsageResult] = await Promise.all([
 				this.gateway.collection('workflow_stages').getFullList({
 					filter: `workflow_id = "${workflowId}"`,
 					sort: 'stage_order'
@@ -281,9 +281,6 @@ export class WorkflowInstanceDetailState {
 				this.gateway.collection('tools_forms').getFullList({
 					filter: `workflow_id = "${workflowId}"`
 				}),
-				this.gateway.collection('tools_form_fields').getFullList(),
-				this.gateway.collection('tools_edit').getFullList(),
-				this.gateway.collection('tools_protocol').getFullList(),
 				this.gateway.collection('workflow_instance_tool_usage').getFullList({
 					filter: `instance_id = "${this.instanceId}"`,
 					sort: '-executed_at',
@@ -297,34 +294,43 @@ export class WorkflowInstanceDetailState {
 			this.forms = formsResult as unknown as ToolForm[];
 			this.toolUsageHistory = toolUsageResult as unknown as ToolUsageRecord[];
 
-			// Filter form fields to only those belonging to this workflow's forms
-			// Also parse field_options which may be stored as JSON strings
+			// Phase 2: Load tools scoped by phase 1 results (form IDs, connection/stage IDs)
 			const formIds = this.forms.map(f => f.id);
+			const connectionIds = this.connections.map(c => c.id);
+			const stageIds = this.stages.map(s => s.id);
+
+			// Build scoped filters using OR chains
+			const formFieldsFilter = formIds.length > 0
+				? formIds.map(id => `form_id = "${id}"`).join(' || ')
+				: 'form_id = "__none__"';
+
+			const toolScopeFilter = [
+				...connectionIds.map(id => `connection_id = "${id}"`),
+				...stageIds.map(id => `stage_id ~ "${id}"`)
+			].join(' || ') || 'connection_id = "__none__"';
+
+			const [formFieldsResult, editToolsResult, protocolToolsResult] = await Promise.all([
+				this.gateway.collection('tools_form_fields').getFullList({
+					filter: formFieldsFilter
+				}),
+				this.gateway.collection('tools_edit').getFullList({
+					filter: toolScopeFilter
+				}),
+				this.gateway.collection('tools_protocol').getFullList({
+					filter: toolScopeFilter
+				})
+			]);
+
 			this.formFields = (formFieldsResult as unknown as FormField[])
-				.filter(f => formIds.includes(f.form_id))
 				.map(f => ({
 					...f,
 					field_options: this.parseFieldOptions(f.field_options)
 				}));
 
-			// Filter edit tools to those for this workflow's connections/stages
-			const connectionIds = this.connections.map(c => c.id);
-			const stageIds = this.stages.map(s => s.id);
-			this.editTools = (editToolsResult as unknown as ToolEdit[]).filter(e => {
-				// Include if attached to a connection in this workflow
-				if (connectionIds.includes(e.connection_id)) return true;
-				// Include if attached to any stage in this workflow (stage_id is now an array)
-				if (e.stage_id && e.stage_id.some(sid => stageIds.includes(sid))) return true;
-				return false;
-			});
+			this.editTools = editToolsResult as unknown as ToolEdit[];
 
-			// Filter protocol tools: exclude global (automation-only), keep stage/connection-attached
-			this.protocolTools = (protocolToolsResult as unknown as ToolProtocol[]).filter(p => {
-				if (p.is_global) return false;
-				if (p.connection_id && connectionIds.includes(p.connection_id)) return true;
-				if (p.stage_id && p.stage_id.some(sid => stageIds.includes(sid))) return true;
-				return false;
-			});
+			// Exclude global protocol tools (automation-only) -- simple boolean check on already-filtered set
+			this.protocolTools = (protocolToolsResult as unknown as ToolProtocol[]).filter(p => !p.is_global);
 
 			// Set initial active stage tab to first visible stage with data
 			if (this.stages.length > 0 && !this.activeStageTab) {

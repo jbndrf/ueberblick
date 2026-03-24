@@ -22,9 +22,13 @@ import { generateId, cleanRecord } from './utils';
 const PUSH_DEBOUNCE_MS = 5_000; // 5 seconds after local write
 
 let syncInProgress = false;
+let catchUpCount = 0;
 
 // Collections to sync (set via setSyncCollections)
 let syncCollections: string[] = [];
+
+// How often to run full deletion detection (every Nth catch-up sync)
+const DELETION_CHECK_INTERVAL = 5;
 
 /**
  * Set the list of collections that sync operations work with.
@@ -47,6 +51,28 @@ const SYNC_PRIORITY: Record<string, number> = {
 
 function getSyncPriority(collection: string): number {
 	return SYNC_PRIORITY[collection] ?? 50;
+}
+
+// =============================================================================
+// Batched Parallel Execution
+// =============================================================================
+
+/**
+ * Run an async function over items in parallel batches.
+ * Returns results in the same order as the input items.
+ */
+async function batchedParallel<T, R>(
+	items: T[],
+	fn: (item: T) => Promise<R>,
+	concurrency: number = 5
+): Promise<PromiseSettledResult<R>[]> {
+	const results: PromiseSettledResult<R>[] = [];
+	for (let i = 0; i < items.length; i += concurrency) {
+		const batch = items.slice(i, i + concurrency);
+		const batchResults = await Promise.allSettled(batch.map(fn));
+		results.push(...batchResults);
+	}
+	return results;
 }
 
 // =============================================================================
@@ -510,18 +536,23 @@ export async function runCatchUpSync(gateway: ParticipantGateway): Promise<void>
 	if (syncInProgress || !navigator.onLine) return;
 
 	syncInProgress = true;
+	catchUpCount++;
 
 	try {
 		// 1. Push local changes to server
 		await uploadChanges(gateway);
 
-		// 2. Pull remote changes per collection
+		// 2. Pull remote changes in parallel batches
+		const pullResults = await batchedParallel(syncCollections, pullChanges, 5);
+
 		let totalPulled = 0;
 		const changedCollections: string[] = [];
-		for (const collection of syncCollections) {
-			const count = await pullChanges(collection);
-			if (count > 0) changedCollections.push(collection);
-			totalPulled += count;
+		for (let i = 0; i < syncCollections.length; i++) {
+			const result = pullResults[i];
+			if (result.status === 'fulfilled' && result.value > 0) {
+				changedCollections.push(syncCollections[i]);
+				totalPulled += result.value;
+			}
 		}
 
 		if (totalPulled > 0) {
@@ -531,19 +562,31 @@ export async function runCatchUpSync(gateway: ParticipantGateway): Promise<void>
 			}
 		}
 
-		// 3. Detect server deletions
-		let totalDeleted = 0;
-		const deletedCollections: string[] = [];
-		for (const collection of syncCollections) {
-			const count = await detectServerDeletions(collection);
-			if (count > 0) deletedCollections.push(collection);
-			totalDeleted += count;
-		}
+		// 3. Detect server deletions -- only for changed collections,
+		//    or all collections every Nth catch-up as a full integrity check
+		const fullDeletionCheck = catchUpCount % DELETION_CHECK_INTERVAL === 0;
+		const collectionsToCheckDeletions = fullDeletionCheck
+			? syncCollections
+			: changedCollections;
 
-		if (totalDeleted > 0) {
-			console.log(`Catch-up detected ${totalDeleted} server-side deletions`);
-			for (const collection of deletedCollections) {
-				notifyDataChange(collection);
+		if (collectionsToCheckDeletions.length > 0) {
+			const deleteResults = await batchedParallel(collectionsToCheckDeletions, detectServerDeletions, 5);
+
+			let totalDeleted = 0;
+			const deletedCollections: string[] = [];
+			for (let i = 0; i < collectionsToCheckDeletions.length; i++) {
+				const result = deleteResults[i];
+				if (result.status === 'fulfilled' && result.value > 0) {
+					deletedCollections.push(collectionsToCheckDeletions[i]);
+					totalDeleted += result.value;
+				}
+			}
+
+			if (totalDeleted > 0) {
+				console.log(`Catch-up detected ${totalDeleted} server-side deletions`);
+				for (const collection of deletedCollections) {
+					notifyDataChange(collection);
+				}
 			}
 		}
 	} catch (error) {
@@ -582,21 +625,29 @@ export async function triggerSync(gateway: ParticipantGateway): Promise<boolean>
 			await db.delete('sync_metadata', meta.collection);
 		}
 
-		// 3. Pull all records (full pull since timestamps are cleared)
+		// 3. Pull all records in parallel (full pull since timestamps are cleared)
+		const pullResults = await batchedParallel(syncCollections, pullChanges, 5);
 		let totalPulled = 0;
-		for (const collection of syncCollections) {
-			const count = await pullChanges(collection);
-			totalPulled += count;
+		for (let i = 0; i < syncCollections.length; i++) {
+			const result = pullResults[i];
+			if (result.status === 'fulfilled' && result.value > 0) {
+				totalPulled += result.value;
+				notifyDataChange(syncCollections[i]);
+			}
 		}
 		if (totalPulled > 0) {
 			console.log(`Full resync pulled ${totalPulled} records`);
 		}
 
-		// 4. Always detect deletions (removes records no longer accessible)
+		// 4. Always detect deletions in parallel (removes records no longer accessible)
+		const deleteResults = await batchedParallel(syncCollections, detectServerDeletions, 5);
 		let totalDeleted = 0;
-		for (const collection of syncCollections) {
-			const count = await detectServerDeletions(collection);
-			totalDeleted += count;
+		for (let i = 0; i < syncCollections.length; i++) {
+			const result = deleteResults[i];
+			if (result.status === 'fulfilled' && result.value > 0) {
+				totalDeleted += result.value;
+				notifyDataChange(syncCollections[i]);
+			}
 		}
 		if (totalDeleted > 0) {
 			console.log(`Full resync removed ${totalDeleted} records no longer on server`);

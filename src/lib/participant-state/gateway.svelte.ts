@@ -93,6 +93,30 @@ export function notifyDataChange(collection: string): void {
 }
 
 // =============================================================================
+// Live Collection Tracking
+// =============================================================================
+
+/**
+ * Track which collections have active live queries.
+ * Used to suppress redundant background fetches from getFullList/getOne
+ * when a live query is already keeping the data fresh.
+ */
+const liveCollections = new Map<string, number>(); // collection name -> active live query count
+
+function registerLiveCollection(name: string): void {
+	liveCollections.set(name, (liveCollections.get(name) || 0) + 1);
+}
+
+function unregisterLiveCollection(name: string): void {
+	const count = (liveCollections.get(name) || 1) - 1;
+	if (count <= 0) {
+		liveCollections.delete(name);
+	} else {
+		liveCollections.set(name, count);
+	}
+}
+
+// =============================================================================
 // Offline Expand Support
 // =============================================================================
 
@@ -331,6 +355,21 @@ export function createParticipantGateway(participantId: string, projectId: strin
 	 */
 	function backgroundFetchFullList(name: string, options?: ListOptions): void {
 		if (typeof window === 'undefined' || !navigator.onLine) return;
+
+		// Skip if a live query is active for this collection and we already have sync data.
+		// The live query's own background fetch + realtime SSE keep data fresh.
+		if (liveCollections.has(name)) {
+			getDB().then(db => db.get('sync_metadata', name)).then(meta => {
+				if (meta) return; // Already synced, live query handles updates
+				doBackgroundFetchFullList(name, options);
+			});
+			return;
+		}
+
+		doBackgroundFetchFullList(name, options);
+	}
+
+	function doBackgroundFetchFullList(name: string, options?: ListOptions): void {
 
 		const pb = getPocketBase();
 		pb.collection(name)
@@ -667,6 +706,9 @@ export function createParticipantGateway(participantId: string, projectId: strin
 				let loading = $state(true);
 				let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+				// Track this collection as having an active live query
+				registerLiveCollection(name);
+
 				async function readFromDB() {
 					const db = await getDB();
 					const all = await db.getAllFromIndex('records', 'by_collection', name);
@@ -726,6 +768,7 @@ export function createParticipantGateway(participantId: string, projectId: strin
 					get records() { return records; },
 					get loading() { return loading; },
 					destroy() {
+						unregisterLiveCollection(name);
 						unsubscribe();
 						if (debounceTimer) clearTimeout(debounceTimer);
 					}

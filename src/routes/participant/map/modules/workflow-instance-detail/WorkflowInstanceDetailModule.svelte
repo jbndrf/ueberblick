@@ -489,30 +489,46 @@
 
 	async function loadHistoryEntityMaps(fields: any[]) {
 		if (!gateway) return;
-		const maps: Record<string, Map<string, string>> = {};
+
+		// Group fields by unique source config to avoid duplicate fetches
+		type SourceKey = string;
+		const sourceGroups = new Map<SourceKey, { opts: any; fieldIds: string[] }>();
 
 		for (const field of fields) {
 			const opts = typeof field.field_options === 'string'
 				? JSON.parse(field.field_options)
 				: field.field_options;
-			if (!opts) continue;
+			if (!opts?.source_type) continue;
 
-			try {
-				let records: any[] = [];
+			const key = `${opts.source_type}:${opts.custom_table_id || ''}:${opts.marker_category_id || ''}:${opts.display_field || ''}`;
+			const existing = sourceGroups.get(key);
+			if (existing) {
+				existing.fieldIds.push(field.id);
+			} else {
+				sourceGroups.set(key, { opts, fieldIds: [field.id] });
+			}
+		}
+
+		// Fetch all unique sources in parallel
+		const entries = Array.from(sourceGroups.entries());
+		const results = await Promise.allSettled(
+			entries.map(async ([, { opts }]) => {
 				const entityMap = new Map<string, string>();
 
 				switch (opts.source_type) {
-					case 'participants':
-						records = await gateway.collection('participants').getFullList();
+					case 'participants': {
+						const records = await gateway.collection('participants').getFullList();
 						for (const r of records) entityMap.set(r.id, r.name || r.email || r.id);
 						break;
-					case 'roles':
-						records = await gateway.collection('roles').getFullList();
+					}
+					case 'roles': {
+						const records = await gateway.collection('roles').getFullList();
 						for (const r of records) entityMap.set(r.id, r.name || r.id);
 						break;
-					case 'custom_table':
+					}
+					case 'custom_table': {
 						if (opts.custom_table_id) {
-							records = await gateway.collection('custom_table_data').getFullList({
+							const records = await gateway.collection('custom_table_data').getFullList({
 								filter: `table_id = "${opts.custom_table_id}"`
 							});
 							const displayField = opts.display_field || 'name';
@@ -522,19 +538,32 @@
 							}
 						}
 						break;
-					case 'marker_category':
+					}
+					case 'marker_category': {
 						if (opts.marker_category_id) {
-							records = await gateway.collection('markers').getFullList({
+							const records = await gateway.collection('markers').getFullList({
 								filter: `category_id = "${opts.marker_category_id}"`
 							});
 							for (const r of records) entityMap.set(r.id, r.title || r.id);
 						}
 						break;
+					}
 				}
 
-				maps[field.id] = entityMap;
-			} catch (err) {
-				console.error(`Failed to load entities for field ${field.id}:`, err);
+				return entityMap;
+			})
+		);
+
+		// Map results back to field IDs
+		const maps: Record<string, Map<string, string>> = {};
+		for (let i = 0; i < entries.length; i++) {
+			const result = results[i];
+			if (result.status === 'fulfilled') {
+				for (const fieldId of entries[i][1].fieldIds) {
+					maps[fieldId] = result.value;
+				}
+			} else {
+				console.error(`Failed to load entities for source ${entries[i][0]}:`, result.reason);
 			}
 		}
 
