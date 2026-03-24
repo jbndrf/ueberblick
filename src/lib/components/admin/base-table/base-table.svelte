@@ -20,6 +20,7 @@
 		type ColumnDef,
 		type RowSelectionState
 	} from '@tanstack/table-core';
+	import { createVirtualizer } from './virtual.svelte';
 	import type { BaseTableConfig, BaseColumnConfig, InternalColumnDef } from './types';
 	import { TextField, NumberField, DateField, BooleanField, ArrayField, DropdownField } from './field-renderers';
 	import * as m from '$lib/paraglide/messages';
@@ -303,6 +304,18 @@
 		}
 	});
 
+	// Virtual scrolling
+	let scrollContainerRef = $state<HTMLDivElement | null>(null);
+	const ROW_HEIGHT = 49;
+
+	// Custom Svelte 5 wrapper — @tanstack/svelte-virtual doesn't support runes mode
+	const virtualizer = createVirtualizer(() => ({
+		count: table.getRowModel().rows.length,
+		getScrollElement: () => scrollContainerRef,
+		estimateSize: () => ROW_HEIGHT,
+		overscan: 10
+	}));
+
 	function clearFilters() {
 		globalFilter = '';
 		table.resetColumnFilters();
@@ -581,14 +594,14 @@
 	{/if}
 
 	<div class="rounded-lg border border-border bg-card overflow-hidden w-full">
-		<div class="overflow-x-auto overflow-y-auto max-h-[calc(100vh-16rem)] custom-scrollbar">
+		<div bind:this={scrollContainerRef} class="overflow-x-auto overflow-y-auto h-[calc(100vh-16rem)] custom-scrollbar">
 			<Table.Root class="w-max min-w-full">
-				<Table.Header>
+				<Table.Header class="sticky top-0 z-20">
 					{#each table.getHeaderGroups() as headerGroup}
 						<Table.Row class="group hover:bg-muted/50">
 							{#each headerGroup.headers as header, index}
 								<Table.Head
-									class="{header.column.id === 'select' ? 'pl-6 pr-2' : header.column.id === 'actions' ? 'pl-2 pr-6' : 'px-6'} py-3 text-sm font-medium text-muted-foreground whitespace-nowrap bg-muted/50 {header.column.id === 'select' ? 'sticky left-0 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] before:absolute before:inset-0 before:bg-card before:-z-10 after:absolute after:inset-0 after:bg-muted/50 after:-z-[9]' : ''} {header.column.id === 'actions' ? 'sticky right-0 z-10 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)] before:absolute before:inset-0 before:bg-card before:-z-10 after:absolute after:inset-0 after:bg-muted/50 after:-z-[9]' : ''}"
+									class="{header.column.id === 'select' ? 'pl-6 pr-2' : header.column.id === 'actions' ? 'pl-2 pr-6' : 'px-6'} py-3 text-sm font-medium text-muted-foreground whitespace-nowrap bg-muted/50 {header.column.id === 'select' ? 'sticky left-0 z-30 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] before:absolute before:inset-0 before:bg-card before:-z-10 after:absolute after:inset-0 after:bg-muted/50 after:-z-[9]' : ''} {header.column.id === 'actions' ? 'sticky right-0 z-30 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)] before:absolute before:inset-0 before:bg-card before:-z-10 after:absolute after:inset-0 after:bg-muted/50 after:-z-[9]' : ''}"
 								>
 									{#if !header.isPlaceholder}
 										{#if columnManagement && index === headerGroup.headers.length - 1}
@@ -632,20 +645,33 @@
 						</Table.Row>
 					{/if}
 					{#if table.getRowModel().rows.length > 0}
-						{#each table.getRowModel().rows as row}
-							<Table.Row class="group {row.getIsSelected() ? 'bg-muted/50' : ''}">
-								{#each row.getVisibleCells() as cell}
-									<Table.Cell
-										class="{cell.column.id === 'select' ? 'pl-6 pr-2' : cell.column.id === 'actions' ? 'pl-2 pr-6' : 'px-6'} py-4 {cell.column.id === 'select' ? 'whitespace-nowrap sticky left-0 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] bg-card group-hover:!bg-muted/50' : 'max-w-[300px]'} {cell.column.id === 'actions' ? 'sticky right-0 z-10 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)] bg-card group-hover:!bg-muted/50' : ''} {(cell.column.id === 'select' || cell.column.id === 'actions') && row.getIsSelected() ? '!bg-muted/50' : ''}"
-									>
-										<FlexRender
-											content={cell.column.columnDef.cell}
-											context={cell.getContext()}
-										/>
-									</Table.Cell>
-								{/each}
-							</Table.Row>
+						{@const virtualItems = virtualizer.getVirtualItems()}
+						{@const allRows = table.getRowModel().rows}
+						<!-- Top spacer -->
+						{#if virtualItems.length > 0}
+							<tr style="height: {virtualItems[0].start}px"></tr>
+						{/if}
+						{#each virtualItems as virtualRow (allRows[virtualRow.index]?.id ?? virtualRow.index)}
+							{@const row = allRows[virtualRow.index]}
+							{#if row}
+								<Table.Row class="group {row.getIsSelected() ? 'bg-muted/50' : ''}" style="height: {ROW_HEIGHT}px">
+									{#each row.getVisibleCells() as cell}
+										<Table.Cell
+											class="{cell.column.id === 'select' ? 'pl-6 pr-2' : cell.column.id === 'actions' ? 'pl-2 pr-6' : 'px-6'} py-4 {cell.column.id === 'select' ? 'whitespace-nowrap sticky left-0 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] bg-card group-hover:!bg-muted/50' : 'max-w-[300px]'} {cell.column.id === 'actions' ? 'sticky right-0 z-10 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)] bg-card group-hover:!bg-muted/50' : ''} {(cell.column.id === 'select' || cell.column.id === 'actions') && row.getIsSelected() ? '!bg-muted/50' : ''}"
+										>
+											<FlexRender
+												content={cell.column.columnDef.cell}
+												context={cell.getContext()}
+											/>
+										</Table.Cell>
+									{/each}
+								</Table.Row>
+							{/if}
 						{/each}
+						<!-- Bottom spacer -->
+						{#if virtualItems.length > 0}
+							<tr style="height: {virtualizer.getTotalSize() - (virtualItems[virtualItems.length - 1]?.end ?? 0)}px"></tr>
+						{/if}
 					{/if}
 
 					<!-- Always-visible creation row -->

@@ -358,6 +358,31 @@ export function closeDB(): void {
 }
 
 /**
+ * Clear all synced records and sync metadata (for session reset on re-auth).
+ * Preserves local-only records (new/modified) and tiles/packages.
+ */
+export async function clearSyncedData(): Promise<void> {
+	const db = await getDB();
+	const tx = db.transaction(['records', 'sync_metadata', 'conflicts'], 'readwrite');
+
+	// Delete all records that are 'unchanged' (server-synced, no local edits)
+	const recordStore = tx.objectStore('records');
+	let cursor = await recordStore.openCursor();
+	while (cursor) {
+		if (cursor.value._status === 'unchanged') {
+			await cursor.delete();
+		}
+		cursor = await cursor.continue();
+	}
+
+	// Clear sync timestamps so next sync does a full pull
+	await tx.objectStore('sync_metadata').clear();
+	await tx.objectStore('conflicts').clear();
+
+	await tx.done;
+}
+
+/**
  * Delete the entire database (for testing or reset)
  */
 export async function deleteDatabase(): Promise<void> {
@@ -394,6 +419,51 @@ export async function checkStorageQuota(): Promise<{
 		usage: 0,
 		available: Infinity,
 		percentUsed: 0
+	};
+}
+
+/**
+ * Storage statistics with per-store item counts and overall quota usage.
+ */
+export interface StorageStats {
+	quota: number;
+	usage: number;
+	percentUsed: number;
+	persistent: boolean;
+	counts: {
+		records: number;
+		tiles: number;
+		files: number;
+		operations: number;
+		conflicts: number;
+	};
+}
+
+/**
+ * Get storage statistics: overall quota usage + per-store item counts.
+ * All operations are fast (count() is O(1) in IndexedDB, estimate() is instant).
+ */
+export async function getStorageStats(): Promise<StorageStats> {
+	const [quota, persistent, db] = await Promise.all([
+		checkStorageQuota(),
+		isStoragePersistent(),
+		getDB()
+	]);
+
+	const [records, tiles, files, operations, conflicts] = await Promise.all([
+		db.count('records'),
+		db.count('tiles'),
+		db.count('files'),
+		db.count('operation_log'),
+		db.count('conflicts')
+	]);
+
+	return {
+		quota: quota.quota,
+		usage: quota.usage,
+		percentUsed: quota.percentUsed,
+		persistent,
+		counts: { records, tiles, files, operations, conflicts }
 	};
 }
 

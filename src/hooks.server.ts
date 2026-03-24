@@ -3,6 +3,7 @@ import { sequence } from '@sveltejs/kit/hooks';
 import { paraglideMiddleware } from '$lib/paraglide/server';
 import PocketBase from 'pocketbase';
 import { POCKETBASE_URL } from '$lib/config/pocketbase';
+import { env } from '$env/dynamic/private';
 
 const handleParaglide: Handle = ({ event, resolve }) =>
 	paraglideMiddleware(event.request, ({ request, locale }) => {
@@ -50,7 +51,7 @@ const handleAuth: Handle = async ({ event, resolve }) => {
 	// Send back the auth cookie to the client
 	const exportedCookie = event.locals.pb.authStore.exportToCookie({
 		httpOnly: false,
-		secure: false,
+		secure: env.SECURE_COOKIES === 'true',
 		sameSite: 'Lax',
 		maxAge: 60 * 60 * 24 * 7 // 1 week
 	});

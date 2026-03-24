@@ -27,3 +27,5 @@ export {
 
 // FormFillState is now exported from the tools/form-state.ts
 export type { FormFillState } from './workflow-instance-detail/tools/form-state';
+
+export { MarkerDetailModule } from './marker-detail';

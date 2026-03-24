@@ -40,6 +40,8 @@ export const mapLayerSchema = z.object({
  */
 export const projectMapDefaultsSchema = z.object({
 	zoom: z.number().int().min(0).max(22).default(10),
+	min_zoom: z.number().int().min(0).max(22).default(1),
+	max_zoom: z.number().int().min(0).max(22).default(19),
 	center: z
 		.object({
 			lat: z.number().min(-90).max(90).default(51.1657),

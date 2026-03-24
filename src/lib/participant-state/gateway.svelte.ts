@@ -26,6 +26,8 @@ interface ListOptions {
 	sort?: string;
 	expand?: string;
 	fields?: string;
+	/** Controls when the initial IDB read fires: 'critical' = immediate, 'normal' = next microtask, 'deferred' = setTimeout */
+	priority?: 'critical' | 'normal' | 'deferred';
 }
 
 /** Paginated list result matching PocketBase SDK */
@@ -95,20 +97,9 @@ export function notifyDataChange(collection: string): void {
 // =============================================================================
 
 /**
- * Find a related record by ID across all collections in IndexedDB.
- */
-async function findRelatedRecord(
-	db: Awaited<ReturnType<typeof getDB>>,
-	id: string
-): Promise<CachedRecord | null> {
-	// Get all records and find by ID (records are stored with _key = `${collection}/${id}`)
-	const allRecords = await db.getAll('records');
-	return allRecords.find((r) => r.id === id && r._status !== 'deleted') || null;
-}
-
-/**
  * Expand relation fields on cached records by joining related records from IndexedDB.
  * Mimics PocketBase's expand functionality for offline mode.
+ * Builds a one-time id->record lookup map to avoid repeated full-table scans.
  */
 async function expandRecords<T>(
 	records: T[],
@@ -119,49 +110,85 @@ async function expandRecords<T>(
 	const db = await getDB();
 	const fieldsToExpand = expandParam.split(',').map((f) => f.trim());
 
-	return Promise.all(
-		records.map(async (record) => {
-			const expanded: Record<string, unknown> = {};
-
-			for (const field of fieldsToExpand) {
-				const relationValue = (record as Record<string, unknown>)[field];
-
-				if (!relationValue) continue;
-
-				// Handle single relation (string ID)
-				if (typeof relationValue === 'string') {
-					const relatedRecord = await findRelatedRecord(db, relationValue);
-					if (relatedRecord) {
-						expanded[field] = cleanRecord(relatedRecord);
-					}
-				}
-				// Handle multi-relation (array of IDs)
-				else if (Array.isArray(relationValue)) {
-					const relatedRecords = await Promise.all(
-						relationValue.map(async (id) => {
-							if (typeof id !== 'string') return null;
-							const relatedRecord = await findRelatedRecord(db, id);
-							if (relatedRecord) {
-								return cleanRecord(relatedRecord);
-							}
-							return null;
-						})
-					);
-					expanded[field] = relatedRecords.filter(Boolean);
+	// Collect only the unique IDs we actually need to expand
+	// (e.g. 20 category IDs from 3200 markers, instead of loading ALL records)
+	const neededIds = new Set<string>();
+	for (const record of records) {
+		for (const field of fieldsToExpand) {
+			const relationValue = (record as Record<string, unknown>)[field];
+			if (!relationValue) continue;
+			if (typeof relationValue === 'string') {
+				neededIds.add(relationValue);
+			} else if (Array.isArray(relationValue)) {
+				for (const id of relationValue) {
+					if (typeof id === 'string') neededIds.add(id);
 				}
 			}
+		}
+	}
 
-			// Return record with expand object if any relations were found
-			if (Object.keys(expanded).length > 0) {
-				return {
-					...record,
-					expand: expanded
-				};
+	if (neededIds.size === 0) return records;
+
+	// Build lookup map from only the needed records.
+	// Records are keyed as "collection/id" so we can't do direct lookups by bare id.
+	// Use a cursor to scan and collect only what we need, stopping early when all found.
+	const recordById = new Map<string, CachedRecord>();
+	const tx = db.transaction('records', 'readonly');
+	let cursor = await tx.store.openCursor();
+	while (cursor) {
+		const r = cursor.value as CachedRecord;
+		if (r._status !== 'deleted' && neededIds.has(r.id)) {
+			recordById.set(r.id, r);
+			if (recordById.size === neededIds.size) break; // found all, stop early
+		}
+		cursor = await cursor.continue();
+	}
+
+	return records.map((record) => {
+		const expanded: Record<string, unknown> = {};
+
+		for (const field of fieldsToExpand) {
+			const relationValue = (record as Record<string, unknown>)[field];
+
+			if (!relationValue) continue;
+
+			// Handle single relation (string ID)
+			if (typeof relationValue === 'string') {
+				const relatedRecord = recordById.get(relationValue);
+				if (relatedRecord) {
+					expanded[field] = cleanRecord(relatedRecord);
+				}
 			}
+			// Handle multi-relation (array of IDs)
+			else if (Array.isArray(relationValue)) {
+				const relatedRecords = relationValue
+					.filter((id): id is string => typeof id === 'string')
+					.map((id) => {
+						const relatedRecord = recordById.get(id);
+						return relatedRecord ? cleanRecord(relatedRecord) : null;
+					})
+					.filter(Boolean);
+				expanded[field] = relatedRecords;
+			}
+		}
 
-			return record;
-		})
-	);
+		// Return record with expand object if any relations were found
+		if (Object.keys(expanded).length > 0) {
+			return {
+				...record,
+				expand: expanded
+			};
+		}
+
+		return record;
+	});
+}
+
+/** Strip the custom `priority` field before passing options to PocketBase SDK */
+function toPbOptions(options?: ListOptions): Omit<ListOptions, 'priority'> | undefined {
+	if (!options) return undefined;
+	const { priority: _, ...rest } = options;
+	return rest;
 }
 
 // =============================================================================
@@ -183,10 +210,15 @@ export function createParticipantGateway(participantId: string, projectId: strin
 	async function updatePendingCount(): Promise<void> {
 		if (typeof window === 'undefined') return;
 		const db = await getDB();
-		const pending = await db.getAllFromIndex('records', 'by_status', 'new');
-		const modified = await db.getAllFromIndex('records', 'by_status', 'modified');
-		const deleted = await db.getAllFromIndex('records', 'by_status', 'deleted');
-		pendingCount = pending.length + modified.length + deleted.length;
+		// Use count() instead of getAll().length to avoid deserializing all records
+		const tx = db.transaction('records', 'readonly');
+		const idx = tx.store.index('by_status');
+		const [p, m, d] = await Promise.all([
+			idx.count('new'),
+			idx.count('modified'),
+			idx.count('deleted')
+		]);
+		pendingCount = p + m + d;
 	}
 
 	// =========================================================================
@@ -302,7 +334,7 @@ export function createParticipantGateway(participantId: string, projectId: strin
 
 		const pb = getPocketBase();
 		pb.collection(name)
-			.getFullList(options)
+			.getFullList(toPbOptions(options))
 			.then(async (serverRecords) => {
 				const db = await getDB();
 				let changed = false;
@@ -659,16 +691,26 @@ export function createParticipantGateway(participantId: string, projectId: strin
 
 				// Initial read from IndexedDB (skip on server -- no IndexedDB)
 				if (typeof window !== 'undefined') {
-					readFromDB();
+					const priority = options?.priority ?? 'critical';
+					const scheduleRead = () => {
+						readFromDB();
+						// Fire one background fetch on setup if collection has no sync_metadata yet
+						(async () => {
+							const db = await getDB();
+							const meta = await db.get('sync_metadata', name);
+							if (!meta) {
+								backgroundFetchFullList(name, options);
+							}
+						})();
+					};
 
-					// Fire one background fetch on setup if collection has no sync_metadata yet
-					(async () => {
-						const db = await getDB();
-						const meta = await db.get('sync_metadata', name);
-						if (!meta) {
-							backgroundFetchFullList(name, options);
-						}
-					})();
+					if (priority === 'critical') {
+						scheduleRead();
+					} else if (priority === 'normal') {
+						queueMicrotask(scheduleRead);
+					} else {
+						setTimeout(scheduleRead, 0);
+					}
 				}
 
 				// Subscribe to data changes for this collection

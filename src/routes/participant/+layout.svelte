@@ -15,6 +15,7 @@
 		setParticipantGateway,
 		getCachedSession,
 	} from '$lib/participant-state/context.svelte';
+	import { clearSyncedData } from '$lib/participant-state/db';
 	import { setSyncCollections, startPushListener, runCatchUpSync } from '$lib/participant-state/sync.svelte';
 	import { setupRealtime } from '$lib/participant-state/realtime.svelte';
 
@@ -93,22 +94,63 @@
 	let cleanupRealtime: (() => void) | null = null;
 	let cleanupVisibility: (() => void) | null = null;
 
-	// Stop background processes when layout unmounts (e.g. navigation away)
-	onDestroy(() => {
+	// Track current participant ID to detect re-auth with different account
+	let currentParticipantId: string | null = null;
+
+	function teardownGateway() {
 		cleanupPushListener?.();
 		cleanupRealtime?.();
 		cleanupVisibility?.();
+		cleanupPushListener = null;
+		cleanupRealtime = null;
+		cleanupVisibility = null;
+		gateway = null;
+		gatewayInitialized = false;
+	}
+
+	// Stop background processes when layout unmounts
+	onDestroy(() => {
+		teardownGateway();
 	});
 
-	// Create gateway synchronously if participant is available
-	// This allows $effect in setupPersistence to work during component init
+	// Create gateway synchronously if participant is available.
+	// setContext() MUST be called during synchronous component init -- not in $effect --
+	// otherwise child components calling getContext() get null.
 	if (data.participant) {
+		currentParticipantId = data.participant.id;
 		gateway = createParticipantGateway(data.participant.id, data.participant.project_id);
 		setParticipantGateway(gateway);
-
-		// Set up auto-persistence (uses $effect, must be called during init)
 		setupPersistence(gateway);
 	}
+
+	// Reactive gateway lifecycle: recreate when participant changes (re-auth with different account)
+	$effect(() => {
+		const participant = data.participant;
+		if (!participant) {
+			// Auth lost -- tear down but keep IndexedDB for offline mode
+			if (currentParticipantId) {
+				teardownGateway();
+				currentParticipantId = null;
+			}
+			return;
+		}
+
+		// Same participant, already initialized -- nothing to do
+		if (participant.id === currentParticipantId && gateway) return;
+
+		// Different participant -- tear down old, clear stale data, create new
+		if (currentParticipantId && currentParticipantId !== participant.id) {
+			teardownGateway();
+			// Clear old participant's synced data from IndexedDB to prevent duplicates
+			clearSyncedData().catch((e) => console.error('Failed to clear synced data:', e));
+		}
+
+		currentParticipantId = participant.id;
+		const gw = createParticipantGateway(participant.id, participant.project_id);
+		gateway = gw;
+		setParticipantGateway(gw);
+		setupPersistence(gw);
+	});
 
 	// Initialize gateway data asynchronously
 	$effect(() => {
@@ -137,11 +179,12 @@
 	}
 
 	async function initGatewayData() {
-		if (!gateway) return;
+		const gw = gateway;
+		if (!gw) return;
 
 		try {
-			// Initialize (loads from IndexedDB)
-			await gateway.init();
+			// Initialize gateway (opens IndexedDB)
+			await gw.init();
 			gatewayInitialized = true;
 			console.log('Participant gateway initialized');
 
@@ -152,11 +195,11 @@
 			setSyncCollections(collections);
 
 			// Push listener: debounced upload on local writes
-			cleanupPushListener = startPushListener(gateway);
+			cleanupPushListener = startPushListener(gw);
 
 			// Realtime: SSE subscriptions + catch-up on reconnect
 			cleanupRealtime = setupRealtime(collections, () => {
-				runCatchUpSync(gateway);
+				runCatchUpSync(gw);
 			});
 
 			// Catch-up on tab focus (with cooldown)
@@ -168,7 +211,7 @@
 					const now = Date.now();
 					if (now - lastCatchUp > CATCHUP_COOLDOWN_MS) {
 						lastCatchUp = now;
-						runCatchUpSync(gateway);
+						runCatchUpSync(gw);
 					}
 				}
 			};

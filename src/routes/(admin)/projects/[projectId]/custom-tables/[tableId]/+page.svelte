@@ -13,10 +13,8 @@
 	import CustomFieldManagerGeneric, {
 		type FieldConfig
 	} from '$lib/components/admin/custom-field-manager-generic.svelte';
-	import { Label } from '$lib/components/ui/label';
-	import { Input } from '$lib/components/ui/input';
-	import { Checkbox } from '$lib/components/ui/checkbox';
 	import DataViewerHeader from '$lib/components/admin/data-viewer-header.svelte';
+	import { CsvImportDialog, type MappedImportData, type TargetField, type ImportProgressCallback } from '$lib/components/csv-import';
 
 	type CustomTableRow = {
 		id: string;
@@ -32,9 +30,6 @@
 	let deleteRowOpen = $state(false);
 	let selectedRow = $state<CustomTableRow | null>(null);
 	let importDialogOpen = $state(false);
-	let replaceData = $state(false);
-	let csvFile = $state<File | null>(null);
-	let importing = $state(false);
 
 	const columnFieldConfig: FieldConfig = {
 		tableName: 'custom_table_columns',
@@ -126,39 +121,41 @@
 		toast.error(message);
 	}
 
-	async function handleImportCSV() {
-		if (!csvFile) {
-			toast.error(m.csvImportSelectFile());
-			return;
-		}
+	const csvImportTargetFields: TargetField[] = $derived(
+		data.columns.map((col) => ({
+			id: col.column_name,
+			label: col.column_name,
+			type: col.column_type,
+			required: col.is_required
+		}))
+	);
 
-		importing = true;
-		const formData = new FormData();
-		formData.append('file', csvFile);
-		formData.append('replaceData', replaceData.toString());
+	async function handleCsvImport(importData: MappedImportData, onProgress: ImportProgressCallback): Promise<{ success: boolean; count: number; error?: string }> {
+		const { rows, replaceData } = importData;
+		const BATCH_SIZE = 25;
+		let imported = 0;
 
-		try {
+		for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+			const batch = rows.slice(i, i + BATCH_SIZE);
+			const formData = new FormData();
+			formData.append('rows', JSON.stringify(batch));
+			formData.append('replaceData', i === 0 ? String(replaceData) : 'false');
+
 			const response = await fetch('?/importCSV', {
 				method: 'POST',
 				body: formData
 			});
 
 			const result = await response.json();
-			if (result.type === 'success') {
-				toast.success(result.data?.message || m.csvImportSuccess());
-				importDialogOpen = false;
-				csvFile = null;
-				replaceData = false;
-				await invalidateAll();
-			} else {
-				toast.error(result.data?.message || m.csvImportError());
+			if (result.type !== 'success') {
+				return { success: false, count: imported, error: result.data?.message || m.csvImportError() };
 			}
-		} catch (error) {
-			console.error('Import error:', error);
-			toast.error(m.csvImportError());
-		} finally {
-			importing = false;
+			imported += batch.length;
+			onProgress(imported, rows.length);
 		}
+
+		await invalidateAll();
+		return { success: true, count: imported };
 	}
 
 	async function updateMeta(field: string, value: any) {
@@ -317,48 +314,8 @@
 </AlertDialog.Root>
 
 <!-- Import CSV Dialog -->
-<Dialog.Root bind:open={importDialogOpen}>
-	<Dialog.Content class="max-w-md">
-		<Dialog.Header>
-			<Dialog.Title>{m.csvImportDialogTitle()}</Dialog.Title>
-			<Dialog.Description>
-				{m.csvImportDialogDescription()}
-			</Dialog.Description>
-		</Dialog.Header>
-		<div class="space-y-4 py-4">
-			<div class="space-y-2">
-				<Label for="csv-file">{m.csvImportFileLabel()}</Label>
-				<Input
-					id="csv-file"
-					type="file"
-					accept=".csv"
-					onchange={(e) => {
-						const target = e.target as HTMLInputElement;
-						csvFile = target.files?.[0] || null;
-					}}
-				/>
-			</div>
-			<div class="flex items-center space-x-2">
-				<Checkbox
-					id="replace-data"
-					checked={replaceData}
-					onCheckedChange={(checked) => (replaceData = checked === true)}
-				/>
-				<Label
-					for="replace-data"
-					class="text-sm font-normal cursor-pointer"
-				>
-					{m.csvImportReplaceData()}
-				</Label>
-			</div>
-		</div>
-		<Dialog.Footer>
-			<Button variant="outline" onclick={() => (importDialogOpen = false)} disabled={importing}>
-				{m.csvImportCancel()}
-			</Button>
-			<Button onclick={handleImportCSV} disabled={!csvFile || importing}>
-				{importing ? m.csvImportImporting() : m.csvImportImportData()}
-			</Button>
-		</Dialog.Footer>
-	</Dialog.Content>
-</Dialog.Root>
+<CsvImportDialog
+	bind:open={importDialogOpen}
+	targetFields={csvImportTargetFields}
+	onimport={handleCsvImport}
+/>

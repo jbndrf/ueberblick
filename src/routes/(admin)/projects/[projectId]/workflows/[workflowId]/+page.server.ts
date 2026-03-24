@@ -23,7 +23,8 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 			}),
 			pb.collection('tools_forms').getFullList({
 				filter: `workflow_id = "${workflowId}"`,
-				fields: 'id'
+				fields: 'id,stage_id,connection_id',
+				expand: 'connection_id'
 			}),
 			pb.collection('workflow_instances').getFullList({
 				filter: `workflow_id = "${workflowId}"`,
@@ -47,6 +48,24 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 				fields: 'id,field_label,field_type,field_options,form_id',
 				sort: 'field_order'
 			});
+		}
+
+		// Build fieldStageMap: form_field.id -> stage_id
+		// Forms can be attached to a stage directly or to a connection (use connection.to_stage_id)
+		const formStageMap = new Map<string, string>();
+		for (const form of forms) {
+			if (form.stage_id) {
+				formStageMap.set(form.id, form.stage_id);
+			} else if (form.connection_id && form.expand?.connection_id?.to_stage_id) {
+				formStageMap.set(form.id, form.expand.connection_id.to_stage_id);
+			}
+		}
+		const fieldStageMap: Record<string, string> = {};
+		for (const ff of formFields) {
+			const stageId = formStageMap.get(ff.form_id);
+			if (stageId) {
+				fieldStageMap[ff.id] = stageId;
+			}
 		}
 
 		// Fetch all field values for all instances
@@ -198,6 +217,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 			workflow,
 			stages,
 			fieldDefs,
+			fieldStageMap,
 			rows,
 			roles: roles || []
 		};
@@ -336,6 +356,130 @@ export const actions: Actions = {
 		} catch (err) {
 			console.error('Error updating filter value icons:', err);
 			return fail(500, { message: 'Failed to update filter value icons' });
+		}
+	},
+
+	importCSV: async ({ request, params, locals: { pb } }) => {
+		const { workflowId } = params;
+		const formData = await request.formData();
+		const rowsJson = formData.get('rows') as string;
+		const replaceData = formData.get('replaceData') === 'true';
+		const targetStageId = formData.get('targetStageId') as string;
+
+		if (!rowsJson) {
+			return fail(400, { message: 'No data provided' });
+		}
+
+		try {
+			const rows: Array<Record<string, string>> = JSON.parse(rowsJson);
+
+			if (rows.length === 0) {
+				return fail(400, { message: 'No data rows to import' });
+			}
+
+			// Fetch stages and resolve target stage
+			const stages = await pb.collection('workflow_stages').getFullList({
+				filter: `workflow_id = "${workflowId}"`,
+				fields: 'id,stage_type'
+			});
+			const startStage = stages.find((s) => s.stage_type === 'start');
+			if (!startStage) {
+				return fail(400, { message: 'Workflow has no start stage' });
+			}
+			const instanceStageId = targetStageId || startStage.id;
+
+			// Build fieldStageMap: field_id -> stage_id (same logic as load function)
+			const forms = await pb.collection('tools_forms').getFullList({
+				filter: `workflow_id = "${workflowId}"`,
+				fields: 'id,stage_id,connection_id',
+				expand: 'connection_id'
+			});
+			const formStageMap = new Map<string, string>();
+			for (const form of forms) {
+				if (form.stage_id) {
+					formStageMap.set(form.id, form.stage_id);
+				} else if (form.connection_id && form.expand?.connection_id?.to_stage_id) {
+					formStageMap.set(form.id, form.expand.connection_id.to_stage_id);
+				}
+			}
+			const formIds = forms.map((f: any) => f.id);
+			let formFields: any[] = [];
+			if (formIds.length > 0) {
+				const filterParts = formIds.map((id: string) => `form_id = "${id}"`);
+				formFields = await pb.collection('tools_form_fields').getFullList({
+					filter: filterParts.join(' || '),
+					fields: 'id,form_id',
+					requestKey: null
+				});
+			}
+			const fieldStageMap: Record<string, string> = {};
+			for (const ff of formFields) {
+				const stageId = formStageMap.get(ff.form_id);
+				if (stageId) {
+					fieldStageMap[ff.id] = stageId;
+				}
+			}
+
+			// Replace existing instances if requested
+			if (replaceData) {
+				const existing = await pb.collection('workflow_instances').getFullList({
+					filter: `workflow_id = "${workflowId}"`,
+					fields: 'id'
+				});
+				for (const inst of existing) {
+					const fieldValues = await pb.collection('workflow_instance_field_values').getFullList({
+						filter: `instance_id = "${inst.id}"`,
+						fields: 'id'
+					});
+					for (const fv of fieldValues) {
+						await pb.collection('workflow_instance_field_values').delete(fv.id);
+					}
+					await pb.collection('workflow_instances').delete(inst.id);
+				}
+			}
+
+			// Determine which keys are special (lat, lon) vs form fields
+			const specialKeys = new Set(['lat', 'lon']);
+			let importedCount = 0;
+
+			for (const row of rows) {
+				// Build location from lat/lon if present
+				let location = null;
+				const lat = parseFloat(row['lat']);
+				const lon = parseFloat(row['lon']);
+				if (!isNaN(lat) && !isNaN(lon)) {
+					location = { lat, lon };
+				}
+
+				// Create the workflow instance at the selected stage
+				const instance = await pb.collection('workflow_instances').create({
+					workflow_id: workflowId,
+					current_stage_id: instanceStageId,
+					status: 'active',
+					location
+				});
+
+				// Create field values with correct stage_id per field
+				for (const [key, value] of Object.entries(row)) {
+					if (specialKeys.has(key) || !value) continue;
+
+					await pb.collection('workflow_instance_field_values').create({
+						instance_id: instance.id,
+						field_key: key,
+						stage_id: fieldStageMap[key] || instanceStageId,
+						value: value
+					});
+				}
+
+				importedCount++;
+			}
+
+			return { success: true, count: importedCount };
+		} catch (err) {
+			console.error('Error importing CSV:', err);
+			return fail(500, {
+				message: err instanceof Error ? err.message : 'Failed to import CSV'
+			});
 		}
 	},
 

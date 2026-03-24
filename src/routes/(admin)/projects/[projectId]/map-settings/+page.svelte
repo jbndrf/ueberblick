@@ -995,6 +995,31 @@
 
 			<div class="grid grid-cols-2 gap-4">
 				<div class="space-y-2">
+					<Label for="min_zoom">Min Zoom</Label>
+					<Input
+						id="min_zoom"
+						name="min_zoom"
+						type="number"
+						min="0"
+						max="22"
+						bind:value={$defaultsForm.min_zoom}
+					/>
+				</div>
+				<div class="space-y-2">
+					<Label for="max_zoom">Max Zoom</Label>
+					<Input
+						id="max_zoom"
+						name="max_zoom"
+						type="number"
+						min="0"
+						max="22"
+						bind:value={$defaultsForm.max_zoom}
+					/>
+				</div>
+			</div>
+
+			<div class="grid grid-cols-2 gap-4">
+				<div class="space-y-2">
 					<Label for="center_lat">Center Latitude</Label>
 					<Input
 						id="center_lat"

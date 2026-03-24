@@ -306,9 +306,11 @@ function lookupFieldValue(instanceId, fieldKey) {
   try {
     const records = $app.findRecordsByFilter(
       "workflow_instance_field_values",
-      'instance_id = "' + instanceId + '" && field_key = "' + fieldKey + '"',
+      'instance_id = {:instId} && field_key = {:fKey}',
       "-updated",
-      1
+      1,
+      0,
+      { instId: instanceId, fKey: fieldKey }
     );
     if (records.length > 0) {
       return records[0].get("value") || "";
@@ -713,9 +715,11 @@ function executeActions(actions, instanceId) {
         try {
           fieldRecords = $app.findRecordsByFilter(
             "workflow_instance_field_values",
-            'instance_id = "' + instanceId + '" && field_key = "' + action.params.field_key + '"',
+            'instance_id = {:instId} && field_key = {:fKey}',
             "",
-            1
+            1,
+            0,
+            { instId: instanceId, fKey: action.params.field_key }
           );
         } catch (err) {
           // Not found
@@ -731,7 +735,7 @@ function executeActions(actions, instanceId) {
           // Resolve stage_id from the field's form attachment, fall back to instance's current stage
           var stageId = "";
           try {
-            var fieldRecord = $app.findFirstRecordByFilter("tools_form_fields", 'id = "' + action.params.field_key + '"');
+            var fieldRecord = $app.findFirstRecordByFilter("tools_form_fields", 'id = {:fKey}', { fKey: action.params.field_key });
             if (fieldRecord) {
               var formRecord = $app.findRecordById("tools_forms", fieldRecord.get("form_id"));
               if (formRecord.get("stage_id")) {

@@ -399,79 +399,18 @@ export const actions: Actions = {
 	importCSV: async ({ request, params, locals: { pb } }) => {
 		const { tableId } = params;
 		const formData = await request.formData();
-		const file = formData.get('file') as File;
+		const rowsJson = formData.get('rows') as string;
 		const replaceData = formData.get('replaceData') === 'true';
 
-		if (!file) {
-			return fail(400, { message: 'CSV file is required' });
+		if (!rowsJson) {
+			return fail(400, { message: 'No data provided' });
 		}
 
 		try {
-			// Get table columns
-			const columns = await pb.collection('custom_table_columns').getFullList({
-				filter: `table_id = "${tableId}"`,
-				fields: 'column_name'
-			});
+			const rows: Array<Record<string, string>> = JSON.parse(rowsJson);
 
-			// Get the custom table to include main column
-			const customTable = await pb.collection('custom_tables').getOne(tableId, {
-				fields: 'main_column'
-			});
-
-			const columnNames = [customTable.main_column, ...columns.map((col) => col.column_name)];
-
-			// Read CSV file
-			const csvText = await file.text();
-			const lines = csvText.split('\n').filter((line) => line.trim());
-
-			if (lines.length === 0) {
-				return fail(400, { message: 'CSV file is empty' });
-			}
-
-			// Parse CSV headers
-			const headers = lines[0].split(',').map((h) => h.trim().replace(/"/g, ''));
-			const dataRows = lines.slice(1);
-
-			if (dataRows.length === 0) {
-				return fail(400, { message: 'No data rows found in CSV' });
-			}
-
-			// Validate headers against existing columns
-			const invalidHeaders = headers.filter((h) => !columnNames.includes(h));
-			if (invalidHeaders.length > 0) {
-				return fail(400, {
-					message: `Invalid column headers: ${invalidHeaders.join(', ')}. Valid columns are: ${columnNames.join(', ')}`
-				});
-			}
-
-			// Parse data rows
-			const rowsToImport: Array<Record<string, any>> = [];
-			for (let i = 0; i < dataRows.length; i++) {
-				const values = dataRows[i].split(',').map((v) => v.trim().replace(/"/g, ''));
-				if (values.length !== headers.length) {
-					console.warn(
-						`Row ${i + 2} has ${values.length} values but expected ${headers.length}. Skipping.`
-					);
-					continue;
-				}
-
-				const rowData: Record<string, any> = {};
-				headers.forEach((header, index) => {
-					rowData[header] = values[index] || '';
-				});
-
-				// Add empty values for missing columns
-				columnNames.forEach((columnName) => {
-					if (!(columnName in rowData)) {
-						rowData[columnName] = '';
-					}
-				});
-
-				rowsToImport.push(rowData);
-			}
-
-			if (rowsToImport.length === 0) {
-				return fail(400, { message: 'No valid data rows to import' });
+			if (rows.length === 0) {
+				return fail(400, { message: 'No data rows to import' });
 			}
 
 			// Replace existing data if requested
@@ -485,7 +424,7 @@ export const actions: Actions = {
 			}
 
 			// Import new data
-			for (const rowData of rowsToImport) {
+			for (const rowData of rows) {
 				await pb.collection('custom_table_data').create({
 					table_id: tableId,
 					row_data: rowData
@@ -494,7 +433,7 @@ export const actions: Actions = {
 
 			return {
 				success: true,
-				message: `Successfully imported ${rowsToImport.length} rows`
+				count: rows.length
 			};
 		} catch (err) {
 			console.error('Error importing CSV:', err);

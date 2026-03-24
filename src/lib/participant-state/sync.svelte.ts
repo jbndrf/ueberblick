@@ -40,6 +40,7 @@ export function setSyncCollections(collections: string[]): void {
 
 const SYNC_PRIORITY: Record<string, number> = {
 	workflow_instances: 10,
+	workflow_protocol_entries: 15,
 	workflow_instance_tool_usage: 20,
 	workflow_instance_field_values: 30
 };
@@ -78,9 +79,13 @@ async function pullChanges(collection: string): Promise<number> {
 		let updatedCount = 0;
 		let latestTimestamp = lastSync || '';
 
+		// Use a single transaction for all reads + writes (10-25x faster than per-record transactions)
+		const tx = db.transaction(['records', 'sync_metadata'], 'readwrite');
+		const recordStore = tx.objectStore('records');
+
 		for (const record of records) {
 			const key = `${collection}/${record.id}`;
-			const existing = await db.get('records', key);
+			const existing = await recordStore.get(key);
 
 			// Don't overwrite local modifications
 			if (existing && existing._status !== 'unchanged') continue;
@@ -95,7 +100,7 @@ async function pullChanges(collection: string): Promise<number> {
 				_status: 'unchanged',
 				_serverUpdated: record.updated as string
 			};
-			await db.put('records', cached);
+			recordStore.put(cached);
 			updatedCount++;
 
 			// Track latest timestamp
@@ -106,11 +111,13 @@ async function pullChanges(collection: string): Promise<number> {
 
 		// Update sync timestamp
 		if (latestTimestamp) {
-			await db.put('sync_metadata', {
+			tx.objectStore('sync_metadata').put({
 				collection,
 				lastSyncTimestamp: latestTimestamp
 			});
 		}
+
+		await tx.done;
 
 		return updatedCount;
 	} catch (e) {
@@ -626,6 +633,9 @@ export async function downloadAll(
 
 			let latestTimestamp = '';
 
+			// Batch all writes in a single IDB transaction
+			const tx = db.transaction(['records', 'sync_metadata'], 'readwrite');
+
 			for (const record of records) {
 				const cached: CachedRecord = {
 					...record,
@@ -634,7 +644,7 @@ export async function downloadAll(
 					_status: 'unchanged',
 					_serverUpdated: record.updated as string
 				};
-				await db.put('records', cached);
+				tx.objectStore('records').put(cached);
 
 				if ((record.updated as string) > latestTimestamp) {
 					latestTimestamp = record.updated as string;
@@ -643,11 +653,13 @@ export async function downloadAll(
 
 			// Set initial sync timestamp
 			if (latestTimestamp) {
-				await db.put('sync_metadata', {
+				tx.objectStore('sync_metadata').put({
 					collection: name,
 					lastSyncTimestamp: latestTimestamp
 				});
 			}
+
+			await tx.done;
 
 			totalRecords += records.length;
 			console.log(`Downloaded ${records.length} records from ${name}`);

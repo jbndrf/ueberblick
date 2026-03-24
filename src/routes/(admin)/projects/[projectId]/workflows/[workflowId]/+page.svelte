@@ -5,7 +5,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Switch } from '$lib/components/ui/switch';
-	import { RefreshCw, Hammer, MapPin, FileText, Palette } from 'lucide-svelte';
+	import { RefreshCw, Hammer, MapPin, FileText, Palette, Upload } from 'lucide-svelte';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { toast } from 'svelte-sonner';
 	import type { PageData } from './$types';
@@ -14,6 +14,7 @@
 	import WorkflowIconDesigner from '$lib/components/admin/workflow-icon-designer.svelte';
 	import { getPocketBase } from '$lib/pocketbase';
 	import { POCKETBASE_URL } from '$lib/config/pocketbase';
+	import { CsvImportDialog, type MappedImportData, type TargetField, type SpecialColumn, type ImportProgressCallback } from '$lib/components/csv-import';
 
 	type FieldValueRecord = { recordId: string; stageId: string };
 
@@ -296,6 +297,83 @@
 		}
 	}
 
+	// CSV Import state
+	let csvImportOpen = $state(false);
+
+	// Stage selector: stages are sorted by stage_order from the server
+	const csvImportStages = $derived(
+		data.stages.map((s: any) => ({ id: s.id, label: s.stage_name }))
+	);
+	const startStageId = $derived(
+		data.stages.find((s: any) => s.stage_type === 'start')?.id || data.stages[0]?.id || ''
+	);
+	let selectedImportStageId = $state('');
+	// Reset to start stage when dialog opens/closes
+	$effect(() => {
+		if (csvImportOpen) {
+			selectedImportStageId = startStageId;
+		}
+	});
+
+	// Filter target fields to only those from stages up to the selected import stage
+	const csvImportTargetFields: TargetField[] = $derived.by(() => {
+		const fieldStageMap = data.fieldStageMap as Record<string, string>;
+		const stageIds = data.stages.map((s: any) => s.id);
+		const selectedIndex = stageIds.indexOf(selectedImportStageId);
+		const reachableStageIds = new Set(stageIds.slice(0, selectedIndex + 1));
+
+		return (data.fieldDefs as FieldDef[])
+			.filter((fd) => {
+				const fieldStage = fieldStageMap[fd.id];
+				// Include field if its stage is reachable, or if it has no stage mapping
+				return !fieldStage || reachableStageIds.has(fieldStage);
+			})
+			.map((fd) => ({
+				id: fd.id,
+				label: fd.label,
+				type: fd.type,
+				required: false
+			}));
+	});
+
+	const csvImportSpecialColumns: SpecialColumn[] = $derived(
+		data.workflow.workflow_type === 'incident'
+			? [
+					{ key: 'lat', label: 'Latitude', required: true },
+					{ key: 'lon', label: 'Longitude', required: true }
+				]
+			: []
+	);
+
+	async function handleCsvImport(importData: MappedImportData, onProgress: ImportProgressCallback): Promise<{ success: boolean; count: number; error?: string }> {
+		const { rows, replaceData } = importData;
+		const BATCH_SIZE = 25;
+		let imported = 0;
+
+		for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+			const batch = rows.slice(i, i + BATCH_SIZE);
+			const formData = new FormData();
+			formData.append('rows', JSON.stringify(batch));
+			formData.append('replaceData', i === 0 ? String(replaceData) : 'false');
+			formData.append('targetStageId', selectedImportStageId);
+
+			const response = await fetch('?/importCSV', {
+				method: 'POST',
+				body: formData
+			});
+
+			const result = await response.json();
+			if (result.type !== 'success') {
+				return { success: false, count: imported, error: result.data?.message || m.csvImportError() };
+			}
+			imported += batch.length;
+			onProgress(imported, rows.length);
+		}
+
+		await invalidateAll();
+		return { success: true, count: imported };
+	}
+
 	// Icon designer state
 	let iconDesignerOpen = $state(false);
 	let iconDesignerStages = $state<any[]>([]);
@@ -497,6 +575,11 @@
 					/>
 				</div>
 
+				<Button variant="outline" size="sm" onclick={() => (csvImportOpen = true)}>
+					<Upload class="mr-2 h-4 w-4" />
+					{m.csvImportButton()}
+				</Button>
+
 				<Button variant="outline" size="sm" onclick={() => openIconDesigner()}>
 					<Palette class="mr-2 h-4 w-4" />
 					Icons
@@ -556,6 +639,20 @@
 		/>
 	</div>
 {/if}
+
+<!-- CSV Import Dialog -->
+<CsvImportDialog
+	bind:open={csvImportOpen}
+	targetFields={csvImportTargetFields}
+	specialColumns={csvImportSpecialColumns}
+	stages={csvImportStages}
+	bind:selectedStage={selectedImportStageId}
+	title={m.csvImportInstancesTitle()}
+	description={m.csvImportInstancesDescription()}
+	importLabel={m.csvImportImportInstances()}
+	replaceLabel={m.csvImportReplaceInstances()}
+	onimport={handleCsvImport}
+/>
 
 <!-- Image Lightbox -->
 <Dialog.Root bind:open={lightboxOpen}>

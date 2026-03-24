@@ -199,6 +199,8 @@ export const PRESET_SOURCES: PresetSource[] = [
 
 export interface ProjectMapDefaults {
 	zoom?: number;
+	min_zoom?: number;
+	max_zoom?: number;
 	center?: {
 		lat: number;
 		lng: number;

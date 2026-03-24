@@ -295,6 +295,18 @@
 	}
 
 	// ==========================================================================
+	// Helpers: resolve IDs to human-readable names for audit trail
+	// ==========================================================================
+
+	function getFieldName(fieldKey: string): string | undefined {
+		return detailState?.formFields.find(f => f.id === fieldKey)?.field_label;
+	}
+
+	function getStageName(stageId: string): string | undefined {
+		return detailState?.stages.find(s => s.id === stageId)?.stage_name;
+	}
+
+	// ==========================================================================
 	// Tool Flow: Form Submit
 	// ==========================================================================
 
@@ -311,6 +323,7 @@
 
 			const createdFields = fieldEntries.map(([fieldId, value]) => ({
 				field_key: fieldId,
+				field_name: getFieldName(fieldId) || fieldId,
 				value: Array.isArray(value) && value[0] instanceof File
 					? `[${(value as File[]).length} file(s)]`
 					: typeof value === 'object' ? JSON.stringify(value) : String(value)
@@ -324,6 +337,7 @@
 				executed_at: new Date().toISOString(),
 				metadata: {
 					action: 'form_fill',
+					stage_name: getStageName(targetStageId) || targetStageId,
 					created_fields: createdFields
 				}
 			}) as { id: string };
@@ -395,9 +409,11 @@
 				executed_at: new Date().toISOString(),
 				metadata: {
 					action: 'stage_transition',
+					connection_id: activeToolFlow.connection.id,
 					from_stage_id: fromStageId,
+					from_stage_name: getStageName(fromStageId) || fromStageId,
 					to_stage_id: toStageId,
-					connection_id: activeToolFlow.connection.id
+					to_stage_name: getStageName(toStageId) || toStageId
 				}
 			});
 
@@ -569,7 +585,7 @@
 
 				// Only log if actually changed (or new)
 				if (oldValue !== newValueStr) {
-					changes.push({ field_key: fieldId, before: oldValue, after: newValueStr });
+					changes.push({ field_key: fieldId, field_name: getFieldName(fieldId) || fieldId, before: oldValue, after: newValueStr });
 				}
 			}
 
@@ -581,6 +597,7 @@
 				executed_at: new Date().toISOString(),
 				metadata: {
 					action: 'edit',
+					stage_name: getStageName(currentStageId) || currentStageId,
 					changes: changes
 				}
 			}) as { id: string };
@@ -759,7 +776,7 @@
 				: typeof newValue === 'object' ? JSON.stringify(newValue) : String(newValue);
 
 			if (oldValue !== newValueStr) {
-				editChanges.push({ field_key: fieldId, before: oldValue, after: newValueStr });
+				editChanges.push({ field_key: fieldId, field_name: getFieldName(fieldId) || fieldId, before: oldValue, after: newValueStr });
 			}
 		}
 
@@ -770,6 +787,7 @@
 			executed_at: new Date().toISOString(),
 			metadata: {
 				action: 'protocol',
+				stage_name: getStageName(currentStageId) || currentStageId,
 				protocol_entry_id: protocolEntry.id,
 				changes: editChanges
 			}
@@ -833,13 +851,15 @@
 
 		try {
 			// 1. Create tool_usage record with location change (audit trail)
+			const locationStageId = detailState.instance?.current_stage_id;
 			await gateway.collection('workflow_instance_tool_usage').create({
 				instance_id: detailState.instanceId,
-				stage_id: detailState.instance?.current_stage_id,
+				stage_id: locationStageId,
 				executed_by: gateway.participantId,
 				executed_at: new Date().toISOString(),
 				metadata: {
 					action: 'location_edit',
+					stage_name: locationStageId ? (getStageName(locationStageId) || locationStageId) : null,
 					before: detailState.instance?.location
 						? { lat: detailState.instance.location.lat, lon: detailState.instance.location.lon }
 						: null,

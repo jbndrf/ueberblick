@@ -63,6 +63,8 @@ services:
       - BODY_SIZE_LIMIT=${BODY_SIZE_LIMIT:-500M}
       # Optional: Expose PocketBase admin UI at /_/ (default: false)
       - EXPOSE_PB_ADMIN=${EXPOSE_PB_ADMIN:-false}
+      # Optional: Set to 'true' when behind HTTPS (production)
+      - SECURE_COOKIES=${SECURE_COOKIES:-false}
     volumes:
       - ./data/nginx_cache:/var/cache/nginx
     # Self-hosters: Uncomment to expose on port 80 directly

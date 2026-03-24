@@ -15,34 +15,55 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 	// Return participant data from PocketBase auth
 	const participant = isParticipantAuth ? locals.pb.authStore.record : null;
 
-	// Get all collection names and file field info using admin auth (for offline sync)
+	// Fetch collection metadata, project settings, and info pages in parallel
 	let collectionNames: string[] = [];
 	let fileFields: Record<string, string[]> = {};
-	if (isParticipantAuth) {
-		try {
-			const adminPb = await getAdminPb();
-			const collections = await adminPb.collections.getFullList();
-			// Filter out system collections (start with _)
-			const nonSystem = collections.filter((c) => !c.name.startsWith('_'));
-			collectionNames = nonSystem.map((c) => c.name);
+	let infoPages: Array<{ id: string; title: string; content: string }> = [];
 
-			// Extract which collections have file fields (auto-detected from schema)
+	if (isParticipantAuth) {
+		const adminPb = await getAdminPb();
+
+		const collectionsPromise = adminPb.collections.getFullList().catch((e) => {
+			console.error('Failed to get collection names:', e);
+			return [] as typeof collectionNames extends (infer U)[] ? U[] : never;
+		});
+
+		const infoPagesPromise = participant?.project_id
+			? adminPb.collection('info_pages').getFullList({
+				filter: `project_id = "${participant.project_id}"`,
+				sort: 'sort_order,created',
+				fields: 'id,title,content'
+			}).catch((e) => {
+				console.error('Failed to load info pages:', e);
+				return [] as Array<{ id: string; title: string; content: string }>;
+			})
+			: Promise.resolve([] as Array<{ id: string; title: string; content: string }>);
+
+		const [collections, pages] = await Promise.all([collectionsPromise, infoPagesPromise]);
+
+		// Process collections
+		if (collections.length > 0) {
+			const nonSystem = collections.filter((c: any) => !c.name.startsWith('_'));
+			collectionNames = nonSystem.map((c: any) => c.name);
+
 			for (const c of nonSystem) {
-				const fileFieldNames = (c.fields as Array<{ type: string; name: string }>)
+				const fileFieldNames = ((c as any).fields as Array<{ type: string; name: string }>)
 					.filter((f) => f.type === 'file')
 					.map((f) => f.name);
 				if (fileFieldNames.length > 0) {
-					fileFields[c.name] = fileFieldNames;
+					fileFields[(c as any).name] = fileFieldNames;
 				}
 			}
-		} catch (e) {
-			console.error('Failed to get collection names:', e);
 		}
+
+		// Process info pages
+		infoPages = (pages as any[]).map((p) => ({ id: p.id, title: p.title, content: p.content }));
 	}
 
 	return {
 		participant,
 		collectionNames,
-		fileFields
+		fileFields,
+		infoPages
 	};
 };

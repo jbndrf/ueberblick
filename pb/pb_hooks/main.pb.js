@@ -167,9 +167,11 @@ onRecordAfterUpdateSuccess((e) => {
   try {
     const automations = $app.findRecordsByFilter(
       "tools_automation",
-      'workflow_id = "' + workflowId + '" && trigger_type = "on_transition" && is_enabled = true',
+      'workflow_id = {:wfId} && trigger_type = "on_transition" && is_enabled = true',
       "",
-      20
+      20,
+      0,
+      { wfId: workflowId }
     );
 
     for (const automation of automations) {
@@ -215,9 +217,11 @@ onRecordAfterUpdateSuccess((e) => {
   try {
     const globalProtocols = $app.findRecordsByFilter(
       "tools_protocol",
-      'workflow_id = "' + workflowId + '" && is_global = true',
+      'workflow_id = {:wfId} && is_global = true',
       "",
-      50
+      50,
+      0,
+      { wfId: workflowId }
     );
 
     for (const protocol of globalProtocols) {
@@ -235,11 +239,13 @@ onRecordAfterUpdateSuccess((e) => {
       try {
         allUsage = $app.findRecordsByFilter(
           "workflow_instance_tool_usage",
-          'instance_id = "' + instanceId + '"',
+          'instance_id = {:instId}',
           "-executed_at",
-          1000
+          1000,
+          0,
+          { instId: instanceId }
         );
-      } catch (err) { /* no records */ }
+      } catch (err) { console.warn("[Protocol] Failed to load tool usage:", err); }
 
       var entryTimestamp = null;
       for (var i = 0; i < allUsage.length; i++) {
@@ -268,21 +274,89 @@ onRecordAfterUpdateSuccess((e) => {
       try {
         spanUsage = $app.findRecordsByFilter(
           "workflow_instance_tool_usage",
-          'instance_id = "' + instanceId + '" && executed_at >= "' + entryTimestamp + '"',
+          'instance_id = {:instId} && executed_at >= {:entryTs}',
           "executed_at",
-          1000
+          1000,
+          0,
+          { instId: instanceId, entryTs: entryTimestamp }
         );
-      } catch (err) { /* no records */ }
+      } catch (err) { console.warn("[Protocol] Failed to load span usage:", err); }
+
+      // Build lookup maps for human-readable names
+      var stageMap = {};
+      try {
+        var stages = $app.findRecordsByFilter("workflow_stages", "workflow_id = {:wfId}", "", 200, 0, { wfId: workflowId });
+        for (var s = 0; s < stages.length; s++) {
+          stageMap[stages[s].id] = stages[s].get("stage_name");
+        }
+      } catch (err) { console.warn("[Protocol] Failed to load stages:", err); }
+
+      var fieldMap = {};
+      try {
+        var forms = $app.findRecordsByFilter("tools_forms", "workflow_id = {:wfId}", "", 200, 0, { wfId: workflowId });
+        for (var fi = 0; fi < forms.length; fi++) {
+          try {
+            var formFields = $app.findRecordsByFilter("tools_form_fields", "form_id = {:fId}", "", 200, 0, { fId: forms[fi].id });
+            for (var ff = 0; ff < formFields.length; ff++) {
+              fieldMap[formFields[ff].id] = formFields[ff].get("field_label");
+            }
+          } catch (err) { /* no fields for this form */ }
+        }
+      } catch (err) { console.warn("[Protocol] Failed to load form fields:", err); }
+
+      var participantMap = {};
+      // Collect unique participant IDs first, then batch-resolve
+      var participantIds = {};
+      for (var j = 0; j < spanUsage.length; j++) {
+        var execBy = spanUsage[j].get("executed_by");
+        if (execBy) participantIds[execBy] = true;
+      }
+      for (var pid in participantIds) {
+        try {
+          var participant = $app.findRecordById("participants", pid);
+          participantMap[pid] = participant.get("name") || participant.get("email") || pid;
+        } catch (err) { console.warn("[Protocol] Failed to resolve participant " + pid + ":", err); }
+      }
 
       var auditLog = [];
       for (var j = 0; j < spanUsage.length; j++) {
         var rec = spanUsage[j];
+        var stageId = rec.get("stage_id");
+        var executedBy = rec.get("executed_by");
+        var meta = auto.parseJsonField(rec.get("metadata"));
+
+        // Enrich metadata with human-readable names
+        if (meta) {
+          if (meta.from_stage_id && stageMap[meta.from_stage_id]) {
+            meta.from_stage_name = stageMap[meta.from_stage_id];
+          }
+          if (meta.to_stage_id && stageMap[meta.to_stage_id]) {
+            meta.to_stage_name = stageMap[meta.to_stage_id];
+          }
+          if (meta.created_fields && Array.isArray(meta.created_fields)) {
+            for (var cf = 0; cf < meta.created_fields.length; cf++) {
+              if (meta.created_fields[cf].field_key && fieldMap[meta.created_fields[cf].field_key]) {
+                meta.created_fields[cf].field_name = fieldMap[meta.created_fields[cf].field_key];
+              }
+            }
+          }
+          if (meta.changes && Array.isArray(meta.changes)) {
+            for (var ch = 0; ch < meta.changes.length; ch++) {
+              if (meta.changes[ch].field_key && fieldMap[meta.changes[ch].field_key]) {
+                meta.changes[ch].field_name = fieldMap[meta.changes[ch].field_key];
+              }
+            }
+          }
+        }
+
         auditLog.push({
           id: rec.id,
-          stage_id: rec.get("stage_id"),
-          executed_by: rec.get("executed_by"),
+          stage_id: stageId,
+          stage_name: stageMap[stageId] || null,
+          executed_by: executedBy,
+          executed_by_name: participantMap[executedBy] || null,
           executed_at: rec.get("executed_at"),
-          metadata: auto.parseJsonField(rec.get("metadata"))
+          metadata: meta
         });
       }
 
@@ -335,9 +409,11 @@ onRecordAfterCreateSuccess((e) => {
 
     const automations = $app.findRecordsByFilter(
       "tools_automation",
-      'workflow_id = "' + workflowId + '" && trigger_type = "on_field_change" && is_enabled = true',
+      'workflow_id = {:wfId} && trigger_type = "on_field_change" && is_enabled = true',
       "",
-      20
+      20,
+      0,
+      { wfId: workflowId }
     );
 
     for (const automation of automations) {
@@ -374,9 +450,11 @@ onRecordAfterUpdateSuccess((e) => {
 
     const automations = $app.findRecordsByFilter(
       "tools_automation",
-      'workflow_id = "' + workflowId + '" && trigger_type = "on_field_change" && is_enabled = true',
+      'workflow_id = {:wfId} && trigger_type = "on_field_change" && is_enabled = true',
       "",
-      20
+      20,
+      0,
+      { wfId: workflowId }
     );
 
     for (const automation of automations) {
@@ -437,13 +515,16 @@ cronAdd("automation_scheduled_check", "* * * * *", () => {
 
       var workflowId = automation.get("workflow_id");
 
-      var filter = 'workflow_id = "' + workflowId + '" && status = "active"';
+      var filter = 'workflow_id = {:wfId} && status = "active"';
+      var params = { wfId: workflowId };
       if (config.target_stage_id) {
-        filter += ' && current_stage_id = "' + config.target_stage_id + '"';
+        filter += ' && current_stage_id = {:targetStage}';
+        params.targetStage = config.target_stage_id;
       }
       if (config.inactive_days && config.inactive_days > 0) {
         var cutoffDate = new Date(now.getTime() - config.inactive_days * 86400000).toISOString();
-        filter += ' && last_activity_at <= "' + cutoffDate + '"';
+        filter += ' && last_activity_at <= {:cutoff}';
+        params.cutoff = cutoffDate;
       }
 
       try {
@@ -451,7 +532,9 @@ cronAdd("automation_scheduled_check", "* * * * *", () => {
           "workflow_instances",
           filter,
           "",
-          500
+          500,
+          0,
+          params
         );
 
         for (var j = 0; j < instances.length; j++) {

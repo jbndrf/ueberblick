@@ -1,7 +1,29 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import type { Map as LeafletMap, TileLayer, Marker as LeafletMarker } from 'leaflet';
+	import type { Map as LeafletMap, TileLayer, Marker as LeafletMarker, LayerGroup } from 'leaflet';
 	import { createCachedTileLayer } from '$lib/components/map/cached-tile-layer';
+	import {
+		buildIndex,
+		markersToFeatures,
+		workflowInstancesToFeatures,
+		getMapBBox,
+		isCluster,
+		getFeatureKey,
+		reduceCounts,
+		mapMarkerProps,
+		mapWorkflowInstanceProps,
+		type MarkerProperties,
+		type WorkflowInstanceProperties,
+		type ClusterFeature,
+		type ClusterDetail
+	} from '$lib/components/map/supercluster-manager';
+	import {
+		generateDonutSvg,
+		donutSize,
+		donutCacheKey,
+		type VisualKeyRegistry
+	} from '$lib/components/map/donut-cluster-icon';
+	import type Supercluster from 'supercluster';
 
 	interface MapLayer {
 		id: string;
@@ -108,8 +130,11 @@
 		visibleTagValues?: Map<string, Set<string>>;
 		/** All workflow definitions (for filter_value_icons) */
 		workflows?: Array<{ id: string; filter_value_icons?: Record<string, IconConfig> }>;
+		/** Pre-computed visual key registry for donut cluster colors */
+		visualKeyRegistry?: VisualKeyRegistry;
 		onMarkerClick?: (marker: MapMarker) => void;
 		onWorkflowInstanceClick?: (instance: WorkflowInstance) => void;
+		onClusterClick?: (detail: ClusterDetail) => void;
 		onMapReady?: (map: LeafletMap) => void;
 		onMapClick?: () => void;
 	}
@@ -127,8 +152,10 @@
 		filterableValues = new Map(),
 		visibleTagValues = new Map(),
 		workflows = [],
+		visualKeyRegistry = new Map(),
 		onMarkerClick,
 		onWorkflowInstanceClick,
+		onClusterClick,
 		onMapReady,
 		onMapClick
 	}: Props = $props();
@@ -167,42 +194,67 @@
 	let leaflet = $state<typeof import('leaflet') | null>(null);
 	let currentBaseTileLayer: TileLayer | null = null;
 	let overlayTileLayers: Map<string, TileLayer> = new Map();
-	let markerLayers: Map<string, LeafletMarker> = new Map();
-	let workflowInstanceLayers: Map<string, LeafletMarker> = new Map();
-	/** Track current_stage_id per instance to detect icon changes */
-	let workflowInstanceStageIds: Map<string, string | undefined> = new Map();
-	/** Track filter value per instance to detect icon changes */
-	let workflowInstanceFilterValues: Map<string, string | undefined> = new Map();
+
+	// Supercluster indexes
+	let markerIndex: Supercluster<MarkerProperties, Supercluster.AnyProps> | null = null;
+	let workflowInstanceIndex: Supercluster<WorkflowInstanceProperties, Supercluster.AnyProps> | null = null;
+
+	// Layer groups for rendered markers (replace cluster groups)
+	let markerLayerGroup: LayerGroup | null = null;
+	let workflowInstanceLayerGroup: LayerGroup | null = null;
+
+	// Currently rendered features on the map, keyed by feature key
+	let renderedMarkers: Map<string, LeafletMarker> = new Map();
+	let renderedWorkflowInstances: Map<string, LeafletMarker> = new Map();
+
+	// Lookup maps for click handlers (point ID -> original data)
+	let markerDataMap: Map<string, MapMarker> = new Map();
+	let workflowInstanceDataMap: Map<string, WorkflowInstance> = new Map();
+
+	// Icon cache to avoid regenerating identical icons
+	let iconCache: Map<string, any> = new Map();
+
+	// O(1) lookup sets for filter checks (instead of Array.includes which is O(n))
+	const visibleCategoryIdSet = $derived(new Set(visibleCategoryIds));
+	const visibleWorkflowIdSet = $derived(new Set(visibleWorkflowIds));
+
+	// Pre-parse splitMultiValue results so JSON.parse runs once per data change, not per filter check
+	const parsedFilterValues = $derived.by(() => {
+		const map = new Map<string, string[]>();
+		for (const [id, value] of filterableValues) {
+			map.set(id, splitMultiValue(value));
+		}
+		return map;
+	});
 
 	// Derived: compute which markers should be visible on the map
 	const visibleMarkers = $derived.by(() => {
 		return markers.filter(
-			(m) => visibleCategoryIds.includes(m.category_id) && m.location?.lat && m.location?.lon
+			(m) => visibleCategoryIdSet.has(m.category_id) && m.location?.lat && m.location?.lon
 		);
 	});
 
 	// Derived: compute which workflow instances should be visible on the map
 	const visibleWorkflowInstances = $derived.by(() => {
 		return workflowInstances.filter((i) => {
-			// 1. Check workflow visibility (existing)
-			if (!visibleWorkflowIds.includes(i.workflow_id)) return false;
-			// 2. Check location exists (existing)
+			if (!visibleWorkflowIdSet.has(i.workflow_id)) return false;
 			if (!i.location?.lat || !i.location?.lon) return false;
-			// 3. Check tag value filtering
 			const allowedValues = visibleTagValues.get(i.workflow_id);
 			if (allowedValues) {
-				// This workflow has tag-based filtering active
-				const instanceValue = filterableValues.get(i.id);
-				// If instance has a value for the tagged field, check if ANY individual value is visible
-				if (instanceValue) {
-					const values = splitMultiValue(instanceValue);
+				const values = parsedFilterValues.get(i.id);
+				if (values) {
 					if (!values.some(v => allowedValues.has(v))) return false;
 				}
-				// If instance has no value, keep it (don't filter untagged)
 			}
 			return true;
 		});
 	});
+
+	// visualKeyRegistry is now received as a prop from the parent (computed once in +page.svelte)
+
+	// O(1) lookup maps for icon creation (instead of Array.find which is O(n) per call)
+	const workflowById = $derived(new Map(workflows.map(w => [w.id, w])));
+	const stageById = $derived(new Map(workflowStages.map(s => [s.id, s])));
 
 	// Default settings
 	const defaultCenter: [number, number] = [51.505, 7.45]; // Germany
@@ -291,8 +343,6 @@
 	function updateOverlayLayers(L: typeof import('leaflet')) {
 		if (!map) return;
 
-		console.log('[MapCanvas] updateOverlayLayers called, activeOverlayIds:', activeOverlayIds);
-
 		// Remove layers that are no longer active
 		for (const [id, tileLayer] of overlayTileLayers) {
 			if (!activeOverlayIds.includes(id)) {
@@ -356,13 +406,19 @@
 		`;
 	}
 
-	// Create Leaflet icon from marker category
+	// Create Leaflet icon from marker category (with caching)
 	function createMarkerIcon(L: typeof import('leaflet'), category: MarkerCategory | undefined) {
 		const iconConfig = category?.icon_config;
 
 		if (!iconConfig?.svgContent) {
-			// Fallback to default marker
 			return new L.Icon.Default();
+		}
+
+		// Cache by category ID
+		const cacheKey = category?.id ? `marker_${category.id}` : undefined;
+		if (cacheKey) {
+			const cached = iconCache.get(cacheKey);
+			if (cached) return cached;
 		}
 
 		const style = iconConfig.style || { size: 32, shape: 'none' };
@@ -378,60 +434,21 @@
 			iconSize = [size, height];
 			iconAnchor = [size / 2, height]; // Anchor at bottom center of pin
 		} else {
-			// Standalone SVG - wrap in container that forces the size
-			// The SVG might have hardcoded width/height, so we use CSS to override
 			iconHtml = `<div class="standalone-svg-icon" style="width:${size}px;height:${size}px;">${iconConfig.svgContent}</div>`;
 			iconSize = [size, size];
 			iconAnchor = [size / 2, size / 2]; // Anchor at center
 		}
 
-		return L.divIcon({
+		const icon = L.divIcon({
 			html: iconHtml,
 			className: 'custom-marker-icon',
 			iconSize,
 			iconAnchor,
 			popupAnchor: [0, -iconAnchor[1]]
 		});
-	}
 
-	// Update markers on map - accepts visible markers list for proper reactivity
-	function syncMarkersToMap(L: typeof import('leaflet'), markersToShow: MapMarker[]) {
-		if (!map) return;
-
-		// Remove markers that are no longer visible
-		const toRemove: string[] = [];
-		for (const [id, leafletMarker] of markerLayers) {
-			if (!markersToShow.some((m) => m.id === id)) {
-				map.removeLayer(leafletMarker);
-				toRemove.push(id);
-			}
-		}
-		for (const id of toRemove) {
-			markerLayers.delete(id);
-		}
-
-		// Add visible markers that aren't on the map yet
-		for (const marker of markersToShow) {
-			if (!marker.location) continue;
-
-			const existingMarker = markerLayers.get(marker.id);
-
-			if (!existingMarker) {
-				// Create new marker
-				const category = marker.expand?.category_id;
-				const icon = createMarkerIcon(L, category);
-
-				const leafletMarker = L.marker([marker.location.lat, marker.location.lon], { icon })
-					.addTo(map);
-
-				// Add click handler
-				if (onMarkerClick) {
-					leafletMarker.on('click', () => onMarkerClick(marker));
-				}
-
-				markerLayers.set(marker.id, leafletMarker);
-			}
-		}
+		if (cacheKey) iconCache.set(cacheKey, icon);
+		return icon;
 	}
 
 	// Create Leaflet icon for workflow instance using workflow's icon_config or marker_color
@@ -444,9 +461,8 @@
 		// 1. Check filter value icon (from workflow.filter_value_icons)
 		const filterValue = filterableValues.get(instance.id);
 		if (filterValue) {
-			// Look up from the workflow def passed via expand, or from the workflows array
 			const wfFilterIcons = workflow?.filter_value_icons
-				?? workflows.find(w => w.id === instance.workflow_id)?.filter_value_icons;
+				?? workflowById.get(instance.workflow_id)?.filter_value_icons;
 			const filterIcon = wfFilterIcons?.[filterValue];
 			if (filterIcon?.svgContent) {
 				effectiveIconConfig = filterIcon;
@@ -454,8 +470,8 @@
 		}
 
 		// 2. Check current stage icon
-		if (!effectiveIconConfig && instance.current_stage_id && workflowStages.length > 0) {
-			const stage = workflowStages.find(s => s.id === instance.current_stage_id);
+		if (!effectiveIconConfig && instance.current_stage_id) {
+			const stage = stageById.get(instance.current_stage_id);
 			const stageIconConfig = stage?.visual_config?.icon_config;
 			if (stageIconConfig?.svgContent) {
 				effectiveIconConfig = stageIconConfig;
@@ -467,7 +483,7 @@
 			effectiveIconConfig = workflow.icon_config;
 		}
 
-		// 3. If we have an icon config, render it
+		// If we have an icon config, render it
 		if (effectiveIconConfig?.svgContent) {
 			const baseIcon = createMarkerIcon(L, { icon_config: effectiveIconConfig } as MarkerCategory);
 			return L.divIcon({
@@ -479,7 +495,7 @@
 			});
 		}
 
-		// 4. Default: colored circle
+		// Default: colored circle
 		const size = 24;
 		const svgContent = `
 			<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
@@ -497,64 +513,187 @@
 		});
 	}
 
-	// Update workflow instances on map
-	function syncWorkflowInstancesToMap(L: typeof import('leaflet'), instancesToShow: WorkflowInstance[]) {
+	// Create a donut cluster icon from aggregated composition data
+	function createDonutClusterIcon(L: typeof import('leaflet'), counts: Record<string, number>, totalCount: number) {
+		const cacheKey = donutCacheKey(counts, totalCount);
+		const cached = iconCache.get(cacheKey);
+		if (cached) return cached;
+
+		const size = donutSize(totalCount);
+		const svg = generateDonutSvg(counts, totalCount, visualKeyRegistry, size);
+
+		const icon = L.divIcon({
+			html: `<div class="supercluster-donut" style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.25));">${svg}</div>`,
+			className: 'custom-marker-icon',
+			iconSize: [size, size],
+			iconAnchor: [size / 2, size / 2]
+		});
+
+		iconCache.set(cacheKey, icon);
+		return icon;
+	}
+
+	// Double-tap detection timer for cluster interactions
+	let clusterTapTimer: ReturnType<typeof setTimeout> | null = null;
+	let lastTappedClusterId: number | null = null;
+
+	/**
+	 * Render the visible clusters/points from a Supercluster index onto a Leaflet LayerGroup.
+	 * Diffs against currently rendered features to minimize DOM changes.
+	 * Single tap on cluster -> detail sheet; double tap -> zoom to resolve.
+	 */
+	function renderFeatures<P extends MarkerProperties | WorkflowInstanceProperties>(
+		L: typeof import('leaflet'),
+		index: Supercluster<P, Supercluster.AnyProps>,
+		layerGroup: LayerGroup,
+		rendered: Map<string, LeafletMarker>,
+		createIcon: (feature: Supercluster.PointFeature<P>) => any,
+		onClick: ((feature: Supercluster.PointFeature<P>) => void) | undefined,
+		clusterType: 'marker' | 'workflowInstance'
+	) {
 		if (!map) return;
 
-		// Remove instances that are no longer visible
-		const toRemove: string[] = [];
-		for (const [id, leafletMarker] of workflowInstanceLayers) {
-			if (!instancesToShow.some((i) => i.id === id)) {
-				map.removeLayer(leafletMarker);
-				toRemove.push(id);
+		const bbox = getMapBBox(map);
+		const zoom = Math.floor(map.getZoom());
+		const features = index.getClusters(bbox, zoom);
+
+		// Build set of feature keys that should be visible
+		const visibleKeys = new Set<string>();
+		for (const feature of features) {
+			visibleKeys.add(getFeatureKey(feature));
+		}
+
+		// Remove rendered features that are no longer visible
+		for (const [key, leafletMarker] of rendered) {
+			if (!visibleKeys.has(key)) {
+				layerGroup.removeLayer(leafletMarker);
+				rendered.delete(key);
 			}
 		}
-		for (const id of toRemove) {
-			workflowInstanceLayers.delete(id);
-			workflowInstanceStageIds.delete(id);
-			workflowInstanceFilterValues.delete(id);
-		}
 
-		// Add or update visible instances
-		for (const instance of instancesToShow) {
-			if (!instance.location) continue;
+		// Add new features
+		for (const feature of features) {
+			const key = getFeatureKey(feature);
+			if (rendered.has(key)) continue;
 
-			const existingMarker = workflowInstanceLayers.get(instance.id);
+			const [lng, lat] = feature.geometry.coordinates;
+			let icon: any;
+			let clickHandler: (() => void) | undefined;
 
-			if (existingMarker) {
-				// Update position if changed
-				const currentLatLng = existingMarker.getLatLng();
-				if (currentLatLng.lat !== instance.location.lat || currentLatLng.lng !== instance.location.lon) {
-					existingMarker.setLatLng([instance.location.lat, instance.location.lon]);
-				}
-				// Update icon if stage or filter value changed
-				const prevStageId = workflowInstanceStageIds.get(instance.id);
-				const prevFilterValue = workflowInstanceFilterValues.get(instance.id);
-				const currentFilterValue = filterableValues.get(instance.id);
-				if (prevStageId !== instance.current_stage_id || prevFilterValue !== currentFilterValue) {
-					const workflow = instance.expand?.workflow_id;
-					const newIcon = createWorkflowInstanceIcon(L, workflow, instance);
-					existingMarker.setIcon(newIcon);
-					workflowInstanceStageIds.set(instance.id, instance.current_stage_id);
-					workflowInstanceFilterValues.set(instance.id, currentFilterValue);
-				}
+			if (isCluster(feature)) {
+				const count = feature.properties.point_count;
+				const counts: Record<string, number> = feature.properties._counts || {};
+				icon = createDonutClusterIcon(L, counts, count);
+
+				// Double-tap: zoom in; Single-tap: show detail sheet
+				const clusterId = feature.properties.cluster_id;
+				clickHandler = () => {
+					if (clusterTapTimer !== null && lastTappedClusterId === clusterId) {
+						// Double tap -- zoom to fully resolve the cluster
+						clearTimeout(clusterTapTimer);
+						clusterTapTimer = null;
+						lastTappedClusterId = null;
+						// Get all leaf points and fit bounds to show them individually
+						const leaves = index.getLeaves(clusterId, Infinity);
+						if (leaves.length > 0 && map) {
+							const bounds = L.latLngBounds(
+								leaves.map(l => L.latLng(l.geometry.coordinates[1], l.geometry.coordinates[0]))
+							);
+							map.flyToBounds(bounds, { padding: [40, 40], maxZoom: getGlobalMaxZoom() });
+						} else {
+							// Fallback: just zoom to expansion level
+							const expansionZoom = index.getClusterExpansionZoom(clusterId);
+							map?.flyTo([lat, lng], expansionZoom);
+						}
+					} else {
+						// First tap -- wait to see if double tap follows
+						if (clusterTapTimer !== null) clearTimeout(clusterTapTimer);
+						lastTappedClusterId = clusterId;
+						clusterTapTimer = setTimeout(() => {
+							clusterTapTimer = null;
+							lastTappedClusterId = null;
+							// Single tap: emit cluster detail
+							onClusterClick?.({
+								center: [lat, lng],
+								totalCount: count,
+								counts,
+								clusterType
+							});
+						}, 300);
+					}
+				};
 			} else {
-				// Create new marker
-				const workflow = instance.expand?.workflow_id;
-				const icon = createWorkflowInstanceIcon(L, workflow, instance);
-
-				const leafletMarker = L.marker([instance.location.lat, instance.location.lon], { icon })
-					.addTo(map);
-
-				// Add click handler
-				if (onWorkflowInstanceClick) {
-					leafletMarker.on('click', () => onWorkflowInstanceClick(instance));
+				icon = createIcon(feature as Supercluster.PointFeature<P>);
+				if (onClick) {
+					clickHandler = () => onClick(feature as Supercluster.PointFeature<P>);
 				}
-
-				workflowInstanceLayers.set(instance.id, leafletMarker);
-				workflowInstanceStageIds.set(instance.id, instance.current_stage_id);
-				workflowInstanceFilterValues.set(instance.id, filterableValues.get(instance.id));
 			}
+
+			const leafletMarker = L.marker([lat, lng], { icon });
+			if (clickHandler) {
+				leafletMarker.on('click', clickHandler);
+			}
+			layerGroup.addLayer(leafletMarker);
+			rendered.set(key, leafletMarker);
+		}
+	}
+
+	// Pending RAF ID for viewport updates
+	let pendingViewportUpdate: number | null = null;
+
+	/** Schedule a viewport update on next animation frame */
+	function scheduleViewportUpdate() {
+		if (pendingViewportUpdate !== null) return;
+		pendingViewportUpdate = requestAnimationFrame(() => {
+			pendingViewportUpdate = null;
+			updateViewport();
+		});
+	}
+
+	/** Re-render markers and workflow instances for the current viewport */
+	function updateViewport() {
+		if (!leaflet || !map || !markerLayerGroup || !workflowInstanceLayerGroup) return;
+
+		if (markerIndex) {
+			renderFeatures(
+				leaflet,
+				markerIndex,
+				markerLayerGroup,
+				renderedMarkers,
+				(feature) => {
+					const marker = markerDataMap.get(feature.properties.id);
+					const category = marker?.expand?.category_id;
+					return createMarkerIcon(leaflet!, category);
+				},
+				onMarkerClick
+					? (feature) => {
+						const marker = markerDataMap.get(feature.properties.id);
+						if (marker) onMarkerClick!(marker);
+					}
+					: undefined,
+				'marker'
+			);
+		}
+
+		if (workflowInstanceIndex) {
+			renderFeatures(
+				leaflet,
+				workflowInstanceIndex,
+				workflowInstanceLayerGroup,
+				renderedWorkflowInstances,
+				(feature) => {
+					const instance = workflowInstanceDataMap.get(feature.properties.id);
+					const workflow = instance?.expand?.workflow_id;
+					return createWorkflowInstanceIcon(leaflet!, workflow, instance!);
+				},
+				onWorkflowInstanceClick
+					? (feature) => {
+						const instance = workflowInstanceDataMap.get(feature.properties.id);
+						if (instance) onWorkflowInstanceClick!(instance);
+					}
+					: undefined,
+				'workflowInstance'
+			);
 		}
 	}
 
@@ -578,7 +717,7 @@
 		];
 		const zoom = mapSettings?.default_zoom ?? defaultZoom;
 
-		// Initialize map - assign to $state variables to trigger effects
+		// Initialize map
 		const mapInstance = L.map(mapContainer, {
 			center,
 			zoom,
@@ -587,9 +726,16 @@
 			attributionControl: true
 		});
 
+		// Initialize layer groups (replacing marker cluster groups)
+		markerLayerGroup = L.layerGroup().addTo(mapInstance);
+		workflowInstanceLayerGroup = L.layerGroup().addTo(mapInstance);
+
 		// Set reactive state - this will trigger the effects
 		leaflet = L;
 		map = mapInstance;
+
+		// Listen for viewport changes to re-render clusters
+		mapInstance.on('moveend', scheduleViewportUpdate);
 
 		// Notify parent that map is ready
 		onMapReady?.(mapInstance);
@@ -606,6 +752,14 @@
 		}, 100);
 	});
 
+	// React to mapSettings changes (e.g. max_zoom loaded after map init)
+	$effect(() => {
+		const maxZoom = getGlobalMaxZoom();
+		if (map) {
+			map.setMaxZoom(maxZoom);
+		}
+	});
+
 	// React to layer selection changes
 	$effect(() => {
 		if (leaflet && map) {
@@ -619,24 +773,103 @@
 		}
 	});
 
-	// React to marker visibility changes
-	// IMPORTANT: Read visibleMarkers BEFORE the guard clause to ensure dependency tracking
+	// Fingerprint helpers to skip unnecessary Supercluster rebuilds
+	function fingerprint(items: Array<{ id: string }>): string {
+		if (items.length === 0) return '';
+		return `${items.length}:${items[0].id}:${items[items.length - 1].id}`;
+	}
+	let lastMarkerFingerprint = '';
+	let lastInstanceFingerprint = '';
+
+	// React to marker data changes: rebuild Supercluster index and re-render (debounced)
+	let markerRebuildTimer: ReturnType<typeof setTimeout> | null = null;
 	$effect(() => {
-		const markersToSync = visibleMarkers; // Read first to track dependency
-		if (leaflet && map) {
-			syncMarkersToMap(leaflet, markersToSync);
-		}
+		const markersToIndex = visibleMarkers;
+		if (!leaflet || !map) return;
+
+		if (markerRebuildTimer) clearTimeout(markerRebuildTimer);
+		markerRebuildTimer = setTimeout(() => {
+			// Skip rebuild if visible markers haven't actually changed
+			const fp = fingerprint(markersToIndex);
+			if (fp === lastMarkerFingerprint && markerIndex) {
+				return;
+			}
+			lastMarkerFingerprint = fp;
+
+			// Update the lookup map for click handlers
+			markerDataMap.clear();
+			for (const m of markers) {
+				markerDataMap.set(m.id, m);
+			}
+
+			// Build fresh index from visible markers (with composition aggregation)
+			const features = markersToFeatures(markersToIndex);
+			markerIndex = buildIndex(features, {
+				radius: 80,
+				maxZoom: getGlobalMaxZoom(),
+				map: mapMarkerProps,
+				reduce: reduceCounts
+			});
+
+			// Clear currently rendered markers and re-render
+			if (markerLayerGroup) {
+				markerLayerGroup.clearLayers();
+				renderedMarkers.clear();
+			}
+			updateViewport();
+		}, 200);
 	});
 
-	// React to workflow instance visibility changes
+	// React to workflow instance data changes: rebuild index and re-render (debounced)
+	let instanceRebuildTimer: ReturnType<typeof setTimeout> | null = null;
 	$effect(() => {
-		const instancesToSync = visibleWorkflowInstances; // Read first to track dependency
-		if (leaflet && map) {
-			syncWorkflowInstancesToMap(leaflet, instancesToSync);
-		}
+		const instancesToIndex = visibleWorkflowInstances;
+		if (!leaflet || !map) return;
+
+		if (instanceRebuildTimer) clearTimeout(instanceRebuildTimer);
+		instanceRebuildTimer = setTimeout(() => {
+			// Skip rebuild if visible instances haven't actually changed
+			const fp = fingerprint(instancesToIndex);
+			if (fp === lastInstanceFingerprint && workflowInstanceIndex) {
+				return;
+			}
+			lastInstanceFingerprint = fp;
+
+			// Update the lookup map for click handlers
+			workflowInstanceDataMap.clear();
+			for (const i of workflowInstances) {
+				workflowInstanceDataMap.set(i.id, i);
+			}
+
+			// Build fresh index from visible instances (with composition aggregation)
+			const features = workflowInstancesToFeatures(instancesToIndex, filterableValues);
+			workflowInstanceIndex = buildIndex(features, {
+				radius: 80,
+				maxZoom: getGlobalMaxZoom(),
+				map: mapWorkflowInstanceProps,
+				reduce: reduceCounts
+			});
+
+			// Clear currently rendered instances and re-render
+			if (workflowInstanceLayerGroup) {
+				workflowInstanceLayerGroup.clearLayers();
+				renderedWorkflowInstances.clear();
+			}
+			updateViewport();
+		}, 200);
 	});
 
 	onDestroy(() => {
+		// Cancel pending debounce timers
+		if (markerRebuildTimer) clearTimeout(markerRebuildTimer);
+		if (instanceRebuildTimer) clearTimeout(instanceRebuildTimer);
+		if (clusterTapTimer) clearTimeout(clusterTapTimer);
+
+		// Cancel pending RAF
+		if (pendingViewportUpdate !== null) {
+			cancelAnimationFrame(pendingViewportUpdate);
+		}
+
 		// Remove click vs drag detection event listeners
 		mapContainer?.removeEventListener('mousedown', handleMapMouseDown);
 		mapContainer?.removeEventListener('mouseup', handleMapMouseUp);
@@ -644,9 +877,17 @@
 		mapContainer?.removeEventListener('touchend', handleMapMouseUp);
 
 		if (map) {
+			map.off('moveend', scheduleViewportUpdate);
 			map.remove();
 			map = null;
 		}
+
+		// Clear caches
+		iconCache.clear();
+		renderedMarkers.clear();
+		renderedWorkflowInstances.clear();
+		markerDataMap.clear();
+		workflowInstanceDataMap.clear();
 	});
 </script>
 

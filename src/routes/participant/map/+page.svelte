@@ -9,7 +9,10 @@
 	import { disconnectRealtime } from '$lib/participant-state';
 	import { Loader2 } from 'lucide-svelte';
 	import { MapCanvas, BottomControlBar, LayerSheet, FilterSheet, WorkflowSelector, SettingsSheet } from './components';
-	import { WorkflowInstanceDetailModule, createSelection, type Selection, type Marker } from './modules';
+	import { WorkflowInstanceDetailModule, MarkerDetailModule, createSelection, type Selection, type Marker } from './modules';
+	import ClusterDetailModule from './modules/cluster-detail/ClusterDetailModule.svelte';
+	import type { ClusterDetail } from '$lib/components/map/supercluster-manager';
+	import type { VisualKeyRegistry } from '$lib/components/map/donut-cluster-icon';
 	import { FormFillTool } from './modules/workflow-instance-detail/tools';
 	import ModuleShell from '$lib/components/module-shell.svelte';
 	import type { Map as LeafletMap } from 'leaflet';
@@ -39,6 +42,7 @@
 			};
 			collectionNames?: string[];
 			fileFields?: Record<string, string[]>;
+			infoPages?: Array<{ id: string; title: string; content: string }>;
 		};
 	}
 
@@ -82,6 +86,10 @@
 	// Selection state
 	let selection = $state<Selection>(createSelection.none());
 
+	// Cluster detail state (for cluster tap interaction)
+	let clusterDetail = $state<ClusterDetail | null>(null);
+	let clusterDetailOpen = $state(false);
+
 	// Workflow creation state (for new workflows via entry form)
 	let pendingWorkflow = $state<PendingWorkflow | null>(null);
 	let formFillOpen = $state(false);
@@ -96,15 +104,16 @@
 	// Live Queries -- reactive, auto-updating from IndexedDB
 	// ==========================================================================
 
-	const projectLive = gateway.collection('projects').live();
-	const layersLive = gateway.collection('map_layers').live({ filter: 'is_active = true', sort: 'display_order' });
-	const markersLive = gateway.collection('markers').live({ expand: 'category_id' });
-	const instancesLive = gateway.collection('workflow_instances').live({ expand: 'workflow_id' });
-	const workflowsLive = gateway.collection('workflows').live({ filter: 'is_active = true' });
-	const stagesLive = gateway.collection('workflow_stages').live();
-	const fieldTagsLive = gateway.collection('tools_field_tags').live();
-	const fieldValuesLive = gateway.collection('workflow_instance_field_values').live();
-	const connectionsLive = gateway.collection('workflow_connections').live({ filter: 'from_stage_id = ""' });
+	// Priority: critical = map shell, normal = map content, deferred = filtering/detail data
+	const projectLive = gateway!.collection('projects').live({ priority: 'critical' });
+	const layersLive = gateway!.collection('map_layers').live({ filter: 'is_active = true', sort: 'display_order', priority: 'critical' });
+	const markersLive = gateway!.collection('markers').live({ expand: 'category_id', priority: 'normal' });
+	const instancesLive = gateway!.collection('workflow_instances').live({ expand: 'workflow_id', priority: 'normal' });
+	const workflowsLive = gateway!.collection('workflows').live({ filter: 'is_active = true', priority: 'normal' });
+	const stagesLive = gateway!.collection('workflow_stages').live({ priority: 'deferred' });
+	const fieldTagsLive = gateway!.collection('tools_field_tags').live({ priority: 'deferred' });
+	const fieldValuesLive = gateway!.collection('workflow_instance_field_values').live({ priority: 'deferred' });
+	const connectionsLive = gateway!.collection('workflow_connections').live({ filter: 'from_stage_id = ""', priority: 'deferred' });
 
 	// Derived data from live queries
 	const project = $derived(projectLive.records[0]);
@@ -124,10 +133,12 @@
 		const center_lat = baseConfig?.default_center?.lat ?? projectDefaults?.center?.lat;
 		const center_lon = baseConfig?.default_center?.lng ?? projectDefaults?.center?.lng;
 		const default_zoom = baseConfig?.default_zoom ?? projectDefaults?.zoom;
+		const min_zoom = projectDefaults?.min_zoom;
+		const max_zoom = projectDefaults?.max_zoom;
 
-		if (center_lat == null && center_lon == null && default_zoom == null) return undefined;
+		if (center_lat == null && center_lon == null && default_zoom == null && min_zoom == null && max_zoom == null) return undefined;
 
-		return { center_lat, center_lon, default_zoom };
+		return { center_lat, center_lon, default_zoom, min_zoom, max_zoom };
 	});
 
 	// Workflows with entry labels derived from connections, filtered by participant role
@@ -151,8 +162,57 @@
 			}));
 	});
 
-	// Loading: true until first IndexedDB read completes for key collections
-	const isLoading = $derived(layersLive.loading && markersLive.loading);
+	// Visual key registry for cluster donut colors (shared between MapCanvas and ClusterDetailModule)
+	const visualKeyRegistry: VisualKeyRegistry = $derived.by(() => {
+		const reg: VisualKeyRegistry = new Map();
+
+		// Marker category colors
+		for (const m of markers) {
+			const cat = (m as any).expand?.category_id;
+			if (cat && !reg.has(`cat:${cat.id}`)) {
+				reg.set(`cat:${cat.id}`, {
+					color: cat.icon_config?.style?.color || '#3b82f6',
+					label: cat.name
+				});
+			}
+		}
+
+		// Workflow-level colors
+		for (const inst of workflowInstances) {
+			const wf = (inst as any).expand?.workflow_id;
+			if (wf && !reg.has(`wf:${wf.id}`)) {
+				reg.set(`wf:${wf.id}`, {
+					color: wf.marker_color || '#6366f1',
+					label: wf.name
+				});
+			}
+		}
+
+		// Stage-level colors
+		for (const stage of workflowStages) {
+			const stageColor = (stage as any).visual_config?.icon_config?.style?.color;
+			if (stageColor) {
+				reg.set(`stage:${stage.id}`, { color: stageColor, label: (stage as any).name || stage.id });
+			}
+		}
+
+		// Filter value colors
+		for (const wf of workflows) {
+			const icons = wf.filter_value_icons;
+			if (!icons) continue;
+			for (const [value, iconConfig] of Object.entries(icons)) {
+				const color = (iconConfig as any)?.style?.color;
+				if (color) {
+					reg.set(`fv:${value}`, { color, label: value });
+				}
+			}
+		}
+
+		return reg;
+	});
+
+	// Loading: true until map layers are loaded (markers appear progressively)
+	const isLoading = $derived(layersLive.loading);
 
 	// Cleanup live queries on destroy
 	onDestroy(() => {
@@ -194,8 +254,9 @@
 	$effect(() => {
 		if (markers.length === 0) return;
 		const currentIds = untrack(() => visibleCategoryIds);
+		const currentSet = new Set(currentIds);
 		const allCategoryIds = [...new Set(markers.map((m: any) => m.category_id).filter(Boolean))];
-		const missing = allCategoryIds.filter((id) => !currentIds.includes(id));
+		const missing = allCategoryIds.filter((id) => !currentSet.has(id));
 		if (missing.length > 0) {
 			visibleCategoryIds = [...currentIds, ...missing];
 		}
@@ -205,11 +266,40 @@
 	$effect(() => {
 		if (workflowInstances.length === 0) return;
 		const currentIds = untrack(() => visibleWorkflowIds);
+		const currentSet = new Set(currentIds);
 		const allWorkflowIds = [...new Set(workflowInstances.map((i: any) => i.workflow_id).filter(Boolean))];
-		const missing = allWorkflowIds.filter((id) => !currentIds.includes(id));
+		const missing = allWorkflowIds.filter((id) => !currentSet.has(id));
 		if (missing.length > 0) {
 			visibleWorkflowIds = [...currentIds, ...missing];
 		}
+	});
+
+	// Pre-built lookup maps for O(1) access in filter derivation (avoids nested loops)
+	const instancesByWorkflow = $derived.by(() => {
+		const map = new Map<string, Array<any>>();
+		for (const inst of workflowInstances) {
+			const wfId = (inst as any).workflow_id;
+			if (!wfId) continue;
+			let arr = map.get(wfId);
+			if (!arr) { arr = []; map.set(wfId, arr); }
+			arr.push(inst);
+		}
+		return map;
+	});
+
+	const fieldValuesByKey = $derived.by(() => {
+		const map = new Map<string, Set<string>>();
+		for (const fv of fieldValues) {
+			const key = (fv as any).field_key;
+			const val = (fv as any).value;
+			if (!key || !val) continue;
+			let set = map.get(key);
+			if (!set) { set = new Set(); map.set(key, set); }
+			for (const v of splitMultiValue(val)) {
+				set.add(v);
+			}
+		}
+		return map;
 	});
 
 	// Initialize tag value visibility - all values visible by default
@@ -224,27 +314,15 @@
 					const filterBy = (mapping.config?.filterBy as string) || 'field';
 
 					if (filterBy === 'stage') {
+						const instances = instancesByWorkflow.get(wfId) || [];
 						const vals = new Set<string>();
-						for (const inst of workflowInstances) {
-							if ((inst as any).workflow_id === wfId && (inst as any).current_stage_id) {
-								vals.add((inst as any).current_stage_id);
-							}
+						for (const inst of instances) {
+							if (inst.current_stage_id) vals.add(inst.current_stage_id);
 						}
-						if (vals.size > 0) {
-							newMap.set(wfId, vals);
-						}
+						if (vals.size > 0) newMap.set(wfId, vals);
 					} else if (mapping.fieldId) {
-						const vals = new Set<string>();
-						for (const fv of fieldValues) {
-							if ((fv as any).field_key === mapping.fieldId && (fv as any).value) {
-								for (const v of splitMultiValue((fv as any).value)) {
-									vals.add(v);
-								}
-							}
-						}
-						if (vals.size > 0) {
-							newMap.set(wfId, vals);
-						}
+						const vals = fieldValuesByKey.get(mapping.fieldId);
+						if (vals && vals.size > 0) newMap.set(wfId, new Set(vals));
 					}
 				}
 			}
@@ -253,8 +331,6 @@
 	});
 
 	// Auto-add new filter values AND workflows as visible
-	// Handles: new instance for existing stage, instance moves to new stage,
-	// first-ever instance for a workflow that had no instances before
 	$effect(() => {
 		if (fieldTags.length === 0 || workflowInstances.length === 0) return;
 		const currentTagValues = untrack(() => visibleTagValues);
@@ -273,26 +349,24 @@
 				const existing = newMap.get(wfId) ?? new Set<string>();
 
 				if (filterBy === 'stage') {
-					for (const inst of workflowInstances) {
-						if ((inst as any).workflow_id === wfId && (inst as any).current_stage_id) {
-							if (!existing.has((inst as any).current_stage_id)) {
-								const updated = new Set(newMap.get(wfId) ?? existing);
-								updated.add((inst as any).current_stage_id);
-								newMap.set(wfId, updated);
-								tagChanged = true;
-							}
+					const instances = instancesByWorkflow.get(wfId) || [];
+					for (const inst of instances) {
+						if (inst.current_stage_id && !existing.has(inst.current_stage_id)) {
+							const updated = new Set(newMap.get(wfId) ?? existing);
+							updated.add(inst.current_stage_id);
+							newMap.set(wfId, updated);
+							tagChanged = true;
 						}
 					}
 				} else if (mapping.fieldId) {
-					for (const fv of fieldValues) {
-						if ((fv as any).field_key === mapping.fieldId && (fv as any).value) {
-							for (const v of splitMultiValue((fv as any).value)) {
-								if (!existing.has(v)) {
-									const updated = new Set(newMap.get(wfId) ?? existing);
-									updated.add(v);
-									newMap.set(wfId, updated);
-									tagChanged = true;
-								}
+					const allVals = fieldValuesByKey.get(mapping.fieldId);
+					if (allVals) {
+						for (const v of allVals) {
+							if (!existing.has(v)) {
+								const updated = new Set(newMap.get(wfId) ?? existing);
+								updated.add(v);
+								newMap.set(wfId, updated);
+								tagChanged = true;
 							}
 						}
 					}
@@ -482,8 +556,18 @@
 
 			const fieldEntries = Object.entries(formValues).filter(([_, value]) => value !== null && value !== undefined && value !== '');
 
+			// Fetch form field definitions to resolve human-readable names
+			let fieldLabelMap: Record<string, string> = {};
+			try {
+				const allFields = await gateway.collection('tools_form_fields').getFullList({ filter: `form_id.workflow_id = "${workflow.id}"` });
+				for (const f of allFields) {
+					fieldLabelMap[(f as any).id] = (f as any).field_label;
+				}
+			} catch (err) { console.warn('[Map] Failed to load field labels:', err); }
+
 			const createdFields = fieldEntries.map(([fieldId, value]) => ({
 				field_key: fieldId,
+				field_name: fieldLabelMap[fieldId] || fieldId,
 				value: Array.isArray(value) && value[0] instanceof File
 					? `[${(value as File[]).length} file(s)]`
 					: typeof value === 'object' ? JSON.stringify(value) : String(value)
@@ -496,6 +580,7 @@
 				executed_at: new Date().toISOString(),
 				metadata: {
 					action: 'instance_created',
+					stage_name: (startStage as any).stage_name || (startStage as any).id,
 					location: coordinates ? { lat: coordinates.lat, lon: coordinates.lng } : null,
 					created_fields: createdFields
 				}
@@ -561,6 +646,10 @@
 		if (selection.type !== 'none') {
 			selection = createSelection.none();
 		}
+		if (clusterDetailOpen) {
+			clusterDetail = null;
+			clusterDetailOpen = false;
+		}
 	}
 
 	function centerOnLocation() {
@@ -607,8 +696,10 @@
 		{filterableValues}
 		{visibleTagValues}
 		{workflows}
+		{visualKeyRegistry}
 		onMarkerClick={handleMarkerClick}
 		onWorkflowInstanceClick={handleWorkflowInstanceClick}
+		onClusterClick={(detail) => { clusterDetail = detail; clusterDetailOpen = true; }}
 		onMapReady={handleMapReady}
 		onMapClick={handleMapClick}
 	/>
@@ -671,6 +762,28 @@
 		/>
 	{/if}
 
+	<!-- Marker Detail Module -->
+	{#if selection.type === 'marker'}
+		<MarkerDetailModule
+			{selection}
+			markers={selectableMarkers}
+			bind:isExpanded={sheetExpanded}
+			onClose={handleSelectionClose}
+			onNext={canGoNext ? () => { selection = createSelection.marker((selectableMarkers[currentIndex + 1] as any).id); } : undefined}
+			onPrevious={canGoPrevious ? () => { selection = createSelection.marker((selectableMarkers[currentIndex - 1] as any).id); } : undefined}
+		/>
+	{/if}
+
+	<!-- Cluster Detail Module (peek sheet with composition breakdown) -->
+	{#if clusterDetailOpen && clusterDetail}
+		<ClusterDetailModule
+			clusterData={clusterDetail}
+			{visualKeyRegistry}
+			bind:isOpen={clusterDetailOpen}
+			onClose={() => { clusterDetail = null; clusterDetailOpen = false; }}
+		/>
+	{/if}
+
 	<!-- Form Fill for NEW Workflow Creation (uses shared ModuleShell + FormFillTool) -->
 	{#if pendingWorkflow && formFillOpen}
 		<ModuleShell
@@ -701,6 +814,7 @@
 		roles={[]}
 		collectionNames={data.collectionNames ?? []}
 		fileFields={data.fileFields ?? {}}
+		infoPages={data.infoPages ?? []}
 		onLogout={handleLogout}
 	/>
 

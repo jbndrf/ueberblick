@@ -15,6 +15,7 @@
 		ShieldCheck,
 		Table,
 		Map,
+		FileText,
 		Workflow,
 		MapPin,
 		Settings,
@@ -152,7 +153,8 @@
 	const projectStaticItems = [
 		{ href: 'map-settings', icon: Map, label: () => m.navMapSettings() },
 		{ href: 'participants', icon: Users, label: () => m.navParticipants() },
-		{ href: 'roles', icon: ShieldCheck, label: () => m.navRoles() }
+		{ href: 'roles', icon: ShieldCheck, label: () => m.navRoles() },
+		{ href: 'info-pages', icon: FileText, label: () => m.navInfoPages() }
 	];
 
 	const globalMenuItems = [

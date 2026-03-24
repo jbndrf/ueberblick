@@ -4,10 +4,12 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Switch } from '$lib/components/ui/switch';
+	import * as Dialog from '$lib/components/ui/dialog';
 	import {
 		LogOut,
 		User,
 		Shield,
+		CircleHelp,
 		Loader2,
 		Download,
 		Smartphone,
@@ -20,6 +22,7 @@
 		WifiOff,
 		CloudUpload
 	} from 'lucide-svelte';
+	import { sanitizeHtml } from '$lib/sanitize-html';
 	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
 	import { getFullLocalCopyMode, setFullLocalCopyMode } from '$lib/participant-state/context.svelte';
 	import { getNetworkStatus } from '$lib/participant-state/network.svelte';
@@ -33,7 +36,7 @@
 	} from '$lib/participant-state';
 	import { deleteDownloadedFiles } from '$lib/participant-state/file-cache';
 	import { getPocketBase } from '$lib/pocketbase';
-	import { getDB, type DownloadedPackage } from '$lib/participant-state/db';
+	import { getDB, getStorageStats, type DownloadedPackage, type StorageStats } from '$lib/participant-state/db';
 	import { createPWAState, initPWAInstallListeners } from '$lib/utils/pwa-detection.svelte';
 	import { onMount } from 'svelte';
 	import PackageSelector from '$lib/components/map/package-selector.svelte';
@@ -52,6 +55,7 @@
 		roles?: Array<{ id: string; name: string }>;
 		collectionNames?: string[];
 		fileFields?: Record<string, string[]>;
+		infoPages?: Array<{ id: string; title: string; content: string }>;
 		onLogout?: () => void;
 	}
 
@@ -61,6 +65,7 @@
 		roles = [],
 		collectionNames = [],
 		fileFields = {},
+		infoPages = [],
 		onLogout
 	}: Props = $props();
 
@@ -91,9 +96,16 @@
 	// Package selector dialog
 	let showPackageSelector = $state(false);
 
+	// Info page dialog
+	let infoPageDialogOpen = $state(false);
+	let selectedInfoPage = $state<{ id: string; title: string; content: string } | null>(null);
+
 	// Full local copy mode (controls media caching)
 	let fullLocalCopy = $state(false);
 	let isTogglingMode = $state(false);
+
+	// Storage stats
+	let storageStats = $state<StorageStats | null>(null);
 
 	// Initialize from localStorage
 	$effect(() => {
@@ -115,6 +127,14 @@
 	onMount(async () => {
 		initPWAInstallListeners();
 		await loadPackMetadata();
+		storageStats = await getStorageStats();
+	});
+
+	// Refresh storage stats when the sheet opens
+	$effect(() => {
+		if (open) {
+			getStorageStats().then((s) => (storageStats = s));
+		}
 	});
 
 	async function loadPackMetadata() {
@@ -299,6 +319,10 @@
 									{/if}
 								</div>
 							</div>
+							<Button variant="outline" size="sm" class="mt-2 w-full justify-start" onclick={handleLogout}>
+								<LogOut class="mr-2 h-4 w-4" />
+								Logout
+							</Button>
 						</div>
 					{/if}
 
@@ -316,10 +340,19 @@
 						</div>
 					{/if}
 
-					<Button variant="outline" size="sm" class="w-full justify-start" onclick={handleLogout}>
-						<LogOut class="mr-2 h-4 w-4" />
-						Logout
-					</Button>
+					{#if infoPages.length > 0}
+						{#each infoPages as page}
+							<button
+								class="w-full rounded-lg border bg-muted/50 p-3 text-left transition-colors hover:bg-muted"
+								onclick={() => { selectedInfoPage = page; infoPageDialogOpen = true; }}
+							>
+								<div class="flex items-center gap-2">
+									<CircleHelp class="h-4 w-4 text-muted-foreground" />
+									<span class="text-sm font-medium">{page.title}</span>
+								</div>
+							</button>
+						{/each}
+					{/if}
 				</div>
 			</Tabs.Content>
 
@@ -543,11 +576,75 @@
 						{/if}
 					</div>
 
+					<!-- STORAGE USAGE -->
+					{#if storageStats}
+						<div class="space-y-2">
+							<h4 class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Storage</h4>
+							<div class="rounded-md border p-3 space-y-3">
+								<!-- Usage bar -->
+								{#if storageStats.quota > 0}
+									<div class="space-y-1">
+										<div class="flex items-center justify-between text-xs">
+											<span class="text-muted-foreground">
+												{formatFileSize(storageStats.usage)} of {formatFileSize(storageStats.quota)}
+											</span>
+											<span class="font-medium">{storageStats.percentUsed.toFixed(1)}%</span>
+										</div>
+										<div class="h-2 w-full overflow-hidden rounded-full bg-muted">
+											<div
+												class="h-full rounded-full transition-all {storageStats.percentUsed > 90 ? 'bg-red-500' : storageStats.percentUsed > 70 ? 'bg-orange-500' : 'bg-primary'}"
+												style="width: {Math.min(storageStats.percentUsed, 100)}%"
+											></div>
+										</div>
+									</div>
+								{/if}
+
+								<!-- Item counts -->
+								<div class="grid grid-cols-3 gap-2 text-center">
+									<div class="rounded bg-muted/50 px-2 py-1.5">
+										<div class="text-sm font-medium">{storageStats.counts.tiles.toLocaleString()}</div>
+										<div class="text-[10px] text-muted-foreground">Tiles</div>
+									</div>
+									<div class="rounded bg-muted/50 px-2 py-1.5">
+										<div class="text-sm font-medium">{storageStats.counts.files.toLocaleString()}</div>
+										<div class="text-[10px] text-muted-foreground">Files</div>
+									</div>
+									<div class="rounded bg-muted/50 px-2 py-1.5">
+										<div class="text-sm font-medium">{storageStats.counts.records.toLocaleString()}</div>
+										<div class="text-[10px] text-muted-foreground">Records</div>
+									</div>
+								</div>
+
+								<!-- Persistence status -->
+								<div class="flex items-center justify-between text-xs">
+									<span class="text-muted-foreground">Persistent storage</span>
+									<span class={storageStats.persistent ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}>
+										{storageStats.persistent ? 'Enabled' : 'Not guaranteed'}
+									</span>
+								</div>
+							</div>
+						</div>
+					{/if}
+
 				</div>
 			</Tabs.Content>
 		</Tabs.Root>
 	</Sheet.ContentNoOverlay>
 </Sheet.Root>
+
+<!-- Info Page Dialog -->
+<Dialog.Root bind:open={infoPageDialogOpen}>
+	<Dialog.Content class="max-h-[80vh] overflow-y-auto sm:max-w-lg">
+		<Dialog.Header>
+			<Dialog.Title>{selectedInfoPage?.title ?? ''}</Dialog.Title>
+		</Dialog.Header>
+		{#if selectedInfoPage}
+			<div class="prose prose-sm dark:prose-invert max-w-none">
+				{@html sanitizeHtml(selectedInfoPage.content)}
+			</div>
+		{/if}
+	</Dialog.Content>
+</Dialog.Root>
 
 <!-- Package Selector Dialog -->
 {#if participant?.project_id}

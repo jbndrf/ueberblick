@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { cn, type WithElementRef } from "$lib/utils.js";
 	import type { Snippet } from "svelte";
-	import type { HTMLButtonAttributes } from "svelte/elements";
+	import type { HTMLAttributes } from "svelte/elements";
 
 	let {
 		ref = $bindable(null),
@@ -9,7 +9,7 @@
 		children,
 		child,
 		...restProps
-	}: WithElementRef<HTMLButtonAttributes> & {
+	}: WithElementRef<HTMLAttributes<HTMLDivElement>> & {
 		child?: Snippet<[{ props: Record<string, unknown> }]>;
 	} = $props();
 
@@ -30,7 +30,7 @@
 {#if child}
 	{@render child({ props: mergedProps })}
 {:else}
-	<button bind:this={ref} {...mergedProps}>
+	<div bind:this={ref} {...mergedProps}>
 		{@render children?.()}
-	</button>
+	</div>
 {/if}

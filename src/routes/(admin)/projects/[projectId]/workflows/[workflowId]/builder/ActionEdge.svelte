@@ -7,6 +7,7 @@
 		tools?: ToolInstance[];
 		selectedToolId?: string;
 		isSelfLoop?: boolean;
+		isBidirectional?: boolean;
 		onSelectTool?: (toolId: string) => void;
 		onAddTool?: () => void;
 	};
@@ -26,6 +27,7 @@
 
 	const tools = $derived(data?.tools ?? []);
 	const isSelfLoop = $derived(data?.isSelfLoop ?? false);
+	const isBidirectional = $derived(data?.isBidirectional ?? false);
 
 	// For self-loops, create a circular looping path above the node
 	function getSelfLoopPath(sx: number, sy: number, tx: number, ty: number) {
@@ -44,10 +46,33 @@
 		return [path, labelX, labelY] as const;
 	}
 
+	// For bidirectional edges, build a quadratic bezier that bulges to the
+	// "right" side of the travel direction. A->B bulges one way, B->A the other.
+	function getBidirectionalPath(sx: number, sy: number, tx: number, ty: number) {
+		const mx = (sx + tx) / 2;
+		const my = (sy + ty) / 2;
+		const dx = tx - sx;
+		const dy = ty - sy;
+		const len = Math.sqrt(dx * dx + dy * dy) || 1;
+		// Perpendicular offset to the right of travel direction
+		const bulge = Math.max(40, len * 0.2);
+		const nx = (dy / len) * bulge;
+		const ny = (-dx / len) * bulge;
+		const cpx = mx + nx;
+		const cpy = my + ny;
+		// Label sits at the quadratic midpoint (t=0.5)
+		const labelX = 0.25 * sx + 0.5 * cpx + 0.25 * tx;
+		const labelY = 0.25 * sy + 0.5 * cpy + 0.25 * ty;
+		const path = `M ${sx},${sy} Q ${cpx},${cpy} ${tx},${ty}`;
+		return [path, labelX, labelY] as const;
+	}
+
 	// Calculate path and label position using $derived for synchronous updates
 	const pathData = $derived.by(() => {
 		if (isSelfLoop) {
 			return getSelfLoopPath(sourceX, sourceY, targetX, targetY);
+		} else if (isBidirectional) {
+			return getBidirectionalPath(sourceX, sourceY, targetX, targetY);
 		} else {
 			return getBezierPath({
 				sourceX,

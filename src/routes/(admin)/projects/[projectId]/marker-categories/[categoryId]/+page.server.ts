@@ -443,94 +443,18 @@ export const actions: Actions = {
 	importCSV: async ({ request, params, locals: { pb } }) => {
 		const { projectId, categoryId } = params;
 		const formData = await request.formData();
-		const file = formData.get('file') as File;
+		const rowsJson = formData.get('rows') as string;
 		const replaceData = formData.get('replaceData') === 'true';
 
-		if (!file) {
-			return fail(400, { message: 'CSV file is required' });
+		if (!rowsJson) {
+			return fail(400, { message: 'No data provided' });
 		}
 
 		try {
-			// Read CSV file
-			const csvText = await file.text();
-			const lines = csvText.split('\n').filter((line) => line.trim());
+			const rows: Array<Record<string, string>> = JSON.parse(rowsJson);
 
-			if (lines.length === 0) {
-				return fail(400, { message: 'CSV file is empty' });
-			}
-
-			// Parse CSV headers
-			const headers = lines[0].split(',').map((h) => h.trim().replace(/"/g, ''));
-			const dataRows = lines.slice(1);
-
-			if (dataRows.length === 0) {
-				return fail(400, { message: 'No data rows found in CSV' });
-			}
-
-			// Validate headers - require latitude and longitude
-			if (!headers.includes('latitude') || !headers.includes('longitude')) {
-				return fail(400, {
-					message: 'CSV must include "latitude" and "longitude" columns for marker location data'
-				});
-			}
-
-			// Parse data rows
-			const markersToImport = [];
-			for (let i = 0; i < dataRows.length; i++) {
-				const values = dataRows[i].split(',').map((v) => v.trim().replace(/"/g, ''));
-				if (values.length !== headers.length) {
-					console.warn(
-						`Row ${i + 2} has ${values.length} values but expected ${headers.length}. Skipping.`
-					);
-					continue;
-				}
-
-				const markerData: Record<string, any> = { properties: {} };
-				headers.forEach((header, index) => {
-					if (header === 'latitude' || header === 'longitude') {
-						markerData[header] = parseFloat(values[index]) || 0;
-					} else {
-						markerData.properties[header] = values[index] || '';
-					}
-				});
-
-				markersToImport.push({
-					project_id: projectId,
-					category_id: categoryId,
-					title:
-						markerData.properties.title ||
-						markerData.properties.name ||
-						`Imported Marker ${i + 1}`,
-					description: markerData.properties.description || '',
-					location: {
-						lat: markerData.latitude,
-						lon: markerData.longitude
-					},
-					properties: markerData.properties || {},
-					visible_to_roles: []
-				});
-			}
-
-			if (markersToImport.length === 0) {
-				return fail(400, { message: 'No valid marker data to import' });
-			}
-
-			// Update marker category fields based on CSV headers
-			const customHeaders = headers.filter((h) => h !== 'latitude' && h !== 'longitude');
-			if (customHeaders.length > 0) {
-				const newFields = customHeaders.map((header) => ({
-					id: crypto.randomUUID(),
-					field_name: header,
-					field_type: 'text',
-					label: header.charAt(0).toUpperCase() + header.slice(1).replace(/_/g, ' '),
-					is_required: false,
-					default_value: null
-				}));
-
-				// Update the marker category with new field definitions
-				await pb.collection('marker_categories').update(categoryId, {
-					fields: newFields
-				});
+			if (rows.length === 0) {
+				return fail(400, { message: 'No data rows to import' });
 			}
 
 			// Replace existing data if requested
@@ -544,14 +468,42 @@ export const actions: Actions = {
 			}
 
 			// Import new data
-			for (const markerData of markersToImport) {
-				await pb.collection('markers').create(markerData);
+			const specialKeys = new Set(['title', 'description', 'latitude', 'longitude']);
+			let importedCount = 0;
+
+			for (let i = 0; i < rows.length; i++) {
+				const row = rows[i];
+
+				// Build location from lat/lon if present
+				let location = null;
+				const lat = parseFloat(row['latitude']);
+				const lon = parseFloat(row['longitude']);
+				if (!isNaN(lat) && !isNaN(lon)) {
+					location = { lat, lon };
+				}
+
+				// Build properties from non-special fields
+				const properties: Record<string, string> = {};
+				for (const [key, value] of Object.entries(row)) {
+					if (!specialKeys.has(key) && value) {
+						properties[key] = value;
+					}
+				}
+
+				await pb.collection('markers').create({
+					project_id: projectId,
+					category_id: categoryId,
+					title: row['title'] || `Imported Marker ${i + 1}`,
+					description: row['description'] || null,
+					location,
+					properties,
+					visible_to_roles: []
+				});
+
+				importedCount++;
 			}
 
-			return {
-				success: true,
-				message: `Successfully imported ${markersToImport.length} markers`
-			};
+			return { success: true, count: importedCount };
 		} catch (err) {
 			console.error('Error importing CSV:', err);
 			return fail(500, {

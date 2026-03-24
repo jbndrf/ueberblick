@@ -142,14 +142,17 @@ export interface ToolUsageRecord {
 	executed_at: string;
 	metadata: {
 		action: 'instance_created' | 'form_fill' | 'edit' | 'location_edit' | 'stage_transition' | 'protocol';
+		stage_name?: string;
 		location?: { lat: number; lon: number } | null;
-		created_fields?: Array<{ field_key: string; value: string }>;
-		changes?: Array<{ field_key: string; before: string | null; after: string }>;
+		created_fields?: Array<{ field_key: string; field_name?: string; value: string }>;
+		changes?: Array<{ field_key: string; field_name?: string; before: string | null; after: string }>;
 		before?: { lat: number; lon: number } | null;
 		after?: { lat: number; lon: number };
 		// Stage transition specific
 		from_stage_id?: string;
+		from_stage_name?: string;
 		to_stage_id?: string;
+		to_stage_name?: string;
 		connection_id?: string;
 		// Protocol specific
 		protocol_entry_id?: string;

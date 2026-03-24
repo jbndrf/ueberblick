@@ -13,11 +13,9 @@
 	import CustomFieldManagerGeneric, {
 		type FieldConfig
 	} from '$lib/components/admin/custom-field-manager-generic.svelte';
-	import { Label } from '$lib/components/ui/label';
-	import { Input } from '$lib/components/ui/input';
-	import { Checkbox } from '$lib/components/ui/checkbox';
 	import DataViewerHeader from '$lib/components/admin/data-viewer-header.svelte';
 	import MarkerIconDesigner from '$lib/components/admin/marker-icon-designer.svelte';
+	import { CsvImportDialog, type MappedImportData, type TargetField, type SpecialColumn, type ImportProgressCallback } from '$lib/components/csv-import';
 
 	type MarkerRow = {
 		id: string;
@@ -40,9 +38,6 @@
 	let deleteMarkerOpen = $state(false);
 	let selectedMarker = $state<MarkerRow | null>(null);
 	let importDialogOpen = $state(false);
-	let replaceData = $state(false);
-	let csvFile = $state<File | null>(null);
-	let importing = $state(false);
 	let iconDesignerOpen = $state(false);
 
 	const fieldConfig: FieldConfig = {
@@ -244,39 +239,48 @@
 		}
 	}
 
-	async function handleImportCSV() {
-		if (!csvFile) {
-			toast.error(m.csvImportSelectFile());
-			return;
-		}
+	const csvImportTargetFields: TargetField[] = $derived([
+		{ id: 'title', label: 'Title', type: 'text', required: true },
+		{ id: 'description', label: 'Description', type: 'text', required: false },
+		...data.fields.map((field) => ({
+			id: field.field_name,
+			label: field.field_name,
+			type: field.field_type,
+			required: field.is_required
+		}))
+	]);
 
-		importing = true;
-		const formData = new FormData();
-		formData.append('file', csvFile);
-		formData.append('replaceData', replaceData.toString());
+	const csvImportSpecialColumns: SpecialColumn[] = [
+		{ key: 'latitude', label: 'Latitude', required: false },
+		{ key: 'longitude', label: 'Longitude', required: false }
+	];
 
-		try {
+	async function handleCsvImport(importData: MappedImportData, onProgress: ImportProgressCallback): Promise<{ success: boolean; count: number; error?: string }> {
+		const { rows, replaceData } = importData;
+		const BATCH_SIZE = 25;
+		let imported = 0;
+
+		for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+			const batch = rows.slice(i, i + BATCH_SIZE);
+			const formData = new FormData();
+			formData.append('rows', JSON.stringify(batch));
+			formData.append('replaceData', i === 0 ? String(replaceData) : 'false');
+
 			const response = await fetch('?/importCSV', {
 				method: 'POST',
 				body: formData
 			});
 
 			const result = await response.json();
-			if (result.type === 'success') {
-				toast.success(result.data?.message || m.csvImportSuccess());
-				importDialogOpen = false;
-				csvFile = null;
-				replaceData = false;
-				await invalidateAll();
-			} else {
-				toast.error(result.data?.message || m.csvImportError());
+			if (result.type !== 'success') {
+				return { success: false, count: imported, error: result.data?.message || m.csvImportError() };
 			}
-		} catch (error) {
-			console.error('Import error:', error);
-			toast.error(m.csvImportError());
-		} finally {
-			importing = false;
+			imported += batch.length;
+			onProgress(imported, rows.length);
 		}
+
+		await invalidateAll();
+		return { success: true, count: imported };
 	}
 </script>
 
@@ -431,51 +435,16 @@
 </AlertDialog.Root>
 
 <!-- Import CSV Dialog -->
-<Dialog.Root bind:open={importDialogOpen}>
-	<Dialog.Content class="max-w-md">
-		<Dialog.Header>
-			<Dialog.Title>{m.csvImportMarkerDialogTitle()}</Dialog.Title>
-			<Dialog.Description>
-				{m.csvImportMarkerDialogDescription()}
-			</Dialog.Description>
-		</Dialog.Header>
-		<div class="space-y-4 py-4">
-			<div class="space-y-2">
-				<Label for="csv-file">{m.csvImportFileLabel()}</Label>
-				<Input
-					id="csv-file"
-					type="file"
-					accept=".csv"
-					onchange={(e) => {
-						const target = e.target as HTMLInputElement;
-						csvFile = target.files?.[0] || null;
-					}}
-				/>
-			</div>
-			<div class="flex items-center space-x-2">
-				<Checkbox
-					id="replace-data"
-					checked={replaceData}
-					onCheckedChange={(checked) => (replaceData = checked === true)}
-				/>
-				<Label
-					for="replace-data"
-					class="text-sm font-normal cursor-pointer"
-				>
-					{m.csvImportReplaceMarkers()}
-				</Label>
-			</div>
-		</div>
-		<Dialog.Footer>
-			<Button variant="outline" onclick={() => (importDialogOpen = false)} disabled={importing}>
-				{m.csvImportCancel()}
-			</Button>
-			<Button onclick={handleImportCSV} disabled={!csvFile || importing}>
-				{importing ? m.csvImportImporting() : m.csvImportImportMarkers()}
-			</Button>
-		</Dialog.Footer>
-	</Dialog.Content>
-</Dialog.Root>
+<CsvImportDialog
+	bind:open={importDialogOpen}
+	targetFields={csvImportTargetFields}
+	specialColumns={csvImportSpecialColumns}
+	title={m.csvImportMarkerDialogTitle()}
+	description={m.csvImportMarkerDialogDescription()}
+	importLabel={m.csvImportImportMarkers()}
+	replaceLabel={m.csvImportReplaceMarkers()}
+	onimport={handleCsvImport}
+/>
 
 <!-- Icon Designer Modal -->
 {#if iconDesignerOpen}
