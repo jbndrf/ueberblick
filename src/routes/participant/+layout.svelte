@@ -14,8 +14,8 @@
 	import {
 		setParticipantGateway,
 		getCachedSession,
+		resetAllParticipantState,
 	} from '$lib/participant-state/context.svelte';
-	import { clearSyncedData } from '$lib/participant-state/db';
 	import { setSyncCollections, startPushListener, runCatchUpSync } from '$lib/participant-state/sync.svelte';
 	import { setupRealtime } from '$lib/participant-state/realtime.svelte';
 
@@ -141,8 +141,8 @@
 		// Different participant -- tear down old, clear stale data, create new
 		if (currentParticipantId && currentParticipantId !== participant.id) {
 			teardownGateway();
-			// Clear old participant's synced data from IndexedDB to prevent duplicates
-			clearSyncedData().catch((e) => console.error('Failed to clear synced data:', e));
+			// Clear all data from old participant to prevent orphaned records causing conflicts
+			resetAllParticipantState().catch((e) => console.error('Failed to reset state:', e));
 		}
 
 		currentParticipantId = participant.id;

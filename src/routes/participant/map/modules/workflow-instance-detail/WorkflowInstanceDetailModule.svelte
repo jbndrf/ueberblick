@@ -12,10 +12,8 @@
 		type ToolUsageRecord
 	} from './state.svelte';
 	import type { WorkflowInstanceSelection } from '../types';
-	import { Separator } from '$lib/components/ui/separator';
-	import * as Card from '$lib/components/ui/card';
 	import * as Tabs from '$lib/components/ui/tabs';
-	import { MapPin, Clock, ChevronDown } from 'lucide-svelte';
+	import { ChevronRight } from 'lucide-svelte';
 	import { FormFillTool, EditFieldsTool, ViewFieldsTool, LocationEditTool, ConflictResolutionTool, ProtocolTool } from './tools';
 	import { getConflictsForInstance, resolveConflict } from '$lib/participant-state/sync.svelte';
 	import type { SyncConflict } from '$lib/participant-state/db';
@@ -47,7 +45,7 @@
 	const gateway = getParticipantGateway();
 	let detailState = $state<WorkflowInstanceDetailState | null>(null);
 	let isOpen = $state(true);
-	let activeTab = $state<string>('overview');
+	let activeTab = $state<string>('activity');
 
 	// Tool flow state (managed internally now)
 	interface ActiveToolFlow {
@@ -78,7 +76,7 @@
 
 		const newState = createWorkflowInstanceDetailState(instanceId, gateway);
 		detailState = newState;
-		activeTab = 'overview';
+		activeTab = 'activity';
 		activeToolFlow = null;
 		activeEditTool = null;
 		activeProtocolTool = null;
@@ -129,9 +127,8 @@
 	// ==========================================================================
 
 	const tabs = [
-		{ id: 'overview', label: 'Overview' },
-		{ id: 'details', label: 'Details' },
-		{ id: 'history', label: 'History' }
+		{ id: 'activity', label: 'Activity' },
+		{ id: 'data', label: 'Data' }
 	];
 
 	// ==========================================================================
@@ -220,6 +217,107 @@
 			hour: '2-digit',
 			minute: '2-digit'
 		});
+	}
+
+	function relativeTime(dateString: string): string {
+		const date = new Date(dateString);
+		const now = new Date();
+		const diffMs = now.getTime() - date.getTime();
+		const diffMin = Math.floor(diffMs / 60000);
+		const diffH = Math.floor(diffMs / 3600000);
+		const diffDays = Math.floor(diffMs / 86400000);
+
+		if (diffMin < 1) return 'Just now';
+		if (diffMin < 60) return `${diffMin}m ago`;
+		if (diffH < 24) return `${diffH}h ago`;
+		if (diffDays === 1) return 'Yesterday';
+		if (diffDays < 7) return `${diffDays}d ago`;
+		return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+	}
+
+	function navigateToStageData(stageId: string) {
+		if (detailState) {
+			detailState.setActiveStageTab(stageId);
+			activeTab = 'data';
+		}
+	}
+
+	// ==========================================================================
+	// Activity: group entries into stage sections
+	// ==========================================================================
+
+	interface ActivitySection {
+		stageId: string;
+		stageName: string;
+		transitionEntry: ToolUsageRecord | null;
+		entries: ToolUsageRecord[];
+	}
+
+	const activitySections = $derived.by((): ActivitySection[] => {
+		if (!detailState || detailState.toolUsageHistory.length === 0) return [];
+
+		const sections: ActivitySection[] = [];
+		// Walk newest-first. Accumulate entries until we hit a stage_transition.
+		// That transition marks the boundary -- everything collected belongs to
+		// the stage that transition moved INTO (to_stage_id).
+		let currentEntries: ToolUsageRecord[] = [];
+		let currentStageId = detailState.instance?.current_stage_id as string;
+
+		for (const entry of detailState.toolUsageHistory) {
+			if (entry.metadata.action === 'stage_transition') {
+				// Flush accumulated entries as a section for the stage we were in
+				sections.push({
+					stageId: currentStageId,
+					stageName: getStageName(currentStageId) || currentStageId,
+					transitionEntry: entry,
+					entries: currentEntries
+				});
+				// Move backwards to the from-stage
+				currentStageId = entry.metadata.from_stage_id || currentStageId;
+				currentEntries = [];
+			} else {
+				currentEntries.push(entry);
+			}
+		}
+
+		// Remaining entries belong to the initial stage (before any transitions)
+		if (currentEntries.length > 0) {
+			sections.push({
+				stageId: currentStageId,
+				stageName: getStageName(currentStageId) || currentStageId,
+				transitionEntry: null,
+				entries: currentEntries
+			});
+		}
+
+		return sections;
+	});
+
+	function getEntryLabel(metadata: ToolUsageRecord['metadata']): string {
+		switch (metadata.action) {
+			case 'instance_created':
+				return 'Created';
+			case 'form_fill':
+				return 'Data recorded';
+			case 'edit':
+			case 'admin_edit': {
+				if (metadata.changes?.length === 1) {
+					const fieldDef = detailState?.formFields.find(f => f.id === metadata.changes![0].field_key);
+					return `${fieldDef?.field_label || 'Field'} updated`;
+				}
+				return metadata.action === 'admin_edit'
+					? `Admin updated ${metadata.changes?.length || ''} fields`
+					: `${metadata.changes?.length || ''} fields updated`;
+			}
+			case 'location_edit':
+				return 'Location updated';
+			case 'protocol':
+				return 'Inspection recorded';
+			case 'conflict_resolution':
+				return 'Sync conflict resolved';
+			default:
+				return 'Action';
+		}
 	}
 
 	// ==========================================================================
@@ -1120,89 +1218,173 @@
 						{/each}
 					</Tabs.List>
 
-					<Tabs.Content value="overview" class="pt-4">
-						<!-- OVERVIEW TAB -->
-						<div class="space-y-4">
-							<!-- Progress -->
-							<div class="space-y-3">
-								<h4 class="text-sm font-semibold">Progress</h4>
-
-								<div class="space-y-2">
-									{#each detailState?.stages ?? [] as stage, index}
-										<div class="flex items-start gap-3">
-											<!-- Dot -->
-											<div class="mt-1 shrink-0">
-												{#if detailState?.isStageCompleted(stage.id)}
-													<div class="h-4 w-4 rounded-full bg-green-400"></div>
-												{:else if detailState?.isCurrentStage(stage.id)}
-													<div class="h-4 w-4 rounded-full bg-muted-foreground"></div>
-												{:else}
-													<div class="h-4 w-4 rounded-full border-2 border-muted-foreground"></div>
-												{/if}
+					<Tabs.Content value="activity" class="pt-4">
+						<!-- ACTIVITY TAB - Grouped by stage -->
+						{#if activitySections.length === 0}
+							<div class="text-center py-12 text-muted-foreground">
+								<p class="text-sm">No activity yet</p>
+							</div>
+						{:else}
+							<div class="space-y-1">
+								{#each activitySections as section, sectionIndex}
+									<!-- Stage header -->
+									{#if section.transitionEntry}
+										{@const transBy = section.transitionEntry.metadata.action === 'admin_edit' ? 'Admin' : (section.transitionEntry.expand?.executed_by?.name || section.transitionEntry.expand?.executed_by?.email || '')}
+										<button
+											class="w-full flex items-center gap-3 rounded-lg bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 px-3 py-2 text-left transition-colors hover:bg-blue-100 dark:hover:bg-blue-900/50"
+											class:mt-2={sectionIndex > 0}
+											onclick={() => navigateToStageData(section.stageId)}
+										>
+											<div class="flex-1 min-w-0">
+												<p class="text-sm font-semibold text-blue-900 dark:text-blue-100">
+													Moved to: {section.stageName}
+												</p>
+												<p class="text-xs text-blue-700/70 dark:text-blue-300/70">
+													{relativeTime(section.transitionEntry.executed_at)}{transBy ? ` \u00b7 ${transBy}` : ''}
+												</p>
 											</div>
-
-											<!-- Content -->
-											<div class="min-w-0 flex-1">
-												<div
-													class="text-sm font-medium {detailState?.isStageCompleted(stage.id)
-														? 'text-foreground'
-														: detailState?.isCurrentStage(stage.id)
-															? 'text-foreground'
-															: 'text-muted-foreground'}"
-												>
-													{stage.stage_name}
-												</div>
-											</div>
+											<ChevronRight class="w-4 h-4 text-blue-400 shrink-0" />
+										</button>
+									{:else}
+										<!-- Initial stage (no transition into it) -->
+										<div
+											class="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50"
+											class:mt-2={sectionIndex > 0}
+										>
+											<div class="h-2 w-2 rounded-full bg-green-500 shrink-0"></div>
+											<p class="text-sm font-semibold text-foreground">{section.stageName}</p>
 										</div>
+									{/if}
 
-										<!-- Connector Line -->
-										{#if index < (detailState?.stages.length ?? 0) - 1}
-											<div class="ml-2 h-3 w-px bg-border"></div>
-										{/if}
-									{/each}
-								</div>
+									<!-- Entries within this stage -->
+									{#if section.entries.length > 0}
+										<div class="border-l-2 border-border ml-3 pl-3 space-y-0.5">
+											{#each section.entries as entry, entryIndex (entry.id)}
+												{@const metadata = entry.metadata}
+												{@const prevEntry = entryIndex > 0 ? section.entries[entryIndex - 1] : null}
+												{@const executedBy = metadata.action === 'admin_edit' ? 'Admin' : (entry.expand?.executed_by?.name || entry.expand?.executed_by?.email || 'Unknown')}
+												{@const showActor = !prevEntry || (prevEntry.expand?.executed_by?.name || prevEntry.expand?.executed_by?.email) !== (entry.expand?.executed_by?.name || entry.expand?.executed_by?.email) || prevEntry.metadata.action === 'admin_edit' !== (metadata.action === 'admin_edit')}
+												{@const hasExpandableContent = (metadata.action === 'instance_created' || metadata.action === 'form_fill') && metadata.created_fields && metadata.created_fields.length > 2}
+												{@const label = getEntryLabel(metadata)}
+
+												<details class="group" data-testid="activity-entry">
+													<summary class="flex items-baseline justify-between gap-2 py-1.5 cursor-pointer select-none hover:bg-muted/30 -mx-1 px-1 rounded">
+														<div class="flex items-baseline gap-1.5 min-w-0">
+															<span class="text-xs font-medium text-foreground shrink-0">{label}</span>
+															{#if showActor}
+																<span class="text-[11px] text-muted-foreground shrink-0">{executedBy}</span>
+															{/if}
+														</div>
+														<span class="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
+															{relativeTime(entry.executed_at)}
+														</span>
+													</summary>
+
+													<div class="pb-2 pt-0.5">
+														<!-- instance_created -->
+														{#if metadata.action === 'instance_created' && metadata.created_fields}
+															{#if metadata.location}
+																<div class="flex gap-1.5 text-xs mb-0.5">
+																	<span class="text-muted-foreground shrink-0">Location:</span>
+																	<span class="font-medium truncate">{metadata.location.lat.toFixed(5)}, {metadata.location.lon.toFixed(5)}</span>
+																</div>
+															{/if}
+															{#each metadata.created_fields as field}
+																{@const fieldDef = detailState?.formFields.find(f => f.id === field.field_key)}
+																<div class="flex gap-1.5 text-xs mb-0.5">
+																	<span class="text-muted-foreground shrink-0">{fieldDef?.field_label || field.field_key}:</span>
+																	<span class="font-medium truncate">{formatHistoryValue(field.value, field.field_key)}</span>
+																</div>
+															{/each}
+														{/if}
+
+														<!-- form_fill -->
+														{#if metadata.action === 'form_fill' && metadata.created_fields}
+															{#each metadata.created_fields as field}
+																{@const fieldDef = detailState?.formFields.find(f => f.id === field.field_key)}
+																<div class="flex gap-1.5 text-xs mb-0.5">
+																	<span class="text-muted-foreground shrink-0">{fieldDef?.field_label || field.field_key}:</span>
+																	<span class="font-medium truncate">{formatHistoryValue(field.value, field.field_key)}</span>
+																</div>
+															{/each}
+														{/if}
+
+														<!-- edit / admin_edit -->
+														{#if (metadata.action === 'edit' || metadata.action === 'admin_edit') && metadata.changes}
+															{#each metadata.changes as change}
+																{@const fieldDef = detailState?.formFields.find(f => f.id === change.field_key)}
+																<div class="text-xs mb-0.5">
+																	<span class="text-muted-foreground">{fieldDef?.field_label || change.field_key}: </span>
+																	<span class="line-through text-muted-foreground/60">{formatHistoryValue(change.before, change.field_key)}</span>
+																	<span class="text-muted-foreground mx-0.5">-></span>
+																	<span class="font-medium">{formatHistoryValue(change.after, change.field_key)}</span>
+																</div>
+															{/each}
+														{/if}
+
+														<!-- location_edit -->
+														{#if metadata.action === 'location_edit'}
+															<div class="text-xs">
+																{#if metadata.before}
+																	<span class="line-through text-muted-foreground/60">{metadata.before.lat.toFixed(5)}, {metadata.before.lon.toFixed(5)}</span>
+																{:else}
+																	<span class="text-muted-foreground">(no location)</span>
+																{/if}
+																<span class="text-muted-foreground mx-0.5">-></span>
+																{#if metadata.after}
+																	<span class="font-medium">{metadata.after.lat.toFixed(5)}, {metadata.after.lon.toFixed(5)}</span>
+																{/if}
+															</div>
+														{/if}
+
+														<!-- protocol -->
+														{#if metadata.action === 'protocol' && metadata.changes}
+															{#each metadata.changes as change}
+																{@const fieldDef = detailState?.formFields.find(f => f.id === change.field_key)}
+																<div class="text-xs mb-0.5">
+																	<span class="text-muted-foreground">{fieldDef?.field_label || change.field_key}: </span>
+																	<span class="line-through text-muted-foreground/60">{formatHistoryValue(change.before, change.field_key)}</span>
+																	<span class="text-muted-foreground mx-0.5">-></span>
+																	<span class="font-medium">{formatHistoryValue(change.after, change.field_key)}</span>
+																</div>
+															{/each}
+														{/if}
+
+														<!-- Photo thumbnails -->
+														{#if metadata.action === 'form_fill' || metadata.action === 'instance_created' || metadata.action === 'protocol'}
+															{@const fileValues = detailState?.fieldValues.filter(fv => fv.file_value && fv.created_by_action === entry.id) ?? []}
+															{#if fileValues.length > 0}
+																<div class="flex gap-1.5 mt-1.5 flex-wrap">
+																	{#each fileValues.slice(0, 4) as fv}
+																		<img
+																			src="/api/files/workflow_instance_field_values/{fv.id}/{fv.file_value}"
+																			alt="Attachment"
+																			class="h-12 w-12 rounded object-cover border border-border"
+																			loading="lazy"
+																		/>
+																	{/each}
+																	{#if fileValues.length > 4}
+																		<div class="h-12 w-12 rounded border border-border bg-muted flex items-center justify-center text-xs text-muted-foreground">
+																			+{fileValues.length - 4}
+																		</div>
+																	{/if}
+																</div>
+															{/if}
+														{/if}
+													</div>
+												</details>
+											{/each}
+										</div>
+									{/if}
+								{/each}
 							</div>
-
-							<Separator />
-
-							<!-- Info Cards -->
-							<div class="grid grid-cols-2 gap-2">
-								{#if detailState?.instance?.location}
-									{@const location = detailState.instance.location as { lat: number; lon: number }}
-									<Card.Root>
-										<Card.Content class="p-3">
-											<div class="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
-												<MapPin class="w-3 h-3" />
-												Location
-											</div>
-											<div class="text-xs font-mono text-foreground">
-												{location.lat.toFixed(5)}, {location.lon.toFixed(5)}
-											</div>
-										</Card.Content>
-									</Card.Root>
-								{/if}
-								{#if detailState?.instance?.created}
-									<Card.Root>
-										<Card.Content class="p-3">
-											<div class="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
-												<Clock class="w-3 h-3" />
-												Started
-											</div>
-											<div class="text-xs text-foreground">
-												{formatDate(detailState.instance.created as string)}
-											</div>
-										</Card.Content>
-									</Card.Root>
-								{/if}
-							</div>
-						</div>
+						{/if}
 					</Tabs.Content>
 
-					<Tabs.Content value="details" class="pt-4">
-						<!-- DETAILS TAB with Stage Sub-tabs -->
+					<Tabs.Content value="data" class="pt-4">
+						<!-- DATA TAB with Stage Sub-tabs -->
 						<div class="space-y-4">
 							{#if detailState && detailState.stages.length > 0}
-								<!-- Stage Sub-tabs -->
 								<Tabs.Root
 									value={detailState.activeStageTab}
 									onValueChange={(v) => handleStageTabChange(v as string)}
@@ -1226,176 +1408,6 @@
 								<div class="text-center py-8 text-muted-foreground">
 									<p class="text-sm">No stages available</p>
 								</div>
-							{/if}
-						</div>
-					</Tabs.Content>
-
-					<Tabs.Content value="history" class="pt-4">
-						<!-- HISTORY TAB -->
-						<div class="space-y-2">
-							{#if !detailState || detailState.toolUsageHistory.length === 0}
-								<div class="text-center py-12 text-muted-foreground">
-									<Clock class="w-12 h-12 mx-auto mb-2 opacity-50" />
-									<p class="text-sm">No activity yet</p>
-								</div>
-							{:else}
-								{#each detailState.toolUsageHistory as entry, index (entry.id)}
-									{@const metadata = entry.metadata}
-									{@const executedBy = metadata.action === 'admin_edit' ? 'Admin' : (entry.expand?.executed_by?.name || entry.expand?.executed_by?.email || 'Unknown')}
-									{@const executedAt = new Date(entry.executed_at).toLocaleString()}
-									{@const itemCount = (metadata.action === 'form_fill' || metadata.action === 'instance_created') ? metadata.created_fields?.length : (metadata.action === 'edit' || metadata.action === 'admin_edit' || metadata.action === 'protocol') ? metadata.changes?.length : 1}
-									<details class="group border rounded-lg overflow-hidden" data-testid="history-entry">
-										<summary class="flex items-center justify-between p-3 cursor-pointer hover:bg-muted/50 select-none">
-											<div class="flex items-center gap-2">
-												<span class="text-xs font-medium px-2 py-0.5 rounded-full {metadata.action === 'instance_created' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : metadata.action === 'stage_transition' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' : metadata.action === 'protocol' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200' : 'bg-muted'}">
-													{#if metadata.action === 'instance_created'}
-														Instance Created
-													{:else if metadata.action === 'form_fill'}
-														Form Submitted
-													{:else if metadata.action === 'edit'}
-														Fields Edited
-													{:else if metadata.action === 'admin_edit'}
-														Admin Edit
-													{:else if metadata.action === 'location_edit'}
-														Location Changed
-													{:else if metadata.action === 'stage_transition'}
-														Stage Changed
-													{:else if metadata.action === 'protocol'}
-														Protocol
-													{:else}
-														Action
-													{/if}
-												</span>
-												{#if itemCount && itemCount > 0}
-													<span class="text-xs text-muted-foreground">({itemCount} {itemCount === 1 ? 'field' : 'fields'})</span>
-												{/if}
-											</div>
-											<div class="flex items-center gap-2">
-												<span class="text-xs text-muted-foreground">{executedAt}</span>
-												<ChevronDown class="w-4 h-4 text-muted-foreground transition-transform group-open:rotate-180" />
-											</div>
-										</summary>
-										<div class="px-3 pb-3 pt-1 border-t bg-muted/20">
-											<p class="text-xs text-muted-foreground mb-2">by {executedBy}</p>
-
-											{#if metadata.action === 'instance_created' && metadata.created_fields}
-												<div class="text-sm space-y-1">
-													{#if metadata.location}
-														<div class="flex gap-2 mb-2">
-															<span class="text-muted-foreground">Location:</span>
-															<span class="font-medium">{metadata.location.lat.toFixed(5)}, {metadata.location.lon.toFixed(5)}</span>
-														</div>
-													{/if}
-													{#each metadata.created_fields as field}
-														{@const fieldDef = detailState.formFields.find(f => f.id === field.field_key)}
-														<div class="flex gap-2">
-															<span class="text-muted-foreground">{fieldDef?.field_label || field.field_key}:</span>
-															<span class="font-medium truncate">{formatHistoryValue(field.value, field.field_key)}</span>
-														</div>
-													{/each}
-												</div>
-											{/if}
-
-											{#if metadata.action === 'form_fill' && metadata.created_fields}
-												<div class="text-sm space-y-1">
-													{#each metadata.created_fields as field}
-														{@const fieldDef = detailState.formFields.find(f => f.id === field.field_key)}
-														<div class="flex gap-2">
-															<span class="text-muted-foreground">{fieldDef?.field_label || field.field_key}:</span>
-															<span class="font-medium truncate">{formatHistoryValue(field.value, field.field_key)}</span>
-														</div>
-													{/each}
-												</div>
-											{/if}
-
-											{#if metadata.action === 'edit' && metadata.changes}
-												<div class="text-sm space-y-1">
-													{#each metadata.changes as change}
-														{@const fieldDef = detailState.formFields.find(f => f.id === change.field_key)}
-														<div class="space-y-0.5">
-															<span class="text-muted-foreground">{fieldDef?.field_label || change.field_key}:</span>
-															<div class="flex items-center gap-2 text-xs">
-																<span class="line-through text-muted-foreground">{formatHistoryValue(change.before, change.field_key)}</span>
-																<span class="text-muted-foreground">-></span>
-																<span class="font-medium">{formatHistoryValue(change.after, change.field_key)}</span>
-															</div>
-														</div>
-													{/each}
-												</div>
-											{/if}
-
-											{#if metadata.action === 'admin_edit' && metadata.changes}
-												<div class="text-sm space-y-1">
-													{#each metadata.changes as change}
-														{@const fieldDef = detailState.formFields.find(f => f.id === change.field_key)}
-														<div class="space-y-0.5">
-															<span class="text-muted-foreground">{fieldDef?.field_label || change.field_key}:</span>
-															<div class="flex items-center gap-2 text-xs">
-																<span class="line-through text-muted-foreground">{formatHistoryValue(change.before, change.field_key)}</span>
-																<span class="text-muted-foreground">-></span>
-																<span class="font-medium">{formatHistoryValue(change.after, change.field_key)}</span>
-															</div>
-														</div>
-													{/each}
-												</div>
-											{/if}
-
-											{#if metadata.action === 'location_edit'}
-												<div class="text-sm">
-													<div class="flex items-center gap-2 text-xs">
-														{#if metadata.before}
-															<span class="text-muted-foreground">
-																{metadata.before.lat.toFixed(5)}, {metadata.before.lon.toFixed(5)}
-															</span>
-														{:else}
-															<span class="text-muted-foreground">(no location)</span>
-														{/if}
-														<span class="text-muted-foreground">-></span>
-														{#if metadata.after}
-															<span class="font-medium">
-																{metadata.after.lat.toFixed(5)}, {metadata.after.lon.toFixed(5)}
-															</span>
-														{/if}
-													</div>
-												</div>
-											{/if}
-
-											{#if metadata.action === 'stage_transition'}
-												{@const fromStage = detailState.stages.find(s => s.id === metadata.from_stage_id)}
-												{@const toStage = detailState.stages.find(s => s.id === metadata.to_stage_id)}
-												<div class="text-sm">
-													<div class="flex items-center gap-2 text-xs">
-														<span class="text-muted-foreground">{fromStage?.stage_name || 'Unknown'}</span>
-														<span class="text-muted-foreground">-></span>
-														<span class="font-medium">{toStage?.stage_name || 'Unknown'}</span>
-													</div>
-												</div>
-											{/if}
-
-											{#if metadata.action === 'protocol'}
-												<div class="text-sm">
-													<p class="text-xs text-muted-foreground">Protocol recorded</p>
-													{#if metadata.changes && metadata.changes.length > 0}
-														<div class="mt-1 space-y-1">
-															{#each metadata.changes as change}
-																{@const fieldDef = detailState.formFields.find(f => f.id === change.field_key)}
-																<div class="space-y-0.5">
-																	<span class="text-muted-foreground">{fieldDef?.field_label || change.field_key}:</span>
-																	<div class="flex items-center gap-2 text-xs">
-																		<span class="line-through text-muted-foreground">{formatHistoryValue(change.before, change.field_key)}</span>
-																		<span class="text-muted-foreground">-></span>
-																		<span class="font-medium">{formatHistoryValue(change.after, change.field_key)}</span>
-																	</div>
-																</div>
-															{/each}
-														</div>
-													{/if}
-												</div>
-											{/if}
-
-										</div>
-									</details>
-								{/each}
 							{/if}
 						</div>
 					</Tabs.Content>

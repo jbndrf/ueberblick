@@ -44,6 +44,7 @@ export interface FieldValue {
 	value: string;
 	file_value: string;
 	stage_id: string;
+	created_by_action: string;
 	created: string;
 }
 
@@ -141,7 +142,7 @@ export interface ToolUsageRecord {
 	executed_by: string;
 	executed_at: string;
 	metadata: {
-		action: 'instance_created' | 'form_fill' | 'edit' | 'location_edit' | 'stage_transition' | 'protocol';
+		action: 'instance_created' | 'form_fill' | 'edit' | 'admin_edit' | 'location_edit' | 'stage_transition' | 'protocol' | 'conflict_resolution';
 		stage_name?: string;
 		location?: { lat: number; lon: number } | null;
 		created_fields?: Array<{ field_key: string; field_name?: string; value: string }>;
@@ -332,9 +333,10 @@ export class WorkflowInstanceDetailState {
 			// Exclude global protocol tools (automation-only) -- simple boolean check on already-filtered set
 			this.protocolTools = (protocolToolsResult as unknown as ToolProtocol[]).filter(p => !p.is_global);
 
-			// Set initial active stage tab to first visible stage with data
+			// Set initial active stage tab to first stage that has data, or first stage as fallback
 			if (this.stages.length > 0 && !this.activeStageTab) {
-				this.activeStageTab = this.stages[0].id;
+				const firstWithData = this.stages.find(s => this.fieldValues.some(fv => fv.stage_id === s.id));
+				this.activeStageTab = firstWithData?.id || this.stages[0].id;
 			}
 
 			this.isLoading = false;

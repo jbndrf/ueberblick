@@ -382,8 +382,14 @@ export function createParticipantGateway(participantId: string, projectId: strin
 					const key = `${name}/${record.id}`;
 					const existing = await db.get('records', key);
 
-					// Skip if we have local modifications (don't overwrite pending changes)
-					if (existing && existing._status !== 'unchanged') continue;
+					// Don't overwrite local modifications, but update _serverUpdated
+					if (existing && existing._status !== 'unchanged') {
+						if (record.updated && existing._serverUpdated !== (record.updated as string)) {
+							existing._serverUpdated = record.updated as string;
+							await db.put('records', existing);
+						}
+						continue;
+					}
 
 					// Check if data actually changed
 					if (existing && existing.updated === record.updated) continue;
@@ -423,8 +429,14 @@ export function createParticipantGateway(participantId: string, projectId: strin
 				const key = `${name}/${record.id}`;
 				const existing = await db.get('records', key);
 
-				// Skip if we have local modifications
-				if (existing && existing._status !== 'unchanged') return;
+				// Don't overwrite local modifications, but update _serverUpdated
+				if (existing && existing._status !== 'unchanged') {
+					if (record.updated && existing._serverUpdated !== (record.updated as string)) {
+						existing._serverUpdated = record.updated as string;
+						await db.put('records', existing);
+					}
+					return;
+				}
 
 				// Check if data actually changed
 				if (existing && existing.updated === record.updated) return;

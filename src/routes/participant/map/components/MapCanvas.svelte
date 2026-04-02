@@ -790,9 +790,16 @@
 	});
 
 	// Fingerprint helpers to skip unnecessary Supercluster rebuilds
-	function fingerprint(items: Array<{ id: string }>): string {
+	function fingerprint(items: Array<{ id: string; updated?: string }>): string {
 		if (items.length === 0) return '';
-		return `${items.length}:${items[0].id}:${items[items.length - 1].id}`;
+		let hash = 0;
+		for (const item of items) {
+			const s = item.id + (item.updated || '');
+			for (let i = 0; i < s.length; i++) {
+				hash = ((hash << 5) - hash + s.charCodeAt(i)) | 0;
+			}
+		}
+		return `${items.length}:${hash}`;
 	}
 	let lastMarkerFingerprint = '';
 	let lastInstanceFingerprint = '';

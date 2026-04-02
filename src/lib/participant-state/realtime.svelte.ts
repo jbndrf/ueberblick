@@ -35,8 +35,16 @@ async function handleRealtimeEvent(
 	if (event.action === 'create' || event.action === 'update') {
 		const existing = await db.get('records', key);
 
-		// Don't overwrite local modifications
-		if (existing && existing._status !== 'unchanged') return;
+		// Don't overwrite local modifications, but track the latest server
+		// timestamp so conflict detection doesn't flag server-side hook updates
+		// (e.g. bumpLastActivity) as conflicts.
+		if (existing && existing._status !== 'unchanged') {
+			if (event.record.updated && existing._serverUpdated !== event.record.updated) {
+				existing._serverUpdated = event.record.updated as string;
+				await db.put('records', existing);
+			}
+			return;
+		}
 
 		// Don't re-write if nothing changed
 		if (existing && existing.updated === event.record.updated) return;

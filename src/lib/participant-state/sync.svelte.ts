@@ -113,8 +113,15 @@ async function pullChanges(collection: string): Promise<number> {
 			const key = `${collection}/${record.id}`;
 			const existing = await recordStore.get(key);
 
-			// Don't overwrite local modifications
-			if (existing && existing._status !== 'unchanged') continue;
+			// Don't overwrite local modifications, but update _serverUpdated
+			// so conflict detection uses the latest server timestamp
+			if (existing && existing._status !== 'unchanged') {
+				if (record.updated && existing._serverUpdated !== (record.updated as string)) {
+					existing._serverUpdated = record.updated as string;
+					recordStore.put(existing);
+				}
+				continue;
+			}
 
 			// Skip if data hasn't actually changed
 			if (existing && existing.updated === record.updated) continue;
@@ -349,7 +356,7 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 				if (collection === 'workflow_instance_field_values' && record.instance_id) {
 					const instanceKey = `workflow_instances/${record.instance_id}`;
 					const instanceRecord = await db.get('records', instanceKey);
-					if (instanceRecord && instanceRecord._status !== 'unchanged') {
+					if (instanceRecord) {
 						try {
 							const serverInstance = await pb.collection('workflow_instances').getOne(
 								record.instance_id as string
