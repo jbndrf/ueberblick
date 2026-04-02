@@ -151,10 +151,9 @@
 
 	// Static menu items for project context
 	const projectStaticItems = [
-		{ href: 'map-settings', icon: Map, label: () => m.navMapSettings() },
+		{ href: 'settings', icon: Settings, label: () => m.navProjectSettings() },
 		{ href: 'participants', icon: Users, label: () => m.navParticipants() },
-		{ href: 'roles', icon: ShieldCheck, label: () => m.navRoles() },
-		{ href: 'info-pages', icon: FileText, label: () => m.navInfoPages() }
+		{ href: 'roles', icon: ShieldCheck, label: () => m.navRoles() }
 	];
 
 	const globalMenuItems = [

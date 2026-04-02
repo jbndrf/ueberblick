@@ -15,7 +15,7 @@
 	import type { VisualKeyRegistry } from '$lib/components/map/donut-cluster-icon';
 	import { FormFillTool } from './modules/workflow-instance-detail/tools';
 	import ModuleShell from '$lib/components/module-shell.svelte';
-	import type { Map as LeafletMap } from 'leaflet';
+	import type { Map as LeafletMap, CircleMarker, Circle } from 'leaflet';
 	import { mapNavCallbacks } from './nav-store.svelte';
 
 	interface Workflow {
@@ -60,6 +60,8 @@
 
 	// Map reference
 	let map = $state<LeafletMap | null>(null);
+	let locationMarker: CircleMarker | null = null;
+	let locationAccuracy: Circle | null = null;
 
 	// UI state
 	let layerSheetOpen = $state(false);
@@ -655,9 +657,39 @@
 	function centerOnLocation() {
 		if ('geolocation' in navigator && map) {
 			navigator.geolocation.getCurrentPosition(
-				(position) => {
-					const { latitude, longitude } = position.coords;
-					map?.setView([latitude, longitude], 16);
+				async (position) => {
+					const { latitude, longitude, accuracy } = position.coords;
+					const L = await import('leaflet');
+					const latlng: [number, number] = [latitude, longitude];
+					map?.setView(latlng, 16);
+
+					// Remove old markers
+					if (locationMarker) {
+						locationMarker.remove();
+					}
+					if (locationAccuracy) {
+						locationAccuracy.remove();
+					}
+
+					// Add accuracy circle
+					locationAccuracy = L.circle(latlng, {
+						radius: accuracy,
+						color: '#4285F4',
+						fillColor: '#4285F4',
+						fillOpacity: 0.1,
+						weight: 1,
+						interactive: false
+					}).addTo(map!);
+
+					// Add location dot
+					locationMarker = L.circleMarker(latlng, {
+						radius: 8,
+						color: '#fff',
+						fillColor: '#4285F4',
+						fillOpacity: 1,
+						weight: 2,
+						interactive: false
+					}).addTo(map!);
 				},
 				(error) => {
 					console.error('Geolocation error:', error);
@@ -705,9 +737,9 @@
 	/>
 
 	<BottomControlBar
-		onLayersClick={() => (layerSheetOpen = true)}
-		onFiltersClick={() => (filterSheetOpen = true)}
-		onToolsClick={() => (settingsSheetOpen = true)}
+		onLayersClick={() => { const next = !layerSheetOpen; filterSheetOpen = false; settingsSheetOpen = false; layerSheetOpen = next; }}
+		onFiltersClick={() => { const next = !filterSheetOpen; layerSheetOpen = false; settingsSheetOpen = false; filterSheetOpen = next; }}
+		onToolsClick={() => { const next = !settingsSheetOpen; layerSheetOpen = false; filterSheetOpen = false; settingsSheetOpen = next; }}
 		onLocationClick={centerOnLocation}
 		{workflows}
 		{map}

@@ -184,7 +184,10 @@
 		const deltaY = Math.abs(pos.clientY - mouseDownPos.y);
 
 		if (deltaX < CLICK_THRESHOLD && deltaY < CLICK_THRESHOLD) {
-			onMapClick?.();
+			// Ignore clicks in the bottom bar area (h-16 = 64px) on mobile
+			if (pos.clientY <= window.innerHeight - 64 || window.innerWidth >= 768) {
+				onMapClick?.();
+			}
 		}
 		mouseDownPos = null;
 	}
@@ -631,7 +634,20 @@
 
 			const leafletMarker = L.marker([lat, lng], { icon });
 			if (clickHandler) {
-				leafletMarker.on('click', clickHandler);
+				leafletMarker.on('click', (e: any) => {
+					// Guard: ignore clicks that originate from the bottom bar area on mobile.
+					// On some mobile browsers, touch events can bleed through fixed overlays
+					// to Leaflet markers underneath.
+					const origEvent = e.originalEvent;
+					if (origEvent) {
+						const y = origEvent.clientY ?? origEvent.pageY;
+						const bottomBarHeight = 64; // h-16 = 4rem = 64px
+						if (y > window.innerHeight - bottomBarHeight) {
+							return;
+						}
+					}
+					clickHandler();
+				});
 			}
 			layerGroup.addLayer(leafletMarker);
 			rendered.set(key, leafletMarker);

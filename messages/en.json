@@ -21,6 +21,7 @@
 	"navRoles": "Roles",
 	"navCustomTables": "Custom Tables",
 	"navMapSettings": "Map Settings",
+	"navProjectSettings": "Project Settings",
 	"navMapSources": "Map Sources",
 	"navWorkflows": "Workflows",
 	"navMarkerCategories": "Marker Categories",
@@ -506,5 +507,14 @@
 	"infoPagesDeleteSuccess": "Info page deleted successfully",
 	"infoPagesCreateError": "Failed to create info page",
 	"infoPagesUpdateError": "Failed to update info page",
-	"infoPagesDeleteError": "Failed to delete info page"
+	"infoPagesDeleteError": "Failed to delete info page",
+	"settingsTabGeneral": "General",
+	"settingsTabMap": "Map",
+	"settingsAppBranding": "App Branding",
+	"settingsAppBrandingDescription": "Customize the icon and name shown in the participant app",
+	"settingsUploadIcon": "Upload Icon",
+	"settingsRemoveIcon": "Remove Icon",
+	"settingsIconHint": "PNG, JPG, SVG, or WebP. Max 2MB.",
+	"settingsDisplayName": "App Name",
+	"settingsDisplayNameHint": "Name shown in the participant app header. Leave empty to use the project name."
 }

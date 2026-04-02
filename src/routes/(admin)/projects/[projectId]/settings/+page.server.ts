@@ -10,6 +10,7 @@ import { createTilePackage, type TileSource } from '$lib/server/tile-packager';
 import { rm } from 'fs/promises';
 import path from 'path';
 import type { ProjectMapDefaults } from '$lib/types/map-layer';
+import { createDeleteAction } from '$lib/server/crud-actions';
 
 // Default map view settings (used when no base layer exists)
 const DEFAULT_MAP_SETTINGS: ProjectMapDefaults = {
@@ -21,10 +22,16 @@ export const load: PageServerLoad = async ({ locals: { pb }, params }) => {
 	const { projectId } = params;
 
 	try {
-		// Fetch project details (including settings for map_defaults fallback)
+		// Fetch project details (including settings and icon)
 		const project = await pb.collection('projects').getOne(projectId, {
-			fields: 'id, name, settings'
+			fields: 'id, name, settings, icon'
 		});
+
+		// Build icon URL using relative path (works with Vite proxy and nginx)
+		let iconUrl: string | null = null;
+		if (project.icon) {
+			iconUrl = `/api/files/projects/${project.id}/${project.icon}`;
+		}
 
 		// Fetch map layers for this project (source data is now inline)
 		let mapLayers: MapLayer[] = [];
@@ -44,9 +51,10 @@ export const load: PageServerLoad = async ({ locals: { pb }, params }) => {
 			sort: 'name'
 		});
 
-		// Get map defaults from project settings or use system defaults
-		const projectSettings = project.settings as { map_defaults?: ProjectMapDefaults } | null;
+		// Get map defaults and display name from project settings
+		const projectSettings = project.settings as { map_defaults?: ProjectMapDefaults; display_name?: string } | null;
 		const mapDefaults = projectSettings?.map_defaults || DEFAULT_MAP_SETTINGS;
+		const displayName = projectSettings?.display_name || '';
 
 		// Find base layer for view defaults
 		const baseLayer = mapLayers.find((l) => l.layer_type === 'base');
@@ -76,27 +84,40 @@ export const load: PageServerLoad = async ({ locals: { pb }, params }) => {
 			// Collection might not exist yet
 		}
 
+		// Fetch info pages for this project
+		const infoPages = await pb.collection('info_pages').getFullList({
+			filter: `project_id = "${projectId}"`,
+			sort: 'sort_order,created'
+		});
+
 		// Initialize forms
 		const layerForm = await superValidate(zod(mapLayerSchema));
 		const defaultsForm = await superValidate(mapDefaults, zod(projectMapDefaultsSchema));
 
 		return {
 			project,
+			iconUrl,
+			displayName,
 			mapLayers,
 			roles,
 			mapDefaults,
 			baseLayer,
 			offlinePackages,
+			infoPages,
 			layerForm,
 			defaultsForm
 		};
 	} catch (err) {
-		console.error('Error loading map settings:', err);
-		throw error(500, 'Failed to load map settings');
+		console.error('Error loading project settings:', err);
+		throw error(500, 'Failed to load project settings');
 	}
 };
 
 export const actions: Actions = {
+	// =====================================================================
+	// Map Settings Actions
+	// =====================================================================
+
 	// Save project map defaults (fallback when no base layer)
 	saveDefaults: async ({ request, locals: { pb }, params }) => {
 		const { projectId } = params;
@@ -687,6 +708,140 @@ export const actions: Actions = {
 		} catch (err) {
 			console.error('Error updating package roles:', err);
 			return fail(500, { message: 'Failed to update package roles' });
+		}
+	},
+
+	// =====================================================================
+	// General Settings Actions (Info Pages + Branding)
+	// =====================================================================
+
+	createInfoPage: async ({ request, params, locals }) => {
+		const { projectId } = params;
+		const pb = locals.pb;
+		const formData = await request.formData();
+
+		const title = formData.get('title') as string;
+		const content = formData.get('content') as string;
+		const sort_order = parseInt(formData.get('sort_order') as string) || 0;
+
+		if (!title?.trim()) {
+			return fail(400, { message: 'Title is required' });
+		}
+		if (!content?.trim()) {
+			return fail(400, { message: 'Content is required' });
+		}
+
+		try {
+			await pb.collection('info_pages').create({
+				project_id: projectId,
+				title: title.trim(),
+				content: content.trim(),
+				sort_order
+			});
+		} catch (error) {
+			console.error('Failed to create info page:', error);
+			return fail(500, { message: 'Failed to create info page' });
+		}
+
+		return { success: true };
+	},
+
+	updateInfoPage: async ({ request, params, locals }) => {
+		const { projectId } = params;
+		const pb = locals.pb;
+		const formData = await request.formData();
+
+		const id = formData.get('id') as string;
+		const title = formData.get('title') as string;
+		const content = formData.get('content') as string;
+		const sort_order = parseInt(formData.get('sort_order') as string) || 0;
+
+		if (!id) return fail(400, { message: 'ID is required' });
+		if (!title?.trim()) return fail(400, { message: 'Title is required' });
+		if (!content?.trim()) return fail(400, { message: 'Content is required' });
+
+		try {
+			const record = await pb.collection('info_pages').getOne(id);
+			if (record.project_id !== projectId) {
+				return fail(403, { message: 'Unauthorized' });
+			}
+
+			await pb.collection('info_pages').update(id, {
+				title: title.trim(),
+				content: content.trim(),
+				sort_order
+			});
+		} catch (error) {
+			console.error('Failed to update info page:', error);
+			return fail(500, { message: 'Failed to update info page' });
+		}
+
+		return { success: true };
+	},
+
+	deleteInfoPage: async ({ request, params, locals }) => {
+		const { projectId } = params;
+		const pb = locals.pb;
+		return createDeleteAction(pb, projectId, {
+			tableName: 'info_pages'
+		})(request);
+	},
+
+	// Upload/update project icon
+	updateAppIcon: async ({ request, locals: { pb }, params }) => {
+		const { projectId } = params;
+		const formData = await request.formData();
+		const iconFile = formData.get('icon') as File;
+
+		if (!iconFile || iconFile.size === 0) {
+			return fail(400, { message: 'Icon file is required' });
+		}
+
+		try {
+			const uploadData = new FormData();
+			uploadData.append('icon', iconFile);
+			await pb.collection('projects').update(projectId, uploadData);
+			return { success: true };
+		} catch (err) {
+			console.error('Error uploading icon:', err);
+			return fail(500, { message: 'Failed to upload icon' });
+		}
+	},
+
+	// Remove project icon
+	removeAppIcon: async ({ locals: { pb }, params }) => {
+		const { projectId } = params;
+
+		try {
+			await pb.collection('projects').update(projectId, { icon: null });
+			return { success: true };
+		} catch (err) {
+			console.error('Error removing icon:', err);
+			return fail(500, { message: 'Failed to remove icon' });
+		}
+	},
+
+	// Update display name shown in participant app
+	updateDisplayName: async ({ request, locals: { pb }, params }) => {
+		const { projectId } = params;
+		const formData = await request.formData();
+		const displayName = (formData.get('display_name') as string)?.trim() || '';
+
+		try {
+			const project = await pb.collection('projects').getOne(projectId);
+			const currentSettings = (project.settings as Record<string, unknown>) || {};
+
+			await pb.collection('projects').update(projectId, {
+				settings: {
+					...currentSettings,
+					display_name: displayName || undefined
+				}
+			});
+
+			return { success: true };
+		} catch (err) {
+			console.error('Error saving display name:', err);
+			return fail(500, { message: 'Failed to save display name' });
 		}
 	}
 };

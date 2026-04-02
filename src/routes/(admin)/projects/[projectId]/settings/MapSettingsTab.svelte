@@ -629,23 +629,15 @@
 </script>
 
 <div class="flex flex-col gap-6 min-w-0 w-full">
-	<!-- Page Header -->
-	<div class="flex items-start justify-between gap-6">
-		<div>
-			<h1 class="text-3xl font-bold tracking-tight">{m.mapSettingsTitle()}</h1>
-			<p class="text-muted-foreground">{m.mapSettingsSubtitle()}</p>
+	<!-- Map Defaults Summary -->
+	<div class="flex items-center justify-between">
+		<div class="text-sm text-muted-foreground">
+			Default view: Zoom {effectiveDefaults().zoom}, Center {effectiveDefaults().center.lat.toFixed(4)}, {effectiveDefaults().center.lng.toFixed(4)}
 		</div>
-
-		<!-- Map Defaults Summary -->
-		<div class="shrink-0 text-sm text-right">
-			<div class="text-muted-foreground">
-				Default view: Zoom {effectiveDefaults().zoom}, Center {effectiveDefaults().center.lat.toFixed(4)}, {effectiveDefaults().center.lng.toFixed(4)}
-			</div>
-			<Button variant="ghost" size="sm" class="h-7 text-xs" onclick={() => (showDefaultsDialog = true)}>
-				<Settings class="mr-1 h-3 w-3" />
-				Edit defaults
-			</Button>
-		</div>
+		<Button variant="ghost" size="sm" class="h-7 text-xs" onclick={() => (showDefaultsDialog = true)}>
+			<Settings class="mr-1 h-3 w-3" />
+			Edit defaults
+		</Button>
 	</div>
 
 	<!-- Tabs for Layers and Offline Packages -->

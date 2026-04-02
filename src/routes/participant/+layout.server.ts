@@ -19,6 +19,8 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 	let collectionNames: string[] = [];
 	let fileFields: Record<string, string[]> = {};
 	let infoPages: Array<{ id: string; title: string; content: string }> = [];
+	let projectIcon: string | null = null;
+	let projectName: string | null = null;
 
 	if (isParticipantAuth) {
 		const adminPb = await getAdminPb();
@@ -39,7 +41,13 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 			})
 			: Promise.resolve([] as Array<{ id: string; title: string; content: string }>);
 
-		const [collections, pages] = await Promise.all([collectionsPromise, infoPagesPromise]);
+		const projectPromise = participant?.project_id
+			? adminPb.collection('projects').getOne(participant.project_id, {
+				fields: 'id,name,icon,settings'
+			}).catch(() => null)
+			: Promise.resolve(null);
+
+		const [collections, pages, project] = await Promise.all([collectionsPromise, infoPagesPromise, projectPromise]);
 
 		// Process collections
 		if (collections.length > 0) {
@@ -58,12 +66,21 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 
 		// Process info pages
 		infoPages = (pages as any[]).map((p) => ({ id: p.id, title: p.title, content: p.content }));
+
+		// Build project icon URL using relative path (works with Vite proxy and nginx)
+		if (project && (project as any).icon) {
+			projectIcon = `/api/files/projects/${project.id}/${(project as any).icon}`;
+		}
+		const settings = (project as any)?.settings as { display_name?: string } | null;
+		projectName = settings?.display_name || (project as any)?.name || null;
 	}
 
 	return {
 		participant,
 		collectionNames,
 		fileFields,
-		infoPages
+		infoPages,
+		projectIcon,
+		projectName
 	};
 };

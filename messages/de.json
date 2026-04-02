@@ -21,6 +21,7 @@
 	"navRoles": "Rollen",
 	"navCustomTables": "Benutzerdefinierte Tabellen",
 	"navMapSettings": "Karteneinstellungen",
+	"navProjectSettings": "Projekteinstellungen",
 	"navMapSources": "Kartenquellen",
 	"navWorkflows": "Workflows",
 	"navMarkerCategories": "Markerkategorien",
@@ -506,5 +507,14 @@
 	"infoPagesDeleteSuccess": "Infoseite erfolgreich geloescht",
 	"infoPagesCreateError": "Fehler beim Erstellen der Infoseite",
 	"infoPagesUpdateError": "Fehler beim Aktualisieren der Infoseite",
-	"infoPagesDeleteError": "Fehler beim Loeschen der Infoseite"
+	"infoPagesDeleteError": "Fehler beim Loeschen der Infoseite",
+	"settingsTabGeneral": "Allgemein",
+	"settingsTabMap": "Karte",
+	"settingsAppBranding": "App-Branding",
+	"settingsAppBrandingDescription": "Passe das Symbol und den Namen in der Teilnehmer-App an",
+	"settingsUploadIcon": "Symbol hochladen",
+	"settingsRemoveIcon": "Symbol entfernen",
+	"settingsIconHint": "PNG, JPG, SVG oder WebP. Max. 2MB.",
+	"settingsDisplayName": "App-Name",
+	"settingsDisplayNameHint": "Name in der Kopfzeile der Teilnehmer-App. Leer lassen, um den Projektnamen zu verwenden."
 }

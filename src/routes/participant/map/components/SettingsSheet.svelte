@@ -634,12 +634,12 @@
 
 <!-- Info Page Dialog -->
 <Dialog.Root bind:open={infoPageDialogOpen}>
-	<Dialog.Content class="max-h-[80vh] overflow-y-auto sm:max-w-lg">
-		<Dialog.Header>
+	<Dialog.Content class="flex max-h-[80vh] flex-col gap-4 overflow-hidden sm:max-w-lg">
+		<Dialog.Header class="shrink-0">
 			<Dialog.Title>{selectedInfoPage?.title ?? ''}</Dialog.Title>
 		</Dialog.Header>
 		{#if selectedInfoPage}
-			<div class="prose prose-sm dark:prose-invert max-w-none">
+			<div class="prose prose-sm dark:prose-invert max-w-none min-h-0 flex-1 overflow-y-auto break-words">
 				{@html sanitizeHtml(selectedInfoPage.content)}
 			</div>
 		{/if}
