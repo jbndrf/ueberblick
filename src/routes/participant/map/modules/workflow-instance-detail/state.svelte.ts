@@ -6,6 +6,7 @@
  */
 
 import type { ParticipantGateway } from '$lib/participant-state/gateway.svelte';
+import type { FieldValueCache } from '$lib/participant-state/field-value-cache.svelte';
 import type { Snippet } from 'svelte';
 
 // =============================================================================
@@ -242,9 +243,12 @@ export class WorkflowInstanceDetailState {
 	// Constructor
 	// ==========================================================================
 
-	constructor(instanceId: string, gateway: ParticipantGateway) {
+	private fieldValueCache: FieldValueCache | null;
+
+	constructor(instanceId: string, gateway: ParticipantGateway, fieldValueCache?: FieldValueCache) {
 		this.instanceId = instanceId;
 		this.gateway = gateway;
+		this.fieldValueCache = fieldValueCache ?? null;
 	}
 
 	// ==========================================================================
@@ -254,12 +258,15 @@ export class WorkflowInstanceDetailState {
 	async load(): Promise<void> {
 		this.isLoading = true;
 		this.loadError = null;
+		const t0 = performance.now();
 
 		try {
 			// First load the instance to get workflow_id
 			const instanceResult = await this.gateway.collection('workflow_instances').getOne(this.instanceId, {
 				expand: 'workflow_id'
 			});
+			const tInstance = performance.now();
+			console.log(`[DetailLoad] getOne instance: ${(tInstance - t0).toFixed(1)}ms`);
 
 			this.instance = instanceResult;
 			const expanded = instanceResult.expand as Record<string, unknown> | undefined;
@@ -268,26 +275,34 @@ export class WorkflowInstanceDetailState {
 			const workflowId = instanceResult.workflow_id as string;
 
 			// Phase 1: Load core data that depends only on workflowId/instanceId
+			const p1Start = performance.now();
+			const p1Labels = ['stages', 'connections', 'fieldValues', 'forms', 'toolUsage'];
+			const p1Timings: number[] = [];
 			const [stagesResult, connectionsResult, fieldValuesResult, formsResult, toolUsageResult] = await Promise.all([
 				this.gateway.collection('workflow_stages').getFullList({
 					filter: `workflow_id = "${workflowId}"`,
 					sort: 'stage_order'
-				}),
+				}).then(r => { p1Timings[0] = performance.now() - p1Start; return r; }),
 				this.gateway.collection('workflow_connections').getFullList({
 					filter: `workflow_id = "${workflowId}"`
-				}),
-				this.gateway.collection('workflow_instance_field_values').getFullList({
-					filter: `instance_id = "${this.instanceId}"`
-				}),
+				}).then(r => { p1Timings[1] = performance.now() - p1Start; return r; }),
+				(this.fieldValueCache
+					? Promise.resolve(this.fieldValueCache.getForInstance(this.instanceId))
+					: this.gateway.collection('workflow_instance_field_values').getFullList({
+						filter: `instance_id = "${this.instanceId}"`
+					})
+				).then(r => { p1Timings[2] = performance.now() - p1Start; return r; }),
 				this.gateway.collection('tools_forms').getFullList({
 					filter: `workflow_id = "${workflowId}"`
-				}),
+				}).then(r => { p1Timings[3] = performance.now() - p1Start; return r; }),
 				this.gateway.collection('workflow_instance_tool_usage').getFullList({
 					filter: `instance_id = "${this.instanceId}"`,
 					sort: '-executed_at',
 					expand: 'executed_by'
-				})
+				}).then(r => { p1Timings[4] = performance.now() - p1Start; return r; })
 			]);
+			const tP1 = performance.now();
+			console.log(`[DetailLoad] Phase 1 total: ${(tP1 - p1Start).toFixed(1)}ms — ${p1Labels.map((l, i) => `${l}: ${p1Timings[i]?.toFixed(1)}ms`).join(', ')}`);
 
 			this.stages = stagesResult as unknown as WorkflowStage[];
 			this.connections = connectionsResult as unknown as WorkflowConnection[];
@@ -310,17 +325,22 @@ export class WorkflowInstanceDetailState {
 				...stageIds.map(id => `stage_id ~ "${id}"`)
 			].join(' || ') || 'connection_id = "__none__"';
 
+			const p2Start = performance.now();
+			const p2Labels = ['formFields', 'editTools', 'protocolTools'];
+			const p2Timings: number[] = [];
 			const [formFieldsResult, editToolsResult, protocolToolsResult] = await Promise.all([
 				this.gateway.collection('tools_form_fields').getFullList({
 					filter: formFieldsFilter
-				}),
+				}).then(r => { p2Timings[0] = performance.now() - p2Start; return r; }),
 				this.gateway.collection('tools_edit').getFullList({
 					filter: toolScopeFilter
-				}),
+				}).then(r => { p2Timings[1] = performance.now() - p2Start; return r; }),
 				this.gateway.collection('tools_protocol').getFullList({
 					filter: toolScopeFilter
-				})
+				}).then(r => { p2Timings[2] = performance.now() - p2Start; return r; })
 			]);
+			const tP2 = performance.now();
+			console.log(`[DetailLoad] Phase 2 total: ${(tP2 - p2Start).toFixed(1)}ms — ${p2Labels.map((l, i) => `${l}: ${p2Timings[i]?.toFixed(1)}ms`).join(', ')}`);
 
 			this.formFields = (formFieldsResult as unknown as FormField[])
 				.map(f => ({
@@ -339,6 +359,7 @@ export class WorkflowInstanceDetailState {
 				this.activeStageTab = firstWithData?.id || this.stages[0].id;
 			}
 
+			console.log(`[DetailLoad] TOTAL: ${(performance.now() - t0).toFixed(1)}ms`);
 			this.isLoading = false;
 		} catch (error) {
 			console.error('Failed to load workflow instance:', error);
@@ -643,7 +664,8 @@ export class WorkflowInstanceDetailState {
 
 export function createWorkflowInstanceDetailState(
 	instanceId: string,
-	gateway: ParticipantGateway
+	gateway: ParticipantGateway,
+	fieldValueCache?: FieldValueCache
 ): WorkflowInstanceDetailState {
-	return new WorkflowInstanceDetailState(instanceId, gateway);
+	return new WorkflowInstanceDetailState(instanceId, gateway, fieldValueCache);
 }

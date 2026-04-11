@@ -13,6 +13,7 @@ export {
 	createParticipantGateway,
 	onDataChange,
 	notifyDataChange,
+	type DataChangeDetail,
 	type ParticipantGateway,
 	type CollectionProxy,
 	type LiveQuery,

@@ -60,14 +60,14 @@ async function handleRealtimeEvent(
 		await db.put('records', cached);
 
 		// Notify gateway listeners (map page etc.) that data changed
-		notifyDataChange(collection);
+		notifyDataChange(collection, event.record.id as string, event.action as 'create' | 'update');
 	} else if (event.action === 'delete') {
 		const existing = await db.get('records', key);
 
 		// Only delete if it's an unchanged record (don't delete local modifications)
 		if (existing && existing._status === 'unchanged') {
 			await db.delete('records', key);
-			notifyDataChange(collection);
+			notifyDataChange(collection, event.record.id as string, 'delete');
 		}
 	}
 }

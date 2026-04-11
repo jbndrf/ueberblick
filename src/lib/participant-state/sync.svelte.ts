@@ -27,6 +27,17 @@ let catchUpCount = 0;
 // Collections to sync (set via setSyncCollections)
 let syncCollections: string[] = [];
 
+// Reactive sync progress (visible in header as "Syncing data (5/26)")
+export interface SyncProgressInfo {
+	done: number;
+	total: number;
+}
+
+export const syncStatus = $state<{ current: SyncProgressInfo | null }>({ current: null });
+
+// General-purpose loading message (set by pages, read by layout header)
+export const appLoadingMessage = $state<{ value: string | null }>({ value: null });
+
 // How often to run full deletion detection (every Nth catch-up sync)
 const DELETION_CHECK_INTERVAL = 5;
 
@@ -546,20 +557,30 @@ export async function runCatchUpSync(gateway: ParticipantGateway): Promise<void>
 	catchUpCount++;
 
 	try {
+		const total = syncCollections.length;
+
 		// 1. Push local changes to server
+		syncStatus.current = { done: 0, total };
 		await uploadChanges(gateway);
 
-		// 2. Pull remote changes in parallel batches
-		const pullResults = await batchedParallel(syncCollections, pullChanges, 5);
-
+		// 2. Pull remote changes in batches of 5, updating progress after each batch
 		let totalPulled = 0;
 		const changedCollections: string[] = [];
-		for (let i = 0; i < syncCollections.length; i++) {
-			const result = pullResults[i];
-			if (result.status === 'fulfilled' && result.value > 0) {
-				changedCollections.push(syncCollections[i]);
-				totalPulled += result.value;
+		const concurrency = 5;
+
+		for (let i = 0; i < total; i += concurrency) {
+			const batch = syncCollections.slice(i, i + concurrency);
+			const batchResults = await Promise.allSettled(batch.map(pullChanges));
+
+			for (let j = 0; j < batch.length; j++) {
+				const result = batchResults[j];
+				if (result.status === 'fulfilled' && result.value > 0) {
+					changedCollections.push(batch[j]);
+					totalPulled += result.value;
+				}
 			}
+
+			syncStatus.current = { done: Math.min(i + concurrency, total), total };
 		}
 
 		if (totalPulled > 0) {
@@ -600,6 +621,7 @@ export async function runCatchUpSync(gateway: ParticipantGateway): Promise<void>
 		console.error('Catch-up sync failed:', error);
 	} finally {
 		syncInProgress = false;
+		syncStatus.current = null;
 	}
 }
 

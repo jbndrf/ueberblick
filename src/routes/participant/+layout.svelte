@@ -16,7 +16,7 @@
 		getCachedSession,
 		resetAllParticipantState,
 	} from '$lib/participant-state/context.svelte';
-	import { setSyncCollections, startPushListener, runCatchUpSync } from '$lib/participant-state/sync.svelte';
+	import { setSyncCollections, startPushListener, runCatchUpSync, syncStatus, appLoadingMessage } from '$lib/participant-state/sync.svelte';
 	import { setupRealtime } from '$lib/participant-state/realtime.svelte';
 
 	// Register service worker for PWA using absolute path.
@@ -96,6 +96,8 @@
 
 	// Track current participant ID to detect re-auth with different account
 	let currentParticipantId: string | null = null;
+
+	// syncStatus.current is reactive (imported $state from sync.svelte.ts)
 
 	function teardownGateway() {
 		cleanupPushListener?.();
@@ -244,7 +246,13 @@
 						</svg>
 					</div>
 				{/if}
-				<span class="font-semibold">{data.projectName ?? 'Überblick'}</span>
+				{#if syncStatus.current}
+					<span class="text-sm text-muted-foreground animate-pulse">Syncing data ({syncStatus.current.done}/{syncStatus.current.total})</span>
+				{:else if appLoadingMessage.value}
+					<span class="text-sm text-muted-foreground animate-pulse">{appLoadingMessage.value}</span>
+				{:else}
+					<span class="font-semibold">{data.projectName ?? 'Überblick'}</span>
+				{/if}
 			</div>
 
 			<!-- Desktop Navigation (hidden on mobile) -->

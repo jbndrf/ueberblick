@@ -7,6 +7,8 @@
 	} from '$lib/participant-state';
 	import { resetPocketBase } from '$lib/pocketbase';
 	import { disconnectRealtime } from '$lib/participant-state';
+	import { FieldValueCache } from '$lib/participant-state/field-value-cache.svelte';
+	import { appLoadingMessage } from '$lib/participant-state/sync.svelte';
 	import { Loader2 } from 'lucide-svelte';
 	import { MapCanvas, BottomControlBar, LayerSheet, FilterSheet, WorkflowSelector, SettingsSheet } from './components';
 	import { WorkflowInstanceDetailModule, MarkerDetailModule, createSelection, type Selection, type Marker } from './modules';
@@ -72,6 +74,8 @@
 
 	// Set up navigation callbacks for header (desktop) navigation
 	onMount(() => {
+		// Defer field value cache init to after first paint (map + markers render first)
+		requestAnimationFrame(() => fieldValueCache.init());
 		mapNavCallbacks.set({
 			onLayersClick: () => (layerSheetOpen = true),
 			onFiltersClick: () => (filterSheetOpen = true),
@@ -114,8 +118,24 @@
 	const workflowsLive = gateway!.collection('workflows').live({ filter: 'is_active = true', priority: 'normal' });
 	const stagesLive = gateway!.collection('workflow_stages').live({ priority: 'deferred' });
 	const fieldTagsLive = gateway!.collection('tools_field_tags').live({ priority: 'deferred' });
-	const fieldValuesLive = gateway!.collection('workflow_instance_field_values').live({ priority: 'deferred' });
+	const fieldValueCache = new FieldValueCache();
 	const connectionsLive = gateway!.collection('workflow_connections').live({ filter: 'from_stage_id = ""', priority: 'deferred' });
+
+	// Show loading indicator in layout header while data loads.
+	// Updates reactively so users see progress, not a static message.
+	$effect(() => {
+		if (markersLive.loading || instancesLive.loading) {
+			appLoadingMessage.value = 'Loading markers...';
+		} else if (fieldValueCache.loading) {
+			const count = fieldValueCache.loadedCount;
+			appLoadingMessage.value = count > 0
+				? `Loading field data (${count.toLocaleString()})...`
+				: 'Loading field data...';
+		} else {
+			appLoadingMessage.value = null;
+		}
+	});
+	onDestroy(() => { appLoadingMessage.value = null; });
 
 	// Derived data from live queries
 	const project = $derived(projectLive.records[0]);
@@ -124,7 +144,7 @@
 	const workflowInstances = $derived(instancesLive.records);
 	const workflowStages = $derived(stagesLive.records);
 	const fieldTags = $derived(fieldTagsLive.records);
-	const fieldValues = $derived(fieldValuesLive.records);
+	const fieldValues = $derived(fieldValueCache.records);
 
 	// Map settings: base layer config takes priority, then project defaults
 	const mapSettings = $derived.by(() => {
@@ -225,7 +245,7 @@
 		workflowsLive.destroy();
 		stagesLive.destroy();
 		fieldTagsLive.destroy();
-		fieldValuesLive.destroy();
+		fieldValueCache.destroy();
 		connectionsLive.destroy();
 	});
 
@@ -289,20 +309,7 @@
 		return map;
 	});
 
-	const fieldValuesByKey = $derived.by(() => {
-		const map = new Map<string, Set<string>>();
-		for (const fv of fieldValues) {
-			const key = (fv as any).field_key;
-			const val = (fv as any).value;
-			if (!key || !val) continue;
-			let set = map.get(key);
-			if (!set) { set = new Set(); map.set(key, set); }
-			for (const v of splitMultiValue(val)) {
-				set.add(v);
-			}
-		}
-		return map;
-	});
+	const fieldValuesByKey = $derived(fieldValueCache.fieldValuesByKey);
 
 	// Initialize tag value visibility - all values visible by default
 	$effect(() => {
@@ -788,6 +795,7 @@
 		<WorkflowInstanceDetailModule
 			{selection}
 			{map}
+			{fieldValueCache}
 			bind:isExpanded={sheetExpanded}
 			bind:isEditingLocation
 			onClose={handleSelectionClose}

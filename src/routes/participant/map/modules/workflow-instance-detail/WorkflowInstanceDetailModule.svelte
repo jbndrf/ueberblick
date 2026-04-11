@@ -11,6 +11,7 @@
 		type ToolProtocol,
 		type ToolUsageRecord
 	} from './state.svelte';
+	import type { FieldValueCache } from '$lib/participant-state/field-value-cache.svelte';
 	import type { WorkflowInstanceSelection } from '../types';
 	import * as Tabs from '$lib/components/ui/tabs';
 	import { ChevronRight } from 'lucide-svelte';
@@ -33,10 +34,12 @@
 		map?: LeafletMap | null;
 		/** Exposes whether location editing is active (bindable) */
 		isEditingLocation?: boolean;
+		/** Optional field value cache for O(1) lookups */
+		fieldValueCache?: FieldValueCache;
 		onClose: () => void;
 	}
 
-	let { selection, isExpanded = $bindable(false), map = null, isEditingLocation = $bindable(false), onClose }: Props = $props();
+	let { selection, isExpanded = $bindable(false), map = null, isEditingLocation = $bindable(false), fieldValueCache, onClose }: Props = $props();
 
 	// ==========================================================================
 	// State
@@ -74,7 +77,7 @@
 		const _count = selection.openCount; // Force re-run on re-click of same instance
 		if (!gateway || !instanceId) return;
 
-		const newState = createWorkflowInstanceDetailState(instanceId, gateway);
+		const newState = createWorkflowInstanceDetailState(instanceId, gateway, fieldValueCache);
 		detailState = newState;
 		activeTab = 'activity';
 		activeToolFlow = null;
@@ -499,6 +502,7 @@
 		const toStageId = activeToolFlow.connection.to_stage_id;
 
 		try {
+			const tt0 = performance.now();
 			// Log stage transition (audit trail)
 			await gateway.collection('workflow_instance_tool_usage').create({
 				instance_id: activeToolFlow.instanceId,
@@ -514,14 +518,20 @@
 					to_stage_name: getStageName(toStageId) || toStageId
 				}
 			});
+			console.log(`[Transition] create tool_usage: ${(performance.now() - tt0).toFixed(1)}ms`);
 
 			// Update instance to new stage
+			const tt1 = performance.now();
 			await gateway.collection('workflow_instances').update(activeToolFlow.instanceId, {
 				current_stage_id: toStageId
 			});
+			console.log(`[Transition] update instance: ${(performance.now() - tt1).toFixed(1)}ms`);
 
 			// Refresh state
+			const tt2 = performance.now();
 			await detailState.refresh();
+			console.log(`[Transition] refresh: ${(performance.now() - tt2).toFixed(1)}ms`);
+			console.log(`[Transition] TOTAL: ${(performance.now() - tt0).toFixed(1)}ms`);
 
 			// Clear tool flow
 			activeToolFlow = null;

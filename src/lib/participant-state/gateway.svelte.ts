@@ -70,7 +70,13 @@ export interface CollectionProxy<T = Record<string, unknown>> {
 // Data Change Notification
 // =============================================================================
 
-type DataChangeListener = (collection: string) => void;
+export interface DataChangeDetail {
+	collection: string;
+	recordId?: string;
+	action?: 'create' | 'update' | 'delete';
+}
+
+type DataChangeListener = (detail: DataChangeDetail) => void;
 const dataChangeListeners = new Set<DataChangeListener>();
 
 /**
@@ -82,10 +88,12 @@ export function onDataChange(listener: DataChangeListener): () => void {
 	return () => dataChangeListeners.delete(listener);
 }
 
-export function notifyDataChange(collection: string): void {
+export function notifyDataChange(collection: string, recordId?: string, action?: 'create' | 'update' | 'delete'): void {
+	ensureCollectionInCache(collection);
+	const detail: DataChangeDetail = { collection, recordId, action };
 	for (const listener of dataChangeListeners) {
 		try {
-			listener(collection);
+			listener(detail);
 		} catch (e) {
 			console.error('Data change listener error:', e);
 		}
@@ -113,6 +121,36 @@ function unregisterLiveCollection(name: string): void {
 		liveCollections.delete(name);
 	} else {
 		liveCollections.set(name, count);
+	}
+}
+
+// =============================================================================
+// Collection Name Cache (for expandRecords)
+// =============================================================================
+
+// Cached list of collection names present in IDB. Populated lazily on first
+// expand call, then kept up-to-date via ensureCollectionInCache().
+let cachedCollectionNames: string[] | null = null;
+
+async function getKnownCollections(db: Awaited<ReturnType<typeof getDB>>): Promise<string[]> {
+	if (cachedCollectionNames) return cachedCollectionNames;
+
+	const names: string[] = [];
+	const tx = db.transaction('records', 'readonly');
+	const idx = tx.store.index('by_collection');
+	let cursor = await idx.openKeyCursor();
+	while (cursor) {
+		const col = cursor.key as string;
+		names.push(col);
+		cursor = await idx.openKeyCursor(IDBKeyRange.lowerBound(col, true));
+	}
+	cachedCollectionNames = names;
+	return names;
+}
+
+function ensureCollectionInCache(collection: string): void {
+	if (cachedCollectionNames && !cachedCollectionNames.includes(collection)) {
+		cachedCollectionNames.push(collection);
 	}
 }
 
@@ -153,19 +191,27 @@ async function expandRecords<T>(
 
 	if (neededIds.size === 0) return records;
 
-	// Build lookup map from only the needed records.
-	// Records are keyed as "collection/id" so we can't do direct lookups by bare id.
-	// Use a cursor to scan and collect only what we need, stopping early when all found.
+	// Build lookup map using direct key lookups.
+	// IDB keys are "{collection}/{id}" but we only have bare ids.
+	// Use cached collection names (populated once, updated incrementally)
+	// to try direct db.get() for each needed ID.
 	const recordById = new Map<string, CachedRecord>();
-	const tx = db.transaction('records', 'readonly');
-	let cursor = await tx.store.openCursor();
-	while (cursor) {
-		const r = cursor.value as CachedRecord;
-		if (r._status !== 'deleted' && neededIds.has(r.id)) {
-			recordById.set(r.id, r);
-			if (recordById.size === neededIds.size) break; // found all, stop early
+	const knownCollections = await getKnownCollections(db);
+
+	if (knownCollections.length > 0) {
+		const lookupPromises: Promise<void>[] = [];
+		for (const id of neededIds) {
+			lookupPromises.push((async () => {
+				for (const col of knownCollections) {
+					const r = await db.get('records', `${col}/${id}`);
+					if (r && r._status !== 'deleted') {
+						recordById.set(r.id, r);
+						break;
+					}
+				}
+			})());
 		}
-		cursor = await cursor.continue();
+		await Promise.all(lookupPromises);
 	}
 
 	return records.map((record) => {
@@ -310,7 +356,7 @@ export function createParticipantGateway(participantId: string, projectId: strin
 		const db = await getDB();
 		await db.put('records', record);
 		await updatePendingCount();
-		notifyDataChange(collectionName);
+		notifyDataChange(collectionName, id, 'create');
 
 		return cleanRecord(record) as unknown as T;
 	}
@@ -340,7 +386,7 @@ export function createParticipantGateway(participantId: string, projectId: strin
 
 		await db.put('records', updated);
 		await updatePendingCount();
-		notifyDataChange(collectionName);
+		notifyDataChange(collectionName, id, 'update');
 
 		return cleanRecord(updated) as unknown as T;
 	}
@@ -405,12 +451,13 @@ export function createParticipantGateway(participantId: string, projectId: strin
 					changed = true;
 				}
 
-				if (changed) {
-					notifyDataChange(name);
-				}
+				// Always notify so live queries can clear their loading state,
+				// even if no records changed (e.g. already up-to-date)
+				notifyDataChange(name);
 			})
 			.catch((e) => {
-				// Silent fail for background fetches
+				// Still notify on failure so loading state clears
+				notifyDataChange(name);
 				console.debug(`Background fetch failed for ${name}:`, e);
 			});
 	}
@@ -449,7 +496,7 @@ export function createParticipantGateway(participantId: string, projectId: strin
 					_serverUpdated: record.updated as string
 				};
 				await db.put('records', cached);
-				notifyDataChange(name);
+				notifyDataChange(name, record.id as string, 'update');
 			})
 			.catch((e) => {
 				console.debug(`Background fetch one failed for ${name}/${id}:`, e);
@@ -487,7 +534,7 @@ export function createParticipantGateway(participantId: string, projectId: strin
 				const db = await getDB();
 				await db.put('records', record);
 				await updatePendingCount();
-				notifyDataChange(name);
+				notifyDataChange(name, id, 'create');
 
 				return cleanRecord(record) as unknown as T;
 			},
@@ -519,7 +566,7 @@ export function createParticipantGateway(participantId: string, projectId: strin
 
 				await db.put('records', updated);
 				await updatePendingCount();
-				notifyDataChange(name);
+				notifyDataChange(name, id, 'update');
 
 				return cleanRecord(updated) as unknown as T;
 			},
@@ -549,7 +596,7 @@ export function createParticipantGateway(participantId: string, projectId: strin
 				}
 
 				await updatePendingCount();
-				notifyDataChange(name);
+				notifyDataChange(name, id, 'delete');
 
 				return true;
 			},
@@ -717,13 +764,17 @@ export function createParticipantGateway(participantId: string, projectId: strin
 				let records = $state<T[]>([]);
 				let loading = $state(true);
 				let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+				// When true, initial background fetch is in progress -- keep loading=true
+				let pendingInitialFetch = false;
 
 				// Track this collection as having an active live query
 				registerLiveCollection(name);
 
 				async function readFromDB() {
+					const t0 = performance.now();
 					const db = await getDB();
 					const all = await db.getAllFromIndex('records', 'by_collection', name);
+					const t1 = performance.now();
 					const visible = all.filter((r) => r._status !== 'deleted');
 
 					const result = query(visible, {
@@ -738,22 +789,31 @@ export function createParticipantGateway(participantId: string, projectId: strin
 					} else {
 						processed = result.map((r) => cleanRecord(r)) as unknown as T[];
 					}
+					const t2 = performance.now();
 
 					records = processed;
-					loading = false;
+					if (!pendingInitialFetch) {
+						loading = false;
+					}
+					if (t2 - t0 > 5) {
+						console.log(`[LiveQuery:${name}] readFromDB: IDB ${(t1-t0).toFixed(1)}ms, process ${(t2-t1).toFixed(1)}ms, ${all.length} raw / ${processed.length} results`);
+					}
 				}
 
 				// Initial read from IndexedDB (skip on server -- no IndexedDB)
 				if (typeof window !== 'undefined') {
 					const priority = options?.priority ?? 'critical';
 					const scheduleRead = () => {
-						readFromDB();
-						// Fire one background fetch on setup if collection has no sync_metadata yet
 						(async () => {
 							const db = await getDB();
 							const meta = await db.get('sync_metadata', name);
-							if (!meta) {
+							if (!meta && navigator.onLine) {
+								// Fresh collection -- keep loading=true until background fetch completes
+								pendingInitialFetch = true;
+								await readFromDB();
 								backgroundFetchFullList(name, options);
+							} else {
+								readFromDB();
 							}
 						})();
 					};
@@ -763,13 +823,84 @@ export function createParticipantGateway(participantId: string, projectId: strin
 					} else if (priority === 'normal') {
 						queueMicrotask(scheduleRead);
 					} else {
-						setTimeout(scheduleRead, 0);
+						// 100ms delay lets critical/normal queries run first
+						setTimeout(scheduleRead, 100);
+					}
+				}
+
+				// Incremental single-record patch: read one record from IDB,
+				// update it in the existing array, and re-expand only that record.
+				// Avoids re-reading all 3218 records for a single-record change.
+				async function patchSingleRecord(recordId: string, action: string) {
+					const db = await getDB();
+
+					if (action === 'delete') {
+						const idx = records.findIndex((r: any) => r.id === recordId);
+						if (idx !== -1) {
+							records = [...records.slice(0, idx), ...records.slice(idx + 1)] as T[];
+						}
+						return;
+					}
+
+					const cached = await db.get('records', `${name}/${recordId}`);
+					if (!cached || cached._status === 'deleted') {
+						// Record deleted or not found -- remove from array
+						const idx = records.findIndex((r: any) => r.id === recordId);
+						if (idx !== -1) {
+							records = [...records.slice(0, idx), ...records.slice(idx + 1)] as T[];
+						}
+						return;
+					}
+
+					// Check if record passes the filter
+					const [filtered] = query([cached], { filter: options?.filter });
+					if (!filtered) {
+						// Record no longer matches filter -- remove if present
+						const idx = records.findIndex((r: any) => r.id === recordId);
+						if (idx !== -1) {
+							records = [...records.slice(0, idx), ...records.slice(idx + 1)] as T[];
+						}
+						return;
+					}
+
+					// Expand if needed
+					let processed: T;
+					if (options?.expand) {
+						const [expanded] = await expandRecords([filtered], options.expand);
+						processed = cleanRecord(expanded as unknown as CachedRecord) as unknown as T;
+					} else {
+						processed = cleanRecord(filtered) as unknown as T;
+					}
+
+					// Patch or append
+					const idx = records.findIndex((r: any) => r.id === recordId);
+					if (idx !== -1) {
+						const updated = [...records];
+						updated[idx] = processed;
+						records = updated as T[];
+					} else {
+						// New record matching filter -- append (sort will be off, but
+						// next full readFromDB on reconnect/focus will fix order)
+						records = [...records, processed] as T[];
 					}
 				}
 
 				// Subscribe to data changes for this collection
-				const unsubscribe = onDataChange((collection) => {
-					if (collection !== name) return;
+				const unsubscribe = onDataChange((detail) => {
+					if (detail.collection !== name) return;
+					// Initial background fetch completed -- allow loading to clear
+					pendingInitialFetch = false;
+
+					// Single-record change: patch incrementally (fast)
+					if (detail.recordId && detail.action) {
+						if (debounceTimer) clearTimeout(debounceTimer);
+						debounceTimer = setTimeout(() => {
+							patchSingleRecord(detail.recordId!, detail.action!);
+						}, 16);
+						return;
+					}
+
+					// Bulk change: full re-read (debounced)
 					if (debounceTimer) clearTimeout(debounceTimer);
 					debounceTimer = setTimeout(() => {
 						readFromDB();
@@ -827,8 +958,8 @@ export function createParticipantGateway(participantId: string, projectId: strin
 				}
 
 				// Subscribe to data changes
-				const unsubscribe = onDataChange((collection) => {
-					if (collection !== name) return;
+				const unsubscribe = onDataChange((detail) => {
+					if (detail.collection !== name) return;
 					if (debounceTimer) clearTimeout(debounceTimer);
 					debounceTimer = setTimeout(() => {
 						readFromDB();
