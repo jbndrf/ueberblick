@@ -3,19 +3,17 @@
 	import type { Map as LeafletMap, TileLayer, Marker as LeafletMarker, LayerGroup } from 'leaflet';
 	import { createCachedTileLayer } from '$lib/components/map/cached-tile-layer';
 	import {
-		buildIndex,
 		markersToFeatures,
 		workflowInstancesToFeatures,
 		getMapBBox,
 		isCluster,
 		getFeatureKey,
-		reduceCounts,
-		mapMarkerProps,
-		mapWorkflowInstanceProps,
 		type MarkerProperties,
 		type WorkflowInstanceProperties,
 		type ClusterFeature,
-		type ClusterDetail
+		type ClusterDetail,
+		type EnhancedClusterDetail,
+		type ClusterLeaf
 	} from '$lib/components/map/supercluster-manager';
 	import {
 		generateDonutSvg,
@@ -23,6 +21,7 @@
 		donutCacheKey,
 		type VisualKeyRegistry
 	} from '$lib/components/map/donut-cluster-icon';
+	import { ClusterClient } from '$lib/workers/cluster-client';
 	import type Supercluster from 'supercluster';
 
 	interface MapLayer {
@@ -134,9 +133,11 @@
 		visualKeyRegistry?: VisualKeyRegistry;
 		onMarkerClick?: (marker: MapMarker) => void;
 		onWorkflowInstanceClick?: (instance: WorkflowInstance) => void;
-		onClusterClick?: (detail: ClusterDetail) => void;
+		onClusterClick?: (detail: EnhancedClusterDetail) => void;
 		onMapReady?: (map: LeafletMap) => void;
 		onMapClick?: () => void;
+		/** When set, bypass clustering and show only these instances as individual markers */
+		drillDownInstanceIds?: Set<string> | null;
 	}
 
 	let {
@@ -157,7 +158,8 @@
 		onWorkflowInstanceClick,
 		onClusterClick,
 		onMapReady,
-		onMapClick
+		onMapClick,
+		drillDownInstanceIds = null
 	}: Props = $props();
 
 	/** Parse a field value that might be a JSON array into individual values */
@@ -198,17 +200,20 @@
 	let currentBaseTileLayer: TileLayer | null = null;
 	let overlayTileLayers: Map<string, TileLayer> = new Map();
 
-	// Supercluster indexes
-	let markerIndex: Supercluster<MarkerProperties, Supercluster.AnyProps> | null = null;
-	let workflowInstanceIndex: Supercluster<WorkflowInstanceProperties, Supercluster.AnyProps> | null = null;
+	// Supercluster web worker client
+	let clusterClient: ClusterClient | null = null;
+	let markerIndexReady = false;
+	let workflowInstanceIndexReady = false;
 
 	// Layer groups for rendered markers (replace cluster groups)
 	let markerLayerGroup: LayerGroup | null = null;
 	let workflowInstanceLayerGroup: LayerGroup | null = null;
 
 	// Currently rendered features on the map, keyed by feature key
-	let renderedMarkers: Map<string, LeafletMarker> = new Map();
-	let renderedWorkflowInstances: Map<string, LeafletMarker> = new Map();
+	// signature tracks cluster composition so we can detect stale icons
+	interface RenderedEntry { marker: LeafletMarker; signature?: string }
+	let renderedMarkers: Map<string, RenderedEntry> = new Map();
+	let renderedWorkflowInstances: Map<string, RenderedEntry> = new Map();
 
 	// Lookup maps for click handlers (point ID -> original data)
 	let markerDataMap: Map<string, MapMarker> = new Map();
@@ -516,6 +521,11 @@
 		});
 	}
 
+	// Signature for detecting cluster composition changes (includes keys + values)
+	function clusterSignature(counts: Record<string, number>, totalCount: number): string {
+		return Object.keys(counts).sort().map(k => `${k}:${counts[k]}`).join('|') + `#${totalCount}`;
+	}
+
 	// Create a donut cluster icon from aggregated composition data
 	function createDonutClusterIcon(L: typeof import('leaflet'), counts: Record<string, number>, totalCount: number) {
 		const cacheKey = donutCacheKey(counts, totalCount);
@@ -541,24 +551,20 @@
 	let lastTappedClusterId: number | null = null;
 
 	/**
-	 * Render the visible clusters/points from a Supercluster index onto a Leaflet LayerGroup.
+	 * Render the visible clusters/points onto a Leaflet LayerGroup from a pre-fetched features array.
 	 * Diffs against currently rendered features to minimize DOM changes.
 	 * Single tap on cluster -> detail sheet; double tap -> zoom to resolve.
 	 */
 	function renderFeatures<P extends MarkerProperties | WorkflowInstanceProperties>(
 		L: typeof import('leaflet'),
-		index: Supercluster<P, Supercluster.AnyProps>,
+		features: Array<Supercluster.ClusterFeature<Supercluster.AnyProps> | Supercluster.PointFeature<P>>,
 		layerGroup: LayerGroup,
-		rendered: Map<string, LeafletMarker>,
+		rendered: Map<string, RenderedEntry>,
 		createIcon: (feature: Supercluster.PointFeature<P>) => any,
 		onClick: ((feature: Supercluster.PointFeature<P>) => void) | undefined,
 		clusterType: 'marker' | 'workflowInstance'
 	) {
 		if (!map) return;
-
-		const bbox = getMapBBox(map);
-		const zoom = Math.floor(map.getZoom());
-		const features = index.getClusters(bbox, zoom);
 
 		// Build set of feature keys that should be visible
 		const visibleKeys = new Set<string>();
@@ -567,26 +573,48 @@
 		}
 
 		// Remove rendered features that are no longer visible
-		for (const [key, leafletMarker] of rendered) {
+		for (const [key, entry] of rendered) {
 			if (!visibleKeys.has(key)) {
-				layerGroup.removeLayer(leafletMarker);
+				layerGroup.removeLayer(entry.marker);
 				rendered.delete(key);
 			}
 		}
 
-		// Add new features
+		// Add or update features
 		for (const feature of features) {
 			const key = getFeatureKey(feature);
-			if (rendered.has(key)) continue;
+			const existing = rendered.get(key);
+
+			if (existing) {
+				// For clusters, check if composition changed and update icon in-place
+				if (isCluster(feature)) {
+					const counts: Record<string, number> = feature.properties._counts || {};
+					const count = feature.properties.point_count;
+					const sig = clusterSignature(counts, count);
+					if (sig !== existing.signature) {
+						existing.marker.setIcon(createDonutClusterIcon(L, counts, count));
+						existing.signature = sig;
+					}
+				} else {
+					const [lng, lat] = feature.geometry.coordinates;
+					const current = existing.marker.getLatLng();
+					if (current.lat !== lat || current.lng !== lng) {
+						existing.marker.setLatLng([lat, lng]);
+					}
+				}
+				continue;
+			}
 
 			const [lng, lat] = feature.geometry.coordinates;
 			let icon: any;
+			let sig: string | undefined;
 			let clickHandler: (() => void) | undefined;
 
 			if (isCluster(feature)) {
 				const count = feature.properties.point_count;
 				const counts: Record<string, number> = feature.properties._counts || {};
 				icon = createDonutClusterIcon(L, counts, count);
+				sig = clusterSignature(counts, count);
 
 				// Double-tap: zoom in; Single-tap: show detail sheet
 				const clusterId = feature.properties.cluster_id;
@@ -596,18 +624,20 @@
 						clearTimeout(clusterTapTimer);
 						clusterTapTimer = null;
 						lastTappedClusterId = null;
-						// Get all leaf points and fit bounds to show them individually
-						const leaves = index.getLeaves(clusterId, Infinity);
-						if (leaves.length > 0 && map) {
-							const bounds = L.latLngBounds(
-								leaves.map(l => L.latLng(l.geometry.coordinates[1], l.geometry.coordinates[0]))
-							);
-							map.flyToBounds(bounds, { padding: [40, 40], maxZoom: getGlobalMaxZoom() });
-						} else {
-							// Fallback: just zoom to expansion level
-							const expansionZoom = index.getClusterExpansionZoom(clusterId);
-							map?.flyTo([lat, lng], expansionZoom);
-						}
+						// Get all leaf points and fit bounds to show them individually (async via worker)
+						clusterClient?.getLeaves(clusterType, clusterId).then(leaves => {
+							if (leaves.length > 0 && map) {
+								const bounds = L.latLngBounds(
+									leaves.map((l: any) => L.latLng(l.geometry.coordinates[1], l.geometry.coordinates[0]))
+								);
+								map.flyToBounds(bounds, { padding: [40, 40], maxZoom: getGlobalMaxZoom() });
+							} else {
+								// Fallback: just zoom to expansion level
+								clusterClient?.getClusterExpansionZoom(clusterType, clusterId).then(expansionZoom => {
+									map?.flyTo([lat, lng], expansionZoom);
+								});
+							}
+						});
 					} else {
 						// First tap -- wait to see if double tap follows
 						if (clusterTapTimer !== null) clearTimeout(clusterTapTimer);
@@ -615,12 +645,28 @@
 						clusterTapTimer = setTimeout(() => {
 							clusterTapTimer = null;
 							lastTappedClusterId = null;
-							// Single tap: emit cluster detail
-							onClusterClick?.({
-								center: [lat, lng],
-								totalCount: count,
-								counts,
-								clusterType
+							// Single tap: emit cluster detail with leaves (async via worker)
+							clusterClient?.getLeaves(clusterType, clusterId).then(rawLeaves => {
+								const leaves: ClusterLeaf[] = rawLeaves
+									.filter((l: any) => l.properties.type === 'workflowInstance')
+									.map((l: any) => {
+										const p = l.properties as unknown as WorkflowInstanceProperties;
+										return {
+											id: p.id,
+											workflowId: p.workflowId,
+											currentStageId: p.currentStageId,
+											filterValue: p.filterValue,
+											coordinates: l.geometry.coordinates as [number, number]
+										};
+									});
+								onClusterClick?.({
+									center: [lat, lng],
+									totalCount: count,
+									counts,
+									clusterType,
+									clusterId,
+									leaves
+								});
 							});
 						}, 300);
 					}
@@ -650,7 +696,7 @@
 				});
 			}
 			layerGroup.addLayer(leafletMarker);
-			rendered.set(key, leafletMarker);
+			rendered.set(key, { marker: leafletMarker, signature: sig });
 		}
 	}
 
@@ -667,53 +713,106 @@
 	}
 
 	/** Re-render markers and workflow instances for the current viewport */
-	function updateViewport() {
-		if (!leaflet || !map || !markerLayerGroup || !workflowInstanceLayerGroup) return;
+	async function updateViewport() {
+		if (!leaflet || !map || !markerLayerGroup || !workflowInstanceLayerGroup || !clusterClient) return;
 
-		if (markerIndex) {
-			renderFeatures(
-				leaflet,
-				markerIndex,
-				markerLayerGroup,
-				renderedMarkers,
-				(feature) => {
-					const marker = markerDataMap.get(feature.properties.id);
-					const category = marker?.expand?.category_id;
-					return createMarkerIcon(leaflet!, category);
-				},
-				onMarkerClick
-					? (feature) => {
+		const bbox = getMapBBox(map) as [number, number, number, number];
+		const zoom = Math.floor(map.getZoom());
+
+		if (markerIndexReady) {
+			const features = await clusterClient.getClusters('marker', bbox, zoom);
+			if (features) {
+				renderFeatures(
+					leaflet,
+					features,
+					markerLayerGroup,
+					renderedMarkers,
+					(feature) => {
 						const marker = markerDataMap.get(feature.properties.id);
-						if (marker) onMarkerClick!(marker);
-					}
-					: undefined,
-				'marker'
-			);
+						const category = marker?.expand?.category_id;
+						return createMarkerIcon(leaflet!, category);
+					},
+					onMarkerClick
+						? (feature) => {
+							const marker = markerDataMap.get(feature.properties.id);
+							if (marker) onMarkerClick!(marker);
+						}
+						: undefined,
+					'marker'
+				);
+			}
 		}
 
-		if (workflowInstanceIndex) {
-			renderFeatures(
-				leaflet,
-				workflowInstanceIndex,
-				workflowInstanceLayerGroup,
-				renderedWorkflowInstances,
-				(feature) => {
-					const instance = workflowInstanceDataMap.get(feature.properties.id);
-					const workflow = instance?.expand?.workflow_id;
-					return createWorkflowInstanceIcon(leaflet!, workflow, instance!);
-				},
-				onWorkflowInstanceClick
-					? (feature) => {
+		if (drillDownInstanceIds && drillDownInstanceIds.size > 0) {
+			renderDrillDownFeatures(leaflet, drillDownInstanceIds);
+		} else if (workflowInstanceIndexReady) {
+			const features = await clusterClient.getClusters('workflowInstance', bbox, zoom);
+			if (features) {
+				renderFeatures(
+					leaflet,
+					features,
+					workflowInstanceLayerGroup,
+					renderedWorkflowInstances,
+					(feature) => {
 						const instance = workflowInstanceDataMap.get(feature.properties.id);
-						if (instance) onWorkflowInstanceClick!(instance);
-					}
-					: undefined,
-				'workflowInstance'
-			);
+						const workflow = instance?.expand?.workflow_id;
+						return createWorkflowInstanceIcon(leaflet!, workflow, instance!);
+					},
+					onWorkflowInstanceClick
+						? (feature) => {
+							const instance = workflowInstanceDataMap.get(feature.properties.id);
+							if (instance) onWorkflowInstanceClick!(instance);
+						}
+						: undefined,
+					'workflowInstance'
+				);
+			}
+		}
+	}
+
+	/** Render only specific instances as individual unclustered markers (drill-down mode) */
+	function renderDrillDownFeatures(L: typeof import('leaflet'), instanceIds: Set<string>) {
+		if (!map || !workflowInstanceLayerGroup) return;
+
+		// Build set of keys that should be visible
+		const targetKeys = new Set<string>();
+		for (const id of instanceIds) {
+			targetKeys.add(`point_${id}`);
+		}
+
+		// Remove markers not in the drill-down set
+		for (const [key, entry] of renderedWorkflowInstances) {
+			if (!targetKeys.has(key)) {
+				workflowInstanceLayerGroup.removeLayer(entry.marker);
+				renderedWorkflowInstances.delete(key);
+			}
+		}
+
+		// Add missing drill-down markers
+		for (const instanceId of instanceIds) {
+			const key = `point_${instanceId}`;
+			if (renderedWorkflowInstances.has(key)) continue;
+
+			const instance = workflowInstanceDataMap.get(instanceId);
+			if (!instance?.location?.lat || !instance?.location?.lon) continue;
+
+			const workflow = instance.expand?.workflow_id;
+			const icon = createWorkflowInstanceIcon(L, workflow, instance);
+
+			const leafletMarker = L.marker([instance.location.lat, instance.location.lon], { icon });
+			if (onWorkflowInstanceClick) {
+				leafletMarker.on('click', () => onWorkflowInstanceClick!(instance));
+			}
+
+			workflowInstanceLayerGroup.addLayer(leafletMarker);
+			renderedWorkflowInstances.set(key, { marker: leafletMarker });
 		}
 	}
 
 	onMount(async () => {
+		// Initialize Supercluster web worker (off main thread clustering)
+		clusterClient = new ClusterClient();
+
 		// Dynamic import to avoid SSR issues
 		const L = await import('leaflet');
 
@@ -776,6 +875,26 @@
 		}
 	});
 
+	// Apply default center/zoom when mapSettings arrives after mount.
+	// On first login, mapSettings is undefined at mount (data not yet fetched from server),
+	// so the map starts at the hardcoded default. This one-shot effect applies the real
+	// settings once they load, then never overrides user-controlled position again.
+	let initialSettingsApplied = false;
+	$effect(() => {
+		if (map && mapSettings && !initialSettingsApplied) {
+			const lat = mapSettings.center_lat;
+			const lon = mapSettings.center_lon;
+			const zoom = mapSettings.default_zoom;
+			if (lat != null && lon != null) {
+				map.setView([lat, lon], zoom ?? map.getZoom());
+				initialSettingsApplied = true;
+			}
+			if (mapSettings.min_zoom != null) {
+				map.setMinZoom(mapSettings.min_zoom);
+			}
+		}
+	});
+
 	// React to layer selection changes
 	$effect(() => {
 		if (leaflet && map) {
@@ -804,17 +923,17 @@
 	let lastMarkerFingerprint = '';
 	let lastInstanceFingerprint = '';
 
-	// React to marker data changes: rebuild Supercluster index and re-render (debounced)
+	// React to marker data changes: rebuild Supercluster index in worker and re-render (debounced)
 	let markerRebuildTimer: ReturnType<typeof setTimeout> | null = null;
 	$effect(() => {
 		const markersToIndex = visibleMarkers;
-		if (!leaflet || !map) return;
+		if (!leaflet || !map || !clusterClient) return;
 
 		if (markerRebuildTimer) clearTimeout(markerRebuildTimer);
-		markerRebuildTimer = setTimeout(() => {
+		markerRebuildTimer = setTimeout(async () => {
 			// Skip rebuild if visible markers haven't actually changed
 			const fp = fingerprint(markersToIndex);
-			if (fp === lastMarkerFingerprint && markerIndex) {
+			if (fp === lastMarkerFingerprint && markerIndexReady) {
 				return;
 			}
 			lastMarkerFingerprint = fp;
@@ -825,35 +944,28 @@
 				markerDataMap.set(m.id, m);
 			}
 
-			// Build fresh index from visible markers (with composition aggregation)
+			// Build fresh index in worker (off main thread)
 			const features = markersToFeatures(markersToIndex);
-			markerIndex = buildIndex(features, {
-				radius: 80,
-				maxZoom: getGlobalMaxZoom(),
-				map: mapMarkerProps,
-				reduce: reduceCounts
-			});
+			await clusterClient!.load('marker', features, 80, getGlobalMaxZoom());
+			markerIndexReady = true;
+			iconCache.clear();
 
-			// Clear currently rendered markers and re-render
-			if (markerLayerGroup) {
-				markerLayerGroup.clearLayers();
-				renderedMarkers.clear();
-			}
+			// Re-render via diff (renderFeatures removes stale, adds new)
 			updateViewport();
 		}, 200);
 	});
 
-	// React to workflow instance data changes: rebuild index and re-render (debounced)
+	// React to workflow instance data changes: rebuild index in worker and re-render (debounced)
 	let instanceRebuildTimer: ReturnType<typeof setTimeout> | null = null;
 	$effect(() => {
 		const instancesToIndex = visibleWorkflowInstances;
-		if (!leaflet || !map) return;
+		if (!leaflet || !map || !clusterClient) return;
 
 		if (instanceRebuildTimer) clearTimeout(instanceRebuildTimer);
-		instanceRebuildTimer = setTimeout(() => {
+		instanceRebuildTimer = setTimeout(async () => {
 			// Skip rebuild if visible instances haven't actually changed
 			const fp = fingerprint(instancesToIndex);
-			if (fp === lastInstanceFingerprint && workflowInstanceIndex) {
+			if (fp === lastInstanceFingerprint && workflowInstanceIndexReady) {
 				return;
 			}
 			lastInstanceFingerprint = fp;
@@ -864,22 +976,23 @@
 				workflowInstanceDataMap.set(i.id, i);
 			}
 
-			// Build fresh index from visible instances (with composition aggregation)
+			// Build fresh index in worker (off main thread)
 			const features = workflowInstancesToFeatures(instancesToIndex, filterableValues);
-			workflowInstanceIndex = buildIndex(features, {
-				radius: 80,
-				maxZoom: getGlobalMaxZoom(),
-				map: mapWorkflowInstanceProps,
-				reduce: reduceCounts
-			});
+			await clusterClient!.load('workflowInstance', features, 80, getGlobalMaxZoom());
+			workflowInstanceIndexReady = true;
+			iconCache.clear();
 
-			// Clear currently rendered instances and re-render
-			if (workflowInstanceLayerGroup) {
-				workflowInstanceLayerGroup.clearLayers();
-				renderedWorkflowInstances.clear();
-			}
+			// Re-render via diff (renderFeatures removes stale, adds new)
 			updateViewport();
 		}, 200);
+	});
+
+	// React to drill-down state changes: re-render immediately
+	$effect(() => {
+		const _ids = drillDownInstanceIds;
+		if (leaflet && map) {
+			updateViewport();
+		}
 	});
 
 	onDestroy(() => {
@@ -904,6 +1017,10 @@
 			map.remove();
 			map = null;
 		}
+
+		// Terminate web worker
+		clusterClient?.destroy();
+		clusterClient = null;
 
 		// Clear caches
 		iconCache.clear();

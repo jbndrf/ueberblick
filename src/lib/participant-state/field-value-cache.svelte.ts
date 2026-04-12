@@ -46,8 +46,7 @@ export class FieldValueCache {
 	async init(): Promise<void> {
 		await this.fullReload();
 
-		// If IDB had no sync_metadata for this collection (fresh login),
-		// keep loading=true until the background fetch from PocketBase completes.
+		// If fresh login, start paginated fetch -- keep loading=true until done
 		let needsBackgroundFetch = false;
 		if (typeof window !== 'undefined' && navigator.onLine) {
 			const db = await getDB();
@@ -77,8 +76,8 @@ export class FieldValueCache {
 
 	/**
 	 * Fetch all field values from PocketBase and store in IDB.
-	 * Uses paginated requests so `loadedCount` updates after each page,
-	 * giving the user visible progress in the header.
+	 * Fetches page-by-page, writing each page in a single IDB transaction
+	 * and updating the in-memory store incrementally (no full IDB re-read).
 	 */
 	private backgroundFetchAll(): void {
 		const pb = getPocketBase();
@@ -86,17 +85,29 @@ export class FieldValueCache {
 
 		(async () => {
 			try {
-				const db = await getDB();
-				let changed = false;
 				let page = 1;
+				let totalPages = 1;
 				let totalFetched = 0;
+				let latestTimestamp = '';
 
-				while (true) {
+				do {
 					const result = await pb.collection(COLLECTION).getList(page, PAGE_SIZE);
+					totalPages = result.totalPages;
+
+					// Batch write this page into IDB in a single transaction
+					const db = await getDB();
+					const tx = db.transaction('records', 'readwrite');
+					const store = tx.objectStore('records');
+					let changed = false;
 
 					for (const record of result.items) {
 						const key = `${COLLECTION}/${record.id}`;
-						const existing = await db.get('records', key);
+						const existing = await store.get(key);
+
+						// Track latest timestamp for sync_metadata
+						if ((record.updated as string) > latestTimestamp) {
+							latestTimestamp = record.updated as string;
+						}
 
 						if (existing && existing._status !== 'unchanged') continue;
 						if (existing && existing.updated === record.updated) continue;
@@ -109,20 +120,39 @@ export class FieldValueCache {
 							_status: 'unchanged',
 							_serverUpdated: record.updated as string
 						};
-						await db.put('records', cached);
+						store.put(cached);
 						changed = true;
+					}
+
+					await tx.done;
+
+					// Update in-memory store directly (avoid full IDB re-read)
+					if (changed) {
+						for (const record of result.items) {
+							this.store.set(record.id as string, cleanRecord({
+								...record,
+								_key: `${COLLECTION}/${record.id}`,
+								_collection: COLLECTION,
+								_status: 'unchanged'
+							} as CachedRecord));
+						}
+						this.rebuildIndexes();
 					}
 
 					totalFetched += result.items.length;
 					this.loadedCount = totalFetched;
-
-					if (page >= result.totalPages) break;
 					page++;
+				} while (page <= totalPages);
+
+				// Write sync_metadata so page refresh skips re-fetching
+				if (latestTimestamp) {
+					const db = await getDB();
+					await db.put('sync_metadata', {
+						collection: COLLECTION,
+						lastSyncTimestamp: latestTimestamp
+					});
 				}
 
-				if (changed) {
-					await this.fullReload();
-				}
 				this.loading = false;
 			} catch (e) {
 				console.debug('FieldValueCache background fetch failed:', e);

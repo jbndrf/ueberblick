@@ -241,9 +241,11 @@ export async function resetAllParticipantState(): Promise<void> {
 	// 2. Clear the offline session cache (belt-and-suspenders, clearAllData already clears records)
 	try { await clearCachedSession(); } catch { /* DB may already be cleared */ }
 
-	// 3. Clear localStorage participant preferences
+	// 3. Clear localStorage participant preferences + the last-seen participant
+	// id used by the layout to detect cross-reload account switches.
 	if (typeof window !== 'undefined') {
 		localStorage.removeItem(FULL_LOCAL_COPY_KEY);
+		try { localStorage.removeItem('ueberblick_last_participant_id'); } catch { /* storage disabled */ }
 	}
 
 	// 4. Clear Service Worker caches (stale API responses and pages)

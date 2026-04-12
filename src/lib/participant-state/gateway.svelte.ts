@@ -43,6 +43,7 @@ interface ListResult<T> {
 export interface LiveQuery<T = Record<string, unknown>> {
 	readonly records: T[];
 	readonly loading: boolean;
+	readonly fetchProgress: { loaded: number; total: number } | null;
 	destroy(): void;
 }
 
@@ -395,11 +396,14 @@ export function createParticipantGateway(participantId: string, projectId: strin
 	// Background Fetch (stale-while-revalidate pattern)
 	// =========================================================================
 
+	type PageCallback = (loaded: number, total: number) => void;
+
 	/**
 	 * Fetch from PocketBase in background and update IndexedDB if data changed.
 	 * This is fire-and-forget -- errors are logged but not thrown.
+	 * Fetches page-by-page so data appears progressively on the map.
 	 */
-	function backgroundFetchFullList(name: string, options?: ListOptions): void {
+	function backgroundFetchFullList(name: string, options?: ListOptions, onPage?: PageCallback): void {
 		if (typeof window === 'undefined' || !navigator.onLine) return;
 
 		// Skip if a live query is active for this collection and we already have sync data.
@@ -407,32 +411,48 @@ export function createParticipantGateway(participantId: string, projectId: strin
 		if (liveCollections.has(name)) {
 			getDB().then(db => db.get('sync_metadata', name)).then(meta => {
 				if (meta) return; // Already synced, live query handles updates
-				doBackgroundFetchFullList(name, options);
+				doBackgroundFetchFullList(name, options, onPage);
 			});
 			return;
 		}
 
-		doBackgroundFetchFullList(name, options);
+		doBackgroundFetchFullList(name, options, onPage);
 	}
 
-	function doBackgroundFetchFullList(name: string, options?: ListOptions): void {
-
+	async function doBackgroundFetchFullList(name: string, options?: ListOptions, onPage?: PageCallback): Promise<void> {
 		const pb = getPocketBase();
-		pb.collection(name)
-			.getFullList(toPbOptions(options))
-			.then(async (serverRecords) => {
+		const perPage = 500;
+		let page = 1;
+		let totalPages = 1;
+		let latestTimestamp = '';
+		const t0 = performance.now();
+
+		try {
+			do {
+				const result = await pb.collection(name).getList(page, perPage, toPbOptions(options));
+				totalPages = result.totalPages;
+				console.log(`[BgFetch:${name}] page ${page}/${totalPages}: ${result.items.length} items (total: ${result.totalItems})`);
+
+				// Batch write this page into IDB in a single transaction
 				const db = await getDB();
+				const tx = db.transaction('records', 'readwrite');
+				const store = tx.objectStore('records');
 				let changed = false;
 
-				for (const record of serverRecords) {
+				for (const record of result.items) {
 					const key = `${name}/${record.id}`;
-					const existing = await db.get('records', key);
+					const existing = await store.get(key);
+
+					// Track latest timestamp for sync_metadata
+					if ((record.updated as string) > latestTimestamp) {
+						latestTimestamp = record.updated as string;
+					}
 
 					// Don't overwrite local modifications, but update _serverUpdated
 					if (existing && existing._status !== 'unchanged') {
 						if (record.updated && existing._serverUpdated !== (record.updated as string)) {
 							existing._serverUpdated = record.updated as string;
-							await db.put('records', existing);
+							store.put(existing);
 						}
 						continue;
 					}
@@ -447,19 +467,42 @@ export function createParticipantGateway(participantId: string, projectId: strin
 						_status: 'unchanged',
 						_serverUpdated: record.updated as string
 					};
-					await db.put('records', cached);
+					store.put(cached);
 					changed = true;
 				}
 
-				// Always notify so live queries can clear their loading state,
-				// even if no records changed (e.g. already up-to-date)
-				notifyDataChange(name);
-			})
-			.catch((e) => {
-				// Still notify on failure so loading state clears
-				notifyDataChange(name);
-				console.debug(`Background fetch failed for ${name}:`, e);
-			});
+				await tx.done;
+
+				// Notify after each page so live queries re-read from IDB
+				// and markers appear progressively on the map
+				if (changed) {
+					console.log(`[BgFetch:${name}] page ${page} changed, notifying`);
+					notifyDataChange(name);
+				}
+
+				onPage?.(Math.min(page * perPage, result.totalItems), result.totalItems);
+				page++;
+			} while (page <= totalPages);
+
+			// Write sync_metadata so subsequent page refreshes skip the background fetch
+			// and delta sync can use lastSyncTimestamp for efficient updates
+			if (latestTimestamp) {
+				const db = await getDB();
+				await db.put('sync_metadata', {
+					collection: name,
+					lastSyncTimestamp: latestTimestamp
+				});
+			}
+
+			console.log(`[BgFetch:${name}] complete in ${(performance.now() - t0).toFixed(0)}ms`);
+			// Final notification ensures loading state clears even if last page had no changes
+			notifyDataChange(name);
+			onPage?.(0, 0); // Signal completion (0,0 = done)
+		} catch (e) {
+			notifyDataChange(name);
+			onPage?.(0, 0);
+			console.debug(`Background fetch failed for ${name}:`, e);
+		}
 	}
 
 	/**
@@ -763,9 +806,8 @@ export function createParticipantGateway(participantId: string, projectId: strin
 			live(options?: ListOptions): LiveQuery<T> {
 				let records = $state<T[]>([]);
 				let loading = $state(true);
+				let fetchProgress = $state<{ loaded: number; total: number } | null>(null);
 				let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-				// When true, initial background fetch is in progress -- keep loading=true
-				let pendingInitialFetch = false;
 
 				// Track this collection as having an active live query
 				registerLiveCollection(name);
@@ -792,9 +834,7 @@ export function createParticipantGateway(participantId: string, projectId: strin
 					const t2 = performance.now();
 
 					records = processed;
-					if (!pendingInitialFetch) {
-						loading = false;
-					}
+					loading = false;
 					if (t2 - t0 > 5) {
 						console.log(`[LiveQuery:${name}] readFromDB: IDB ${(t1-t0).toFixed(1)}ms, process ${(t2-t1).toFixed(1)}ms, ${all.length} raw / ${processed.length} results`);
 					}
@@ -807,13 +847,20 @@ export function createParticipantGateway(participantId: string, projectId: strin
 						(async () => {
 							const db = await getDB();
 							const meta = await db.get('sync_metadata', name);
+							// Always read from IDB first (may be empty on fresh login, that's OK)
+							await readFromDB();
+							// If fresh collection, start paginated fetch -- data arrives progressively
 							if (!meta && navigator.onLine) {
-								// Fresh collection -- keep loading=true until background fetch completes
-								pendingInitialFetch = true;
-								await readFromDB();
-								backgroundFetchFullList(name, options);
-							} else {
-								readFromDB();
+								// Set progress immediately so consumers know a fetch is in flight
+								fetchProgress = { loaded: 0, total: 0 };
+								backgroundFetchFullList(name, options, (loaded, total) => {
+									if (loaded === 0 && total === 0) {
+										// Signal completion
+										fetchProgress = null;
+									} else {
+										fetchProgress = { loaded, total };
+									}
+								});
 							}
 						})();
 					};
@@ -888,8 +935,6 @@ export function createParticipantGateway(participantId: string, projectId: strin
 				// Subscribe to data changes for this collection
 				const unsubscribe = onDataChange((detail) => {
 					if (detail.collection !== name) return;
-					// Initial background fetch completed -- allow loading to clear
-					pendingInitialFetch = false;
 
 					// Single-record change: patch incrementally (fast)
 					if (detail.recordId && detail.action) {
@@ -903,6 +948,7 @@ export function createParticipantGateway(participantId: string, projectId: strin
 					// Bulk change: full re-read (debounced)
 					if (debounceTimer) clearTimeout(debounceTimer);
 					debounceTimer = setTimeout(() => {
+						console.log(`[LiveQuery:${name}] bulk re-read triggered`);
 						readFromDB();
 					}, 100);
 				});
@@ -910,6 +956,7 @@ export function createParticipantGateway(participantId: string, projectId: strin
 				return {
 					get records() { return records; },
 					get loading() { return loading; },
+					get fetchProgress() { return fetchProgress; },
 					destroy() {
 						unregisterLiveCollection(name);
 						unsubscribe();

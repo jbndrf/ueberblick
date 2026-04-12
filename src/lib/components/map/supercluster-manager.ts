@@ -1,5 +1,5 @@
-import Supercluster from 'supercluster';
-import type { BBox, Feature, Point } from 'geojson';
+import type Supercluster from 'supercluster';
+import type { BBox } from 'geojson';
 
 export interface MarkerProperties {
 	type: 'marker';
@@ -29,51 +29,39 @@ export interface ClusterDetail {
 	clusterType: 'marker' | 'workflowInstance';
 }
 
-/** Shared reduce function: merges _counts frequency maps */
-export function reduceCounts(accumulated: any, mapped: any): void {
-	if (!mapped._counts) return;
-	if (!accumulated._counts) accumulated._counts = {};
-	for (const key of Object.keys(mapped._counts)) {
-		accumulated._counts[key] = (accumulated._counts[key] || 0) + mapped._counts[key];
-	}
+/** A single leaf point extracted from a cluster */
+export interface ClusterLeaf {
+	id: string;
+	workflowId: string;
+	currentStageId?: string;
+	filterValue?: string;
+	coordinates: [number, number]; // [lng, lat]
 }
 
-/** Map function for marker features: produces visual key by category */
-export function mapMarkerProps(props: MarkerProperties): { _counts: Record<string, number> } {
-	return { _counts: { [`cat:${props.categoryId}`]: 1 } };
+/** Enhanced cluster detail with leaf data for grouped breakdown */
+export interface EnhancedClusterDetail extends ClusterDetail {
+	clusterId: number;
+	leaves: ClusterLeaf[];
 }
 
-/** Map function for workflow instance features: produces visual key by filter value > stage > workflow */
-export function mapWorkflowInstanceProps(props: WorkflowInstanceProperties): { _counts: Record<string, number> } {
-	const key = props.filterValue
-		? `fv:${props.filterValue}`
-		: props.currentStageId
-			? `stage:${props.currentStageId}`
-			: `wf:${props.workflowId}`;
-	return { _counts: { [key]: 1 } };
+/** Per-workflow breakdown within a cluster */
+export interface WorkflowClusterGroup {
+	workflowId: string;
+	workflowName: string;
+	filterMode: 'stage' | 'field';
+	totalCount: number;
+	rows: WorkflowClusterRow[];
 }
 
-/**
- * Creates a Supercluster index from an array of items with locations.
- * Returns the index instance ready for getClusters() queries.
- */
-export function buildIndex<P extends ClusterProperties>(
-	features: Supercluster.PointFeature<P>[],
-	options?: {
-		radius?: number;
-		maxZoom?: number;
-		map?: (props: P) => any;
-		reduce?: (accumulated: any, mapped: any) => void;
-	}
-): Supercluster<P, Supercluster.AnyProps> {
-	const index = new Supercluster<P, Supercluster.AnyProps>({
-		radius: options?.radius ?? 80,
-		maxZoom: options?.maxZoom ?? 22,
-		...(options?.map && { map: options.map }),
-		...(options?.reduce && { reduce: options.reduce })
-	});
-	index.load(features);
-	return index;
+/** A single row within a workflow group */
+export interface WorkflowClusterRow {
+	key: string;
+	prefixedKey: string;
+	label: string;
+	color: string;
+	count: number;
+	percentage: number;
+	leafIds: string[];
 }
 
 /**

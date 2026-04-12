@@ -1,11 +1,17 @@
 import { error, fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
+import {
+	ADMIN_INSTANCE_PAGE_SIZE,
+	buildRowsFromInstances,
+	buildStageNameMap,
+	fetchCreatorNameMap,
+	fetchFieldValuesForInstances
+} from '$lib/admin/workflow-rows';
 
 export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 	const { projectId, workflowId } = params;
 
 	try {
-		// Fetch workflow
 		const workflow = await pb.collection('workflows').getOne(workflowId, {
 			filter: `project_id = "${projectId}"`
 		});
@@ -14,8 +20,10 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 			throw error(404, 'Workflow not found');
 		}
 
-		// Fetch stages, forms, form fields, instances, and field values in parallel
-		const [stages, forms, instances, roles] = await Promise.all([
+		// Phase 1: everything that doesn't depend on instance IDs runs in parallel.
+		// formFields is fetched via the relation filter `form_id.workflow_id = "X"`
+		// instead of waiting on the forms query and OR-batching by form id.
+		const [stages, forms, formFields, instancesResult, roles] = await Promise.all([
 			pb.collection('workflow_stages').getFullList({
 				filter: `workflow_id = "${workflowId}"`,
 				fields: 'id,stage_name,stage_type',
@@ -26,10 +34,14 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 				fields: 'id,stage_id,connection_id',
 				expand: 'connection_id'
 			}),
-			pb.collection('workflow_instances').getFullList({
+			pb.collection('tools_form_fields').getFullList({
+				filter: `form_id.workflow_id = "${workflowId}"`,
+				fields: 'id,field_label,field_type,field_options,form_id',
+				sort: 'field_order'
+			}),
+			pb.collection('workflow_instances').getList(1, ADMIN_INSTANCE_PAGE_SIZE, {
 				filter: `workflow_id = "${workflowId}"`,
-				sort: '-created',
-				expand: 'current_stage_id,created_by'
+				sort: '-created'
 			}),
 			pb.collection('roles').getFullList({
 				filter: `project_id = "${projectId}"`,
@@ -38,20 +50,10 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 			})
 		]);
 
-		// Fetch form fields for all forms of this workflow (including field_options for label resolution)
-		const formIds = forms.map((f) => f.id);
-		let formFields: any[] = [];
-		if (formIds.length > 0) {
-			const filterParts = formIds.map((id) => `form_id = "${id}"`);
-			formFields = await pb.collection('tools_form_fields').getFullList({
-				filter: filterParts.join(' || '),
-				fields: 'id,field_label,field_type,field_options,form_id',
-				sort: 'field_order'
-			});
-		}
+		const instances = instancesResult.items;
+		const totalInstances = instancesResult.totalItems;
 
 		// Build fieldStageMap: form_field.id -> stage_id
-		// Forms can be attached to a stage directly or to a connection (use connection.to_stage_id)
 		const formStageMap = new Map<string, string>();
 		for (const form of forms) {
 			if (form.stage_id) {
@@ -68,93 +70,20 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 			}
 		}
 
-		// Fetch all field values for all instances
-		const instanceIds = instances.map((i) => i.id);
-		let fieldValues: any[] = [];
-		if (instanceIds.length > 0) {
-			// Batch in groups to avoid overly long filters
-			const batchSize = 50;
-			for (let i = 0; i < instanceIds.length; i += batchSize) {
-				const batch = instanceIds.slice(i, i + batchSize);
-				const filterParts = batch.map((id) => `instance_id = "${id}"`);
-				const batchValues = await pb.collection('workflow_instance_field_values').getFullList({
-					filter: filterParts.join(' || '),
-					fields: 'id,instance_id,field_key,value,file_value,stage_id',
-					requestKey: null
-				});
-				fieldValues = fieldValues.concat(batchValues);
-			}
-		}
-
-		// Pivot field values by instance_id, parsing JSON values
-		// Store both parsed value and record metadata for updates
-		const fieldValuesByInstance: Record<string, Record<string, any>> = {};
-		const fieldValueRecords: Record<string, Record<string, { recordId: string; stageId: string }>> = {};
-		const filesByInstance: Record<string, Record<string, Array<{ recordId: string; fileName: string }>>> = {};
-		for (const fv of fieldValues) {
-			if (!fieldValuesByInstance[fv.instance_id]) {
-				fieldValuesByInstance[fv.instance_id] = {};
-				fieldValueRecords[fv.instance_id] = {};
-				filesByInstance[fv.instance_id] = {};
-			}
-
-			// File field values: collect into arrays per field_key
-			if (fv.file_value) {
-				if (!filesByInstance[fv.instance_id][fv.field_key]) {
-					filesByInstance[fv.instance_id][fv.field_key] = [];
-				}
-				filesByInstance[fv.instance_id][fv.field_key].push({
-					recordId: fv.id,
-					fileName: fv.file_value
-				});
-				// Still track the record for potential updates
-				fieldValueRecords[fv.instance_id][fv.field_key] = {
-					recordId: fv.id,
-					stageId: fv.stage_id
-				};
-				continue;
-			}
-
-			// Parse JSON arrays/objects stored as strings
-			let parsed = fv.value;
-			if (typeof parsed === 'string' && (parsed.startsWith('[') || parsed.startsWith('{'))) {
-				try {
-					parsed = JSON.parse(parsed);
-				} catch {
-					// keep as string
-				}
-			}
-			fieldValuesByInstance[fv.instance_id][fv.field_key] = parsed;
-			fieldValueRecords[fv.instance_id][fv.field_key] = {
-				recordId: fv.id,
-				stageId: fv.stage_id
-			};
-		}
-
-		// Build flat row objects
-		const rows = instances.map((inst) => ({
-			id: inst.id,
-			status: inst.status,
-			current_stage_id: inst.current_stage_id,
-			current_stage_name: inst.expand?.current_stage_id?.stage_name || '',
-			created_by_name: inst.expand?.created_by?.name || inst.expand?.created_by?.email || '',
-			location: inst.location,
-			created: inst.created,
-			updated: inst.updated,
-			fieldData: fieldValuesByInstance[inst.id] || {},
-			fieldValueRecords: fieldValueRecords[inst.id] || {},
-			fileData: filesByInstance[inst.id] || {}
-		}));
-
 		// Build unique field definitions for columns
-		// Deduplicate by field_key (id) since the same field can appear in multiple forms
-		const fieldDefsMap = new Map<string, { id: string; label: string; type: string; fieldOptions: any }>();
+		const fieldDefsMap = new Map<
+			string,
+			{ id: string; label: string; type: string; fieldOptions: any; resolvedEntities?: any[] }
+		>();
 		for (const ff of formFields) {
 			if (!fieldDefsMap.has(ff.id)) {
-				// Parse field_options if it's a string
 				let fieldOptions = ff.field_options;
 				if (typeof fieldOptions === 'string') {
-					try { fieldOptions = JSON.parse(fieldOptions); } catch { fieldOptions = null; }
+					try {
+						fieldOptions = JSON.parse(fieldOptions);
+					} catch {
+						fieldOptions = null;
+					}
 				}
 				fieldDefsMap.set(ff.id, {
 					id: ff.id,
@@ -164,61 +93,104 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 				});
 			}
 		}
-
-		// Resolve entities for custom_table_selector fields
 		const fieldDefs = Array.from(fieldDefsMap.values());
-		for (const fd of fieldDefs) {
-			if (fd.type === 'custom_table_selector' && fd.fieldOptions) {
-				const opts = fd.fieldOptions;
-				try {
-					if (opts.source_type === 'custom_table' && opts.custom_table_id) {
-						const tableData = await pb.collection('custom_table_data').getFullList({
-							filter: `table_id = "${opts.custom_table_id}"`,
-							requestKey: null
-						});
-						fd.resolvedEntities = tableData.map((row: any) => ({
-							id: opts.value_field === 'id' ? row.id : (row.row_data?.[opts.value_field] ?? row.id),
-							label: row.row_data?.[opts.display_field] ?? row.id
-						}));
-					} else if (opts.source_type === 'participants') {
-						const participants = await pb.collection('participants').getFullList({
-							filter: `project_id = "${projectId}"`,
-							fields: 'id,name,email',
-							requestKey: null
-						});
-						fd.resolvedEntities = participants.map((p: any) => ({
-							id: p.id,
-							label: p.name || p.email || p.id
-						}));
-					} else if (opts.source_type === 'roles') {
-						fd.resolvedEntities = roles.map((r: any) => ({
-							id: r.id,
-							label: r.name
-						}));
-					} else if (opts.source_type === 'marker_category' && opts.marker_category_id) {
-						const markers = await pb.collection('markers').getFullList({
-							filter: `category_id = "${opts.marker_category_id}"`,
-							fields: 'id,title',
-							requestKey: null
-						});
-						fd.resolvedEntities = markers.map((mk: any) => ({
-							id: mk.id,
-							label: mk.title || mk.id
-						}));
-					}
-				} catch (err) {
-					console.error(`Failed to resolve entities for field ${fd.id}:`, err);
-					fd.resolvedEntities = [];
-				}
+
+		// Resolve entities for custom_table_selector fields in parallel with per-source dedup.
+		// Multiple fields referencing the same source (e.g. same custom_table or "participants")
+		// share a single underlying fetch.
+		const rawFetchCache = new Map<string, Promise<any[]>>();
+		const cachedFetch = (key: string, fetcher: () => Promise<any[]>): Promise<any[]> => {
+			let p = rawFetchCache.get(key);
+			if (!p) {
+				p = fetcher();
+				rawFetchCache.set(key, p);
 			}
-		}
+			return p;
+		};
+
+		await Promise.all(
+			fieldDefs
+				.filter((fd) => fd.type === 'custom_table_selector' && fd.fieldOptions)
+				.map(async (fd) => {
+					const opts = fd.fieldOptions;
+					try {
+						if (opts.source_type === 'custom_table' && opts.custom_table_id) {
+							const tableData = await cachedFetch(`custom_table:${opts.custom_table_id}`, () =>
+								pb.collection('custom_table_data').getFullList({
+									filter: `table_id = "${opts.custom_table_id}"`,
+									requestKey: null
+								})
+							);
+							fd.resolvedEntities = tableData.map((row: any) => ({
+								id:
+									opts.value_field === 'id'
+										? row.id
+										: (row.row_data?.[opts.value_field] ?? row.id),
+								label: row.row_data?.[opts.display_field] ?? row.id
+							}));
+						} else if (opts.source_type === 'participants') {
+							const participants = await cachedFetch(`participants:${projectId}`, () =>
+								pb.collection('participants').getFullList({
+									filter: `project_id = "${projectId}"`,
+									fields: 'id,name,email',
+									requestKey: null
+								})
+							);
+							fd.resolvedEntities = participants.map((p: any) => ({
+								id: p.id,
+								label: p.name || p.email || p.id
+							}));
+						} else if (opts.source_type === 'roles') {
+							fd.resolvedEntities = roles.map((r: any) => ({
+								id: r.id,
+								label: r.name
+							}));
+						} else if (opts.source_type === 'marker_category' && opts.marker_category_id) {
+							const markers = await cachedFetch(`markers:${opts.marker_category_id}`, () =>
+								pb.collection('markers').getFullList({
+									filter: `category_id = "${opts.marker_category_id}"`,
+									fields: 'id,title',
+									requestKey: null
+								})
+							);
+							fd.resolvedEntities = markers.map((mk: any) => ({
+								id: mk.id,
+								label: mk.title || mk.id
+							}));
+						}
+					} catch (err) {
+						console.error(`Failed to resolve entities for field ${fd.id}:`, err);
+						fd.resolvedEntities = [];
+					}
+				})
+		);
+
+		// Phase 2: field values (one OR-query) + creator names run in parallel.
+		// Stage names come from the already-loaded `stages` array -- no expand needed.
+		const stageNameById = buildStageNameMap(stages as any);
+		const [fieldValues, creatorNameById] = await Promise.all([
+			fetchFieldValuesForInstances(
+				pb,
+				instances.map((i) => i.id)
+			),
+			fetchCreatorNameMap(
+				pb,
+				instances.map((i) => i.created_by)
+			)
+		]);
+		const initialRows = buildRowsFromInstances(instances, fieldValues, {
+			stageNameById,
+			creatorNameById
+		});
 
 		return {
 			workflow,
 			stages,
 			fieldDefs,
 			fieldStageMap,
-			rows,
+			initialRows,
+			totalInstances,
+			instancePageSize: ADMIN_INSTANCE_PAGE_SIZE,
 			roles: roles || []
 		};
 	} catch (err: any) {

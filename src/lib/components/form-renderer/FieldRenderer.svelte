@@ -400,28 +400,31 @@
 	const formattedDateValue = $derived.by(() => {
 		if (field.field_type !== 'date' || !hasValue) return null;
 		const dateMode = dateOptions?.date_mode || 'date';
-		try {
-			const date = new Date(value as string);
-			if (dateMode === 'time') {
-				return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-			} else if (dateMode === 'datetime') {
-				return date.toLocaleString('de-DE', {
-					day: '2-digit',
-					month: '2-digit',
-					year: 'numeric',
-					hour: '2-digit',
-					minute: '2-digit'
-				});
-			} else {
-				return date.toLocaleDateString('de-DE', {
-					day: '2-digit',
-					month: '2-digit',
-					year: 'numeric'
-				});
-			}
-		} catch {
-			return String(value);
+		const str = String(value);
+
+		if (dateMode === 'time') {
+			// Stored as "HH:mm" string — already display-ready
+			const m = str.match(/^(\d{1,2}):(\d{2})/);
+			return m ? `${m[1].padStart(2, '0')}:${m[2]}` : str;
 		}
+
+		const date = new Date(str);
+		if (isNaN(date.getTime())) return str;
+
+		if (dateMode === 'datetime') {
+			return date.toLocaleString('de-DE', {
+				day: '2-digit',
+				month: '2-digit',
+				year: 'numeric',
+				hour: '2-digit',
+				minute: '2-digit'
+			});
+		}
+		return date.toLocaleDateString('de-DE', {
+			day: '2-digit',
+			month: '2-digit',
+			year: 'numeric'
+		});
 	});
 </script>
 

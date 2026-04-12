@@ -26,17 +26,35 @@
 		Array.isArray(category?.fields) ? category.fields : []
 	);
 
-	function formatValue(value: unknown, fieldType: string): string {
+	function formatValue(value: unknown, fieldType: string, fieldOptions?: any): string {
 		if (value == null || value === '') return '-';
 		switch (fieldType) {
 			case 'boolean':
 				return value ? 'Yes' : 'No';
-			case 'date':
-				try {
-					return new Date(String(value)).toLocaleDateString();
-				} catch {
-					return String(value);
+			case 'date': {
+				const str = String(value);
+				const mode = fieldOptions?.date_mode || 'date';
+				if (mode === 'time') {
+					const m = str.match(/^(\d{1,2}):(\d{2})/);
+					return m ? `${m[1].padStart(2, '0')}:${m[2]}` : str;
 				}
+				const date = new Date(str);
+				if (isNaN(date.getTime())) return str;
+				if (mode === 'datetime') {
+					return date.toLocaleString('de-DE', {
+						day: '2-digit',
+						month: '2-digit',
+						year: 'numeric',
+						hour: '2-digit',
+						minute: '2-digit'
+					});
+				}
+				return date.toLocaleDateString('de-DE', {
+					day: '2-digit',
+					month: '2-digit',
+					year: 'numeric'
+				});
+			}
 			default:
 				return String(value);
 		}
@@ -74,7 +92,7 @@
 									{formatFieldName(field.field_name)}
 								</span>
 								<span class="text-sm font-medium">
-									{formatValue(value, field.field_type)}
+									{formatValue(value, field.field_type, field.field_options)}
 								</span>
 							</div>
 						{/each}

@@ -13,7 +13,7 @@
 	import { MapCanvas, BottomControlBar, LayerSheet, FilterSheet, WorkflowSelector, SettingsSheet } from './components';
 	import { WorkflowInstanceDetailModule, MarkerDetailModule, createSelection, type Selection, type Marker } from './modules';
 	import ClusterDetailModule from './modules/cluster-detail/ClusterDetailModule.svelte';
-	import type { ClusterDetail } from '$lib/components/map/supercluster-manager';
+	import type { EnhancedClusterDetail, WorkflowClusterGroup, WorkflowClusterRow, ClusterLeaf } from '$lib/components/map/supercluster-manager';
 	import type { VisualKeyRegistry } from '$lib/components/map/donut-cluster-icon';
 	import { FormFillTool } from './modules/workflow-instance-detail/tools';
 	import ModuleShell from '$lib/components/module-shell.svelte';
@@ -74,8 +74,20 @@
 
 	// Set up navigation callbacks for header (desktop) navigation
 	onMount(() => {
-		// Defer field value cache init to after first paint (map + markers render first)
-		requestAnimationFrame(() => fieldValueCache.init());
+		// Wait for instances to finish streaming before starting field value fetch.
+		// This ensures map markers (which need lat/lon from instances) load first,
+		// without field values competing for bandwidth.
+		let fieldValueInitStarted = false;
+		const unwatchFieldValues = $effect.root(() => {
+			$effect(() => {
+				if (!instancesLive.loading && !instancesLive.fetchProgress && !fieldValueInitStarted) {
+					fieldValueInitStarted = true;
+					fieldValueCache.init();
+					unwatchFieldValues();
+				}
+			});
+		});
+
 		mapNavCallbacks.set({
 			onLayersClick: () => (layerSheetOpen = true),
 			onFiltersClick: () => (filterSheetOpen = true),
@@ -93,8 +105,17 @@
 	let selection = $state<Selection>(createSelection.none());
 
 	// Cluster detail state (for cluster tap interaction)
-	let clusterDetail = $state<ClusterDetail | null>(null);
+	let clusterDetail = $state<EnhancedClusterDetail | null>(null);
 	let clusterDetailOpen = $state(false);
+	let clusterGroups = $state<WorkflowClusterGroup[]>([]);
+
+	// Drill-down state: zoom into a subset of a cluster's markers
+	let drillDownActive = $state(false);
+	let drillDownSavedCenter = $state<[number, number]>([0, 0]);
+	let drillDownSavedZoom = $state(0);
+	let drillDownInstanceIds = $state<Set<string> | null>(null);
+	let drillDownActiveRowKey = $state<string | null>(null);
+	let drillDownActiveWorkflowId = $state<string | null>(null);
 
 	// Workflow creation state (for new workflows via entry form)
 	let pendingWorkflow = $state<PendingWorkflow | null>(null);
@@ -111,26 +132,36 @@
 	// ==========================================================================
 
 	// Priority: critical = map shell, normal = map content, deferred = filtering/detail data
+	// Project scoping: markers, map_layers, and workflows have direct `project_id`
+	// relations, so we filter the local-first IDB read to the current project. This
+	// is defense-in-depth against stale cross-project records lingering in IDB --
+	// the layout already wipes IDB on participant switches, but filtering here
+	// guarantees nothing from another project can ever render on the map.
+	const projectScopedFilter = `project_id = "${gateway!.projectId}"`;
 	const projectLive = gateway!.collection('projects').live({ priority: 'critical' });
-	const layersLive = gateway!.collection('map_layers').live({ filter: 'is_active = true', sort: 'display_order', priority: 'critical' });
-	const markersLive = gateway!.collection('markers').live({ expand: 'category_id', priority: 'normal' });
+	const layersLive = gateway!.collection('map_layers').live({ filter: `is_active = true && ${projectScopedFilter}`, sort: 'display_order', priority: 'critical' });
+	const markersLive = gateway!.collection('markers').live({ filter: projectScopedFilter, expand: 'category_id', priority: 'normal' });
 	const instancesLive = gateway!.collection('workflow_instances').live({ expand: 'workflow_id', priority: 'normal' });
-	const workflowsLive = gateway!.collection('workflows').live({ filter: 'is_active = true', priority: 'normal' });
+	const workflowsLive = gateway!.collection('workflows').live({ filter: `is_active = true && ${projectScopedFilter}`, priority: 'normal' });
 	const stagesLive = gateway!.collection('workflow_stages').live({ priority: 'deferred' });
 	const fieldTagsLive = gateway!.collection('tools_field_tags').live({ priority: 'deferred' });
 	const fieldValueCache = new FieldValueCache();
 	const connectionsLive = gateway!.collection('workflow_connections').live({ filter: 'from_stage_id = ""', priority: 'deferred' });
 
-	// Show loading indicator in layout header while data loads.
-	// Updates reactively so users see progress, not a static message.
+	// Show progress in layout header while data streams in.
+	// Map is interactive the whole time -- this is informational only.
 	$effect(() => {
-		if (markersLive.loading || instancesLive.loading) {
-			appLoadingMessage.value = 'Loading markers...';
+		const instProgress = instancesLive.fetchProgress;
+		if (instProgress) {
+			if (instProgress.total > 0) {
+				appLoadingMessage.value = `Loading markers (${instProgress.loaded.toLocaleString()}/${instProgress.total.toLocaleString()})...`;
+			} else {
+				appLoadingMessage.value = 'Loading markers...';
+			}
+		} else if (fieldValueCache.loadedCount > 0 && fieldValueCache.loading) {
+			appLoadingMessage.value = `Loading field data (${fieldValueCache.loadedCount.toLocaleString()})...`;
 		} else if (fieldValueCache.loading) {
-			const count = fieldValueCache.loadedCount;
-			appLoadingMessage.value = count > 0
-				? `Loading field data (${count.toLocaleString()})...`
-				: 'Loading field data...';
+			appLoadingMessage.value = 'Loading field data...';
 		} else {
 			appLoadingMessage.value = null;
 		}
@@ -210,12 +241,10 @@
 			}
 		}
 
-		// Stage-level colors
+		// Stage-level colors (always register so cluster detail gets labels)
 		for (const stage of workflowStages) {
-			const stageColor = (stage as any).visual_config?.icon_config?.style?.color;
-			if (stageColor) {
-				reg.set(`stage:${stage.id}`, { color: stageColor, label: (stage as any).name || stage.id });
-			}
+			const stageColor = (stage as any).visual_config?.icon_config?.style?.color || '#6366f1';
+			reg.set(`stage:${stage.id}`, { color: stageColor, label: (stage as any).stage_name || (stage as any).name || stage.id });
 		}
 
 		// Filter value colors
@@ -231,6 +260,21 @@
 		}
 
 		return reg;
+	});
+
+	// Filter mode per workflow: 'stage' or 'field' based on field tag config
+	const filterModeByWorkflow = $derived.by(() => {
+		const map = new Map<string, 'stage' | 'field'>();
+		for (const ft of fieldTags) {
+			const mappings = ((ft as any).tag_mappings || []) as Array<{ tagType: string; config: Record<string, unknown> }>;
+			for (const mapping of mappings) {
+				if (mapping.tagType !== 'filterable') continue;
+				const wfId = (ft as any).workflow_id as string;
+				const filterBy = (mapping.config?.filterBy as string) || 'field';
+				map.set(wfId, filterBy as 'stage' | 'field');
+			}
+		}
+		return map;
 	});
 
 	// Loading: true until map layers are loaded (markers appear progressively)
@@ -436,6 +480,122 @@
 		}
 		return map;
 	});
+
+	// ==========================================================================
+	// Cluster Detail Helpers
+	// ==========================================================================
+
+	function buildClusterGroups(leaves: ClusterLeaf[]): WorkflowClusterGroup[] {
+		// Group leaves by workflowId
+		const byWorkflow = new Map<string, ClusterLeaf[]>();
+		for (const leaf of leaves) {
+			let arr = byWorkflow.get(leaf.workflowId);
+			if (!arr) {
+				arr = [];
+				byWorkflow.set(leaf.workflowId, arr);
+			}
+			arr.push(leaf);
+		}
+
+		const groups: WorkflowClusterGroup[] = [];
+
+		for (const [wfId, wfLeaves] of byWorkflow) {
+			const wf = workflows.find((w: any) => w.id === wfId);
+			const filterMode = filterModeByWorkflow.get(wfId) || 'stage';
+
+			const countMap = new Map<string, { count: number; ids: string[] }>();
+			for (const leaf of wfLeaves) {
+				let key: string;
+				if (filterMode === 'stage') {
+					key = leaf.currentStageId || '_unknown';
+				} else {
+					key = leaf.filterValue || '_unset';
+				}
+				let entry = countMap.get(key);
+				if (!entry) {
+					entry = { count: 0, ids: [] };
+					countMap.set(key, entry);
+				}
+				entry.count++;
+				entry.ids.push(leaf.id);
+			}
+
+			const rows: WorkflowClusterRow[] = [...countMap.entries()]
+				.map(([key, { count, ids }]) => {
+					const prefixedKey = filterMode === 'stage' ? `stage:${key}` : `fv:${key}`;
+					const info = visualKeyRegistry.get(prefixedKey);
+					return {
+						key,
+						prefixedKey,
+						label: info?.label || key,
+						color: info?.color || '#9ca3af',
+						count,
+						percentage: Math.round((count / wfLeaves.length) * 100),
+						leafIds: ids
+					};
+				})
+				.sort((a, b) => b.count - a.count);
+
+			groups.push({
+				workflowId: wfId,
+				workflowName: (wf as any)?.name || wfId,
+				filterMode,
+				totalCount: wfLeaves.length,
+				rows
+			});
+		}
+
+		return groups.sort((a, b) => b.totalCount - a.totalCount);
+	}
+
+	function handleClusterRowTap(workflowId: string, row: WorkflowClusterRow) {
+		if (!map || !clusterDetail) return;
+
+		// Tapping the already-active row deactivates drill-down
+		if (drillDownActive && drillDownActiveRowKey === row.key && drillDownActiveWorkflowId === workflowId) {
+			map.flyTo(drillDownSavedCenter, drillDownSavedZoom);
+			drillDownActive = false;
+			drillDownInstanceIds = null;
+			drillDownActiveRowKey = null;
+			drillDownActiveWorkflowId = null;
+			return;
+		}
+
+		// Save map state only on first drill-down (preserve when switching rows)
+		if (!drillDownActive) {
+			drillDownSavedCenter = [map.getCenter().lat, map.getCenter().lng];
+			drillDownSavedZoom = map.getZoom();
+		}
+
+		drillDownActive = true;
+		drillDownInstanceIds = new Set(row.leafIds);
+		drillDownActiveRowKey = row.key;
+		drillDownActiveWorkflowId = workflowId;
+
+		// Zoom to fit matching leaves
+		const matchingLeaves = clusterDetail.leaves.filter(l => row.leafIds.includes(l.id));
+		if (matchingLeaves.length > 0) {
+			import('leaflet').then(L => {
+				const bounds = L.latLngBounds(
+					matchingLeaves.map(l => L.latLng(l.coordinates[1], l.coordinates[0]))
+				);
+				map!.flyToBounds(bounds, { padding: [60, 60], maxZoom: 18 });
+			});
+		}
+	}
+
+	function handleClusterDetailClose() {
+		if (drillDownActive && map) {
+			map.flyTo(drillDownSavedCenter, drillDownSavedZoom);
+		}
+		drillDownActive = false;
+		drillDownInstanceIds = null;
+		drillDownActiveRowKey = null;
+		drillDownActiveWorkflowId = null;
+		clusterDetail = null;
+		clusterDetailOpen = false;
+		clusterGroups = [];
+	}
 
 	// ==========================================================================
 	// Marker Selection & Navigation
@@ -656,8 +816,7 @@
 			selection = createSelection.none();
 		}
 		if (clusterDetailOpen) {
-			clusterDetail = null;
-			clusterDetailOpen = false;
+			handleClusterDetailClose();
 		}
 	}
 
@@ -738,7 +897,19 @@
 		{visualKeyRegistry}
 		onMarkerClick={handleMarkerClick}
 		onWorkflowInstanceClick={handleWorkflowInstanceClick}
-		onClusterClick={(detail) => { clusterDetail = detail; clusterDetailOpen = true; }}
+		onClusterClick={(detail) => {
+			// If drill-down was active from a previous cluster, restore first
+			if (drillDownActive) {
+				drillDownActive = false;
+				drillDownInstanceIds = null;
+				drillDownActiveRowKey = null;
+				drillDownActiveWorkflowId = null;
+			}
+			clusterDetail = detail;
+			clusterDetailOpen = true;
+			clusterGroups = buildClusterGroups(detail.leaves);
+		}}
+		drillDownInstanceIds={drillDownActive ? drillDownInstanceIds : null}
 		onMapReady={handleMapReady}
 		onMapClick={handleMapClick}
 	/>
@@ -817,10 +988,13 @@
 	<!-- Cluster Detail Module (peek sheet with composition breakdown) -->
 	{#if clusterDetailOpen && clusterDetail}
 		<ClusterDetailModule
-			clusterData={clusterDetail}
-			{visualKeyRegistry}
+			groups={clusterGroups}
+			totalCount={clusterDetail.totalCount}
+			activeRowKey={drillDownActiveRowKey}
+			activeWorkflowId={drillDownActiveWorkflowId}
 			bind:isOpen={clusterDetailOpen}
-			onClose={() => { clusterDetail = null; clusterDetailOpen = false; }}
+			onRowTap={handleClusterRowTap}
+			onClose={handleClusterDetailClose}
 		/>
 	{/if}
 

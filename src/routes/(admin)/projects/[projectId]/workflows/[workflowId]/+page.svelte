@@ -15,22 +15,14 @@
 	import { getPocketBase } from '$lib/pocketbase';
 	import { POCKETBASE_URL } from '$lib/config/pocketbase';
 	import { CsvImportDialog, type MappedImportData, type TargetField, type SpecialColumn, type ImportProgressCallback } from '$lib/components/csv-import';
-
-	type FieldValueRecord = { recordId: string; stageId: string };
-
-	type InstanceRow = {
-		id: string;
-		status: string;
-		current_stage_id: string;
-		current_stage_name: string;
-		created_by_name: string;
-		location: any;
-		created: string;
-		updated: string;
-		fieldData: Record<string, any>;
-		fieldValueRecords: Record<string, FieldValueRecord>;
-		fileData: Record<string, Array<{ recordId: string; fileName: string }>>;
-	};
+	import {
+		buildRowsFromInstances,
+		buildStageNameMap,
+		fetchCreatorNameMap,
+		fetchFieldValuesForInstances,
+		type FieldValueRecord,
+		type InstanceRow
+	} from '$lib/admin/workflow-rows';
 
 	type FieldDef = {
 		id: string;
@@ -45,6 +37,82 @@
 	let tableRef: BaseTable<InstanceRow>;
 	let lightboxOpen = $state(false);
 	let lightboxUrl = $state('');
+
+	// Progressive row loading: server returns the first page of instances in
+	// data.initialRows; the rest stream in from the PocketBase client after mount.
+	let rows = $state<InstanceRow[]>(data.initialRows);
+	let totalRows = $state(data.totalInstances);
+	let loadingMore = $state(false);
+	let loadVersion = 0;
+
+	async function loadRemainingRows(version: number, workflowId: string, perPage: number) {
+		loadingMore = true;
+		try {
+			const pb = getPocketBase();
+			const stageNameById = buildStageNameMap(data.stages as any);
+			let currentPage = 2;
+			while (true) {
+				if (version !== loadVersion) return;
+				if (rows.length >= totalRows) break;
+
+				const result = await pb.collection('workflow_instances').getList(currentPage, perPage, {
+					filter: `workflow_id = "${workflowId}"`,
+					sort: '-created'
+				});
+				if (version !== loadVersion) return;
+				if (result.items.length === 0) break;
+
+				const [fvs, creatorNameById] = await Promise.all([
+					fetchFieldValuesForInstances(
+						pb,
+						result.items.map((i: any) => i.id)
+					),
+					fetchCreatorNameMap(
+						pb,
+						result.items.map((i: any) => i.created_by)
+					)
+				]);
+				if (version !== loadVersion) return;
+
+				const newRows = buildRowsFromInstances(result.items, fvs, {
+					stageNameById,
+					creatorNameById
+				});
+				rows = [...rows, ...newRows];
+				totalRows = result.totalItems;
+				currentPage++;
+			}
+		} catch (err) {
+			console.error('Failed to load remaining rows:', err);
+			toast.error('Failed to load all rows');
+		} finally {
+			if (version === loadVersion) loadingMore = false;
+		}
+	}
+
+	// Tracked with a plain variable (not $state) so it does not participate in
+	// reactivity. The $effect re-fires on data-object replacement during
+	// hydration / invalidation even when nothing relevant changed -- without
+	// this guard we were firing the background pagination 2-3x on first load.
+	let loadedForWorkflowId = '';
+
+	$effect(() => {
+		const workflowId = data.workflow.id;
+		if (loadedForWorkflowId === workflowId) return;
+		loadedForWorkflowId = workflowId;
+
+		const initial = data.initialRows;
+		const total = data.totalInstances;
+		const perPage = data.instancePageSize;
+
+		const myVersion = ++loadVersion;
+		rows = [...initial];
+		totalRows = total;
+
+		if (rows.length < total) {
+			loadRemainingRows(myVersion, workflowId, perPage);
+		}
+	});
 
 	const globalFilterFn = (row: any, _columnId: string, filterValue: string) => {
 		if (!filterValue) return true;
@@ -217,7 +285,7 @@
 						singleSelect: isSingleSelectField(fd)
 					},
 					onUpdate: async (rowId: string, value: any) => {
-						const row = data.rows.find((r: InstanceRow) => r.id === rowId);
+						const row = rows.find((r: InstanceRow) => r.id === rowId);
 						if (!row) return;
 						await saveFieldValue(
 							rowId, fd.id, value,
@@ -254,7 +322,7 @@
 				fieldType: mapFieldType(fd.type),
 				capabilities: { sortable: true, filterable: true, editable: true },
 				onUpdate: async (rowId: string, value: string) => {
-					const row = data.rows.find((r: InstanceRow) => r.id === rowId);
+					const row = rows.find((r: InstanceRow) => r.id === rowId);
 					if (!row) return;
 					await saveFieldValue(
 						rowId, fd.id, value,
@@ -604,7 +672,7 @@
 
 	<BaseTable
 		bind:this={tableRef}
-		data={data.rows}
+		data={rows}
 		{columns}
 		{globalFilterFn}
 		enableRowSelection={true}

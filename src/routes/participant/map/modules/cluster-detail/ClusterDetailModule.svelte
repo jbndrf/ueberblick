@@ -1,74 +1,82 @@
 <script lang="ts">
 	import ModuleShell from '$lib/components/module-shell.svelte';
-	import type { ClusterDetail } from '$lib/components/map/supercluster-manager';
-	import type { VisualKeyRegistry } from '$lib/components/map/donut-cluster-icon';
+	import type { WorkflowClusterGroup, WorkflowClusterRow } from '$lib/components/map/supercluster-manager';
 
 	interface Props {
-		clusterData: ClusterDetail | null;
-		visualKeyRegistry: VisualKeyRegistry;
+		groups: WorkflowClusterGroup[];
+		totalCount: number;
+		activeRowKey: string | null;
+		activeWorkflowId: string | null;
 		isOpen?: boolean;
+		onRowTap: (workflowId: string, row: WorkflowClusterRow) => void;
 		onClose: () => void;
 	}
 
-	let { clusterData, visualKeyRegistry, isOpen = $bindable(false), onClose }: Props = $props();
-
-	interface BreakdownRow {
-		key: string;
-		color: string;
-		label: string;
-		count: number;
-		percentage: number;
-	}
-
-	const rows = $derived.by<BreakdownRow[]>(() => {
-		if (!clusterData) return [];
-		const total = clusterData.totalCount;
-		return Object.entries(clusterData.counts)
-			.map(([key, count]) => {
-				const info = visualKeyRegistry.get(key);
-				return {
-					key,
-					color: info?.color || '#9ca3af',
-					label: info?.label || key,
-					count,
-					percentage: Math.round((count / total) * 100)
-				};
-			})
-			.sort((a, b) => b.count - a.count);
-	});
+	let {
+		groups,
+		totalCount,
+		activeRowKey,
+		activeWorkflowId,
+		isOpen = $bindable(false),
+		onRowTap,
+		onClose
+	}: Props = $props();
 </script>
 
 <ModuleShell
 	{isOpen}
-	title="{clusterData?.totalCount ?? 0} items"
-	subtitle={clusterData?.clusterType === 'marker' ? 'Markers' : 'Workflow Instances'}
+	title="{totalCount} Instances"
+	subtitle="{groups.length} Workflow{groups.length !== 1 ? 's' : ''}"
 	onClose={() => { isOpen = false; onClose(); }}
-	mobileHeightPeek={25}
-	mobileHeightExpanded={60}
+	mobileHeightPeek={35}
+	mobileHeightExpanded={75}
 >
 	{#snippet content()}
-		<div class="flex flex-col gap-1 p-4">
-			{#each rows as row (row.key)}
-				<div class="flex items-center gap-3 rounded-lg px-2 py-1.5">
-					<div
-						class="h-3 w-3 shrink-0 rounded-full"
-						style:background-color={row.color}
-					></div>
-					<span class="min-w-0 flex-1 truncate text-sm">{row.label}</span>
-					<span class="tabular-nums text-muted-foreground shrink-0 text-sm font-medium">
-						{row.count}
-					</span>
-					<div class="h-2 w-16 shrink-0 overflow-hidden rounded-full bg-muted">
-						<div
-							class="h-full rounded-full transition-all"
-							style:width="{row.percentage}%"
-							style:background-color={row.color}
-						></div>
+		<div class="flex flex-col gap-4 p-4">
+			{#each groups as group, gi (group.workflowId)}
+				<div class="flex flex-col gap-1.5">
+					<div class="flex items-center justify-between px-1">
+						<h4 class="text-sm font-semibold">{group.workflowName}</h4>
+						<span class="text-muted-foreground text-xs">{group.totalCount}</span>
 					</div>
-					<span class="tabular-nums text-muted-foreground w-8 shrink-0 text-right text-xs">
-						{row.percentage}%
-					</span>
+
+					{#each group.rows as row (row.key)}
+						<button
+							class="flex items-center gap-3 rounded-lg p-3 text-left transition-colors
+								{activeRowKey === row.key && activeWorkflowId === group.workflowId
+								? 'bg-primary/10 ring-primary/30 ring-1'
+								: 'bg-muted/30 hover:bg-muted/50 active:bg-muted/70'}"
+							onclick={() => onRowTap(group.workflowId, row)}
+						>
+							<div
+								class="h-4 w-4 shrink-0 rounded-full"
+								style:background-color={row.color}
+							></div>
+							<div class="min-w-0 flex-1">
+								<span class="block truncate text-sm font-medium">{row.label}</span>
+								<span class="text-muted-foreground text-xs">
+									{row.count} item{row.count !== 1 ? 's' : ''}
+								</span>
+							</div>
+							<div class="w-20 shrink-0">
+								<div class="bg-muted h-2.5 w-full overflow-hidden rounded-full">
+									<div
+										class="h-full rounded-full transition-all duration-300"
+										style:width="{row.percentage}%"
+										style:background-color={row.color}
+									></div>
+								</div>
+							</div>
+							<span class="text-muted-foreground w-10 shrink-0 text-right text-xs tabular-nums">
+								{row.percentage}%
+							</span>
+						</button>
+					{/each}
 				</div>
+
+				{#if gi < groups.length - 1}
+					<hr class="border-border" />
+				{/if}
 			{/each}
 		</div>
 	{/snippet}

@@ -44,59 +44,28 @@
 		data.projects?.find((p: { id: string }) => p.id === currentProjectId)
 	);
 
-	// Sidebar entity data (loaded client-side)
-	let sidebarWorkflows = $state<Array<{ id: string; name: string; workflow_type: string }>>([]);
-	let sidebarTables = $state<Array<{ id: string; display_name: string }>>([]);
-	let sidebarMarkerCategories = $state<Array<{ id: string; name: string }>>([]);
-	let sidebarLoading = $state(false);
+	// Sidebar entity data comes from the project layout server load
+	// (src/routes/(admin)/projects/[projectId]/+layout.server.ts) so it ships
+	// with the initial HTML. Reading via $page.data keeps this layout agnostic
+	// of which child route is active.
+	const sidebarWorkflows = $derived(
+		($page.data.sidebarWorkflows as Array<{ id: string; name: string; workflow_type: string }>) ?? []
+	);
+	const sidebarTables = $derived(
+		($page.data.sidebarTables as Array<{ id: string; display_name: string }>) ?? []
+	);
+	const sidebarMarkerCategories = $derived(
+		($page.data.sidebarMarkerCategories as Array<{ id: string; name: string }>) ?? []
+	);
 
 	// Track collapsed state for groups
 	let workflowsCollapsed = $state(false);
 	let tablesCollapsed = $state(false);
 
-	// Load sidebar entities when project changes
-	$effect(() => {
-		if (currentProjectId) {
-			loadSidebarData(currentProjectId);
-		} else {
-			sidebarWorkflows = [];
-			sidebarTables = [];
-			sidebarMarkerCategories = [];
-		}
-	});
-
-	async function loadSidebarData(projectId: string) {
-		sidebarLoading = true;
-		const pb = getPocketBase();
-		try {
-			const [workflows, tables, markers] = await Promise.all([
-				pb.collection('workflows').getFullList({
-					filter: `project_id = "${projectId}"`,
-					fields: 'id,name,workflow_type',
-					sort: 'name',
-					requestKey: null
-				}),
-				pb.collection('custom_tables').getFullList({
-					filter: `project_id = "${projectId}"`,
-					fields: 'id,display_name',
-					sort: 'display_name',
-					requestKey: null
-				}),
-				pb.collection('marker_categories').getFullList({
-					filter: `project_id = "${projectId}"`,
-					fields: 'id,name',
-					sort: 'name',
-					requestKey: null
-				})
-			]);
-			sidebarWorkflows = workflows as any;
-			sidebarTables = tables as any;
-			sidebarMarkerCategories = markers as any;
-		} catch (err) {
-			console.error('Failed to load sidebar data:', err);
-		} finally {
-			sidebarLoading = false;
-		}
+	// Refresh sidebar after a quick-create action. Invalidating the project
+	// layout load re-runs it and refreshes $page.data.
+	async function refreshSidebar() {
+		await invalidate('sidebar');
 	}
 
 	// Quick-create functions
@@ -112,8 +81,8 @@
 				marker_color: type === 'incident' ? '#ff0000' : null,
 				icon_config: {}
 			});
-			await loadSidebarData(currentProjectId);
 			await goto(`/projects/${currentProjectId}/workflows/${record.id}`);
+			await refreshSidebar();
 		} catch (err) {
 			console.error('Failed to create workflow:', err);
 			toast.error('Failed to create workflow');
@@ -132,16 +101,16 @@
 					visible_to_roles: [],
 					fields: []
 				});
-				await loadSidebarData(currentProjectId);
 				await goto(`/projects/${currentProjectId}/marker-categories/${record.id}`);
+				await refreshSidebar();
 			} else {
 				const record = await pb.collection('custom_tables').create({
 					project_id: currentProjectId,
 					table_name: 'new_table_' + Date.now(),
 					display_name: 'New Table'
 				});
-				await loadSidebarData(currentProjectId);
 				await goto(`/projects/${currentProjectId}/custom-tables/${record.id}`);
+				await refreshSidebar();
 			}
 		} catch (err) {
 			console.error('Failed to create table:', err);
@@ -301,7 +270,7 @@
 												</Sidebar.MenuSubButton>
 											</Sidebar.MenuItem>
 										{/each}
-										{#if sidebarWorkflows.length === 0 && !sidebarLoading}
+										{#if sidebarWorkflows.length === 0}
 											<div class="px-3 py-2 text-xs text-muted-foreground">
 												{m.navNoWorkflows()}
 											</div>
@@ -371,7 +340,7 @@
 												</Sidebar.MenuSubButton>
 											</Sidebar.MenuItem>
 										{/each}
-										{#if sidebarTables.length === 0 && sidebarMarkerCategories.length === 0 && !sidebarLoading}
+										{#if sidebarTables.length === 0 && sidebarMarkerCategories.length === 0}
 											<div class="px-3 py-2 text-xs text-muted-foreground">
 												{m.navNoTables()}
 											</div>

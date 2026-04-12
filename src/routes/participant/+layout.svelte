@@ -94,8 +94,24 @@
 	let cleanupRealtime: (() => void) | null = null;
 	let cleanupVisibility: (() => void) | null = null;
 
-	// Track current participant ID to detect re-auth with different account
-	let currentParticipantId: string | null = null;
+	// Track current participant ID to detect re-auth with different account.
+	// Persisted in localStorage so cross-reload participant switches (e.g. logging
+	// in as a different token after a cookie expiry) are detected too -- otherwise
+	// the previous participant's IDB records (markers, instances, ...) would leak
+	// into the new session until the next background sync overwrote them.
+	const LAST_PARTICIPANT_KEY = 'ueberblick_last_participant_id';
+	function readStoredParticipantId(): string | null {
+		if (typeof window === 'undefined') return null;
+		try { return localStorage.getItem(LAST_PARTICIPANT_KEY); } catch { return null; }
+	}
+	function writeStoredParticipantId(id: string | null): void {
+		if (typeof window === 'undefined') return;
+		try {
+			if (id) localStorage.setItem(LAST_PARTICIPANT_KEY, id);
+			else localStorage.removeItem(LAST_PARTICIPANT_KEY);
+		} catch { /* storage disabled */ }
+	}
+	let currentParticipantId: string | null = readStoredParticipantId();
 
 	// syncStatus.current is reactive (imported $state from sync.svelte.ts)
 
@@ -118,8 +134,34 @@
 	// Create gateway synchronously if participant is available.
 	// setContext() MUST be called during synchronous component init -- not in $effect --
 	// otherwise child components calling getContext() get null.
+	//
+	// If the stored participant id from the previous session differs from the
+	// incoming one, we still create the gateway synchronously (so context is set
+	// for children), but route its first IDB access through a pending-clear gate:
+	// the gateway's init() awaits `pendingClear` before touching the DB, and
+	// children are gated on `!clearingStaleState` in the template so no live
+	// query reads happen until the clear finishes.
+	let clearingStaleState = $state(false);
+	let pendingClear: Promise<void> | null = null;
 	if (data.participant) {
+		const storedId = currentParticipantId;
+		const needsReset = !!storedId && storedId !== data.participant.id;
 		currentParticipantId = data.participant.id;
+		writeStoredParticipantId(data.participant.id);
+
+		if (needsReset) {
+			clearingStaleState = true;
+			pendingClear = resetAllParticipantState()
+				.catch((e) => {
+					console.error('Failed to clear stale participant state:', e);
+				})
+				.then(() => {
+					// Re-persist the new id, since resetAllParticipantState wipes it.
+					writeStoredParticipantId(data.participant!.id);
+					clearingStaleState = false;
+				});
+		}
+
 		gateway = createParticipantGateway(data.participant.id, data.participant.project_id);
 		setParticipantGateway(gateway);
 		setupPersistence(gateway);
@@ -129,7 +171,10 @@
 	$effect(() => {
 		const participant = data.participant;
 		if (!participant) {
-			// Auth lost -- tear down but keep IndexedDB for offline mode
+			// Auth lost -- tear down but keep IndexedDB for offline mode.
+			// Note: keep the stored last-participant id so an offline reload can
+			// still match and avoid a spurious wipe. It's cleared explicitly on
+			// resetAllParticipantState() below.
 			if (currentParticipantId) {
 				teardownGateway();
 				currentParticipantId = null;
@@ -148,6 +193,7 @@
 		}
 
 		currentParticipantId = participant.id;
+		writeStoredParticipantId(participant.id);
 		const gw = createParticipantGateway(participant.id, participant.project_id);
 		gateway = gw;
 		setParticipantGateway(gw);
@@ -185,6 +231,14 @@
 		if (!gw) return;
 
 		try {
+			// If a cross-reload participant switch was detected, wait for the stale
+			// IDB wipe before initializing the gateway -- otherwise gw.init() would
+			// open the old DB and live queries could race the clear.
+			if (pendingClear) {
+				await pendingClear;
+				pendingClear = null;
+			}
+
 			// Initialize gateway (opens IndexedDB)
 			await gw.init();
 			gatewayInitialized = true;
@@ -284,7 +338,17 @@
 
 		<!-- Main Content -->
 		<main class="flex-1 overflow-hidden">
-			{@render children()}
+			{#if clearingStaleState}
+				<div class="flex h-full items-center justify-center text-sm text-muted-foreground">
+					<span class="animate-pulse">Preparing session…</span>
+				</div>
+			{:else if gateway || offlineSession || !data.participant}
+				{@render children()}
+			{:else}
+				<div class="flex h-full items-center justify-center text-sm text-muted-foreground">
+					<span class="animate-pulse">Loading…</span>
+				</div>
+			{/if}
 		</main>
 	</div>
 {/if}
