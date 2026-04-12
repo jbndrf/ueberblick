@@ -8,7 +8,15 @@
 import { getContext, setContext } from 'svelte';
 import { createParticipantGateway, type ParticipantGateway } from './gateway.svelte';
 import { setupPersistence, saveReferenceData, loadReferenceData, clearAllData } from './persistence.svelte';
-import { getDB, closeDB } from './db';
+import {
+	getDB,
+	closeDB,
+	setActiveParticipant,
+	getActiveParticipantId,
+	deleteParticipantDb,
+	pruneOtherParticipantDbs,
+	deleteLegacyDb
+} from './db';
 import type {
 	Workflow,
 	WorkflowStage,
@@ -227,28 +235,124 @@ export function getFullLocalCopyMode(): boolean {
 }
 
 // =============================================================================
+// Last-active participant hints (localStorage)
+// =============================================================================
+
+// These hints let the layout detect cross-reload changes *before* opening any
+// IndexedDB: if stored id/role/project don't match `data.participant`, we know
+// to switch to a different DB (or wipe the current one for role/project
+// changes on the same participant) before any local-first read fires.
+
+const LAST_PARTICIPANT_ID_KEY = 'ueberblick_last_participant_id';
+const LAST_ROLE_ID_KEY = 'ueberblick_last_role_id';
+const LAST_PROJECT_ID_KEY = 'ueberblick_last_project_id';
+
+export interface LastActiveHints {
+	participantId: string | null;
+	roleId: string | null;
+	projectId: string | null;
+}
+
+export function getLastActiveHints(): LastActiveHints {
+	if (typeof window === 'undefined') {
+		return { participantId: null, roleId: null, projectId: null };
+	}
+	try {
+		return {
+			participantId: localStorage.getItem(LAST_PARTICIPANT_ID_KEY),
+			roleId: localStorage.getItem(LAST_ROLE_ID_KEY),
+			projectId: localStorage.getItem(LAST_PROJECT_ID_KEY)
+		};
+	} catch {
+		return { participantId: null, roleId: null, projectId: null };
+	}
+}
+
+export function writeLastActiveHints(hints: LastActiveHints): void {
+	if (typeof window === 'undefined') return;
+	try {
+		if (hints.participantId) localStorage.setItem(LAST_PARTICIPANT_ID_KEY, hints.participantId);
+		else localStorage.removeItem(LAST_PARTICIPANT_ID_KEY);
+		if (hints.roleId) localStorage.setItem(LAST_ROLE_ID_KEY, hints.roleId);
+		else localStorage.removeItem(LAST_ROLE_ID_KEY);
+		if (hints.projectId) localStorage.setItem(LAST_PROJECT_ID_KEY, hints.projectId);
+		else localStorage.removeItem(LAST_PROJECT_ID_KEY);
+	} catch { /* storage disabled */ }
+}
+
+export function clearLastActiveHints(): void {
+	writeLastActiveHints({ participantId: null, roleId: null, projectId: null });
+}
+
+// =============================================================================
+// Active participant switching
+// =============================================================================
+
+/**
+ * Switch the active IndexedDB to the given participant. Delegates to the db
+ * module; exposed here so consumers import a single entry point.
+ */
+export function switchActiveParticipant(participantId: string | null): void {
+	setActiveParticipant(participantId);
+}
+
+/**
+ * Legacy-database cleanup: deletes the pre-namespacing `participant-state`
+ * database if it still exists on this origin. Safe to call on every boot.
+ */
+export async function cleanupLegacyDatabase(): Promise<void> {
+	await deleteLegacyDb();
+}
+
+/**
+ * Delete every participant-scoped DB on this origin except the given id.
+ * Bounds storage usage when users log in as different participants over time.
+ */
+export async function pruneStaleParticipantDbs(keepParticipantId: string): Promise<void> {
+	await pruneOtherParticipantDbs(keepParticipantId);
+}
+
+// =============================================================================
 // Full Session Reset (call on logout)
 // =============================================================================
 
 /**
- * Nuclear cleanup: wipe all participant state so the next login starts fresh.
- * Clears IndexedDB (all 6 stores), localStorage prefs, and Service Worker caches.
+ * Nuclear cleanup for the *currently active* participant. Deletes that
+ * participant's entire IndexedDB, forgets the last-active hints, and clears
+ * the service worker page/api caches. Leaves other participants' DBs on this
+ * origin untouched -- use `pruneStaleParticipantDbs()` for that.
+ *
+ * Behaviour matrix:
+ *  - "Logout" button on map screen: calls this, then fetches /participant/logout
+ *  - In-session participant switch to a different id: layout calls this on the
+ *    *old* participant's DB before switching
+ *  - Role/project change detected on reload: calls this to drop role-gated
+ *    stale data for the same participant
  */
 export async function resetAllParticipantState(): Promise<void> {
-	// 1. Clear all IndexedDB data (records, tiles, files, op_log, sync_metadata, conflicts)
-	await clearAllData();
+	const id = getActiveParticipantId();
 
-	// 2. Clear the offline session cache (belt-and-suspenders, clearAllData already clears records)
-	try { await clearCachedSession(); } catch { /* DB may already be cleared */ }
+	// 1. Drop the in-memory DB handle and the id that points to it.
+	closeDB();
 
-	// 3. Clear localStorage participant preferences + the last-seen participant
-	// id used by the layout to detect cross-reload account switches.
-	if (typeof window !== 'undefined') {
-		localStorage.removeItem(FULL_LOCAL_COPY_KEY);
-		try { localStorage.removeItem('ueberblick_last_participant_id'); } catch { /* storage disabled */ }
+	// 2. Delete the participant-scoped IndexedDB on disk. If no participant
+	// was active (edge case: called before any login), fall back to the
+	// clear-stores path which is a no-op on an unopened DB.
+	if (id) {
+		try { await deleteParticipantDb(id); } catch (e) {
+			console.error('Failed to delete participant DB:', e);
+		}
+	} else {
+		try { await clearAllData(); } catch { /* nothing to clear */ }
 	}
 
-	// 4. Clear Service Worker caches (stale API responses and pages)
+	// 3. Clear localStorage participant hints + the full-local-copy pref.
+	if (typeof window !== 'undefined') {
+		localStorage.removeItem(FULL_LOCAL_COPY_KEY);
+	}
+	clearLastActiveHints();
+
+	// 4. Clear Service Worker caches (stale API responses and pages).
 	if (typeof window !== 'undefined' && 'caches' in window) {
 		await Promise.all([
 			caches.delete('api-cache'),
@@ -256,6 +360,8 @@ export async function resetAllParticipantState(): Promise<void> {
 		]);
 	}
 
-	// 5. Close the IndexedDB connection so next session opens fresh
-	closeDB();
+	// 5. Forget the active participant so the next setActiveParticipant call
+	// is treated as a switch (and fires the participant-switch listeners that
+	// reset module-level caches like `cachedCollectionNames` in the gateway).
+	setActiveParticipant(null);
 }

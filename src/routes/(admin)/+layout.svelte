@@ -40,22 +40,32 @@
 		return match ? match[1] : null;
 	});
 
-	const currentProject = $derived(
-		data.projects?.find((p: { id: string }) => p.id === currentProjectId)
+	// Current project comes from the root layout server load (single getOne).
+	const currentProject = $derived(data.currentProject);
+
+	// Full projects list is only rendered on the /projects landing page and
+	// is loaded by that page's own +page.server.ts.
+	const projectsList = $derived(
+		($page.data.projects as Array<{ id: string; name: string }> | undefined) ?? []
 	);
 
 	// Sidebar entity data comes from the project layout server load
-	// (src/routes/(admin)/projects/[projectId]/+layout.server.ts) so it ships
-	// with the initial HTML. Reading via $page.data keeps this layout agnostic
-	// of which child route is active.
-	const sidebarWorkflows = $derived(
-		($page.data.sidebarWorkflows as Array<{ id: string; name: string; workflow_type: string }>) ?? []
+	// (src/routes/(admin)/projects/[projectId]/+layout.server.ts) as streamed
+	// promises so pages render immediately while the sidebar fills in.
+	const sidebarWorkflowsPromise = $derived(
+		$page.data.sidebarWorkflows as
+			| Promise<Array<{ id: string; name: string; workflow_type: string }>>
+			| undefined
 	);
-	const sidebarTables = $derived(
-		($page.data.sidebarTables as Array<{ id: string; display_name: string }>) ?? []
+	const sidebarTablesPromise = $derived(
+		$page.data.sidebarTables as
+			| Promise<Array<{ id: string; display_name: string }>>
+			| undefined
 	);
-	const sidebarMarkerCategories = $derived(
-		($page.data.sidebarMarkerCategories as Array<{ id: string; name: string }>) ?? []
+	const sidebarMarkerCategoriesPromise = $derived(
+		$page.data.sidebarMarkerCategories as
+			| Promise<Array<{ id: string; name: string }>>
+			| undefined
 	);
 
 	// Track collapsed state for groups
@@ -255,26 +265,30 @@
 							{#if !workflowsCollapsed}
 								<Sidebar.GroupContent>
 									<Sidebar.Menu>
-										{#each sidebarWorkflows as wf}
-											<Sidebar.MenuItem>
-												<Sidebar.MenuSubButton
-													href="/projects/{currentProjectId}/workflows/{wf.id}"
-													isActive={$page.url.pathname.startsWith(`/projects/${currentProjectId}/workflows/${wf.id}`)}
-												>
-													{#if wf.workflow_type === 'incident'}
-														<MapPin class="h-4 w-4" />
-													{:else}
-														<Workflow class="h-4 w-4" />
-													{/if}
-													<span>{wf.name}</span>
-												</Sidebar.MenuSubButton>
-											</Sidebar.MenuItem>
-										{/each}
-										{#if sidebarWorkflows.length === 0}
-											<div class="px-3 py-2 text-xs text-muted-foreground">
-												{m.navNoWorkflows()}
-											</div>
-										{/if}
+										{#await sidebarWorkflowsPromise ?? Promise.resolve([])}
+											<div class="px-3 py-2 text-xs text-muted-foreground">...</div>
+										{:then sidebarWorkflows}
+											{#each sidebarWorkflows as wf}
+												<Sidebar.MenuItem>
+													<Sidebar.MenuSubButton
+														href="/projects/{currentProjectId}/workflows/{wf.id}"
+														isActive={$page.url.pathname.startsWith(`/projects/${currentProjectId}/workflows/${wf.id}`)}
+													>
+														{#if wf.workflow_type === 'incident'}
+															<MapPin class="h-4 w-4" />
+														{:else}
+															<Workflow class="h-4 w-4" />
+														{/if}
+														<span>{wf.name}</span>
+													</Sidebar.MenuSubButton>
+												</Sidebar.MenuItem>
+											{/each}
+											{#if sidebarWorkflows.length === 0}
+												<div class="px-3 py-2 text-xs text-muted-foreground">
+													{m.navNoWorkflows()}
+												</div>
+											{/if}
+										{/await}
 									</Sidebar.Menu>
 								</Sidebar.GroupContent>
 							{/if}
@@ -318,45 +332,49 @@
 							{#if !tablesCollapsed}
 								<Sidebar.GroupContent>
 									<Sidebar.Menu>
-										{#each sidebarTables as tbl}
-											<Sidebar.MenuItem>
-												<Sidebar.MenuSubButton
-													href="/projects/{currentProjectId}/custom-tables/{tbl.id}"
-													isActive={$page.url.pathname.startsWith(`/projects/${currentProjectId}/custom-tables/${tbl.id}`)}
-												>
-													<Table class="h-4 w-4" />
-													<span>{tbl.display_name}</span>
-												</Sidebar.MenuSubButton>
-											</Sidebar.MenuItem>
-										{/each}
-										{#each sidebarMarkerCategories as mc}
-											<Sidebar.MenuItem>
-												<Sidebar.MenuSubButton
-													href="/projects/{currentProjectId}/marker-categories/{mc.id}"
-													isActive={$page.url.pathname.startsWith(`/projects/${currentProjectId}/marker-categories/${mc.id}`)}
-												>
-													<MapPin class="h-4 w-4" />
-													<span>{mc.name}</span>
-												</Sidebar.MenuSubButton>
-											</Sidebar.MenuItem>
-										{/each}
-										{#if sidebarTables.length === 0 && sidebarMarkerCategories.length === 0}
-											<div class="px-3 py-2 text-xs text-muted-foreground">
-												{m.navNoTables()}
-											</div>
-										{/if}
+										{#await Promise.all([sidebarTablesPromise ?? Promise.resolve([]), sidebarMarkerCategoriesPromise ?? Promise.resolve([])])}
+											<div class="px-3 py-2 text-xs text-muted-foreground">...</div>
+										{:then [sidebarTables, sidebarMarkerCategories]}
+											{#each sidebarTables as tbl}
+												<Sidebar.MenuItem>
+													<Sidebar.MenuSubButton
+														href="/projects/{currentProjectId}/custom-tables/{tbl.id}"
+														isActive={$page.url.pathname.startsWith(`/projects/${currentProjectId}/custom-tables/${tbl.id}`)}
+													>
+														<Table class="h-4 w-4" />
+														<span>{tbl.display_name}</span>
+													</Sidebar.MenuSubButton>
+												</Sidebar.MenuItem>
+											{/each}
+											{#each sidebarMarkerCategories as mc}
+												<Sidebar.MenuItem>
+													<Sidebar.MenuSubButton
+														href="/projects/{currentProjectId}/marker-categories/{mc.id}"
+														isActive={$page.url.pathname.startsWith(`/projects/${currentProjectId}/marker-categories/${mc.id}`)}
+													>
+														<MapPin class="h-4 w-4" />
+														<span>{mc.name}</span>
+													</Sidebar.MenuSubButton>
+												</Sidebar.MenuItem>
+											{/each}
+											{#if sidebarTables.length === 0 && sidebarMarkerCategories.length === 0}
+												<div class="px-3 py-2 text-xs text-muted-foreground">
+													{m.navNoTables()}
+												</div>
+											{/if}
+										{/await}
 									</Sidebar.Menu>
 								</Sidebar.GroupContent>
 							{/if}
 						</Sidebar.Group>
 
-					{:else if data.projects && data.projects.length > 0}
+					{:else if projectsList.length > 0}
 						<Sidebar.Separator class="my-4" />
 						<Sidebar.Group>
 							<Sidebar.GroupLabel>{m.navYourProjects()}</Sidebar.GroupLabel>
 							<Sidebar.GroupContent>
 								<Sidebar.Menu>
-									{#each data.projects as project}
+									{#each projectsList as project}
 										<Sidebar.MenuItem>
 											<Sidebar.MenuButton>
 												{#snippet child({ props })}

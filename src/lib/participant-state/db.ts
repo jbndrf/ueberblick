@@ -178,11 +178,68 @@ interface ParticipantStateDB extends DBSchema {
 	};
 }
 
-const DB_NAME = 'participant-state';
+// Legacy (pre-namespacing) database name. Still referenced by `deleteLegacyDb()`
+// so upgrades can remove the old global DB on first boot after this change.
+const LEGACY_DB_NAME = 'participant-state';
+const DB_NAME_PREFIX = 'participant-state__';
 const DB_VERSION = 8;
 
-// Promise-based singleton: all concurrent callers share one openDB() call.
+function participantDbName(participantId: string): string {
+	return `${DB_NAME_PREFIX}${participantId}`;
+}
+
+// The participant whose IndexedDB is currently active. All IDB reads/writes
+// go through the DB named after this id. Switching participants is "open a
+// different database", not "wipe the shared one" -- physical isolation.
+let activeParticipantId: string | null = null;
+
+// Promise-based singleton for the *currently active* DB. Changing the active
+// participant closes this and forces the next getDB() to re-open the new one.
 let dbPromise: Promise<IDBPDatabase<ParticipantStateDB>> | null = null;
+
+// Listeners notified whenever the active participant changes. The gateway
+// module subscribes to reset its module-scoped collection-name cache, which
+// would otherwise bleed collection names from the previous DB into the new
+// one.
+type ParticipantSwitchListener = (newId: string | null) => void;
+const participantSwitchListeners = new Set<ParticipantSwitchListener>();
+
+export function onParticipantSwitch(listener: ParticipantSwitchListener): () => void {
+	participantSwitchListeners.add(listener);
+	return () => participantSwitchListeners.delete(listener);
+}
+
+/**
+ * Point the IndexedDB layer at a specific participant's database. Idempotent
+ * when called with the same id. Drops the cached handle so the next getDB()
+ * call opens a fresh connection to the right DB -- but does NOT synchronously
+ * close the old handle. Synchronous close races with in-flight transactions
+ * in live queries (they call getDB() then db.get() on the next microtask,
+ * and closing mid-await throws "database connection is closing"). Consumers
+ * that are still mid-query keep their reference to the old handle; it will
+ * be closed when they release it and the garbage collector runs.
+ *
+ * No-op on the server. `activeParticipantId` is module-level state and
+ * IndexedDB doesn't exist on the server anyway, so keeping it untouched
+ * during SSR avoids cross-request leakage.
+ */
+export function setActiveParticipant(participantId: string | null): void {
+	if (typeof window === 'undefined') return;
+	if (activeParticipantId === participantId) return;
+	// Drop the pointer. The old Promise/IDBPDatabase remains alive for
+	// consumers that already awaited it; they'll finish their work and
+	// release the handle. Next getDB() call opens a fresh connection to
+	// the new participant's DB.
+	dbPromise = null;
+	activeParticipantId = participantId;
+	for (const listener of participantSwitchListeners) {
+		try { listener(participantId); } catch (e) { console.error('Participant switch listener error:', e); }
+	}
+}
+
+export function getActiveParticipantId(): string | null {
+	return activeParticipantId;
+}
 
 /**
  * Schema upgrade logic -- shared between primary open and recovery retry.
@@ -284,8 +341,14 @@ function upgradeSchema(db: IDBPDatabase<ParticipantStateDB>, oldVersion: number)
  * Internal: open the database with full error handling and recovery.
  */
 async function doOpenDB(): Promise<IDBPDatabase<ParticipantStateDB>> {
+	if (!activeParticipantId) {
+		throw new Error(
+			'No active participant. Call setActiveParticipant(id) before getDB().'
+		);
+	}
+	const dbName = participantDbName(activeParticipantId);
 	try {
-		return await openDB<ParticipantStateDB>(DB_NAME, DB_VERSION, {
+		return await openDB<ParticipantStateDB>(dbName, DB_VERSION, {
 			upgrade(db, oldVersion) {
 				upgradeSchema(db, oldVersion);
 			},
@@ -295,11 +358,14 @@ async function doOpenDB(): Promise<IDBPDatabase<ParticipantStateDB>> {
 					`IndexedDB upgrade blocked (v${currentVersion} -> v${blockedVersion}). Waiting for other connections to close.`
 				);
 			},
-			blocking(_currentVersion, _blockedVersion, event) {
-				// OUR connection is blocking someone else's upgrade.
-				// Close so the other connection can proceed.
-				(event.target as IDBDatabase).close();
-				dbPromise = null;
+			blocking(_currentVersion, _blockedVersion, _event) {
+				// Our connection is blocking someone else's upgrade. We do NOT
+				// close synchronously here: closing kills every in-flight
+				// transaction on this handle and throws "The database
+				// connection is closing" errors into live queries. The other
+				// connection will just have to wait until our handle is
+				// naturally released (tab close/reload).
+				console.warn('IndexedDB blocking another connection upgrade. Ignoring.');
 			},
 			terminated() {
 				// Browser closed our connection unexpectedly (e.g., storage pressure).
@@ -315,13 +381,13 @@ async function doOpenDB(): Promise<IDBPDatabase<ParticipantStateDB>> {
 		dbPromise = null;
 
 		await new Promise<void>((resolve, reject) => {
-			const req = indexedDB.deleteDatabase(DB_NAME);
+			const req = indexedDB.deleteDatabase(dbName);
 			req.onsuccess = () => resolve();
 			req.onerror = () => reject(req.error);
 		});
 
 		// Retry with a fresh database (non-recursive: calls openDB directly).
-		return await openDB<ParticipantStateDB>(DB_NAME, DB_VERSION, {
+		return await openDB<ParticipantStateDB>(dbName, DB_VERSION, {
 			upgrade(db, oldVersion) {
 				upgradeSchema(db, oldVersion);
 			}
@@ -383,14 +449,84 @@ export async function clearSyncedData(): Promise<void> {
 }
 
 /**
- * Delete the entire database (for testing or reset)
+ * Delete the currently active participant's database. Closes the handle
+ * first so the delete isn't blocked by our own open connection.
  */
 export async function deleteDatabase(): Promise<void> {
+	const id = activeParticipantId;
+	if (!id) return;
 	closeDB();
+	await deleteParticipantDb(id);
+}
+
+/**
+ * Delete a specific participant's IndexedDB by id.
+ */
+export async function deleteParticipantDb(participantId: string): Promise<void> {
+	const name = participantDbName(participantId);
 	await new Promise<void>((resolve, reject) => {
-		const request = indexedDB.deleteDatabase(DB_NAME);
+		const request = indexedDB.deleteDatabase(name);
 		request.onsuccess = () => resolve();
 		request.onerror = () => reject(request.error);
+		// `blocked` fires if another tab still has the DB open; the delete
+		// will complete once that tab closes. Don't block here -- just resolve
+		// so we don't hang the logout flow.
+		request.onblocked = () => resolve();
+	});
+}
+
+/**
+ * List all participant-scoped IndexedDB database names currently on this
+ * origin. Uses `indexedDB.databases()` where available; returns an empty
+ * list on browsers that don't support it (Firefox < 126, Safari < 17).
+ * Callers should treat an empty result as "unknown, don't try to prune".
+ */
+export async function listParticipantDbs(): Promise<string[]> {
+	if (typeof indexedDB === 'undefined' || typeof indexedDB.databases !== 'function') {
+		return [];
+	}
+	try {
+		const dbs = await indexedDB.databases();
+		return dbs
+			.map((d) => d.name)
+			.filter((n): n is string => typeof n === 'string' && n.startsWith(DB_NAME_PREFIX));
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * Delete every participant-scoped DB on this origin except `keepParticipantId`.
+ * Called on successful login to bound storage usage without relying on
+ * explicit logout. No-op if `indexedDB.databases()` isn't supported.
+ */
+export async function pruneOtherParticipantDbs(keepParticipantId: string): Promise<void> {
+	const keep = participantDbName(keepParticipantId);
+	const names = await listParticipantDbs();
+	await Promise.all(
+		names
+			.filter((n) => n !== keep)
+			.map((n) => new Promise<void>((resolve) => {
+				const req = indexedDB.deleteDatabase(n);
+				req.onsuccess = () => resolve();
+				req.onerror = () => resolve();
+				req.onblocked = () => resolve();
+			}))
+	);
+}
+
+/**
+ * One-shot cleanup: delete the legacy pre-namespacing `participant-state`
+ * database if it still exists. Safe to call repeatedly; the delete is a
+ * no-op if the DB isn't present.
+ */
+export async function deleteLegacyDb(): Promise<void> {
+	if (typeof indexedDB === 'undefined') return;
+	await new Promise<void>((resolve) => {
+		const req = indexedDB.deleteDatabase(LEGACY_DB_NAME);
+		req.onsuccess = () => resolve();
+		req.onerror = () => resolve();
+		req.onblocked = () => resolve();
 	});
 }
 

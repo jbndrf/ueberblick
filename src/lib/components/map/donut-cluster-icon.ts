@@ -1,6 +1,7 @@
 /**
- * Generates SVG donut cluster icons from aggregated composition data.
- * All segments are neutral grey with white gaps between them to indicate proportions.
+ * Generates SVG pie-chart cluster icons from aggregated composition data.
+ * Filled grey wedges with white angular gaps; largest slice starts at 12 o'clock.
+ * A small white disc sits behind the count label for readability.
  */
 
 export interface VisualKeyInfo {
@@ -11,8 +12,8 @@ export interface VisualKeyInfo {
 export type VisualKeyRegistry = Map<string, VisualKeyInfo>;
 
 const CLUSTER_COLOR = '#6b7280'; // gray-500
-const SEPARATOR_COLOR = '#ffffff';
-const MIN_SLICE_FRACTION = 0.05; // slices < 5% merged into "other"
+const GAP_ANGLE = 0.12; // radians between adjacent slices (~7°)
+const DOMINANCE_THRESHOLD = 0.95; // slices above this render as a single solid pie
 
 interface DonutSlice {
 	key: string;
@@ -30,22 +31,21 @@ export function donutCacheKey(counts: Record<string, number>, totalCount: number
 }
 
 /**
- * Generate an SVG donut string for a cluster.
- * Solid grey ring with white separator lines indicating proportions.
+ * Generate an SVG pie-chart string for a cluster.
+ * Solid grey circle with white radial separator lines marking slice boundaries.
+ * Largest slice starts at 12 o'clock. Count label is black text on top.
  */
 export function generateDonutSvg(
 	counts: Record<string, number>,
 	totalCount: number,
-	registry: VisualKeyRegistry,
+	_registry: VisualKeyRegistry,
 	size: number
 ): string {
 	const slices = buildSlices(counts, totalCount);
 
 	const cx = size / 2;
 	const cy = size / 2;
-	const ringWidth = 6;
-	const r = cx - ringWidth / 2 - 1;
-	const fillR = r - ringWidth / 2;
+	const r = cx - 1; // slight inset to avoid edge clipping
 
 	const label = totalCount < 1000
 		? String(totalCount)
@@ -53,27 +53,30 @@ export function generateDonutSvg(
 			? `${(totalCount / 1000).toFixed(1)}k`
 			: `${Math.floor(totalCount / 1000)}k`;
 
-	const fontSize = size < 46 ? 11 : 13;
+	const fontSize = size < 46 ? 13 : 15;
 
-	// Separator lines: drawn from center outward, then covered by the white inner fill.
-	// The outer edge is clipped by the SVG viewBox. Simple and reliable.
+	// Solid grey circle forms the pie. Since all slices are the same color,
+	// we don't need separate wedge paths -- just draw radial white separator
+	// lines at each slice boundary. Largest slice starts at 12 o'clock.
 	let separators = '';
-
 	if (slices.length > 1) {
-		let angle = -Math.PI / 2;
+		let cursor = -Math.PI / 2;
 		for (let i = 0; i < slices.length; i++) {
-			angle += slices[i].fraction * 2 * Math.PI;
-			const x = cx + size * Math.cos(angle);
-			const y = cy + size * Math.sin(angle);
-			separators += `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(2)}" y2="${y.toFixed(2)}" stroke="${SEPARATOR_COLOR}" stroke-width="2"/>`;
+			// Draw a separator at the START of each slice boundary.
+			// Cursor begins at 12 o'clock which is also slices[0]'s start edge,
+			// so we get one line per slice (n lines for n slices), which is exactly
+			// the number of boundaries in a closed pie.
+			const x = (cx + r * Math.cos(cursor)).toFixed(2);
+			const y = (cy + r * Math.sin(cursor)).toFixed(2);
+			separators += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="#ffffff" stroke-width="2" stroke-linecap="butt"/>`;
+			cursor += slices[i].fraction * 2 * Math.PI;
 		}
 	}
 
 	return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-	<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${CLUSTER_COLOR}" stroke-width="${ringWidth}"/>
+	<circle cx="${cx}" cy="${cy}" r="${r}" fill="${CLUSTER_COLOR}"/>
 	${separators}
-	<circle cx="${cx}" cy="${cy}" r="${fillR}" fill="white"/>
-	<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="${fontSize}" font-weight="bold" font-family="system-ui, sans-serif" fill="#374151">${label}</text>
+	<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="${fontSize}" font-weight="bold" font-family="system-ui, sans-serif" fill="#000000">${label}</text>
 </svg>`;
 }
 
@@ -87,13 +90,20 @@ export function donutSize(count: number): number {
 }
 
 /**
- * Build ordered slices from counts, merging small ones into "other".
+ * Build ordered slices from counts, sorted largest first.
+ * If the dominant slice is >= DOMINANCE_THRESHOLD, collapse everything
+ * into a single slice so the icon renders as a continuous ring.
  */
 function buildSlices(
 	counts: Record<string, number>,
 	totalCount: number
 ): DonutSlice[] {
+	if (totalCount <= 0) {
+		return [{ key: '_all', count: 0, fraction: 1 }];
+	}
+
 	const entries = Object.entries(counts)
+		.filter(([, count]) => count > 0)
 		.map(([key, count]) => ({
 			key,
 			count,
@@ -101,32 +111,13 @@ function buildSlices(
 		}))
 		.sort((a, b) => b.count - a.count);
 
-	const significant: DonutSlice[] = [];
-	let otherCount = 0;
-
-	for (const entry of entries) {
-		if (entry.fraction < MIN_SLICE_FRACTION) {
-			otherCount += entry.count;
-		} else {
-			significant.push(entry);
-		}
+	if (entries.length === 0) {
+		return [{ key: '_all', count: totalCount, fraction: 1 }];
 	}
 
-	if (otherCount > 0) {
-		significant.push({
-			key: '_other',
-			count: otherCount,
-			fraction: otherCount / totalCount
-		});
+	if (entries[0].fraction >= DOMINANCE_THRESHOLD) {
+		return [{ key: entries[0].key, count: totalCount, fraction: 1 }];
 	}
 
-	if (significant.length === 0) {
-		significant.push({
-			key: '_all',
-			count: totalCount,
-			fraction: 1
-		});
-	}
-
-	return significant;
+	return entries;
 }

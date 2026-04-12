@@ -8,7 +8,7 @@
 	import { resetPocketBase } from '$lib/pocketbase';
 	import { disconnectRealtime } from '$lib/participant-state';
 	import { FieldValueCache } from '$lib/participant-state/field-value-cache.svelte';
-	import { appLoadingMessage } from '$lib/participant-state/sync.svelte';
+	import { appLoadingMessage, downloadProgress as syncDownloadProgress, downloadAllCollections } from '$lib/participant-state/sync.svelte';
 	import { Loader2 } from 'lucide-svelte';
 	import { MapCanvas, BottomControlBar, LayerSheet, FilterSheet, WorkflowSelector, SettingsSheet } from './components';
 	import { WorkflowInstanceDetailModule, MarkerDetailModule, createSelection, type Selection, type Marker } from './modules';
@@ -88,6 +88,19 @@
 			});
 		});
 
+		// Proactively download every remaining collection into IDB. Runs AFTER
+		// the live queries above have been declared (they registered themselves
+		// synchronously), so downloadAllCollections will skip those names and
+		// only pull collections that aren't otherwise managed -- tools_edit,
+		// tools_protocol, tools_form_fields, tools_forms,
+		// workflow_instance_tool_usage, etc. workflow_instance_field_values is
+		// handled by FieldValueCache so we pass it as externally-managed.
+		// Idempotent: re-logins short-circuit via sync_metadata.
+		const names = data.collectionNames ?? [];
+		downloadAllCollections(names, ['workflow_instance_field_values']).catch((e) =>
+			console.warn('Initial collection download failed (non-fatal):', e)
+		);
+
 		mapNavCallbacks.set({
 			onLayersClick: () => (layerSheetOpen = true),
 			onFiltersClick: () => (filterSheetOpen = true),
@@ -146,12 +159,16 @@
 	const stagesLive = gateway!.collection('workflow_stages').live({ priority: 'deferred' });
 	const fieldTagsLive = gateway!.collection('tools_field_tags').live({ priority: 'deferred' });
 	const fieldValueCache = new FieldValueCache();
-	const connectionsLive = gateway!.collection('workflow_connections').live({ filter: 'from_stage_id = ""', priority: 'deferred' });
+	// Proactive full-collection download in +layout.svelte fills workflow_connections
+	// on first login; realtime + delta sync handle updates. The live query here
+	// is purely to keep an up-to-date reactive mirror in IDB for any consumers.
+	const connectionsLive = gateway!.collection('workflow_connections').live({ priority: 'deferred' });
 
 	// Show progress in layout header while data streams in.
 	// Map is interactive the whole time -- this is informational only.
 	$effect(() => {
 		const instProgress = instancesLive.fetchProgress;
+		const dlProgress = syncDownloadProgress.current;
 		if (instProgress) {
 			if (instProgress.total > 0) {
 				appLoadingMessage.value = `Loading markers (${instProgress.loaded.toLocaleString()}/${instProgress.total.toLocaleString()})...`;
@@ -162,6 +179,13 @@
 			appLoadingMessage.value = `Loading field data (${fieldValueCache.loadedCount.toLocaleString()})...`;
 		} else if (fieldValueCache.loading) {
 			appLoadingMessage.value = 'Loading field data...';
+		} else if (dlProgress) {
+			const label = dlProgress.currentCollection ?? 'data';
+			if (dlProgress.totalRecords > 0) {
+				appLoadingMessage.value = `Loading ${label} (${dlProgress.loadedRecords.toLocaleString()}/${dlProgress.totalRecords.toLocaleString()})...`;
+			} else {
+				appLoadingMessage.value = `Loading ${label}...`;
+			}
 		} else {
 			appLoadingMessage.value = null;
 		}
@@ -198,6 +222,7 @@
 	const workflows: Workflow[] = $derived.by(() => {
 		const entryLabelByWorkflow = new Map<string, string>();
 		for (const conn of connectionsLive.records) {
+			if (conn.from_stage_id) continue;
 			const label = (conn.visual_config as any)?.button_label;
 			if (label) entryLabelByWorkflow.set(conn.workflow_id as string, label);
 		}

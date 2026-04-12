@@ -10,7 +10,7 @@
  * Audit trail is handled at the tool level via workflow_instance_tool_usage collection.
  */
 
-import { getDB, initDB, type CachedRecord, requestPersistentStorage } from './db';
+import { getDB, initDB, onParticipantSwitch, type CachedRecord, requestPersistentStorage } from './db';
 import { getPocketBase } from '$lib/pocketbase';
 import { query } from './query';
 import { storeFileBlob, buildFileKey } from './file-cache';
@@ -112,6 +112,15 @@ export function notifyDataChange(collection: string, recordId?: string, action?:
  */
 const liveCollections = new Map<string, number>(); // collection name -> active live query count
 
+/**
+ * Snapshot of the collection names currently being watched by at least one
+ * active live query. Used by the initial-download path in sync.svelte.ts so
+ * it doesn't race live queries that are already pulling the same collection.
+ */
+export function getLiveCollectionNames(): string[] {
+	return Array.from(liveCollections.keys());
+}
+
 function registerLiveCollection(name: string): void {
 	liveCollections.set(name, (liveCollections.get(name) || 0) + 1);
 }
@@ -131,7 +140,16 @@ function unregisterLiveCollection(name: string): void {
 
 // Cached list of collection names present in IDB. Populated lazily on first
 // expand call, then kept up-to-date via ensureCollectionInCache().
+// Resets automatically when the active participant changes -- otherwise
+// collection names from the previous participant's DB would bleed into the
+// new one and cause mis-targeted expand lookups.
 let cachedCollectionNames: string[] | null = null;
+
+if (typeof window !== 'undefined') {
+	onParticipantSwitch(() => {
+		cachedCollectionNames = null;
+	});
+}
 
 async function getKnownCollections(db: Awaited<ReturnType<typeof getDB>>): Promise<string[]> {
 	if (cachedCollectionNames) return cachedCollectionNames;
@@ -840,27 +858,44 @@ export function createParticipantGateway(participantId: string, projectId: strin
 					}
 				}
 
-				// Initial read from IndexedDB (skip on server -- no IndexedDB)
+				// Initial read from IndexedDB (skip on server -- no IndexedDB).
+				// All IDB work is wrapped so a transient error (stale handle
+				// during participant switch, page unload mid-transaction)
+				// clears the loading state and doesn't propagate as an
+				// unhandled promise rejection that freezes the tab.
 				if (typeof window !== 'undefined') {
 					const priority = options?.priority ?? 'critical';
 					const scheduleRead = () => {
 						(async () => {
-							const db = await getDB();
-							const meta = await db.get('sync_metadata', name);
-							// Always read from IDB first (may be empty on fresh login, that's OK)
-							await readFromDB();
-							// If fresh collection, start paginated fetch -- data arrives progressively
-							if (!meta && navigator.onLine) {
-								// Set progress immediately so consumers know a fetch is in flight
-								fetchProgress = { loaded: 0, total: 0 };
-								backgroundFetchFullList(name, options, (loaded, total) => {
-									if (loaded === 0 && total === 0) {
-										// Signal completion
-										fetchProgress = null;
-									} else {
-										fetchProgress = { loaded, total };
-									}
-								});
+							try {
+								const db = await getDB();
+								const meta = await db.get('sync_metadata', name);
+								// Always read from IDB first (may be empty on fresh login, that's OK)
+								await readFromDB();
+								// If fresh collection, start paginated fetch -- data arrives progressively
+								if (!meta && navigator.onLine) {
+									// Set progress immediately so consumers know a fetch is in flight
+									fetchProgress = { loaded: 0, total: 0 };
+									backgroundFetchFullList(name, options, (loaded, total) => {
+										if (loaded === 0 && total === 0) {
+											// Signal completion
+											fetchProgress = null;
+										} else {
+											fetchProgress = { loaded, total };
+										}
+									});
+								}
+							} catch (e) {
+								// Most common cause: the DB handle was closed
+								// between `await getDB()` and the first store
+								// call, e.g. because the participant just
+								// switched or the page is unloading. Leave
+								// `records` as whatever was already there and
+								// drop out of the loading state so the UI
+								// doesn't spin forever.
+								console.debug(`[LiveQuery:${name}] initial read failed:`, e);
+								loading = false;
+								fetchProgress = null;
 							}
 						})();
 					};

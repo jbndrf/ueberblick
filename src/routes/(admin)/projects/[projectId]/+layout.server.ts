@@ -1,34 +1,52 @@
 import type { LayoutServerLoad } from './$types';
 
 /**
- * Loads the sidebar entities for a project so they ship with the initial HTML
- * instead of being fetched after client hydration. This removes the
- * "empty sidebar for a second or two" flash on cold navigation.
+ * Streams sidebar entities for a project so pages inside the project can
+ * render immediately while the sidebar fills in. Consumers in +layout.svelte
+ * await these promises with {#await}.
  */
 export const load: LayoutServerLoad = async ({ params, depends, locals: { pb } }) => {
 	const { projectId } = params;
 	depends('sidebar');
 
-	const [sidebarWorkflows, sidebarTables, sidebarMarkerCategories] = await Promise.all([
-		pb.collection('workflows').getFullList({
+	const sidebarWorkflows = pb
+		.collection('workflows')
+		.getFullList({
 			filter: `project_id = "${projectId}"`,
 			fields: 'id,name,workflow_type',
 			sort: 'name',
 			requestKey: null
-		}),
-		pb.collection('custom_tables').getFullList({
+		})
+		.catch((err) => {
+			console.error('Error fetching sidebar workflows:', err);
+			return [] as Array<{ id: string; name: string; workflow_type: string }>;
+		});
+
+	const sidebarTables = pb
+		.collection('custom_tables')
+		.getFullList({
 			filter: `project_id = "${projectId}"`,
 			fields: 'id,display_name',
 			sort: 'display_name',
 			requestKey: null
-		}),
-		pb.collection('marker_categories').getFullList({
+		})
+		.catch((err) => {
+			console.error('Error fetching sidebar custom tables:', err);
+			return [] as Array<{ id: string; display_name: string }>;
+		});
+
+	const sidebarMarkerCategories = pb
+		.collection('marker_categories')
+		.getFullList({
 			filter: `project_id = "${projectId}"`,
 			fields: 'id,name',
 			sort: 'name',
 			requestKey: null
 		})
-	]);
+		.catch((err) => {
+			console.error('Error fetching sidebar marker categories:', err);
+			return [] as Array<{ id: string; name: string }>;
+		});
 
 	return {
 		sidebarWorkflows,

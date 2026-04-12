@@ -15,6 +15,11 @@
 		setParticipantGateway,
 		getCachedSession,
 		resetAllParticipantState,
+		getLastActiveHints,
+		writeLastActiveHints,
+		switchActiveParticipant,
+		pruneStaleParticipantDbs,
+		cleanupLegacyDatabase,
 	} from '$lib/participant-state/context.svelte';
 	import { setSyncCollections, startPushListener, runCatchUpSync, syncStatus, appLoadingMessage } from '$lib/participant-state/sync.svelte';
 	import { setupRealtime } from '$lib/participant-state/realtime.svelte';
@@ -94,24 +99,23 @@
 	let cleanupRealtime: (() => void) | null = null;
 	let cleanupVisibility: (() => void) | null = null;
 
-	// Track current participant ID to detect re-auth with different account.
-	// Persisted in localStorage so cross-reload participant switches (e.g. logging
-	// in as a different token after a cookie expiry) are detected too -- otherwise
-	// the previous participant's IDB records (markers, instances, ...) would leak
-	// into the new session until the next background sync overwrote them.
-	const LAST_PARTICIPANT_KEY = 'ueberblick_last_participant_id';
-	function readStoredParticipantId(): string | null {
-		if (typeof window === 'undefined') return null;
-		try { return localStorage.getItem(LAST_PARTICIPANT_KEY); } catch { return null; }
+	// Active participant/role/project identifiers. Each participant gets their
+	// own IndexedDB ("participant-state__${id}"), so cross-participant data
+	// leakage is structurally impossible. We track role and project id too so
+	// we can wipe that participant's DB when their role or project changes
+	// server-side -- role-gated workflows/tools cached under the old role
+	// must not render under the new one.
+	let currentParticipantId: string | null = null;
+	let currentRoleId: string | null = null;
+	let currentProjectId: string | null = null;
+
+	// One-shot: delete the legacy pre-namespacing DB on first boot after this
+	// change lands. Fire-and-forget -- safe to call repeatedly.
+	if (typeof window !== 'undefined') {
+		cleanupLegacyDatabase().catch((e) =>
+			console.warn('Legacy DB cleanup failed (non-fatal):', e)
+		);
 	}
-	function writeStoredParticipantId(id: string | null): void {
-		if (typeof window === 'undefined') return;
-		try {
-			if (id) localStorage.setItem(LAST_PARTICIPANT_KEY, id);
-			else localStorage.removeItem(LAST_PARTICIPANT_KEY);
-		} catch { /* storage disabled */ }
-	}
-	let currentParticipantId: string | null = readStoredParticipantId();
 
 	// syncStatus.current is reactive (imported $state from sync.svelte.ts)
 
@@ -135,46 +139,91 @@
 	// setContext() MUST be called during synchronous component init -- not in $effect --
 	// otherwise child components calling getContext() get null.
 	//
-	// If the stored participant id from the previous session differs from the
-	// incoming one, we still create the gateway synchronously (so context is set
-	// for children), but route its first IDB access through a pending-clear gate:
-	// the gateway's init() awaits `pendingClear` before touching the DB, and
-	// children are gated on `!clearingStaleState` in the template so no live
-	// query reads happen until the clear finishes.
-	let clearingStaleState = $state(false);
-	let pendingClear: Promise<void> | null = null;
+	// Switching participants = opening a different IndexedDB (the DB is
+	// namespaced by participant id), so "cross-participant leak" is
+	// structurally impossible. Same participant with a changed role or
+	// project triggers a scoped reset of *that* participant's DB so
+	// role-gated workflows/tools don't bleed across role changes.
+	let rolePendingReset: Promise<void> | null = null;
 	if (data.participant) {
-		const storedId = currentParticipantId;
-		const needsReset = !!storedId && storedId !== data.participant.id;
-		currentParticipantId = data.participant.id;
-		writeStoredParticipantId(data.participant.id);
+		const participant = data.participant;
+		const newId = participant.id;
+		const newRoleId = (participant.role_id as string | undefined) ?? null;
+		const newProjectId = participant.project_id;
 
-		if (needsReset) {
-			clearingStaleState = true;
-			pendingClear = resetAllParticipantState()
-				.catch((e) => {
-					console.error('Failed to clear stale participant state:', e);
-				})
+		const hints = getLastActiveHints();
+		const idChanged = !!hints.participantId && hints.participantId !== newId;
+		const sameIdRoleChanged =
+			hints.participantId === newId && !!hints.roleId && hints.roleId !== newRoleId;
+		const sameIdProjectChanged =
+			hints.participantId === newId && !!hints.projectId && hints.projectId !== newProjectId;
+
+		// Point the IDB layer at this participant's own DB *before* the gateway
+		// is created. This is synchronous and cheap -- it only updates a
+		// module-level string; the real open happens lazily in getDB().
+		switchActiveParticipant(newId);
+
+		if (sameIdRoleChanged || sameIdProjectChanged) {
+			// Same participant, but their role or project changed server-side.
+			// Role-gated workflows/tools/stages cached under the old role must
+			// not render under the new one. Wipe this participant's DB; the
+			// background sync will repopulate it under the new role/project.
+			// We kick this off async and gate the gateway init on it via
+			// `rolePendingReset` so live queries don't race the delete.
+			rolePendingReset = resetAllParticipantState()
+				.catch((e) => console.error('Failed to reset state on role/project change:', e))
 				.then(() => {
-					// Re-persist the new id, since resetAllParticipantState wipes it.
-					writeStoredParticipantId(data.participant!.id);
-					clearingStaleState = false;
+					// resetAllParticipantState clears the active id; set it again.
+					switchActiveParticipant(newId);
+					writeLastActiveHints({
+						participantId: newId,
+						roleId: newRoleId,
+						projectId: newProjectId
+					});
 				});
+		} else {
+			// Persist hints immediately. For an id change this is "new
+			// participant took over"; for no change this is "same session".
+			writeLastActiveHints({
+				participantId: newId,
+				roleId: newRoleId,
+				projectId: newProjectId
+			});
+			// If another participant was active on this device before, their
+			// orphaned DB should be pruned to bound storage. Fire-and-forget.
+			if (idChanged && typeof window !== 'undefined') {
+				pruneStaleParticipantDbs(newId).catch((e) =>
+					console.warn('Failed to prune stale participant DBs:', e)
+				);
+			}
 		}
 
-		gateway = createParticipantGateway(data.participant.id, data.participant.project_id);
+		currentParticipantId = newId;
+		currentRoleId = newRoleId;
+		currentProjectId = newProjectId;
+
+		gateway = createParticipantGateway(newId, newProjectId);
 		setParticipantGateway(gateway);
 		setupPersistence(gateway);
+	} else {
+		// No server-authenticated participant. Leave the active DB unset here
+		// and let the offline-session check below restore it from the hint
+		// (see `checkOfflineSession`).
+		const hints = getLastActiveHints();
+		currentParticipantId = hints.participantId;
+		currentRoleId = hints.roleId;
+		currentProjectId = hints.projectId;
 	}
 
-	// Reactive gateway lifecycle: recreate when participant changes (re-auth with different account)
+	// Reactive gateway lifecycle: recreate when participant changes in-session.
+	// The sync init block above handles the first mount; this effect handles
+	// live changes (e.g. form-based re-auth without a full reload).
 	$effect(() => {
 		const participant = data.participant;
 		if (!participant) {
-			// Auth lost -- tear down but keep IndexedDB for offline mode.
-			// Note: keep the stored last-participant id so an offline reload can
-			// still match and avoid a spurious wipe. It's cleared explicitly on
-			// resetAllParticipantState() below.
+			// Auth lost -- tear down but keep IndexedDB on disk so a later
+			// offline reload can still reach it via the cached session. We
+			// keep the active DB handle pointed at the last participant.
 			if (currentParticipantId) {
 				teardownGateway();
 				currentParticipantId = null;
@@ -182,19 +231,56 @@
 			return;
 		}
 
-		// Same participant, already initialized -- nothing to do
-		if (participant.id === currentParticipantId && gateway) return;
+		const newId = participant.id;
+		const newRoleId = (participant.role_id as string | undefined) ?? null;
+		const newProjectId = participant.project_id;
 
-		// Different participant -- tear down old, clear stale data, create new
-		if (currentParticipantId && currentParticipantId !== participant.id) {
+		// Same participant, same role/project, already initialized -- nothing to do.
+		if (
+			newId === currentParticipantId &&
+			newRoleId === currentRoleId &&
+			newProjectId === currentProjectId &&
+			gateway
+		) return;
+
+		const roleOrProjectChanged =
+			newId === currentParticipantId &&
+			(newRoleId !== currentRoleId || newProjectId !== currentProjectId);
+
+		if (currentParticipantId && currentParticipantId !== newId) {
+			// Different participant took over in-session. Tear down the old
+			// gateway and switch the DB layer to the new participant's own DB.
+			// No wipe: the old participant's DB on disk is still theirs, and
+			// will be pruned on next login.
 			teardownGateway();
-			// Clear all data from old participant to prevent orphaned records causing conflicts
-			resetAllParticipantState().catch((e) => console.error('Failed to reset state:', e));
+			if (typeof window !== 'undefined') {
+				pruneStaleParticipantDbs(newId).catch((e) =>
+					console.warn('Failed to prune stale participant DBs:', e)
+				);
+			}
+		} else if (roleOrProjectChanged) {
+			// Same participant, role or project changed server-side. Wipe
+			// their DB so role-gated data doesn't leak across the change.
+			teardownGateway();
+			resetAllParticipantState()
+				.catch((e) => console.error('Failed to reset state on role/project change:', e))
+				.then(() => {
+					switchActiveParticipant(newId);
+				});
 		}
 
-		currentParticipantId = participant.id;
-		writeStoredParticipantId(participant.id);
-		const gw = createParticipantGateway(participant.id, participant.project_id);
+		switchActiveParticipant(newId);
+		writeLastActiveHints({
+			participantId: newId,
+			roleId: newRoleId,
+			projectId: newProjectId
+		});
+
+		currentParticipantId = newId;
+		currentRoleId = newRoleId;
+		currentProjectId = newProjectId;
+
+		const gw = createParticipantGateway(newId, newProjectId);
 		gateway = gw;
 		setParticipantGateway(gw);
 		setupPersistence(gw);
@@ -215,11 +301,24 @@
 	});
 
 	async function checkOfflineSession() {
+		// The active-participant hint was already read during the sync init
+		// block and written to currentParticipantId. Point the DB layer at
+		// that hint's DB before reading the cached session -- otherwise we'd
+		// hit the "No active participant" error in getDB().
+		const hintedId = currentParticipantId;
+		if (!hintedId) return;
+
+		switchActiveParticipant(hintedId);
 		const cached = await getCachedSession();
 
 		if (cached) {
 			// Restore offline session -- in local-first mode, the app always works
 			offlineSession = cached;
+			currentParticipantId = cached.participantId;
+			currentProjectId = cached.projectId;
+			// Make sure the DB layer is pointed at the session's participant
+			// (should match the hint, but be defensive).
+			switchActiveParticipant(cached.participantId);
 			gateway = createParticipantGateway(cached.participantId, cached.projectId);
 			setParticipantGateway(gateway);
 			setupPersistence(gateway);
@@ -231,12 +330,13 @@
 		if (!gw) return;
 
 		try {
-			// If a cross-reload participant switch was detected, wait for the stale
-			// IDB wipe before initializing the gateway -- otherwise gw.init() would
-			// open the old DB and live queries could race the clear.
-			if (pendingClear) {
-				await pendingClear;
-				pendingClear = null;
+			// If a role/project change forced a scoped wipe of this
+			// participant's DB, wait for it to complete before gw.init()
+			// opens the (recreated) DB. Otherwise live queries could race
+			// the delete.
+			if (rolePendingReset) {
+				await rolePendingReset;
+				rolePendingReset = null;
 			}
 
 			// Initialize gateway (opens IndexedDB)
@@ -338,11 +438,7 @@
 
 		<!-- Main Content -->
 		<main class="flex-1 overflow-hidden">
-			{#if clearingStaleState}
-				<div class="flex h-full items-center justify-center text-sm text-muted-foreground">
-					<span class="animate-pulse">Preparing session…</span>
-				</div>
-			{:else if gateway || offlineSession || !data.participant}
+			{#if gateway || offlineSession || !data.participant}
 				{@render children()}
 			{:else}
 				<div class="flex h-full items-center justify-center text-sm text-muted-foreground">

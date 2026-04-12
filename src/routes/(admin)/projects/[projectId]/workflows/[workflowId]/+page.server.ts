@@ -97,7 +97,8 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 
 		// Resolve entities for custom_table_selector fields in parallel with per-source dedup.
 		// Multiple fields referencing the same source (e.g. same custom_table or "participants")
-		// share a single underlying fetch.
+		// share a single underlying fetch. This runs in parallel with Phase 2 (field values
+		// + creator names) since neither depends on the other.
 		const rawFetchCache = new Map<string, Promise<any[]>>();
 		const cachedFetch = (key: string, fetcher: () => Promise<any[]>): Promise<any[]> => {
 			let p = rawFetchCache.get(key);
@@ -108,7 +109,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 			return p;
 		};
 
-		await Promise.all(
+		const entityResolutionPromise = Promise.all(
 			fieldDefs
 				.filter((fd) => fd.type === 'custom_table_selector' && fd.fieldOptions)
 				.map(async (fd) => {
@@ -165,10 +166,12 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 				})
 		);
 
-		// Phase 2: field values (one OR-query) + creator names run in parallel.
-		// Stage names come from the already-loaded `stages` array -- no expand needed.
+		// Phase 2: field values + creator names. Run in parallel with entity resolution
+		// (neither depends on the other). Stage names come from the already-loaded
+		// `stages` array -- no expand needed.
 		const stageNameById = buildStageNameMap(stages as any);
-		const [fieldValues, creatorNameById] = await Promise.all([
+		const [, fieldValues, creatorNameById] = await Promise.all([
+			entityResolutionPromise,
 			fetchFieldValuesForInstances(
 				pb,
 				instances.map((i) => i.id)

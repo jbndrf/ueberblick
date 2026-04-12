@@ -593,9 +593,11 @@
 					class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
 				>
 					<option value="">Select a project...</option>
-					{#each (data.projects || []).filter((p) => p.id !== $page.params.projectId) as project}
-						<option value={project.id}>{project.name}</option>
-					{/each}
+					{#await data.projects then projectsList}
+						{#each projectsList.filter((p) => p.id !== $page.params.projectId) as project}
+							<option value={project.id}>{project.name}</option>
+						{/each}
+					{/await}
 				</select>
 			</div>
 			<div class="grid gap-2">

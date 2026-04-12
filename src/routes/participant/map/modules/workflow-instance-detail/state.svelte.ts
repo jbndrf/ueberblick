@@ -310,48 +310,49 @@ export class WorkflowInstanceDetailState {
 			this.forms = formsResult as unknown as ToolForm[];
 			this.toolUsageHistory = toolUsageResult as unknown as ToolUsageRecord[];
 
-			// Phase 2: Load tools scoped by phase 1 results (form IDs, connection/stage IDs)
-			const formIds = this.forms.map(f => f.id);
-			const connectionIds = this.connections.map(c => c.id);
-			const stageIds = this.stages.map(s => s.id);
-
-			// Build scoped filters using OR chains
-			const formFieldsFilter = formIds.length > 0
-				? formIds.map(id => `form_id = "${id}"`).join(' || ')
-				: 'form_id = "__none__"';
-
-			const toolScopeFilter = [
-				...connectionIds.map(id => `connection_id = "${id}"`),
-				...stageIds.map(id => `stage_id ~ "${id}"`)
-			].join(' || ') || 'connection_id = "__none__"';
+			// Phase 2: Load tools and filter in memory to this workflow's scope.
+			// The initial full-collection download in +layout.svelte ensures these
+			// tables are populated in IDB before the user opens a detail view, so
+			// local unfiltered reads are cheap -- no per-workflow filter round-trip
+			// to PocketBase needed.
+			const formIds = new Set(this.forms.map(f => f.id));
+			const connectionIds = new Set(this.connections.map(c => c.id));
+			const stageIds = new Set(this.stages.map(s => s.id));
 
 			const p2Start = performance.now();
 			const p2Labels = ['formFields', 'editTools', 'protocolTools'];
 			const p2Timings: number[] = [];
 			const [formFieldsResult, editToolsResult, protocolToolsResult] = await Promise.all([
-				this.gateway.collection('tools_form_fields').getFullList({
-					filter: formFieldsFilter
-				}).then(r => { p2Timings[0] = performance.now() - p2Start; return r; }),
-				this.gateway.collection('tools_edit').getFullList({
-					filter: toolScopeFilter
-				}).then(r => { p2Timings[1] = performance.now() - p2Start; return r; }),
-				this.gateway.collection('tools_protocol').getFullList({
-					filter: toolScopeFilter
-				}).then(r => { p2Timings[2] = performance.now() - p2Start; return r; })
+				this.gateway.collection('tools_form_fields').getFullList()
+					.then(r => { p2Timings[0] = performance.now() - p2Start; return r; }),
+				this.gateway.collection('tools_edit').getFullList()
+					.then(r => { p2Timings[1] = performance.now() - p2Start; return r; }),
+				this.gateway.collection('tools_protocol').getFullList()
+					.then(r => { p2Timings[2] = performance.now() - p2Start; return r; })
 			]);
 			const tP2 = performance.now();
 			console.log(`[DetailLoad] Phase 2 total: ${(tP2 - p2Start).toFixed(1)}ms — ${p2Labels.map((l, i) => `${l}: ${p2Timings[i]?.toFixed(1)}ms`).join(', ')}`);
 
 			this.formFields = (formFieldsResult as unknown as FormField[])
+				.filter(f => formIds.has(f.form_id))
 				.map(f => ({
 					...f,
 					field_options: this.parseFieldOptions(f.field_options)
 				}));
 
-			this.editTools = editToolsResult as unknown as ToolEdit[];
+			this.editTools = (editToolsResult as unknown as ToolEdit[]).filter(e => {
+				if (e.connection_id && connectionIds.has(e.connection_id)) return true;
+				if (e.stage_id && e.stage_id.some(sid => stageIds.has(sid))) return true;
+				return false;
+			});
 
-			// Exclude global protocol tools (automation-only) -- simple boolean check on already-filtered set
-			this.protocolTools = (protocolToolsResult as unknown as ToolProtocol[]).filter(p => !p.is_global);
+			// Exclude global protocol tools (automation-only) and scope to this workflow.
+			this.protocolTools = (protocolToolsResult as unknown as ToolProtocol[]).filter(p => {
+				if (p.is_global) return false;
+				if (p.connection_id && connectionIds.has(p.connection_id)) return true;
+				if (p.stage_id && p.stage_id.some(sid => stageIds.has(sid))) return true;
+				return false;
+			});
 
 			// Set initial active stage tab to first stage that has data, or first stage as fallback
 			if (this.stages.length > 0 && !this.activeStageTab) {

@@ -11,7 +11,7 @@
 import { getPocketBase } from '$lib/pocketbase';
 import { getDB, type CachedRecord, type SyncConflict } from './db';
 import { getFilesForRecord, deleteLocalFilesForRecord, deleteFilesForRecord } from './file-cache';
-import { notifyDataChange, onDataChange } from './gateway.svelte';
+import { notifyDataChange, onDataChange, getLiveCollectionNames } from './gateway.svelte';
 import type { ParticipantGateway } from './gateway.svelte';
 import { generateId, cleanRecord } from './utils';
 
@@ -37,6 +37,18 @@ export const syncStatus = $state<{ current: SyncProgressInfo | null }>({ current
 
 // General-purpose loading message (set by pages, read by layout header)
 export const appLoadingMessage = $state<{ value: string | null }>({ value: null });
+
+// Aggregate progress for the initial full-collection download (first login).
+// Surfaced in the participant map header alongside markers/field-value progress.
+export interface DownloadProgressInfo {
+	loadedRecords: number;
+	totalRecords: number;
+	currentCollection: string | null;
+}
+
+export const downloadProgress = $state<{ current: DownloadProgressInfo | null }>({
+	current: null
+});
 
 // How often to run full deletion detection (every Nth catch-up sync)
 const DELETION_CHECK_INTERVAL = 5;
@@ -688,6 +700,158 @@ export async function triggerSync(gateway: ParticipantGateway): Promise<boolean>
 	}
 
 	return true;
+}
+
+// =============================================================================
+// Full Collection Download (first login, idempotent)
+// =============================================================================
+
+/**
+ * Proactively pull every listed collection into IndexedDB. Runs on first
+ * login (from the map page, after live queries have been declared) so the
+ * participant has the complete project data available before opening any
+ * detail view -- matches what Settings -> Sync Now does, but silent and
+ * automatic.
+ *
+ * Deduplication: collections that already have a `sync_metadata` entry are
+ * skipped (delta catch-up + realtime keep them fresh), and collections
+ * currently being watched by a live query are ALSO skipped -- the live
+ * query's own paginated background fetch is already handling them, and
+ * running both paths in parallel would fetch every row twice. Callers can
+ * pass `externallyManaged` for collections handled outside the normal live
+ * query path (e.g. `FieldValueCache`).
+ *
+ * Paginated with PAGE_SIZE 500 so `downloadProgress` can tick forward
+ * record-by-record for the header indicator.
+ */
+const DOWNLOAD_PAGE_SIZE = 500;
+
+export async function downloadAllCollections(
+	collectionNames: string[],
+	externallyManaged: string[] = []
+): Promise<void> {
+	if (typeof window === 'undefined' || !navigator.onLine) return;
+	if (collectionNames.length === 0) return;
+
+	const pb = getPocketBase();
+	const db = await getDB();
+
+	// Anything currently watched by a live query, handled externally (e.g.
+	// FieldValueCache), or already marked synced is handled elsewhere.
+	const skip = new Set<string>([
+		...getLiveCollectionNames(),
+		...externallyManaged
+	]);
+
+	const pending: string[] = [];
+	for (const name of collectionNames) {
+		if (skip.has(name)) continue;
+		const meta = await db.get('sync_metadata', name);
+		if (!meta) pending.push(name);
+	}
+
+	if (pending.length === 0) {
+		// Nothing to do -- keep downloadProgress null so the header stays quiet.
+		return;
+	}
+
+	downloadProgress.current = {
+		loadedRecords: 0,
+		totalRecords: 0,
+		currentCollection: null
+	};
+
+	try {
+		for (const name of pending) {
+			downloadProgress.current = {
+				loadedRecords: downloadProgress.current?.loadedRecords ?? 0,
+				totalRecords: downloadProgress.current?.totalRecords ?? 0,
+				currentCollection: name
+			};
+
+			try {
+				let page = 1;
+				let totalPages = 1;
+				let latestTimestamp = '';
+
+				do {
+					const result = await pb.collection(name).getList(page, DOWNLOAD_PAGE_SIZE, {
+						sort: 'updated'
+					});
+					totalPages = result.totalPages;
+
+					// Batch-write this page in a single IDB transaction.
+					const tx = db.transaction('records', 'readwrite');
+					const store = tx.objectStore('records');
+
+					for (const record of result.items) {
+						const key = `${name}/${record.id}`;
+						const existing = await store.get(key);
+
+						if ((record.updated as string) > latestTimestamp) {
+							latestTimestamp = record.updated as string;
+						}
+
+						// Never clobber local modifications -- only bump
+						// _serverUpdated so conflict detection sees the latest
+						// server timestamp.
+						if (existing && existing._status !== 'unchanged') {
+							if (record.updated && existing._serverUpdated !== (record.updated as string)) {
+								existing._serverUpdated = record.updated as string;
+								store.put(existing);
+							}
+							continue;
+						}
+
+						// Skip unchanged rows we already have.
+						if (existing && existing.updated === record.updated) continue;
+
+						const cached: CachedRecord = {
+							...record,
+							id: record.id as string,
+							_key: key,
+							_collection: name,
+							_status: 'unchanged',
+							_serverUpdated: record.updated as string
+						};
+						store.put(cached);
+					}
+
+					await tx.done;
+
+					// Update aggregate progress. First page of a collection
+					// fills in its row count; later pages just bump loaded.
+					const prev: DownloadProgressInfo = downloadProgress.current!;
+					const newTotal = page === 1
+						? prev.totalRecords + result.totalItems
+						: prev.totalRecords;
+					downloadProgress.current = {
+						loadedRecords: prev.loadedRecords + result.items.length,
+						totalRecords: newTotal,
+						currentCollection: name
+					};
+
+					// Notify so live queries / FieldValueCache re-read the new rows.
+					notifyDataChange(name);
+
+					page++;
+				} while (page <= totalPages);
+
+				// Stamp sync_metadata so subsequent logins skip this collection
+				// and delta catch-up can use lastSyncTimestamp going forward.
+				if (latestTimestamp) {
+					await db.put('sync_metadata', {
+						collection: name,
+						lastSyncTimestamp: latestTimestamp
+					});
+				}
+			} catch (e) {
+				console.debug(`downloadAllCollections: skipped ${name}:`, e);
+			}
+		}
+	} finally {
+		downloadProgress.current = null;
+	}
 }
 
 // =============================================================================

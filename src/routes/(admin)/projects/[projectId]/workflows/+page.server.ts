@@ -21,24 +21,31 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 	const { projectId } = params;
 
 	try {
-		// Fetch workflows for this project and all projects (for import dialog)
-		const [workflowsRaw, allProjects] = await Promise.all([
-			pb.collection('workflows').getFullList({
-				filter: `project_id = "${projectId}"`,
-				sort: '-created'
-			}),
-			pb.collection('projects').getFullList({ sort: 'name' })
-		]);
+		const workflowsRaw = await pb.collection('workflows').getFullList({
+			filter: `project_id = "${projectId}"`,
+			sort: '-created'
+		});
 
 		// Normalize workflows to parse JSON array fields from TEXT columns
 		const workflows = normalizeRecords(workflowsRaw, 'workflows');
 
 		const form = await superValidate(zod(workflowSchema));
 
+		// Import dialog only needs the projects list when opened; stream it so
+		// the workflows page can render immediately without waiting on it.
+		const projectsPromise = pb
+			.collection('projects')
+			.getFullList({ fields: 'id,name', sort: 'name', requestKey: null })
+			.then((list) => list.map((p: any) => ({ id: p.id, name: p.name })))
+			.catch((err) => {
+				console.error('Error fetching projects for import dialog:', err);
+				return [] as Array<{ id: string; name: string }>;
+			});
+
 		return {
 			workflows: workflows || [],
 			form,
-			projects: allProjects.map((p: any) => ({ id: p.id, name: p.name }))
+			projects: projectsPromise
 		};
 	} catch (err) {
 		console.error('Error fetching workflows:', err);

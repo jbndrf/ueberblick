@@ -4,35 +4,37 @@ import type { LayoutServerLoad } from './$types';
 export const load: LayoutServerLoad = async ({ locals, url }) => {
 	const user = locals.user;
 
-	// Allow access to login page without authentication
 	if (url.pathname === '/login') {
-		return { user, projects: [] };
+		return { user, currentProject: null };
 	}
 
-	// Redirect to login if not authenticated
 	if (!user) {
 		const redirectTo = url.pathname + url.search;
 		redirect(303, `/login?redirectTo=${encodeURIComponent(redirectTo)}`);
 	}
 
-	// Ensure user is from 'users' collection (admin), not 'participants'
 	if (locals.pb.authStore.record?.collectionName !== 'users') {
 		redirect(303, '/login');
 	}
 
-	// Fetch user's projects for sidebar
-	let projects: Array<{ id: string; name: string }> = [];
-	try {
-		const data = await locals.pb.collection('projects').getFullList({
-			fields: 'id,name',
-			sort: 'name',
-			requestKey: null // Disable auto-cancellation for layout data
-		});
-
-		projects = data;
-	} catch (err) {
-		console.error('Error fetching projects:', err);
+	// Fetch only the current project's name when inside a project URL.
+	// The /projects page loads its own full list; other admin pages don't
+	// render the project list at all, so there's nothing else to fetch here.
+	const projectIdMatch = url.pathname.match(/^\/projects\/([^/]+)/);
+	let currentProject: { id: string; name: string } | null = null;
+	if (projectIdMatch) {
+		try {
+			const record = await locals.pb
+				.collection('projects')
+				.getOne(projectIdMatch[1], {
+					fields: 'id,name',
+					requestKey: null
+				});
+			currentProject = { id: record.id, name: record.name };
+		} catch (err) {
+			console.error('Error fetching current project:', err);
+		}
 	}
 
-	return { user, projects };
+	return { user, currentProject };
 };
