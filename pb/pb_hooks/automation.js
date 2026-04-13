@@ -728,7 +728,6 @@ function executeActions(actions, instanceId) {
         if (fieldRecords.length > 0) {
           const record = fieldRecords[0];
           record.set("value", resolvedValue);
-          record.set("last_modified_at", new Date().toISOString());
           noHooksApp.save(record);
           bumpUpdatedTimestamp("workflow_instance_field_values", record.id);
         } else {
@@ -758,7 +757,6 @@ function executeActions(actions, instanceId) {
           record.set("field_key", action.params.field_key);
           record.set("value", resolvedValue);
           record.set("stage_id", stageId);
-          record.set("last_modified_at", new Date().toISOString());
           $app.save(record);
         }
         var paramsWithResolved = JSON.parse(JSON.stringify(action.params));

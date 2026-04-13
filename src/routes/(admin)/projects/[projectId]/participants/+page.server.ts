@@ -110,16 +110,7 @@ export const actions: Actions = {
 			return fail(400, { form });
 		}
 
-		// Generate placeholder email if not provided
-		let email = form.data.email;
-		if (!email) {
-			// Count existing participants to generate unique placeholder
-			const existingCount = await pb.collection('participants').getList(1, 1, {
-				filter: `project_id = "${projectId}"`
-			});
-			const nextNumber = existingCount.totalItems + 1;
-			email = `participant${nextNumber}@placeholder.local`;
-		}
+		const userProvidedEmail = form.data.email;
 
 		// Generate unique token with retry logic
 		let token = generateUniqueToken();
@@ -127,6 +118,9 @@ export const actions: Actions = {
 		const maxRetries = 3;
 
 		while (retryCount < maxRetries) {
+			const email =
+				userProvidedEmail ||
+				`p-${Math.random().toString(36).slice(2, 8)}@placeholder.local`;
 			try {
 				await pb.collection('participants').create({
 					project_id: projectId,
@@ -144,8 +138,10 @@ export const actions: Actions = {
 				// Success
 				return { form, success: true };
 			} catch (insertError: any) {
-				// Check if it's a duplicate token error
-				if (insertError?.data?.token?.message?.includes('unique')) {
+				const tokenCollision = insertError?.data?.token?.message?.includes('unique');
+				const emailCollision =
+					!userProvidedEmail && insertError?.data?.email?.message?.includes('unique');
+				if (tokenCollision || emailCollision) {
 					retryCount++;
 					if (retryCount < maxRetries) {
 						token = generateUniqueToken();

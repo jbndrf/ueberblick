@@ -2,6 +2,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { AlertTriangle, Check, RotateCcw } from 'lucide-svelte';
 	import type { SyncConflict } from '$lib/participant-state/db';
+	import { getChangedFields } from '../conflict-diff';
 
 	// ==========================================================================
 	// Props
@@ -53,16 +54,6 @@
 	// Helpers
 	// ==========================================================================
 
-	// Internal/metadata columns that should never be shown to the participant
-	const SKIP_KEYS = new Set([
-		'id', 'created', 'updated', 'collectionId', 'collectionName',
-		'instance_id', 'field_key', 'stage_id',
-		'created_by_action', 'last_modified_by_action', 'last_modified_at'
-	]);
-
-	// For workflow_instance_field_values, only these columns carry participant data
-	const FIELD_VALUE_DISPLAY_KEYS = new Set(['value', 'file_value']);
-
 	function getFieldLabel(conflict: SyncConflict, fieldKey: string): string {
 		if (conflict.collection === 'workflow_instance_field_values') {
 			// Look up the form field label using field_key from the record data
@@ -75,38 +66,6 @@
 		// Generic fallback
 		const field = formFields.find((f) => f.id === fieldKey);
 		return field?.field_label || fieldKey;
-	}
-
-	/**
-	 * Extract fields that differ between local and server versions.
-	 */
-	function getChangedFields(conflict: SyncConflict): Array<{
-		key: string;
-		localValue: unknown;
-		serverValue: unknown;
-	}> {
-		const changed: Array<{ key: string; localValue: unknown; serverValue: unknown }> = [];
-		const isFieldValues = conflict.collection === 'workflow_instance_field_values';
-
-		// Compare all keys from the local version
-		for (const [key, localVal] of Object.entries(conflict.localVersion)) {
-			if (SKIP_KEYS.has(key)) continue;
-			// For field values, only show value/file_value columns
-			if (isFieldValues && !FIELD_VALUE_DISPLAY_KEYS.has(key)) continue;
-
-			const serverVal = conflict.serverVersion[key];
-
-			// Only show fields where values differ
-			if (JSON.stringify(localVal) !== JSON.stringify(serverVal)) {
-				changed.push({
-					key,
-					localValue: localVal,
-					serverValue: serverVal
-				});
-			}
-		}
-
-		return changed;
 	}
 
 	function formatValue(value: unknown): string {

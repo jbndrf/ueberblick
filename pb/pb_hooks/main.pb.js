@@ -515,7 +515,7 @@ cronAdd("automation_scheduled_check", "* * * * *", () => {
 
       var workflowId = automation.get("workflow_id");
 
-      var filter = 'workflow_id = {:wfId} && status = "active"';
+      var filter = 'workflow_id = {:wfId} && (status = "active" || status = "completed")';
       var params = { wfId: workflowId };
       if (config.target_stage_id) {
         filter += ' && current_stage_id = {:targetStage}';

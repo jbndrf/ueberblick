@@ -13,7 +13,7 @@ import { getDB, type CachedRecord, type SyncConflict } from './db';
 import { getFilesForRecord, deleteLocalFilesForRecord, deleteFilesForRecord } from './file-cache';
 import { notifyDataChange, onDataChange, getLiveCollectionNames } from './gateway.svelte';
 import type { ParticipantGateway } from './gateway.svelte';
-import { generateId, cleanRecord } from './utils';
+import { generateId, cleanRecord, deepEqual } from './utils';
 
 // =============================================================================
 // Configuration
@@ -62,18 +62,61 @@ export function setSyncCollections(collections: string[]): void {
 }
 
 // =============================================================================
-// Collection Sync Priority
+// Collection Sync Rules
 // =============================================================================
+//
+// Declarative rules for the sync push loop. Replaces the previous
+// per-collection hardcoded branches (tool_usage dedup, field_values parent
+// refresh). Adding a new synced collection with a parent relationship now
+// means adding one entry here instead of editing the loop.
+//
+// priority:    Lower number = higher priority = pushed first. Parents must
+//              push before children so foreign-key references resolve.
+// parentRef:   If set, after a successful push of this record, the parent
+//              identified by `foreignKey` will have its _serverUpdated
+//              refreshed from the server (guarded by external-writer check).
+//              Needed when server-side hooks bump the parent's `updated`
+//              column as a side effect of child writes.
+// hookColumns: Columns on the parent that server-side hooks mutate as a
+//              side effect and that the external-writer guard should
+//              ignore when comparing. Defaults to ['updated', 'created'].
 
-const SYNC_PRIORITY: Record<string, number> = {
-	workflow_instances: 10,
-	workflow_protocol_entries: 15,
-	workflow_instance_tool_usage: 20,
-	workflow_instance_field_values: 30
+interface SyncRule {
+	priority: number;
+	parentRef?: {
+		collection: string;
+		foreignKey: string;
+	};
+	hookColumns?: string[];
+}
+
+const DEFAULT_HOOK_COLUMNS = ['updated', 'created'];
+const INSTANCE_HOOK_COLUMNS = ['updated', 'created', 'last_activity_at'];
+
+const SYNC_RULES: Record<string, SyncRule> = {
+	workflow_instances: {
+		priority: 10,
+		hookColumns: INSTANCE_HOOK_COLUMNS
+	},
+	workflow_protocol_entries: {
+		priority: 15
+	},
+	workflow_instance_tool_usage: {
+		priority: 20,
+		parentRef: { collection: 'workflow_instances', foreignKey: 'instance_id' }
+	},
+	workflow_instance_field_values: {
+		priority: 30,
+		parentRef: { collection: 'workflow_instances', foreignKey: 'instance_id' }
+	}
 };
 
+function getSyncRule(collection: string): SyncRule {
+	return SYNC_RULES[collection] ?? { priority: 50 };
+}
+
 function getSyncPriority(collection: string): number {
-	return SYNC_PRIORITY[collection] ?? 50;
+	return getSyncRule(collection).priority;
 }
 
 // =============================================================================
@@ -254,21 +297,111 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 
 			if (record._status === 'modified') {
 				// --- Conflict Detection ---
-				// Fetch the server's current version to check for conflicts
+				// Fetch the server's current version to check for conflicts.
+				let serverRecord: Record<string, unknown> | null = null;
+				let serverFetchFailed = false;
+				let serverFetchWas404 = false;
+
 				try {
-					const serverRecord = await pb.collection(collection).getOne(id);
+					serverRecord = await pb.collection(collection).getOne(id);
+				} catch (e) {
+					serverFetchFailed = true;
+					const msg = e instanceof Error ? e.message : '';
+					if (msg.includes('404') || (e as { status?: number } | null)?.status === 404) {
+						serverFetchWas404 = true;
+					}
+				}
 
-					if (
-						record._serverUpdated &&
-						serverRecord.updated !== record._serverUpdated
-					) {
-						// Server was modified by someone else since our last pull.
-						// Server wins: store conflict for participant review.
+				// Pillar 4: server-side delete of a record we still want to update.
+				// Store a modified-vs-deleted conflict and stop retrying.
+				if (serverFetchWas404) {
+					await storeDeletedConflict(record, gateway.participantId);
+					const resolved: CachedRecord = {
+						...record,
+						_status: 'unchanged',
+						_syncingAt: undefined,
+						_error: undefined,
+						_retryCount: undefined
+					};
+					await db.put('records', resolved);
+					completed++;
+					continue;
+				}
+
+				const serverMoved =
+					!!serverRecord &&
+					!!record._serverUpdated &&
+					serverRecord.updated !== record._serverUpdated;
+
+				if (serverRecord && serverMoved) {
+					// Field-scoped conflict detection.
+					//
+					// The set of fields the participant has actually touched
+					// lives in record._baseline (keys = touched fields, values
+					// = server-side values at the moment of the first local
+					// edit). For each touched field we classify:
+					//
+					//   echo    -- server already holds our intended value.
+					//              Nothing to push for this field.
+					//   safe    -- server still holds our pre-edit baseline.
+					//              Our write can proceed without data loss.
+					//   real    -- server has moved this field to a third
+					//              value. This is a real conflict.
+					//
+					// The push is a real conflict iff at least one touched
+					// field is 'real'. Unrelated drift on OTHER fields (e.g.
+					// server bumped last_activity_at or an admin edited a
+					// field we never touched) is ignored -- we never sent a
+					// value for those fields and the partial update below
+					// won't touch them either.
+					//
+					// If _baseline is missing (record modified by older code
+					// path that didn't capture baselines), fall back to the
+					// pre-existing row-level echo/divergence check so we
+					// don't lose conflict detection for those records.
+
+					const baseline = record._baseline;
+					const touchedKeys = baseline
+						? Object.keys(baseline)
+						: Object.keys(data).filter(
+							(k) => !k.startsWith('_') && k !== 'id' && k !== 'created' && k !== 'updated'
+						);
+
+					let hasFile = false;
+					let hasRealConflict = false;
+					let allEchoes = true;
+					const safeFields: string[] = [];
+
+					for (const key of touchedKeys) {
+						const value = data[key];
+						if (value instanceof File || value instanceof Blob) {
+							hasFile = true;
+							allEchoes = false;
+							safeFields.push(key);
+							continue;
+						}
+						if (deepEqual(serverRecord[key], value)) {
+							// Echo: server already has our value for this field.
+							continue;
+						}
+						allEchoes = false;
+						if (baseline && deepEqual(serverRecord[key], baseline[key])) {
+							// Server still holds the pre-edit value -- safe to push.
+							safeFields.push(key);
+							continue;
+						}
+						// Server moved this field to a third value.
+						hasRealConflict = true;
+						break;
+					}
+
+					if (hasRealConflict) {
+						// Store for participant review and flip local to server
+						// version so we don't retry.
 						await storeConflict(record, serverRecord, gateway.participantId);
-
-						// Accept server version
 						const merged: CachedRecord = {
 							...serverRecord,
+							id: serverRecord.id as string,
 							_key: record._key,
 							_collection: collection,
 							_status: 'unchanged',
@@ -278,46 +411,60 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 						completed++;
 						continue;
 					}
-				} catch (e) {
-					// If we can't fetch (e.g. 404 = deleted on server), continue with update
-					// which will fail and be handled below
+
+					if (allEchoes && !hasFile) {
+						// Silent no-op reconcile: every touched field already
+						// matches the server.
+						const reconciled: CachedRecord = {
+							...serverRecord,
+							id: serverRecord.id as string,
+							_key: record._key,
+							_collection: collection,
+							_status: 'unchanged',
+							_serverUpdated: serverRecord.updated as string,
+							_error: undefined,
+							_retryCount: undefined,
+							_syncingAt: undefined
+						};
+						await db.put('records', reconciled);
+						console.log(`Reconciled echo ${collection}/${id}`);
+						completed++;
+						continue;
+					}
+
+					// Fall through to push. The unconditional baseline-based
+					// narrowing below takes care of trimming `data` to the
+					// fields we intended to touch. safeFields is unused from
+					// here but kept in the loop above as documentation of
+					// the classification.
+					void safeFields;
+				}
+
+				// Fetch failed for a non-404 reason (transient network, server
+				// error). Fall through to the update call; any genuine error
+				// surfaces via the outer catch and the record stays pending
+				// for retry. serverFetchFailed / serverRecord are now unused
+				// past this point.
+				void serverFetchFailed;
+
+				// Always narrow the push body when we have a baseline, even
+				// if the server hasn't drifted. Sending only the fields the
+				// participant actually touched keeps the semantics honest
+				// (this is a patch, not a full-row write) and avoids racing
+				// concurrent writers on unrelated fields in the window
+				// between the conflict check and the PATCH itself.
+				if (record._baseline) {
+					const baseline = record._baseline;
+					const partial: Record<string, unknown> = {};
+					for (const key of Object.keys(baseline)) {
+						if (key in data) partial[key] = data[key];
+					}
+					for (const key of Object.keys(data)) delete data[key];
+					Object.assign(data, partial);
 				}
 			}
 
 			if (record._status === 'new' || record._status === 'modified') {
-				// Dedup check for tool_usage: if this is a retry (stale lock expired),
-				// check if the server already has this record from a previous attempt
-				if (collection === 'workflow_instance_tool_usage' && record._status === 'new') {
-					try {
-						const executedAt = record.executed_at as string;
-						const instanceId = record.instance_id as string;
-						if (executedAt && instanceId) {
-							const existing = await pb.collection(collection).getFirstListItem(
-								`instance_id = "${instanceId}" && executed_at = "${executedAt}"`
-							);
-							if (existing) {
-								// Ghost push -- reconcile with server copy
-								const reconciled: CachedRecord = {
-									...existing,
-									id: existing.id as string,
-									_key: record._key,
-									_collection: collection,
-									_status: 'unchanged',
-									_serverUpdated: existing.updated as string,
-									_error: undefined,
-									_retryCount: undefined
-								};
-								await db.put('records', reconciled);
-								console.log(`Deduped ${collection}/${id} (matched server ${existing.id})`);
-								completed++;
-								continue;
-							}
-						}
-					} catch {
-						// Not found on server -- proceed with create
-					}
-				}
-
 				// Mark record as in-flight to prevent duplicate submissions
 				record._syncingAt = Date.now();
 				await db.put('records', record);
@@ -372,24 +519,14 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 				};
 				await db.put('records', synced);
 
-				// After pushing field_values, refresh _serverUpdated on the parent
-				// workflow_instance. PocketBase hooks bump instance.updated via
-				// bumpLastActivity(), which would cause false conflict detection
-				// if the instance is still pending in this batch.
-				if (collection === 'workflow_instance_field_values' && record.instance_id) {
-					const instanceKey = `workflow_instances/${record.instance_id}`;
-					const instanceRecord = await db.get('records', instanceKey);
-					if (instanceRecord) {
-						try {
-							const serverInstance = await pb.collection('workflow_instances').getOne(
-								record.instance_id as string
-							);
-							instanceRecord._serverUpdated = serverInstance.updated as string;
-							await db.put('records', instanceRecord);
-						} catch {
-							// Instance might not exist on server yet
-						}
-					}
+				// If this collection has a parent relationship where server-side
+				// hooks bump parent.updated as a side effect, refresh the parent's
+				// cached _serverUpdated so the next push of that parent doesn't
+				// see a phantom conflict. Guarded against external writers so an
+				// admin or automation edit on the parent is not silently laundered.
+				const rule = getSyncRule(collection);
+				if (rule.parentRef) {
+					await refreshParentServerUpdated(record, rule, pb, db);
 				}
 			} else if (record._status === 'deleted') {
 				// Delete from PocketBase
@@ -410,34 +547,26 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 
 			completed++;
 		} catch (error) {
-			const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+			// PocketBase ClientResponseError carries the structured error bag in
+			// .response.data: { fieldName: { code, message } }. The top-level
+			// .message is always the useless "Failed to create record." string,
+			// so pull the per-field detail out explicitly.
+			const pbErr = error as {
+				status?: number;
+				response?: { message?: string; data?: Record<string, { message?: string }> };
+				message?: string;
+			};
+			const fieldErrors = pbErr?.response?.data ?? {};
+			const fieldSummary = Object.entries(fieldErrors)
+				.map(([k, v]) => `${k}: ${v?.message ?? 'invalid'}`)
+				.join('; ');
+			const topMessage = pbErr?.response?.message || pbErr?.message || 'Unknown error';
+			const errorMessage = fieldSummary ? `${topMessage} [${fieldSummary}]` : topMessage;
 
-			// Ghost push recovery: record was created on server but local status
-			// never updated (e.g. network timeout after server processed request).
-			// Fetch the server copy and reconcile instead of retrying forever.
-			if (record._status === 'new' && errorMessage.includes('must be unique')) {
-				try {
-					const serverRecord = await pb.collection(record._collection).getOne(record.id);
-					const reconciled: CachedRecord = {
-						...serverRecord,
-						id: serverRecord.id as string,
-						_key: record._key,
-						_collection: record._collection,
-						_status: 'unchanged',
-						_serverUpdated: serverRecord.updated as string,
-						_error: undefined,
-						_retryCount: undefined
-					};
-					await db.put('records', reconciled);
-					console.log(`Reconciled duplicate ${record._collection}/${record.id}`);
-					completed++;
-					continue;
-				} catch {
-					// Could not fetch from server -- fall through to normal error handling
-				}
-			}
-
-			console.error(`Failed to sync ${record._collection}/${record.id}:`, errorMessage);
+			console.error(
+				`Failed to sync ${record._collection}/${record.id} ` +
+					`(status=${pbErr?.status ?? 0}): ${errorMessage}`
+			);
 
 			// Mark as error, clear sync lock so it can be retried
 			const failedRecord: CachedRecord = {
@@ -457,6 +586,73 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 	await gateway.updatePendingCount();
 
 	console.log(`Push complete: ${completed} succeeded, ${failed} failed`);
+}
+
+// =============================================================================
+// Parent-Refresh Helper (for SYNC_RULES.parentRef)
+// =============================================================================
+
+/**
+ * After a child record is pushed, refresh the cached parent record's
+ * _serverUpdated so the next push of the parent doesn't see the hook-driven
+ * timestamp bump as a phantom conflict.
+ *
+ * External-writer guard: before overwriting _serverUpdated, compare every
+ * directly-writable field on the parent between the cached local copy and
+ * the freshly fetched server copy. If any writable field differs, an admin
+ * or automation has edited the parent since the last pull -- do NOT refresh;
+ * let the upcoming parent push hit the real conflict-detection path so the
+ * external edit is preserved (either as a conflict or by server-wins merge).
+ *
+ * "Writable" means "not listed in hookColumns" -- hook-driven autodate and
+ * activity bumps are the noise we are trying to filter out.
+ */
+async function refreshParentServerUpdated(
+	childRecord: CachedRecord,
+	rule: SyncRule,
+	pb: ReturnType<typeof getPocketBase>,
+	db: Awaited<ReturnType<typeof getDB>>
+): Promise<void> {
+	if (!rule.parentRef) return;
+
+	const parentId = childRecord[rule.parentRef.foreignKey] as string | undefined;
+	if (!parentId) return;
+
+	const parentKey = `${rule.parentRef.collection}/${parentId}`;
+	const cachedParent = await db.get('records', parentKey);
+	if (!cachedParent) return;
+
+	let serverParent: Record<string, unknown>;
+	try {
+		serverParent = await pb.collection(rule.parentRef.collection).getOne(parentId);
+	} catch {
+		// Parent not on server yet (still pending) or inaccessible -- nothing
+		// to refresh against. Leave _serverUpdated alone.
+		return;
+	}
+
+	// Compare writable fields between cached parent and server parent.
+	// Skip local metadata keys (prefixed with _) and hook-mutated columns.
+	const parentRule = getSyncRule(rule.parentRef.collection);
+	const hookColumns = new Set(parentRule.hookColumns ?? DEFAULT_HOOK_COLUMNS);
+
+	for (const key of Object.keys(cachedParent)) {
+		if (key.startsWith('_')) continue;
+		if (hookColumns.has(key)) continue;
+		if (!deepEqual(cachedParent[key], serverParent[key])) {
+			// An external writer touched the parent. Do not refresh --
+			// let the real conflict-detection path handle it.
+			console.log(
+				`[sync] parent-refresh skipped for ${parentKey}: ` +
+				`external writer changed field "${key}"`
+			);
+			return;
+		}
+	}
+
+	// All writable fields match -- the bump is hook-only, safe to refresh.
+	cachedParent._serverUpdated = serverParent.updated as string;
+	await db.put('records', cachedParent);
 }
 
 // =============================================================================
@@ -484,6 +680,7 @@ async function storeConflict(
 		collection: localRecord._collection,
 		recordId: localRecord.id,
 		instanceId,
+		type: 'modified-vs-modified',
 		localVersion: localData,
 		serverVersion: serverRecord as Record<string, unknown>,
 		localModifiedBy: participantId,
@@ -493,6 +690,41 @@ async function storeConflict(
 
 	await db.put('conflicts', conflict);
 	console.log(`Conflict stored for ${localRecord._collection}/${localRecord.id}`);
+}
+
+/**
+ * Store a conflict for a locally modified record whose server-side record
+ * has been deleted. The participant can later decide whether to re-create
+ * the record or discard their edits. Flips the local record to 'unchanged'
+ * so the sync loop stops retrying the doomed update.
+ */
+async function storeDeletedConflict(
+	localRecord: CachedRecord,
+	participantId: string
+): Promise<void> {
+	const db = await getDB();
+	const localData = cleanRecord(localRecord);
+	const instanceId =
+		(localRecord.instance_id as string) ||
+		(localRecord._collection === 'workflow_instances' ? localRecord.id : '');
+
+	const conflict: SyncConflict = {
+		id: generateId(),
+		collection: localRecord._collection,
+		recordId: localRecord.id,
+		instanceId,
+		type: 'modified-vs-deleted',
+		localVersion: localData,
+		serverVersion: {},
+		localModifiedBy: participantId,
+		detectedAt: new Date().toISOString(),
+		status: 'pending'
+	};
+
+	await db.put('conflicts', conflict);
+	console.log(
+		`Deleted-on-server conflict stored for ${localRecord._collection}/${localRecord.id}`
+	);
 }
 
 /**

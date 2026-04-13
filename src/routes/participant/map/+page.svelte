@@ -329,6 +329,11 @@
 	// Tag value visibility: workflowId -> Set of visible tag values (all visible by default)
 	let visibleTagValues = $state<Map<string, Set<string>>>(new Map());
 
+	// Uncluster toggle: render individual markers/instances inside the viewport
+	let uncluster = $state(false);
+	let unclusterCap = $state(500);
+	let unclusterStats = $state<{ rendered: number; total: number }>({ rendered: 0, total: 0 });
+
 	// ==========================================================================
 	// Initialization Effects (run once when data first arrives)
 	// ==========================================================================
@@ -920,6 +925,9 @@
 		{visibleTagValues}
 		{workflows}
 		{visualKeyRegistry}
+		{uncluster}
+		{unclusterCap}
+		onUnclusterStats={(rendered, total) => (unclusterStats = { rendered, total })}
 		onMarkerClick={handleMarkerClick}
 		onWorkflowInstanceClick={handleWorkflowInstanceClick}
 		onClusterClick={(detail) => {
@@ -984,6 +992,11 @@
 		onCategoryToggle={handleCategoryToggle}
 		onWorkflowToggle={handleWorkflowToggle}
 		onTagValueToggle={handleTagValueToggle}
+		{uncluster}
+		onUnclusterToggle={(next) => (uncluster = next)}
+		{unclusterCap}
+		onUnclusterCapChange={(next) => (unclusterCap = next)}
+		{unclusterStats}
 	/>
 
 	<!-- Workflow Instance Detail Module (handles tool flows internally) -->

@@ -18,7 +18,9 @@
 	import { FormFillTool, EditFieldsTool, ViewFieldsTool, LocationEditTool, ConflictResolutionTool, ProtocolTool } from './tools';
 	import { getConflictsForInstance, resolveConflict } from '$lib/participant-state/sync.svelte';
 	import type { SyncConflict } from '$lib/participant-state/db';
+	import { getChangedFields } from './conflict-diff';
 	import { getPocketBase } from '$lib/pocketbase';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import { AlertTriangle } from 'lucide-svelte';
 	import type { Map as LeafletMap } from 'leaflet';
 
@@ -64,6 +66,9 @@
 	let isLocationPickerActive = $state(false);
 	let activeLocationEditTool = $state<ToolEdit | null>(null);
 
+	// Connection confirmation dialog state
+	let pendingConfirmConnection = $state<WorkflowConnection | null>(null);
+
 	// Conflict resolution state
 	let pendingConflicts = $state<SyncConflict[]>([]);
 	let showConflictTool = $state(false);
@@ -85,6 +90,7 @@
 		activeProtocolTool = null;
 		isLocationPickerActive = false;
 		activeLocationEditTool = null;
+		pendingConfirmConnection = null;
 		showConflictTool = false;
 		newState.load();
 
@@ -96,9 +102,10 @@
 		try {
 			const raw = await getConflictsForInstance(instanceId);
 			// Re-fetch current server versions so "Current value" is up-to-date
+			let conflicts: SyncConflict[];
 			if (navigator.onLine) {
 				const pb = getPocketBase();
-				const refreshed = await Promise.all(
+				conflicts = await Promise.all(
 					raw.map(async (conflict) => {
 						try {
 							const current = await pb.collection(conflict.collection).getOne(conflict.recordId);
@@ -109,10 +116,21 @@
 						}
 					})
 				);
-				pendingConflicts = refreshed;
 			} else {
-				pendingConflicts = raw;
+				conflicts = raw;
 			}
+			// Drop conflicts whose user-visible diff is empty (phantoms from
+			// bookkeeping-only drift) and mark them resolved so the banner
+			// doesn't fire on stale IDB rows.
+			const visible: SyncConflict[] = [];
+			for (const conflict of conflicts) {
+				if (getChangedFields(conflict).length > 0) {
+					visible.push(conflict);
+				} else {
+					await resolveConflict(conflict.id);
+				}
+			}
+			pendingConflicts = visible;
 		} catch {
 			pendingConflicts = [];
 		}
@@ -350,6 +368,19 @@
 	// ==========================================================================
 
 	async function handleConnectionClick(connection: WorkflowConnection) {
+		if (!detailState) return;
+
+		// Confirm up-front: tool submits persist incrementally, so gating here is
+		// the only point where a cancel leaves zero partial state behind.
+		if (connection.visual_config?.requires_confirmation) {
+			pendingConfirmConnection = connection;
+			return;
+		}
+
+		await proceedConnection(connection);
+	}
+
+	async function proceedConnection(connection: WorkflowConnection) {
 		if (!detailState) return;
 
 		// Get tools for this connection
@@ -769,11 +800,8 @@
 					const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
 
 					if (existing) {
-						// Update existing - link with last_modified_by_action
 						await gateway.collection('workflow_instance_field_values').update(existing.id, {
-							value: stringValue,
-							last_modified_by_action: toolUsage.id,
-							last_modified_at: new Date().toISOString()
+							value: stringValue
 						});
 					} else {
 						// Create new - use the field's original stage, not current stage
@@ -953,9 +981,7 @@
 
 				if (existing) {
 					await gateway.collection('workflow_instance_field_values').update(existing.id, {
-						value: stringValue,
-						last_modified_by_action: toolUsage.id,
-						last_modified_at: new Date().toISOString()
+						value: stringValue
 					});
 				} else {
 					await gateway.collection('workflow_instance_field_values').create({
@@ -1392,22 +1418,25 @@
 					</Tabs.Content>
 
 					<Tabs.Content value="data" class="pt-4">
+						{@const stagesWithData = detailState
+							? detailState.stages.filter((s) => detailState.stageHasData(s.id))
+							: []}
 						<!-- DATA TAB with Stage Sub-tabs -->
 						<div class="space-y-4">
-							{#if detailState && detailState.stages.length > 0}
+							{#if detailState && stagesWithData.length > 0}
 								<Tabs.Root
 									value={detailState.activeStageTab}
 									onValueChange={(v) => handleStageTabChange(v as string)}
 								>
 									<Tabs.List class="w-full overflow-x-auto flex-nowrap">
-										{#each detailState.stages as stage}
+										{#each stagesWithData as stage}
 											<Tabs.Trigger value={stage.id} class="text-xs whitespace-nowrap">
 												{stage.stage_name}
 											</Tabs.Trigger>
 										{/each}
 									</Tabs.List>
 
-									{#each detailState.stages as stage}
+									{#each stagesWithData as stage}
 										<Tabs.Content value={stage.id} class="pt-4">
 											{@const fields = detailState.getFieldsForFormRenderer(stage.id) as import('$lib/components/form-renderer').FormFieldWithValue[]}
 											<ViewFieldsTool {fields} />
@@ -1416,7 +1445,7 @@
 								</Tabs.Root>
 							{:else}
 								<div class="text-center py-8 text-muted-foreground">
-									<p class="text-sm">No stages available</p>
+									<p class="text-sm">No data yet</p>
 								</div>
 							{/if}
 						</div>
@@ -1426,6 +1455,37 @@
 		{/if}
 	{/snippet}
 </ModuleShell>
+
+<!-- Connection confirmation dialog (shown immediately on button click) -->
+<AlertDialog.Root
+	open={pendingConfirmConnection !== null}
+	onOpenChange={(open) => {
+		if (!open) pendingConfirmConnection = null;
+	}}
+>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>
+				{pendingConfirmConnection?.visual_config?.button_label || pendingConfirmConnection?.action_name || 'Confirm action'}
+			</AlertDialog.Title>
+			<AlertDialog.Description>
+				{pendingConfirmConnection?.visual_config?.confirmation_message || 'Are you sure you want to proceed?'}
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+			<AlertDialog.Action
+				onclick={async () => {
+					const connection = pendingConfirmConnection;
+					pendingConfirmConnection = null;
+					if (connection) await proceedConnection(connection);
+				}}
+			>
+				Continue
+			</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>
 
 <!-- Location Edit Tool (rendered as map overlay) -->
 {#if isLocationPickerActive && map && detailState}

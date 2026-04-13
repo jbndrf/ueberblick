@@ -396,11 +396,27 @@ export function createParticipantGateway(participantId: string, projectId: strin
 		const now = new Date().toISOString();
 		const plainData = await extractFormData(collectionName, id, formData);
 
+		// See the JSON update path above -- same first-touch baseline logic.
+		const nextBaseline: Record<string, unknown> | undefined =
+			existing._status === 'new'
+				? undefined
+				: { ...(existing._baseline ?? {}) };
+		if (nextBaseline) {
+			for (const key of Object.keys(plainData)) {
+				if (key.startsWith('_')) continue;
+				if (key === 'id' || key === 'created' || key === 'updated') continue;
+				if (!(key in nextBaseline)) {
+					nextBaseline[key] = existing[key];
+				}
+			}
+		}
+
 		const updated: CachedRecord = {
 			...existing,
 			...plainData,
 			updated: now,
-			_status: existing._status === 'new' ? 'new' : 'modified'
+			_status: existing._status === 'new' ? 'new' : 'modified',
+			...(nextBaseline ? { _baseline: nextBaseline } : {})
 		};
 
 		await db.put('records', updated);
@@ -526,42 +542,48 @@ export function createParticipantGateway(participantId: string, projectId: strin
 	/**
 	 * Background fetch for a single record.
 	 */
-	function backgroundFetchOne(name: string, id: string, options?: { expand?: string; fields?: string }): void {
+	async function backgroundFetchOne(name: string, id: string, options?: { expand?: string; fields?: string }): Promise<void> {
 		if (typeof window === 'undefined' || !navigator.onLine) return;
 
-		const pb = getPocketBase();
-		pb.collection(name)
-			.getOne(id, options)
-			.then(async (record) => {
-				const db = await getDB();
-				const key = `${name}/${record.id}`;
-				const existing = await db.get('records', key);
+		try {
+			const db = await getDB();
+			const key = `${name}/${id}`;
 
-				// Don't overwrite local modifications, but update _serverUpdated
-				if (existing && existing._status !== 'unchanged') {
-					if (record.updated && existing._serverUpdated !== (record.updated as string)) {
-						existing._serverUpdated = record.updated as string;
-						await db.put('records', existing);
-					}
-					return;
+			// Guard against revalidating a record that isn't on the server yet
+			// (status 'new', still pending initial push -- would 404) or one we
+			// have unsynced local edits for (would clobber them).
+			const guard = await db.get('records', key);
+			if (guard && guard._status !== 'unchanged') return;
+
+			const pb = getPocketBase();
+			const record = await pb.collection(name).getOne(id, options);
+
+			const existing = await db.get('records', key);
+
+			// Re-check after the network round-trip: a local write may have
+			// landed while we were waiting, and we must not overwrite it.
+			if (existing && existing._status !== 'unchanged') {
+				if (record.updated && existing._serverUpdated !== (record.updated as string)) {
+					existing._serverUpdated = record.updated as string;
+					await db.put('records', existing);
 				}
+				return;
+			}
 
-				// Check if data actually changed
-				if (existing && existing.updated === record.updated) return;
+			if (existing && existing.updated === record.updated) return;
 
-				const cached: CachedRecord = {
-					...record,
-					_key: key,
-					_collection: name,
-					_status: 'unchanged',
-					_serverUpdated: record.updated as string
-				};
-				await db.put('records', cached);
-				notifyDataChange(name, record.id as string, 'update');
-			})
-			.catch((e) => {
-				console.debug(`Background fetch one failed for ${name}/${id}:`, e);
-			});
+			const cached: CachedRecord = {
+				...record,
+				_key: key,
+				_collection: name,
+				_status: 'unchanged',
+				_serverUpdated: record.updated as string
+			};
+			await db.put('records', cached);
+			notifyDataChange(name, record.id as string, 'update');
+		} catch (e) {
+			console.debug(`Background fetch one failed for ${name}/${id}:`, e);
+		}
 	}
 
 	// =========================================================================
@@ -618,11 +640,36 @@ export function createParticipantGateway(participantId: string, projectId: strin
 				}
 
 				const now = new Date().toISOString();
+				const incoming = JSON.parse(JSON.stringify(data)) as Record<string, unknown>;
+
+				// Capture per-field pre-edit baseline for modified records so
+				// the sync push can do field-scoped conflict detection. Only
+				// record the baseline the *first* time a field is touched --
+				// subsequent local edits on the same field must not overwrite
+				// the original server-side value, or the comparison on push
+				// would no longer reflect what the server had when editing
+				// began. Skip for records that are still 'new' (never on the
+				// server yet) because there is no server-side baseline.
+				const nextBaseline: Record<string, unknown> | undefined =
+					existing._status === 'new'
+						? undefined
+						: { ...(existing._baseline ?? {}) };
+				if (nextBaseline) {
+					for (const key of Object.keys(incoming)) {
+						if (key.startsWith('_')) continue;
+						if (key === 'id' || key === 'created' || key === 'updated') continue;
+						if (!(key in nextBaseline)) {
+							nextBaseline[key] = existing[key];
+						}
+					}
+				}
+
 				const updated: CachedRecord = {
 					...existing,
-					...JSON.parse(JSON.stringify(data)),
+					...incoming,
 					updated: now,
-					_status: existing._status === 'new' ? 'new' : 'modified'
+					_status: existing._status === 'new' ? 'new' : 'modified',
+					...(nextBaseline ? { _baseline: nextBaseline } : {})
 				};
 
 				await db.put('records', updated);
@@ -670,8 +717,13 @@ export function createParticipantGateway(participantId: string, projectId: strin
 				const record = await db.get('records', `${name}/${id}`);
 
 				if (record && record._status !== 'deleted') {
-					// Trigger background revalidation
-					backgroundFetchOne(name, id, options);
+					// Trigger background revalidation -- but only for records that
+					// are fully synced. For 'new' records the server doesn't know
+					// about them yet (getOne would 404); for 'modified' the local
+					// copy is newer than the server and we'd overwrite it.
+					if (record._status === 'unchanged') {
+						backgroundFetchOne(name, id, options);
+					}
 
 					// Process expand parameter if present
 					if (options?.expand) {

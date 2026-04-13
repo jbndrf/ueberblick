@@ -64,7 +64,7 @@ yarn-error.log*
 
 # Deployment tooling
 compose-deployer/
-
+legacy_dlapp/
 # MCP server (separate repo)
 mcp-server/
 

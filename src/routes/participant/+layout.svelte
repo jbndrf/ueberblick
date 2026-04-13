@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { onMount, onDestroy } from 'svelte';
-	import { browser } from '$app/environment';
+	import { browser, dev } from '$app/environment';
 	import * as m from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { UserCircle, Layers, Filter, Navigation, Settings, Plus } from 'lucide-svelte';
@@ -17,6 +17,7 @@
 		resetAllParticipantState,
 		getLastActiveHints,
 		writeLastActiveHints,
+		roleIdsEqual,
 		switchActiveParticipant,
 		pruneStaleParticipantDbs,
 		cleanupLegacyDatabase,
@@ -27,7 +28,9 @@
 	// Register service worker for PWA using absolute path.
 	// virtual:pwa-register generates relative "./sw.js" which breaks on sub-paths like /participant/map.
 	onMount(async () => {
-		if (!browser || !('serviceWorker' in navigator)) return;
+		// vite-pwa is configured with devOptions.enabled = false, so /sw.js only
+		// exists in production builds. Skip registration in dev to avoid a 404.
+		if (!browser || !('serviceWorker' in navigator) || dev) return;
 
 		try {
 			const registration = await navigator.serviceWorker.register('/sw.js', {
@@ -106,8 +109,14 @@
 	// server-side -- role-gated workflows/tools cached under the old role
 	// must not render under the new one.
 	let currentParticipantId: string | null = null;
-	let currentRoleId: string | null = null;
+	let currentRoleIds: string[] = [];
 	let currentProjectId: string | null = null;
+
+	function normalizeRoleIds(raw: unknown): string[] {
+		if (Array.isArray(raw)) return raw.filter((v): v is string => typeof v === 'string');
+		if (typeof raw === 'string' && raw) return [raw];
+		return [];
+	}
 
 	// One-shot: delete the legacy pre-namespacing DB on first boot after this
 	// change lands. Fire-and-forget -- safe to call repeatedly.
@@ -148,13 +157,13 @@
 	if (data.participant) {
 		const participant = data.participant;
 		const newId = participant.id;
-		const newRoleId = (participant.role_id as string | undefined) ?? null;
+		const newRoleIds = normalizeRoleIds(participant.role_id);
 		const newProjectId = participant.project_id;
 
 		const hints = getLastActiveHints();
 		const idChanged = !!hints.participantId && hints.participantId !== newId;
 		const sameIdRoleChanged =
-			hints.participantId === newId && !!hints.roleId && hints.roleId !== newRoleId;
+			hints.participantId === newId && !!hints.roleIds && !roleIdsEqual(hints.roleIds, newRoleIds);
 		const sameIdProjectChanged =
 			hints.participantId === newId && !!hints.projectId && hints.projectId !== newProjectId;
 
@@ -177,7 +186,7 @@
 					switchActiveParticipant(newId);
 					writeLastActiveHints({
 						participantId: newId,
-						roleId: newRoleId,
+						roleIds: newRoleIds,
 						projectId: newProjectId
 					});
 				});
@@ -186,7 +195,7 @@
 			// participant took over"; for no change this is "same session".
 			writeLastActiveHints({
 				participantId: newId,
-				roleId: newRoleId,
+				roleIds: newRoleIds,
 				projectId: newProjectId
 			});
 			// If another participant was active on this device before, their
@@ -199,7 +208,7 @@
 		}
 
 		currentParticipantId = newId;
-		currentRoleId = newRoleId;
+		currentRoleIds = newRoleIds;
 		currentProjectId = newProjectId;
 
 		gateway = createParticipantGateway(newId, newProjectId);
@@ -211,7 +220,7 @@
 		// (see `checkOfflineSession`).
 		const hints = getLastActiveHints();
 		currentParticipantId = hints.participantId;
-		currentRoleId = hints.roleId;
+		currentRoleIds = hints.roleIds ?? [];
 		currentProjectId = hints.projectId;
 	}
 
@@ -232,20 +241,20 @@
 		}
 
 		const newId = participant.id;
-		const newRoleId = (participant.role_id as string | undefined) ?? null;
+		const newRoleIds = normalizeRoleIds(participant.role_id);
 		const newProjectId = participant.project_id;
 
 		// Same participant, same role/project, already initialized -- nothing to do.
 		if (
 			newId === currentParticipantId &&
-			newRoleId === currentRoleId &&
+			roleIdsEqual(newRoleIds, currentRoleIds) &&
 			newProjectId === currentProjectId &&
 			gateway
 		) return;
 
 		const roleOrProjectChanged =
 			newId === currentParticipantId &&
-			(newRoleId !== currentRoleId || newProjectId !== currentProjectId);
+			(!roleIdsEqual(newRoleIds, currentRoleIds) || newProjectId !== currentProjectId);
 
 		if (currentParticipantId && currentParticipantId !== newId) {
 			// Different participant took over in-session. Tear down the old
@@ -272,12 +281,12 @@
 		switchActiveParticipant(newId);
 		writeLastActiveHints({
 			participantId: newId,
-			roleId: newRoleId,
+			roleIds: newRoleIds,
 			projectId: newProjectId
 		});
 
 		currentParticipantId = newId;
-		currentRoleId = newRoleId;
+		currentRoleIds = newRoleIds;
 		currentProjectId = newProjectId;
 
 		const gw = createParticipantGateway(newId, newProjectId);

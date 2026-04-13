@@ -233,9 +233,7 @@ export const actions: Actions = {
 			// Step 2: Update or create field value
 			if (existingRecordId) {
 				await pb.collection('workflow_instance_field_values').update(existingRecordId, {
-					value: newValue,
-					last_modified_by_action: toolUsage.id,
-					last_modified_at: new Date().toISOString()
+					value: newValue
 				});
 			} else {
 				await pb.collection('workflow_instance_field_values').create({

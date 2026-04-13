@@ -450,7 +450,7 @@
 				</div>
 			{/if}
 		{:else if field.field_type === 'long_text'}
-			<div class="rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[100px] whitespace-pre-wrap">
+			<div class="rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[100px] whitespace-pre-wrap break-words">
 				{#if hasValue}
 					{value}
 				{:else}
@@ -467,7 +467,7 @@
 			{:else if selectedLabels.length > 0}
 				<div class="flex flex-wrap gap-1.5 rounded-md border border-input bg-background px-3 py-2 min-h-10">
 					{#each selectedLabels as label}
-						<Badge variant="secondary">{label}</Badge>
+						<Badge variant="secondary" class="whitespace-normal break-words text-left">{label}</Badge>
 					{/each}
 				</div>
 			{:else}
@@ -485,7 +485,7 @@
 			</div>
 		{:else}
 			<!-- Text/number/email fields -->
-			<div class="rounded-md border border-input bg-background px-3 py-2 text-sm min-h-10 flex items-center">
+			<div class="rounded-md border border-input bg-background px-3 py-2 text-sm min-h-10 break-words">
 				{#if hasValue}
 					{value}
 				{:else}

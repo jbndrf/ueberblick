@@ -249,22 +249,36 @@ const LAST_PROJECT_ID_KEY = 'ueberblick_last_project_id';
 
 export interface LastActiveHints {
 	participantId: string | null;
-	roleId: string | null;
+	roleIds: string[] | null;
 	projectId: string | null;
 }
 
 export function getLastActiveHints(): LastActiveHints {
 	if (typeof window === 'undefined') {
-		return { participantId: null, roleId: null, projectId: null };
+		return { participantId: null, roleIds: null, projectId: null };
 	}
 	try {
+		const rawRoles = localStorage.getItem(LAST_ROLE_ID_KEY);
+		let roleIds: string[] | null = null;
+		if (rawRoles) {
+			try {
+				const parsed = JSON.parse(rawRoles);
+				if (Array.isArray(parsed) && parsed.every((v) => typeof v === 'string')) {
+					roleIds = parsed;
+				}
+				// Non-array (e.g. legacy stringified array "id1,id2") -> treat as
+				// unknown so the next reload doesn't trigger a spurious wipe.
+			} catch {
+				roleIds = null;
+			}
+		}
 		return {
 			participantId: localStorage.getItem(LAST_PARTICIPANT_ID_KEY),
-			roleId: localStorage.getItem(LAST_ROLE_ID_KEY),
+			roleIds,
 			projectId: localStorage.getItem(LAST_PROJECT_ID_KEY)
 		};
 	} catch {
-		return { participantId: null, roleId: null, projectId: null };
+		return { participantId: null, roleIds: null, projectId: null };
 	}
 }
 
@@ -273,15 +287,26 @@ export function writeLastActiveHints(hints: LastActiveHints): void {
 	try {
 		if (hints.participantId) localStorage.setItem(LAST_PARTICIPANT_ID_KEY, hints.participantId);
 		else localStorage.removeItem(LAST_PARTICIPANT_ID_KEY);
-		if (hints.roleId) localStorage.setItem(LAST_ROLE_ID_KEY, hints.roleId);
-		else localStorage.removeItem(LAST_ROLE_ID_KEY);
+		if (hints.roleIds && hints.roleIds.length > 0) {
+			localStorage.setItem(LAST_ROLE_ID_KEY, JSON.stringify([...hints.roleIds].sort()));
+		} else {
+			localStorage.removeItem(LAST_ROLE_ID_KEY);
+		}
 		if (hints.projectId) localStorage.setItem(LAST_PROJECT_ID_KEY, hints.projectId);
 		else localStorage.removeItem(LAST_PROJECT_ID_KEY);
 	} catch { /* storage disabled */ }
 }
 
 export function clearLastActiveHints(): void {
-	writeLastActiveHints({ participantId: null, roleId: null, projectId: null });
+	writeLastActiveHints({ participantId: null, roleIds: null, projectId: null });
+}
+
+export function roleIdsEqual(a: string[] | null, b: string[] | null): boolean {
+	if (a === b) return true;
+	if (!a || !b || a.length !== b.length) return false;
+	const sa = [...a].sort();
+	const sb = [...b].sort();
+	return sa.every((v, i) => v === sb[i]);
 }
 
 // =============================================================================

@@ -55,12 +55,22 @@ export interface SyncMetadata {
 /**
  * Stored conflict when server version wins during push sync.
  * Participant can review and optionally re-apply their changes.
+ *
+ * type:
+ *   'modified-vs-modified' (default) -- participant modified the record and
+ *     the server has a newer version of the same record. serverVersion holds
+ *     the server's current data.
+ *   'modified-vs-deleted' -- participant modified a record that has been
+ *     deleted on the server. serverVersion is an empty object; the conflict
+ *     exists so the participant can decide whether to re-create or drop
+ *     their edits.
  */
 export interface SyncConflict {
 	id: string;
 	collection: string;
 	recordId: string;
 	instanceId: string;
+	type?: 'modified-vs-modified' | 'modified-vs-deleted';
 	localVersion: Record<string, unknown>;
 	serverVersion: Record<string, unknown>;
 	localModifiedBy: string;
@@ -77,6 +87,15 @@ export interface CachedRecord {
 	_collection: string; // collection name
 	_status: 'unchanged' | 'new' | 'modified' | 'deleted';
 	_serverUpdated?: string; // server's `updated` timestamp at last pull (for conflict detection)
+	// Per-field pre-edit baseline for modified records. Keys are the fields
+	// the participant has locally overwritten; values are the server-side
+	// values those fields held at the moment of the first local edit. The
+	// sync push uses this to distinguish "server hasn't touched this field
+	// since we started editing it" (safe to push) from "server has moved on"
+	// (real conflict). Only fields present in this map are conflict-relevant
+	// for the push -- an unrelated field drift on the same row no longer
+	// demotes the push to a conflict.
+	_baseline?: Record<string, unknown>;
 	_syncingAt?: number; // timestamp when push started (prevents duplicate submissions)
 	_error?: string;
 	_retryCount?: number;

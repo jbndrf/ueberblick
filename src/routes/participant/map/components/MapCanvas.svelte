@@ -138,6 +138,12 @@
 		onMapClick?: () => void;
 		/** When set, bypass clustering and show only these instances as individual markers */
 		drillDownInstanceIds?: Set<string> | null;
+		/** When true, render individual markers/instances for the current viewport (no clustering) */
+		uncluster?: boolean;
+		/** Max number of individual points to render when unclustered (even-sampled) */
+		unclusterCap?: number;
+		/** Reports how many points were rendered vs. total available in the viewport (uncluster mode) */
+		onUnclusterStats?: (rendered: number, total: number) => void;
 	}
 
 	let {
@@ -159,8 +165,21 @@
 		onClusterClick,
 		onMapReady,
 		onMapClick,
-		drillDownInstanceIds = null
+		drillDownInstanceIds = null,
+		uncluster = false,
+		unclusterCap = 500,
+		onUnclusterStats
 	}: Props = $props();
+
+	/** Sum of underlying points in a clustered feature list (point_count for clusters, 1 per singleton). */
+	function totalPointsIn(features: any[] | null | undefined): number {
+		if (!features) return 0;
+		let sum = 0;
+		for (const f of features) {
+			sum += isCluster(f) ? f.properties.point_count : 1;
+		}
+		return sum;
+	}
 
 	/** Parse a field value that might be a JSON array into individual values */
 	function splitMultiValue(value: string): string[] {
@@ -562,7 +581,8 @@
 		rendered: Map<string, RenderedEntry>,
 		createIcon: (feature: Supercluster.PointFeature<P>) => any,
 		onClick: ((feature: Supercluster.PointFeature<P>) => void) | undefined,
-		clusterType: 'marker' | 'workflowInstance'
+		clusterType: 'marker' | 'workflowInstance',
+		getPointIconSignature?: (feature: Supercluster.PointFeature<P>) => string
 	) {
 		if (!map) return;
 
@@ -596,10 +616,18 @@
 						existing.signature = sig;
 					}
 				} else {
-					const [lng, lat] = feature.geometry.coordinates;
+					const pointFeature = feature as Supercluster.PointFeature<P>;
+					const [lng, lat] = pointFeature.geometry.coordinates;
 					const current = existing.marker.getLatLng();
 					if (current.lat !== lat || current.lng !== lng) {
 						existing.marker.setLatLng([lat, lng]);
+					}
+					if (getPointIconSignature) {
+						const nextSig = getPointIconSignature(pointFeature);
+						if (nextSig !== existing.signature) {
+							existing.marker.setIcon(createIcon(pointFeature));
+							existing.signature = nextSig;
+						}
 					}
 				}
 				continue;
@@ -672,9 +700,13 @@
 					}
 				};
 			} else {
-				icon = createIcon(feature as Supercluster.PointFeature<P>);
+				const pointFeature = feature as Supercluster.PointFeature<P>;
+				icon = createIcon(pointFeature);
+				if (getPointIconSignature) {
+					sig = getPointIconSignature(pointFeature);
+				}
 				if (onClick) {
-					clickHandler = () => onClick(feature as Supercluster.PointFeature<P>);
+					clickHandler = () => onClick(pointFeature);
 				}
 			}
 
@@ -712,67 +744,115 @@
 		});
 	}
 
+	// Re-query the viewport whenever the uncluster toggle or cap changes.
+	$effect(() => {
+		uncluster;
+		unclusterCap;
+		scheduleViewportUpdate();
+	});
+
 	/** Re-render markers and workflow instances for the current viewport */
 	async function updateViewport() {
 		if (!leaflet || !map || !markerLayerGroup || !workflowInstanceLayerGroup || !clusterClient) return;
 
 		const bbox = getMapBBox(map) as [number, number, number, number];
-		const zoom = Math.floor(map.getZoom());
+		const baseZoom = Math.floor(map.getZoom());
+		const highZoom = getGlobalMaxZoom() + 1;
 
-		if (markerIndexReady) {
-			const features = await clusterClient.getClusters('marker', bbox, zoom);
-			if (features) {
-				renderFeatures(
-					leaflet,
-					features,
-					markerLayerGroup,
-					renderedMarkers,
-					(feature) => {
-						const marker = markerDataMap.get(feature.properties.id);
-						const category = marker?.expand?.category_id;
-						return createMarkerIcon(leaflet!, category);
-					},
-					onMarkerClick
-						? (feature) => {
-							const marker = markerDataMap.get(feature.properties.id);
-							if (marker) onMarkerClick!(marker);
-						}
-						: undefined,
-					'marker'
-				);
+		const wfDrillDownActive = !!(drillDownInstanceIds && drillDownInstanceIds.size > 0);
+
+		// Phase 1: fetch clustered view at the current zoom. Always needed to
+		// count how many underlying points are in the viewport so we can decide
+		// whether to auto-uncluster below the cap.
+		let markerFeatures = markerIndexReady
+			? await clusterClient.getClusters('marker', bbox, baseZoom)
+			: null;
+		let wfFeatures = !wfDrillDownActive && workflowInstanceIndexReady
+			? await clusterClient.getClusters('workflowInstance', bbox, baseZoom)
+			: null;
+
+		const markerTotal = totalPointsIn(markerFeatures);
+		const wfTotal = totalPointsIn(wfFeatures);
+		const combinedTotal = markerTotal + wfTotal;
+
+		const shouldExpand =
+			uncluster && combinedTotal > 0 && combinedTotal <= unclusterCap;
+
+		// Phase 2: if we're under the cap, re-query at a zoom above the index's
+		// built maxZoom so supercluster returns the raw points in the bbox.
+		if (shouldExpand) {
+			if (markerIndexReady) {
+				markerFeatures = await clusterClient.getClusters('marker', bbox, highZoom);
+			}
+			if (!wfDrillDownActive && workflowInstanceIndexReady) {
+				wfFeatures = await clusterClient.getClusters('workflowInstance', bbox, highZoom);
 			}
 		}
 
-		if (drillDownInstanceIds && drillDownInstanceIds.size > 0) {
-			renderDrillDownFeatures(leaflet, drillDownInstanceIds);
-		} else if (workflowInstanceIndexReady) {
-			const features = await clusterClient.getClusters('workflowInstance', bbox, zoom);
-			if (features) {
-				renderFeatures(
-					leaflet,
-					features,
-					workflowInstanceLayerGroup,
-					renderedWorkflowInstances,
-					(feature) => {
+		if (markerFeatures) {
+			renderFeatures(
+				leaflet,
+				markerFeatures,
+				markerLayerGroup,
+				renderedMarkers,
+				(feature) => {
+					const marker = markerDataMap.get(feature.properties.id);
+					const category = marker?.expand?.category_id;
+					return createMarkerIcon(leaflet!, category);
+				},
+				onMarkerClick
+					? (feature) => {
+						const marker = markerDataMap.get(feature.properties.id);
+						if (marker) onMarkerClick!(marker);
+					}
+					: undefined,
+				'marker',
+				(feature) => markerDataMap.get(feature.properties.id)?.category_id ?? ''
+			);
+		}
+
+		if (wfDrillDownActive) {
+			renderDrillDownFeatures(leaflet, drillDownInstanceIds!);
+		} else if (wfFeatures) {
+			renderFeatures(
+				leaflet,
+				wfFeatures,
+				workflowInstanceLayerGroup,
+				renderedWorkflowInstances,
+				(feature) => {
+					const instance = workflowInstanceDataMap.get(feature.properties.id);
+					const workflow = instance?.expand?.workflow_id;
+					return createWorkflowInstanceIcon(leaflet!, workflow, instance!);
+				},
+				onWorkflowInstanceClick
+					? (feature) => {
 						const instance = workflowInstanceDataMap.get(feature.properties.id);
-						const workflow = instance?.expand?.workflow_id;
-						return createWorkflowInstanceIcon(leaflet!, workflow, instance!);
-					},
-					onWorkflowInstanceClick
-						? (feature) => {
-							const instance = workflowInstanceDataMap.get(feature.properties.id);
-							if (instance) onWorkflowInstanceClick!(instance);
-						}
-						: undefined,
-					'workflowInstance'
-				);
-			}
+						if (instance) onWorkflowInstanceClick!(instance);
+					}
+					: undefined,
+				'workflowInstance',
+				(feature) => {
+					const i = workflowInstanceDataMap.get(feature.properties.id);
+					if (!i) return '';
+					const fv = filterableValues.get(i.id) ?? '';
+					return `${i.workflow_id}|${i.current_stage_id ?? ''}|${fv}`;
+				}
+			);
+		}
+
+		if (uncluster) {
+			onUnclusterStats?.(shouldExpand ? combinedTotal : 0, combinedTotal);
 		}
 	}
 
 	/** Render only specific instances as individual unclustered markers (drill-down mode) */
 	function renderDrillDownFeatures(L: typeof import('leaflet'), instanceIds: Set<string>) {
 		if (!map || !workflowInstanceLayerGroup) return;
+
+		const instanceIconSignature = (i: WorkflowInstance) => {
+			const fv = filterableValues.get(i.id) ?? '';
+			return `${i.workflow_id}|${i.current_stage_id ?? ''}|${fv}`;
+		};
 
 		// Build set of keys that should be visible
 		const targetKeys = new Set<string>();
@@ -788,24 +868,36 @@
 			}
 		}
 
-		// Add missing drill-down markers
+		// Add or update drill-down markers
 		for (const instanceId of instanceIds) {
 			const key = `point_${instanceId}`;
-			if (renderedWorkflowInstances.has(key)) continue;
-
 			const instance = workflowInstanceDataMap.get(instanceId);
 			if (!instance?.location?.lat || !instance?.location?.lon) continue;
 
 			const workflow = instance.expand?.workflow_id;
-			const icon = createWorkflowInstanceIcon(L, workflow, instance);
+			const existing = renderedWorkflowInstances.get(key);
 
+			if (existing) {
+				const current = existing.marker.getLatLng();
+				if (current.lat !== instance.location.lat || current.lng !== instance.location.lon) {
+					existing.marker.setLatLng([instance.location.lat, instance.location.lon]);
+				}
+				const nextSig = instanceIconSignature(instance);
+				if (nextSig !== existing.signature) {
+					existing.marker.setIcon(createWorkflowInstanceIcon(L, workflow, instance));
+					existing.signature = nextSig;
+				}
+				continue;
+			}
+
+			const icon = createWorkflowInstanceIcon(L, workflow, instance);
 			const leafletMarker = L.marker([instance.location.lat, instance.location.lon], { icon });
 			if (onWorkflowInstanceClick) {
 				leafletMarker.on('click', () => onWorkflowInstanceClick!(instance));
 			}
 
 			workflowInstanceLayerGroup.addLayer(leafletMarker);
-			renderedWorkflowInstances.set(key, { marker: leafletMarker });
+			renderedWorkflowInstances.set(key, { marker: leafletMarker, signature: instanceIconSignature(instance) });
 		}
 	}
 

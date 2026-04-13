@@ -90,8 +90,6 @@ export interface FieldValue {
 	file_value: string;
 	stage_id: string;
 	created_by_action: string;
-	last_modified_by_action: string;
-	last_modified_at: string;
 	created: string;
 	updated: string;
 }

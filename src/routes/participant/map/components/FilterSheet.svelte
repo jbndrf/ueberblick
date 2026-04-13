@@ -3,6 +3,7 @@
 	import { Switch } from '$lib/components/ui/switch';
 	import { Separator } from '$lib/components/ui/separator';
 	import { Badge } from '$lib/components/ui/badge';
+	import { Input } from '$lib/components/ui/input';
 	import { ChevronDown, ChevronRight } from 'lucide-svelte';
 
 	interface Marker {
@@ -109,6 +110,11 @@
 		onCategoryToggle: (categoryId: string, visible: boolean) => void;
 		onWorkflowToggle: (workflowId: string, visible: boolean) => void;
 		onTagValueToggle?: (workflowId: string, tagValue: string, visible: boolean) => void;
+		uncluster?: boolean;
+		onUnclusterToggle?: (next: boolean) => void;
+		unclusterCap?: number;
+		onUnclusterCapChange?: (next: number) => void;
+		unclusterStats?: { rendered: number; total: number };
 	}
 
 	let {
@@ -124,8 +130,20 @@
 		workflows = [],
 		onCategoryToggle,
 		onWorkflowToggle,
-		onTagValueToggle
+		onTagValueToggle,
+		uncluster = false,
+		onUnclusterToggle,
+		unclusterCap = 500,
+		onUnclusterCapChange,
+		unclusterStats
 	}: Props = $props();
+
+	function handleCapInput(event: Event) {
+		const raw = (event.target as HTMLInputElement).value;
+		const parsed = parseInt(raw, 10);
+		if (!Number.isFinite(parsed) || parsed <= 0) return;
+		onUnclusterCapChange?.(parsed);
+	}
 
 	// Track which workflow sub-sections are expanded
 	let expandedWorkflows = $state<Set<string>>(new Set());
@@ -401,6 +419,47 @@
 					No map content available
 				</div>
 			{/if}
+
+			<Separator />
+
+			<div class="space-y-3 rounded-lg border p-3">
+				<div class="flex items-center justify-between">
+					<div class="min-w-0 flex-1 pr-3">
+						<div class="text-sm font-medium">Uncluster</div>
+						<div class="text-xs text-muted-foreground">
+							Show individual markers in the current view
+						</div>
+					</div>
+					<Switch
+						checked={uncluster}
+						onCheckedChange={(checked) => onUnclusterToggle?.(checked)}
+					/>
+				</div>
+
+				{#if uncluster}
+					<div class="flex items-center justify-between gap-3">
+						<label for="uncluster-cap" class="text-xs font-medium">Up to</label>
+						<Input
+							id="uncluster-cap"
+							type="number"
+							min="1"
+							step="50"
+							class="h-8 w-24 text-right"
+							value={unclusterCap}
+							onchange={handleCapInput}
+						/>
+					</div>
+					{#if unclusterStats && unclusterStats.total > 0}
+						<div class="text-xs text-muted-foreground">
+							{#if unclusterStats.rendered > 0}
+								Showing {unclusterStats.total} individually
+							{:else}
+								{unclusterStats.total} in view — too many, still clustered
+							{/if}
+						</div>
+					{/if}
+				{/if}
+			</div>
 		</div>
 	</Sheet.ContentNoOverlay>
 </Sheet.Root>
