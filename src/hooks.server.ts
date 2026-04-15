@@ -14,6 +14,19 @@ const handleParaglide: Handle = ({ event, resolve }) =>
 		});
 	});
 
+const CSP_REPORT_ONLY = [
+	"default-src 'self'",
+	"script-src 'self'",
+	"style-src 'self' 'unsafe-inline'",
+	"img-src 'self' data: blob: https:",
+	"font-src 'self' data:",
+	"connect-src 'self' https: wss:",
+	"worker-src 'self' blob:",
+	"frame-ancestors 'none'",
+	"base-uri 'self'",
+	"form-action 'self'"
+].join('; ');
+
 const handleAuth: Handle = async ({ event, resolve }) => {
 	// Create PocketBase instance
 	event.locals.pb = new PocketBase(POCKETBASE_URL);
@@ -56,6 +69,18 @@ const handleAuth: Handle = async ({ event, resolve }) => {
 		maxAge: 60 * 60 * 24 * 7 // 1 week
 	});
 	response.headers.append('set-cookie', exportedCookie);
+
+	response.headers.set('X-Content-Type-Options', 'nosniff');
+	response.headers.set('X-Frame-Options', 'DENY');
+	response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+	response.headers.set('Permissions-Policy', 'geolocation=(self), camera=(self), microphone=()');
+	if (env.SECURE_COOKIES === 'true') {
+		response.headers.set(
+			'Strict-Transport-Security',
+			'max-age=31536000; includeSubDomains'
+		);
+	}
+	response.headers.set('Content-Security-Policy-Report-Only', CSP_REPORT_ONLY);
 
 	return response;
 };
