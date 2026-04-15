@@ -1,5 +1,6 @@
-import { error, fail } from '@sveltejs/kit';
+import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
+import * as m from '$lib/paraglide/messages';
 import {
 	ADMIN_INSTANCE_PAGE_SIZE,
 	buildRowsFromInstances,
@@ -7,6 +8,7 @@ import {
 	fetchCreatorNameMap,
 	fetchFieldValuesForInstances
 } from '$lib/admin/workflow-rows';
+import { duplicateWorkflow } from '$lib/server/schema-transfer';
 
 export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 	const { projectId, workflowId } = params;
@@ -17,7 +19,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 		});
 
 		if (!workflow) {
-			throw error(404, 'Workflow not found');
+			throw error(404, m.workflowDetailServerWorkflowNotFound?.() ?? 'Workflow not found');
 		}
 
 		// Phase 1: everything that doesn't depend on instance IDs runs in parallel.
@@ -186,6 +188,17 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 			creatorNameById
 		});
 
+		// Stream the projects list for the "Import from another project" dialog
+		// so the detail page renders immediately without waiting on it.
+		const projectsPromise = pb
+			.collection('projects')
+			.getFullList({ fields: 'id,name', sort: 'name', requestKey: null })
+			.then((list) => list.map((p: any) => ({ id: p.id, name: p.name })))
+			.catch((err) => {
+				console.error('Error fetching projects for import dialog:', err);
+				return [] as Array<{ id: string; name: string }>;
+			});
+
 		return {
 			workflow,
 			stages,
@@ -194,12 +207,13 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 			initialRows,
 			totalInstances,
 			instancePageSize: ADMIN_INSTANCE_PAGE_SIZE,
-			roles: roles || []
+			roles: roles || [],
+			projects: projectsPromise
 		};
 	} catch (err: any) {
 		if (err?.status) throw err;
 		console.error('Error loading workflow data:', err);
-		throw error(500, 'Failed to load workflow');
+		throw error(500, m.workflowDetailServerFailedToLoad?.() ?? 'Failed to load workflow');
 	}
 };
 
@@ -214,7 +228,7 @@ export const actions: Actions = {
 		const stageId = formData.get('stage_id') as string;
 
 		if (!instanceId || !fieldKey) {
-			return fail(400, { message: 'Instance ID and field key are required' });
+			return fail(400, { message: m.workflowDetailServerInstanceAndFieldRequired?.() ?? 'Instance ID and field key are required' });
 		}
 
 		try {
@@ -248,7 +262,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating field value:', err);
-			return fail(500, { message: 'Failed to update field value' });
+			return fail(500, { message: m.workflowDetailServerFailedToUpdateFieldValue?.() ?? 'Failed to update field value' });
 		}
 	},
 
@@ -261,7 +275,7 @@ export const actions: Actions = {
 		try {
 			iconConfig = iconConfigJson ? JSON.parse(iconConfigJson) : {};
 		} catch {
-			return fail(400, { message: 'Invalid icon config JSON' });
+			return fail(400, { message: m.workflowDetailServerInvalidIconConfigJson?.() ?? 'Invalid icon config JSON' });
 		}
 
 		try {
@@ -271,7 +285,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating workflow icon config:', err);
-			return fail(500, { message: 'Failed to update icon config' });
+			return fail(500, { message: m.workflowDetailServerFailedToUpdateIconConfig?.() ?? 'Failed to update icon config' });
 		}
 	},
 
@@ -281,14 +295,14 @@ export const actions: Actions = {
 		const iconConfigJson = formData.get('iconConfig') as string;
 
 		if (!stageId) {
-			return fail(400, { message: 'Stage ID is required' });
+			return fail(400, { message: m.workflowDetailServerStageIdRequired?.() ?? 'Stage ID is required' });
 		}
 
 		let iconConfig: Record<string, unknown> | null;
 		try {
 			iconConfig = iconConfigJson ? JSON.parse(iconConfigJson) : null;
 		} catch {
-			return fail(400, { message: 'Invalid icon config JSON' });
+			return fail(400, { message: m.workflowDetailServerInvalidIconConfigJson?.() ?? 'Invalid icon config JSON' });
 		}
 
 		try {
@@ -305,7 +319,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating stage icon config:', err);
-			return fail(500, { message: 'Failed to update stage icon config' });
+			return fail(500, { message: m.workflowDetailServerFailedToUpdateStageIconConfig?.() ?? 'Failed to update stage icon config' });
 		}
 	},
 
@@ -318,7 +332,7 @@ export const actions: Actions = {
 		try {
 			filterValueIcons = iconsJson ? JSON.parse(iconsJson) : {};
 		} catch {
-			return fail(400, { message: 'Invalid filter value icons JSON' });
+			return fail(400, { message: m.workflowDetailServerInvalidFilterValueIconsJson?.() ?? 'Invalid filter value icons JSON' });
 		}
 
 		try {
@@ -328,7 +342,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating filter value icons:', err);
-			return fail(500, { message: 'Failed to update filter value icons' });
+			return fail(500, { message: m.workflowDetailServerFailedToUpdateFilterValueIcons?.() ?? 'Failed to update filter value icons' });
 		}
 	},
 
@@ -340,14 +354,14 @@ export const actions: Actions = {
 		const targetStageId = formData.get('targetStageId') as string;
 
 		if (!rowsJson) {
-			return fail(400, { message: 'No data provided' });
+			return fail(400, { message: m.workflowDetailServerNoDataProvided?.() ?? 'No data provided' });
 		}
 
 		try {
 			const rows: Array<Record<string, string>> = JSON.parse(rowsJson);
 
 			if (rows.length === 0) {
-				return fail(400, { message: 'No data rows to import' });
+				return fail(400, { message: m.workflowDetailServerNoDataRows?.() ?? 'No data rows to import' });
 			}
 
 			// Fetch stages and resolve target stage
@@ -357,7 +371,7 @@ export const actions: Actions = {
 			});
 			const startStage = stages.find((s) => s.stage_type === 'start');
 			if (!startStage) {
-				return fail(400, { message: 'Workflow has no start stage' });
+				return fail(400, { message: m.workflowDetailServerNoStartStage?.() ?? 'Workflow has no start stage' });
 			}
 			const instanceStageId = targetStageId || startStage.id;
 
@@ -451,9 +465,53 @@ export const actions: Actions = {
 		} catch (err) {
 			console.error('Error importing CSV:', err);
 			return fail(500, {
-				message: err instanceof Error ? err.message : 'Failed to import CSV'
+				message: err instanceof Error ? err.message : (m.workflowDetailServerFailedToImportCsv?.() ?? 'Failed to import CSV')
 			});
 		}
+	},
+
+	duplicate: async ({ params, locals: { pb } }) => {
+		const { projectId, workflowId } = params;
+		try {
+			const newId = await duplicateWorkflow(pb, workflowId, projectId);
+			return { success: true, duplicatedWorkflowId: newId };
+		} catch (err) {
+			console.error('Error duplicating workflow:', err);
+			return fail(500, { message: m.workflowsServer_duplicate_error?.() ?? 'Failed to duplicate workflow' });
+		}
+	},
+
+	importFromProject: async ({ request, params, locals: { pb } }) => {
+		const { projectId } = params;
+		const formData = await request.formData();
+		const sourceWorkflowId = formData.get('sourceWorkflowId') as string;
+
+		if (!sourceWorkflowId) {
+			return fail(400, { message: m.workflowsServer_sourceWorkflowId_required?.() ?? 'Source workflow ID is required' });
+		}
+
+		try {
+			const newId = await duplicateWorkflow(pb, sourceWorkflowId, projectId);
+			return { success: true, importedWorkflowId: newId };
+		} catch (err) {
+			console.error('Error importing workflow:', err);
+			return fail(500, { message: m.workflowsServer_import_error?.() ?? 'Failed to import workflow' });
+		}
+	},
+
+	deleteWorkflow: async ({ params, locals: { pb } }) => {
+		const { projectId, workflowId } = params;
+		try {
+			const record = await pb.collection('workflows').getOne(workflowId);
+			if (record.project_id !== projectId) {
+				return fail(403, { message: 'Unauthorized' });
+			}
+			await pb.collection('workflows').delete(workflowId);
+		} catch (err) {
+			console.error('Error deleting workflow:', err);
+			return fail(500, { message: m.workflowsDeleteError?.() ?? 'Failed to delete workflow' });
+		}
+		throw redirect(303, `/projects/${projectId}/settings`);
 	},
 
 	updateWorkflowMeta: async ({ request, params, locals: { pb } }) => {
@@ -463,12 +521,12 @@ export const actions: Actions = {
 		const value = formData.get('value') as string;
 
 		if (!field) {
-			return fail(400, { message: 'Field name is required' });
+			return fail(400, { message: m.workflowDetailServerFieldNameRequired?.() ?? 'Field name is required' });
 		}
 
 		const allowedFields = ['name', 'description', 'is_active', 'workflow_type', 'private_instances', 'visible_to_roles'];
 		if (!allowedFields.includes(field)) {
-			return fail(400, { message: 'Invalid field' });
+			return fail(400, { message: m.workflowDetailServerInvalidField?.() ?? 'Invalid field' });
 		}
 
 		try {
@@ -485,7 +543,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating workflow metadata:', err);
-			return fail(500, { message: 'Failed to update workflow' });
+			return fail(500, { message: m.workflowDetailServerFailedToUpdateWorkflow?.() ?? 'Failed to update workflow' });
 		}
 	}
 };

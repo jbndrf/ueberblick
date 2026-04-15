@@ -1,12 +1,28 @@
 <script lang="ts">
-	import { invalidateAll } from '$app/navigation';
+	import { goto, invalidate, invalidateAll } from '$app/navigation';
+	import { deserialize } from '$app/forms';
 	import { page } from '$app/stores';
 	import * as m from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Switch } from '$lib/components/ui/switch';
-	import { RefreshCw, Hammer, MapPin, FileText, Palette, Upload } from 'lucide-svelte';
+	import {
+		RefreshCw,
+		Hammer,
+		MapPin,
+		FileText,
+		Palette,
+		Upload,
+		MoreVertical,
+		Copy,
+		Import,
+		Trash2,
+		Check
+	} from 'lucide-svelte';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog';
+	import WorkflowImportDialog from '$lib/components/admin/workflow-import-dialog.svelte';
 	import { toast } from 'svelte-sonner';
 	import type { PageData } from './$types';
 	import { BaseTable, type BaseColumnConfig } from '$lib/components/admin/base-table';
@@ -84,7 +100,7 @@
 			}
 		} catch (err) {
 			console.error('Failed to load remaining rows:', err);
-			toast.error('Failed to load all rows');
+			toast.error(m.workflowDetailLoadRowsError?.() ?? 'Failed to load all rows');
 		} finally {
 			if (version === loadVersion) loadingMore = false;
 		}
@@ -193,8 +209,8 @@
 		if (result.type === 'success') {
 			await invalidateAll();
 		} else {
-			toast.error('Failed to update field value');
-			throw new Error(result.data?.message || 'Failed to update');
+			toast.error(m.workflowDetailUpdateFieldError?.() ?? 'Failed to update field value');
+			throw new Error(result.data?.message || (m.workflowDetailUpdateError?.() ?? 'Failed to update'));
 		}
 	}
 
@@ -225,7 +241,7 @@
 		const standardColumns: BaseColumnConfig<InstanceRow>[] = [
 			{
 				id: 'status',
-				header: 'Status',
+				header: m.workflowDetailColStatus?.() ?? 'Status',
 				accessorKey: 'status',
 				fieldType: 'text',
 				capabilities: { sortable: true, filterable: true, readonly: true },
@@ -233,14 +249,14 @@
 			},
 			{
 				id: 'current_stage',
-				header: 'Stage',
+				header: m.workflowDetailColStage?.() ?? 'Stage',
 				accessorFn: (row) => row.current_stage_name,
 				fieldType: 'text',
 				capabilities: { sortable: true, filterable: true, readonly: true }
 			},
 			{
 				id: 'created_by',
-				header: 'Created By',
+				header: m.workflowDetailColCreatedBy?.() ?? 'Created By',
 				accessorFn: (row) => row.created_by_name,
 				fieldType: 'text',
 				capabilities: { sortable: true, filterable: true, readonly: true }
@@ -250,7 +266,7 @@
 		if (data.workflow.workflow_type === 'incident') {
 			standardColumns.push({
 				id: 'location',
-				header: 'Location',
+				header: m.workflowDetailColLocation?.() ?? 'Location',
 				accessorFn: (row) => {
 					if (!row.location) return '';
 					if (typeof row.location === 'object' && row.location.lat != null) {
@@ -337,7 +353,7 @@
 		const metaColumns: BaseColumnConfig<InstanceRow>[] = [
 			{
 				id: 'created',
-				header: 'Created',
+				header: m.workflowDetailColCreated?.() ?? 'Created',
 				accessorKey: 'created',
 				fieldType: 'date',
 				capabilities: { sortable: true, filterable: false, readonly: true }
@@ -361,7 +377,7 @@
 		if (result.type === 'success') {
 			await invalidateAll();
 		} else {
-			toast.error('Failed to update');
+			toast.error(m.workflowDetailUpdateError?.() ?? 'Failed to update');
 		}
 	}
 
@@ -497,7 +513,7 @@
 			iconDesignerOpen = true;
 		} catch (err) {
 			console.error('Error loading icon designer data:', err);
-			toast.error('Failed to load icon designer data');
+			toast.error(m.workflowDetailIconDesignerLoadError?.() ?? 'Failed to load icon designer data');
 		}
 	}
 
@@ -563,6 +579,80 @@
 	async function togglePrivateInstances() {
 		await updateMeta('private_instances', !data.workflow.private_instances);
 	}
+
+	async function changeWorkflowType(newType: 'incident' | 'survey') {
+		if (newType === data.workflow.workflow_type) return;
+		await updateMeta('workflow_type', newType);
+		toast.success(m.workflowsTypeChangeSuccess?.() ?? 'Workflow type updated');
+	}
+
+	// Kebab actions: duplicate / import / delete
+	let importDialogOpen = $state(false);
+	let deleteDialogOpen = $state(false);
+	let duplicating = $state(false);
+	let deleting = $state(false);
+
+	async function handleDuplicate() {
+		if (duplicating) return;
+		duplicating = true;
+		try {
+			const response = await fetch('?/duplicate', { method: 'POST', body: new FormData() });
+			const result = deserialize(await response.text()) as {
+				type: string;
+				data?: { duplicatedWorkflowId?: string; message?: string };
+			};
+			if (result.type === 'success') {
+				const newId = result.data?.duplicatedWorkflowId;
+				toast.success(m.workflowsDuplicateSuccess?.({ name: data.workflow.name }) ?? `Workflow duplicated`);
+				await invalidate('sidebar');
+				if (newId) {
+					await goto(`/projects/${$page.params.projectId}/workflows/${newId}`);
+				}
+			} else {
+				toast.error(result.data?.message || (m.workflowsDuplicateError?.() ?? 'Failed to duplicate workflow'));
+			}
+		} catch (err) {
+			console.error('Error duplicating workflow:', err);
+			toast.error(m.workflowsDuplicateError?.() ?? 'Failed to duplicate workflow');
+		} finally {
+			duplicating = false;
+		}
+	}
+
+	async function handleImported(newId: string) {
+		await invalidate('sidebar');
+		await goto(`/projects/${$page.params.projectId}/workflows/${newId}`);
+	}
+
+	async function handleDelete() {
+		if (deleting) return;
+		deleting = true;
+		try {
+			const response = await fetch('?/deleteWorkflow', { method: 'POST', body: new FormData() });
+			const result = deserialize(await response.text()) as {
+				type: string;
+				location?: string;
+				data?: { message?: string };
+			};
+			if (result.type === 'redirect' && result.location) {
+				toast.success(m.workflowsDeleteSuccess?.() ?? 'Workflow deleted');
+				await invalidate('sidebar');
+				await goto(result.location);
+			} else if (result.type === 'success') {
+				toast.success(m.workflowsDeleteSuccess?.() ?? 'Workflow deleted');
+				await invalidate('sidebar');
+				await goto(`/projects/${$page.params.projectId}/settings`);
+			} else {
+				toast.error(result.data?.message || (m.workflowsDeleteError?.() ?? 'Failed to delete workflow'));
+			}
+		} catch (err) {
+			console.error('Error deleting workflow:', err);
+			toast.error(m.workflowsDeleteError?.() ?? 'Failed to delete workflow');
+		} finally {
+			deleting = false;
+			deleteDialogOpen = false;
+		}
+	}
 </script>
 
 {#snippet fileCellRenderer({ value }: { value: any })}
@@ -620,15 +710,46 @@
 	>
 		{#snippet actions()}
 			<div class="flex items-center gap-2">
-				<Badge variant={data.workflow.workflow_type === 'incident' ? 'default' : 'secondary'}>
-					{#if data.workflow.workflow_type === 'incident'}
-						<MapPin class="mr-1 h-3 w-3" />
-					{/if}
-					{data.workflow.workflow_type}
-				</Badge>
+				<DropdownMenu.Root>
+					<DropdownMenu.Trigger>
+						{#snippet child({ props })}
+							<button
+								type="button"
+								{...props}
+								class="inline-flex items-center rounded-md px-2.5 py-0.5 text-xs font-semibold transition-colors hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {data.workflow.workflow_type === 'incident' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'}"
+								title={m.workflowsTypeChangeHelp?.() ?? 'Click to change workflow type'}
+							>
+								{#if data.workflow.workflow_type === 'incident'}
+									<MapPin class="mr-1 h-3 w-3" />
+								{/if}
+								{data.workflow.workflow_type === 'incident'
+									? (m.workflowsTypeIncident?.() ?? 'Incident')
+									: (m.workflowsTypeSurvey?.() ?? 'Survey')}
+							</button>
+						{/snippet}
+					</DropdownMenu.Trigger>
+					<DropdownMenu.Content align="start">
+						<DropdownMenu.Item onclick={() => changeWorkflowType('incident')}>
+							{#if data.workflow.workflow_type === 'incident'}
+								<Check class="mr-2 h-4 w-4" />
+							{:else}
+								<span class="mr-2 inline-block h-4 w-4"></span>
+							{/if}
+							{m.workflowsTypeIncidentWorkflow?.() ?? 'Incident Workflow'}
+						</DropdownMenu.Item>
+						<DropdownMenu.Item onclick={() => changeWorkflowType('survey')}>
+							{#if data.workflow.workflow_type === 'survey'}
+								<Check class="mr-2 h-4 w-4" />
+							{:else}
+								<span class="mr-2 inline-block h-4 w-4"></span>
+							{/if}
+							{m.workflowsTypeSurveyWorkflow?.() ?? 'Survey Workflow'}
+						</DropdownMenu.Item>
+					</DropdownMenu.Content>
+				</DropdownMenu.Root>
 
 				<div class="flex items-center gap-2 text-sm">
-					<span class="text-muted-foreground">{data.workflow.is_active ? 'Active' : 'Inactive'}</span>
+					<span class="text-muted-foreground">{data.workflow.is_active ? (m.rolesActive?.() ?? 'Active') : (m.rolesInactive?.() ?? 'Inactive')}</span>
 					<Switch
 						checked={data.workflow.is_active}
 						onCheckedChange={toggleActive}
@@ -650,7 +771,7 @@
 
 				<Button variant="outline" size="sm" onclick={() => openIconDesigner()}>
 					<Palette class="mr-2 h-4 w-4" />
-					Icons
+					{m.workflowDetailIconsButton?.() ?? 'Icons'}
 				</Button>
 
 				<Button
@@ -659,13 +780,41 @@
 					href="/projects/{$page.params.projectId}/workflows/{$page.params.workflowId}/builder"
 				>
 					<Hammer class="mr-2 h-4 w-4" />
-					Build
+					{m.workflowDetailBuildButton?.() ?? 'Build'}
 				</Button>
 
 				<Button variant="outline" size="sm" onclick={() => invalidateAll()}>
 					<RefreshCw class="mr-2 h-4 w-4" />
 					{m.customTableEditRefresh()}
 				</Button>
+
+				<DropdownMenu.Root>
+					<DropdownMenu.Trigger>
+						{#snippet child({ props })}
+							<Button variant="outline" size="sm" {...props} aria-label={m.workflowsMoreActions?.() ?? 'More actions'}>
+								<MoreVertical class="h-4 w-4" />
+							</Button>
+						{/snippet}
+					</DropdownMenu.Trigger>
+					<DropdownMenu.Content align="end">
+						<DropdownMenu.Item onclick={handleDuplicate} disabled={duplicating}>
+							<Copy class="mr-2 h-4 w-4" />
+							{m.workflowsActionDuplicate?.() ?? 'Duplicate workflow'}
+						</DropdownMenu.Item>
+						<DropdownMenu.Item onclick={() => (importDialogOpen = true)}>
+							<Import class="mr-2 h-4 w-4" />
+							{m.workflowsImportFromProject?.() ?? 'Import from another project...'}
+						</DropdownMenu.Item>
+						<DropdownMenu.Separator />
+						<DropdownMenu.Item
+							class="text-destructive focus:text-destructive"
+							onclick={() => (deleteDialogOpen = true)}
+						>
+							<Trash2 class="mr-2 h-4 w-4" />
+							{m.workflowsActionDelete?.() ?? 'Delete workflow'}
+						</DropdownMenu.Item>
+					</DropdownMenu.Content>
+				</DropdownMenu.Root>
 			</div>
 		{/snippet}
 	</DataViewerHeader>
@@ -679,9 +828,9 @@
 		enableShiftSelect={true}
 		showToolbar={true}
 		showEditMode={true}
-		editModeLabel="Edit mode"
-		emptyMessage="No workflow instances yet"
-		emptySubMessage="Instances are created by participants through the app"
+		editModeLabel={m.workflowDetailEditMode?.() ?? 'Edit mode'}
+		emptyMessage={m.workflowDetailEmptyMessage?.() ?? 'No workflow instances yet'}
+		emptySubMessage={m.workflowDetailEmptySubMessage?.() ?? 'Instances are created by participants through the app'}
 	/>
 </div>
 
@@ -722,11 +871,41 @@
 	onimport={handleCsvImport}
 />
 
+<!-- Import from another project dialog -->
+<WorkflowImportDialog
+	bind:open={importDialogOpen}
+	currentProjectId={$page.params.projectId ?? ''}
+	projects={data.projects}
+	onImported={handleImported}
+/>
+
+<!-- Delete workflow confirm dialog -->
+<AlertDialog.Root bind:open={deleteDialogOpen}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>{m.workflowsDeleteTitle?.() ?? 'Delete workflow'}</AlertDialog.Title>
+			<AlertDialog.Description>
+				{m.workflowsDeleteConfirm?.() ?? 'Are you sure you want to delete this workflow? This will also delete all associated stages and actions. This action cannot be undone.'}
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel disabled={deleting}>{m.commonCancel?.() ?? 'Cancel'}</AlertDialog.Cancel>
+			<AlertDialog.Action
+				class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+				onclick={handleDelete}
+				disabled={deleting}
+			>
+				{m.commonDelete?.() ?? 'Delete'}
+			</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>
+
 <!-- Image Lightbox -->
 <Dialog.Root bind:open={lightboxOpen}>
 	<Dialog.Content class="max-w-3xl p-0 overflow-hidden">
 		{#if lightboxUrl}
-			<img src={lightboxUrl} alt="Preview" class="w-full h-auto" />
+			<img src={lightboxUrl} alt={m.workflowDetailPreviewAlt?.() ?? 'Preview'} class="w-full h-auto" />
 		{/if}
 	</Dialog.Content>
 </Dialog.Root>
