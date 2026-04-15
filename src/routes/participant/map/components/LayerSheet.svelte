@@ -4,6 +4,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Switch } from '$lib/components/ui/switch';
 	import { Separator } from '$lib/components/ui/separator';
+	import * as m from '$lib/paraglide/messages';
 
 	interface MapLayer {
 		id: string;
@@ -46,15 +47,15 @@
 <Sheet.Root bind:open>
 	<Sheet.ContentNoOverlay side="left" class="w-80">
 		<Sheet.Header>
-			<Sheet.Title>Map Layers</Sheet.Title>
-			<Sheet.Description>Select base map and overlay layers</Sheet.Description>
+			<Sheet.Title>{m.participantLayerSheetTitle?.() ?? 'Map Layers'}</Sheet.Title>
+			<Sheet.Description>{m.participantLayerSheetDescription?.() ?? 'Select base map and overlay layers'}</Sheet.Description>
 		</Sheet.Header>
 
 		<div class="space-y-6 py-6">
 			<!-- Base Layers -->
 			{#if baseLayers.length > 0}
 				<div>
-					<h4 class="mb-3 text-sm font-medium">Base Layers</h4>
+					<h4 class="mb-3 text-sm font-medium">{m.participantLayerSheetBaseLayers?.() ?? 'Base Layers'}</h4>
 					<RadioGroup.Root value={activeBaseLayerId ?? ''} onValueChange={handleBaseLayerChange}>
 						<div class="space-y-2">
 							{#each baseLayers as layer}
@@ -77,7 +78,7 @@
 			<!-- Overlay Layers -->
 			{#if overlayLayers.length > 0}
 				<div>
-					<h4 class="mb-3 text-sm font-medium">Overlay Layers</h4>
+					<h4 class="mb-3 text-sm font-medium">{m.participantLayerSheetOverlayLayers?.() ?? 'Overlay Layers'}</h4>
 					<div class="space-y-2">
 						{#each overlayLayers as layer}
 							{@const isActive = activeOverlayIds.includes(layer.id)}
@@ -101,7 +102,7 @@
 
 			{#if baseLayers.length === 0 && overlayLayers.length === 0}
 				<div class="py-8 text-center text-sm text-muted-foreground">
-					No map layers configured for this project
+					{m.participantLayerSheetNoLayersConfigured?.() ?? 'No map layers configured for this project'}
 				</div>
 			{/if}
 		</div>

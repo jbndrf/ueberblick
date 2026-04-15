@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { FileWarning } from 'lucide-svelte';
+	import * as m from '$lib/paraglide/messages';
 	import AncestorFieldGroup from './AncestorFieldGroup.svelte';
 	import type { ToolsForm, ToolsFormField, WorkflowStage } from '$lib/workflow-builder';
 
@@ -33,23 +34,47 @@
 		onTogglePrefill
 	}: Props = $props();
 
-	// Group by stage for better organization
+	// Group by stage for better organization, deduping at stage/form/field level so
+	// overlapping entries from the state helpers don't crash the keyed each blocks.
 	const groupedByStage = $derived.by(() => {
-		const map = new Map<string, { stage: WorkflowStage; forms: AncestorFieldGroupData[] }>();
+		const stageMap = new Map<
+			string,
+			{ stage: WorkflowStage; forms: Map<string, AncestorFieldGroupData> }
+		>();
 
 		for (const group of ancestorFields) {
-			const existing = map.get(group.stage.id);
-			if (existing) {
-				existing.forms.push(group);
-			} else {
-				map.set(group.stage.id, {
+			const stageId = group.stage?.id;
+			const formId = group.form?.id;
+			if (!stageId || !formId) continue;
+
+			let stageEntry = stageMap.get(stageId);
+			if (!stageEntry) {
+				stageEntry = { stage: group.stage, forms: new Map() };
+				stageMap.set(stageId, stageEntry);
+			}
+
+			const existingForm = stageEntry.forms.get(formId);
+			if (!existingForm) {
+				stageEntry.forms.set(formId, {
 					stage: group.stage,
-					forms: [group]
+					form: group.form,
+					fields: [...group.fields]
 				});
+			} else {
+				const seen = new Set(existingForm.fields.map((f) => f.id));
+				for (const field of group.fields) {
+					if (!seen.has(field.id)) {
+						existingForm.fields.push(field);
+						seen.add(field.id);
+					}
+				}
 			}
 		}
 
-		return Array.from(map.values());
+		return Array.from(stageMap.values()).map((entry) => ({
+			stage: entry.stage,
+			forms: Array.from(entry.forms.values())
+		}));
 	});
 
 	const hasFields = $derived(ancestorFields.length > 0);
@@ -57,8 +82,8 @@
 
 <div class="ancestor-fields-panel">
 	<div class="panel-header">
-		<span class="panel-title">Available Fields</span>
-		<span class="field-count">{selectedFieldIds.length} selected</span>
+		<span class="panel-title">{m.editToolAncestorFieldsPanelAvailableFields?.() ?? 'Available Fields'}</span>
+		<span class="field-count">{selectedFieldIds.length} {m.editToolAncestorFieldsPanelSelected?.() ?? 'selected'}</span>
 	</div>
 
 	<div class="panel-content">
@@ -82,9 +107,9 @@
 		{:else}
 			<div class="empty-state">
 				<FileWarning class="h-8 w-8" />
-				<p>No ancestor fields available</p>
+				<p>{m.editToolAncestorFieldsPanelNoFieldsAvailable?.() ?? 'No ancestor fields available'}</p>
 				<span class="empty-hint">
-					Add fields to forms in earlier stages to make them editable here.
+					{m.editToolAncestorFieldsPanelNoFieldsHint?.() ?? 'Add fields to forms in earlier stages to make them editable here.'}
 				</span>
 			</div>
 		{/if}

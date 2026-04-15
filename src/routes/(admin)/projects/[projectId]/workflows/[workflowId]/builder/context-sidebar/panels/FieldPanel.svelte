@@ -11,6 +11,7 @@
 		Trash2,
 		Pencil
 	} from 'lucide-svelte';
+	import * as m from '$lib/paraglide/messages';
 	import ToolSection from '../shared/ToolSection.svelte';
 	import ToolButton from '../shared/ToolButton.svelte';
 	import type { SelectionContext } from '../context';
@@ -37,48 +38,48 @@
 		</div>
 	</div>
 
-	<ToolSection title="Field Options">
+	<ToolSection title={m.workflowBuilderFieldPanelFieldOptions?.() ?? 'Field Options'}>
 		<div class="tool-grid">
 			<ToolButton
-				label={context.field.isRequired ? 'Required' : 'Optional'}
-				description="Toggle requirement"
+				label={context.field.isRequired ? (m.workflowBuilderFieldPanelRequired?.() ?? 'Required') : (m.workflowBuilderFieldPanelOptional?.() ?? 'Optional')}
+				description={m.workflowBuilderFieldPanelToggleRequirement?.() ?? 'Toggle requirement'}
 				icon={Asterisk}
 				variant={context.field.isRequired ? 'primary' : 'default'}
 				onclick={onToggleRequired}
 			/>
 			<ToolButton
-				label="Add Help Text"
-				description="Instructions for users"
+				label={m.workflowBuilderFieldPanelAddHelpText?.() ?? 'Add Help Text'}
+				description={m.workflowBuilderFieldPanelInstructionsForUsers?.() ?? 'Instructions for users'}
 				icon={CircleHelp}
 				variant="muted"
 			/>
 		</div>
 	</ToolSection>
 
-	<ToolSection title="Conditional Logic" defaultOpen={false}>
+	<ToolSection title={m.workflowBuilderFieldPanelConditionalLogic?.() ?? 'Conditional Logic'} defaultOpen={false}>
 		<div class="tool-grid">
 			<ToolButton
-				label="Show When..."
-				description="Conditional visibility"
+				label={m.workflowBuilderFieldPanelShowWhen?.() ?? 'Show When...'}
+				description={m.workflowBuilderFieldPanelConditionalVisibility?.() ?? 'Conditional visibility'}
 				icon={Eye}
 				variant="muted"
 			/>
 			<ToolButton
-				label="Hide When..."
-				description="Conditional hiding"
+				label={m.workflowBuilderFieldPanelHideWhen?.() ?? 'Hide When...'}
+				description={m.workflowBuilderFieldPanelConditionalHiding?.() ?? 'Conditional hiding'}
 				icon={EyeOff}
 				variant="muted"
 			/>
 		</div>
 	</ToolSection>
 
-	<ToolSection title="Field Actions" defaultOpen={false}>
+	<ToolSection title={m.workflowBuilderFieldPanelFieldActions?.() ?? 'Field Actions'} defaultOpen={false}>
 		<div class="tool-grid">
-			<ToolButton label="Move Up" icon={ArrowUp} variant="muted" onclick={onMoveUp} />
-			<ToolButton label="Move Down" icon={ArrowDown} variant="muted" onclick={onMoveDown} />
-			<ToolButton label="Duplicate" icon={Copy} variant="muted" onclick={onDuplicate} />
-			<ToolButton label="Edit Field" icon={Pencil} variant="muted" onclick={onEditField} />
-			<ToolButton label="Delete Field" icon={Trash2} variant="muted" onclick={onDeleteField} />
+			<ToolButton label={m.workflowBuilderFieldPanelMoveUp?.() ?? 'Move Up'} icon={ArrowUp} variant="muted" onclick={onMoveUp} />
+			<ToolButton label={m.workflowBuilderFieldPanelMoveDown?.() ?? 'Move Down'} icon={ArrowDown} variant="muted" onclick={onMoveDown} />
+			<ToolButton label={m.workflowBuilderFieldPanelDuplicate?.() ?? 'Duplicate'} icon={Copy} variant="muted" onclick={onDuplicate} />
+			<ToolButton label={m.workflowBuilderFieldPanelEditField?.() ?? 'Edit Field'} icon={Pencil} variant="muted" onclick={onEditField} />
+			<ToolButton label={m.workflowBuilderFieldPanelDeleteField?.() ?? 'Delete Field'} icon={Trash2} variant="muted" onclick={onDeleteField} />
 		</div>
 	</ToolSection>
 </div>

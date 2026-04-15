@@ -4,6 +4,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { describeCron, validateCron } from '$lib/automation/cron-utils';
+	import * as m from '$lib/paraglide/messages';
 
 	import type {
 		TriggerType,
@@ -40,9 +41,9 @@
 	}: Props = $props();
 
 	const TRIGGER_TYPES: { value: TriggerType; label: string; description: string; icon: typeof Route }[] = [
-		{ value: 'on_transition', label: 'On Transition', description: 'When instance moves between stages', icon: Route },
-		{ value: 'on_field_change', label: 'On Field Change', description: 'When a field value changes', icon: Pencil },
-		{ value: 'scheduled', label: 'Scheduled', description: 'Run on a cron schedule', icon: Clock }
+		{ value: 'on_transition', label: (m.automationTriggerCardOnTransitionLabel?.() ?? 'On Transition'), description: (m.automationTriggerCardOnTransitionDesc?.() ?? 'When instance moves between stages'), icon: Route },
+		{ value: 'on_field_change', label: (m.automationTriggerCardOnFieldChangeLabel?.() ?? 'On Field Change'), description: (m.automationTriggerCardOnFieldChangeDesc?.() ?? 'When a field value changes'), icon: Pencil },
+		{ value: 'scheduled', label: (m.automationTriggerCardScheduledLabel?.() ?? 'Scheduled'), description: (m.automationTriggerCardScheduledDesc?.() ?? 'Run on a cron schedule'), icon: Clock }
 	];
 
 	let isEditing = $state(false);
@@ -75,25 +76,25 @@
 	);
 
 	const stageOptionsWithAny: StageOption[] = $derived([
-		{ id: '', name: 'Any Stage' },
+		{ id: '', name: (m.automationTriggerCardAnyStage?.() ?? 'Any Stage') },
 		...stages
 	]);
 
 	const fieldOptionsWithAny: FieldOption[] = $derived([
-		{ key: '', label: 'Any Field' },
+		{ key: '', label: (m.automationTriggerCardAnyField?.() ?? 'Any Field') },
 		...fieldOptions
 	]);
 
 	// Summary text for configured trigger
 	function getSummary(): string {
 		if (transitionConfig) {
-			const from = stages.find(s => s.id === transitionConfig.from_stage_id)?.name ?? 'Any';
-			const to = stages.find(s => s.id === transitionConfig.to_stage_id)?.name ?? 'Any';
+			const from = stages.find(s => s.id === transitionConfig.from_stage_id)?.name ?? (m.automationTriggerCardAny?.() ?? 'Any');
+			const to = stages.find(s => s.id === transitionConfig.to_stage_id)?.name ?? (m.automationTriggerCardAny?.() ?? 'Any');
 			return `${from} -> ${to}`;
 		}
 		if (fieldChangeConfig) {
-			const stage = stages.find(s => s.id === fieldChangeConfig.stage_id)?.name ?? 'Any stage';
-			const field = fieldOptions.find(f => f.key === fieldChangeConfig.field_key)?.label ?? 'Any field';
+			const stage = stages.find(s => s.id === fieldChangeConfig.stage_id)?.name ?? (m.automationTriggerCardAnyStage?.() ?? 'Any Stage');
+			const field = fieldOptions.find(f => f.key === fieldChangeConfig.field_key)?.label ?? (m.automationTriggerCardAnyField?.() ?? 'Any Field');
 			return `${field} in ${stage}`;
 		}
 		if (scheduledConfig) {
@@ -111,7 +112,7 @@
 {#if !hasConfig && !isEditing}
 	<!-- No trigger configured: show type palette -->
 	<div class="trigger-palette">
-		<span class="palette-label">Choose a trigger</span>
+		<span class="palette-label">{m.automationTriggerCardChooseTrigger?.() ?? 'Choose a trigger'}</span>
 		<div class="palette-options">
 			{#each TRIGGER_TYPES as tt}
 				{@const Icon = tt.icon}
@@ -152,7 +153,7 @@
 	<!-- Editing trigger config -->
 	<div class="trigger-edit">
 		<div class="trigger-edit-header">
-			<span class="trigger-edit-title">Configure Trigger</span>
+			<span class="trigger-edit-title">{m.automationTriggerCardConfigureTitle?.() ?? 'Configure Trigger'}</span>
 			<Button variant="ghost" size="icon" class="h-6 w-6" onclick={() => isEditing = false}>
 				<X class="h-3 w-3" />
 			</Button>
@@ -177,7 +178,7 @@
 		<div class="trigger-config-fields">
 			{#if transitionConfig}
 				<div class="config-field">
-					<Label class="text-xs">From Stage</Label>
+					<Label class="text-xs">{m.automationTriggerCardFromStage?.() ?? 'From Stage'}</Label>
 					<select
 						class="config-select"
 						value={transitionConfig.from_stage_id ?? ''}
@@ -189,7 +190,7 @@
 					</select>
 				</div>
 				<div class="config-field">
-					<Label class="text-xs">To Stage</Label>
+					<Label class="text-xs">{m.automationTriggerCardToStage?.() ?? 'To Stage'}</Label>
 					<select
 						class="config-select"
 						value={transitionConfig.to_stage_id ?? ''}
@@ -202,7 +203,7 @@
 				</div>
 			{:else if fieldChangeConfig}
 				<div class="config-field">
-					<Label class="text-xs">Stage</Label>
+					<Label class="text-xs">{m.automationTriggerCardStage?.() ?? 'Stage'}</Label>
 					<select
 						class="config-select"
 						value={fieldChangeConfig.stage_id ?? ''}
@@ -214,7 +215,7 @@
 					</select>
 				</div>
 				<div class="config-field">
-					<Label class="text-xs">Field</Label>
+					<Label class="text-xs">{m.automationTriggerCardField?.() ?? 'Field'}</Label>
 					<select
 						class="config-select"
 						value={fieldChangeConfig.field_key ?? ''}
@@ -227,7 +228,7 @@
 				</div>
 			{:else if scheduledConfig}
 				<div class="config-field">
-					<Label class="text-xs">Target Stage</Label>
+					<Label class="text-xs">{m.automationTriggerCardTargetStage?.() ?? 'Target Stage'}</Label>
 					<select
 						class="config-select"
 						value={scheduledConfig.target_stage_id ?? ''}
@@ -237,10 +238,10 @@
 							<option value={s.id}>{s.name}</option>
 						{/each}
 					</select>
-					<span class="config-help">Only run for instances at this stage</span>
+					<span class="config-help">{m.automationTriggerCardTargetStageHelp?.() ?? 'Only run for instances at this stage'}</span>
 				</div>
 				<div class="config-field">
-					<Label class="text-xs">Cron Expression</Label>
+					<Label class="text-xs">{m.automationTriggerCardCronExpression?.() ?? 'Cron Expression'}</Label>
 					<Input
 						value={scheduledConfig.cron}
 						oninput={(e) => onTriggerConfigChange?.({ ...scheduledConfig, cron: e.currentTarget.value })}
@@ -254,7 +255,7 @@
 					{/if}
 				</div>
 				<div class="config-field">
-					<Label class="text-xs">Inactive for (days)</Label>
+					<Label class="text-xs">{m.automationTriggerCardInactiveDays?.() ?? 'Inactive for (days)'}</Label>
 					<Input
 						type="number"
 						min={0}
@@ -266,14 +267,14 @@
 						placeholder="0"
 						class="h-7 text-xs"
 					/>
-					<span class="config-help">Only target instances with no activity for this many days (0 = no filter)</span>
+					<span class="config-help">{m.automationTriggerCardInactiveDaysHelp?.() ?? 'Only target instances with no activity for this many days (0 = no filter)'}</span>
 				</div>
 			{/if}
 		</div>
 
 		<div class="trigger-edit-footer">
 			<Button variant="ghost" size="sm" class="h-6 text-xs" onclick={() => isEditing = false}>
-				Done
+				{m.automationTriggerCardDone?.() ?? 'Done'}
 			</Button>
 		</div>
 	</div>

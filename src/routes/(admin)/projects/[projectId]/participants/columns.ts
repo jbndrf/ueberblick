@@ -1,3 +1,5 @@
+import * as m from '$lib/paraglide/messages';
+
 export type Participant = {
 	id: string;
 	name: string;
@@ -10,4 +12,14 @@ export type Participant = {
 	project_id: string;
 	created: string;
 	metadata?: Record<string, any>;
+};
+
+export const participantsColumnHeaders = {
+	name: m.participantsName?.() ?? 'Name',
+	email: m.participantsEmail?.() ?? 'Email',
+	phone: m.participantsPhone?.() ?? 'Phone',
+	token: m.participantsToken?.() ?? 'Access Token',
+	roles: m.participantsRoles?.() ?? 'Roles',
+	status: m.participantsStatus?.() ?? 'Status',
+	lastActive: m.participantsLastActive?.() ?? 'Last Active'
 };

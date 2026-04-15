@@ -7,6 +7,7 @@
 	import { Switch } from '$lib/components/ui/switch';
 	import * as Tabs from '$lib/components/ui/tabs';
 	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	import { ArrowRight, LogIn, RotateCcw, Trash2 } from 'lucide-svelte';
 
@@ -81,7 +82,7 @@
 	let buttonColor = $state(edge.data.visual_config?.button_color || '#3b82f6');
 	let requiresConfirmation = $state(edge.data.visual_config?.requires_confirmation || false);
 	let confirmationMessage = $state(
-		edge.data.visual_config?.confirmation_message || 'Are you sure you want to proceed?'
+		edge.data.visual_config?.confirmation_message || (m.propertiesEdgePropertyConfirmationDefault?.() ?? 'Are you sure you want to proceed?')
 	);
 	let activeTab = $state('permissions');
 
@@ -98,7 +99,7 @@
 			buttonColor = edge.data.visual_config?.button_color || '#3b82f6';
 			requiresConfirmation = edge.data.visual_config?.requires_confirmation || false;
 			confirmationMessage =
-				edge.data.visual_config?.confirmation_message || 'Are you sure you want to proceed?';
+				edge.data.visual_config?.confirmation_message || (m.propertiesEdgePropertyConfirmationDefault?.() ?? 'Are you sure you want to proceed?');
 		}
 	});
 
@@ -163,25 +164,25 @@
 					bind:value={actionName}
 					onblur={handleNameBlur}
 					class="header-input"
-					placeholder="Action name..."
+					placeholder={m.propertiesEdgePropertyActionNamePlaceholder?.() ?? 'Action name...'}
 				/>
 				<div class="edge-meta">
 					<span class="edge-type-badge" class:edit={isEditAction} class:entry={isEntryConnection}>
 						{#if isEntryConnection}
-							Entry Action
+							{m.propertiesEdgePropertyTypeEntry?.() ?? 'Entry Action'}
 						{:else if isEditAction}
-							Edit Action
+							{m.propertiesEdgePropertyTypeEdit?.() ?? 'Edit Action'}
 						{:else}
-							Progress Action
+							{m.propertiesEdgePropertyTypeProgress?.() ?? 'Progress Action'}
 						{/if}
 					</span>
 					{#if isEntryConnection}
 						<span class="edge-path">
-							Workflow Entry -> {targetNode?.data.title || 'Start'}
+							{m.propertiesEdgePropertyWorkflowEntry?.() ?? 'Workflow Entry'} -> {targetNode?.data.title || (m.propertiesEdgePropertyTargetStart?.() ?? 'Start')}
 						</span>
 					{:else if !isEditAction}
 						<span class="edge-path">
-							{sourceNode?.data.title || 'Source'} -> {targetNode?.data.title || 'Target'}
+							{sourceNode?.data.title || (m.propertiesEdgePropertySourceFallback?.() ?? 'Source')} -> {targetNode?.data.title || (m.propertiesEdgePropertyTargetFallback?.() ?? 'Target')}
 						</span>
 					{/if}
 				</div>
@@ -192,15 +193,15 @@
 	<!-- Tabs -->
 	<Tabs.Root bind:value={activeTab} class="flex-1 flex flex-col">
 		<Tabs.List class="panel-tabs">
-			<Tabs.Trigger value="permissions">Permissions</Tabs.Trigger>
-			<Tabs.Trigger value="tools">Tools</Tabs.Trigger>
-			<Tabs.Trigger value="settings">Settings</Tabs.Trigger>
+			<Tabs.Trigger value="permissions">{m.propertiesEdgePropertyTabPermissions?.() ?? 'Permissions'}</Tabs.Trigger>
+			<Tabs.Trigger value="tools">{m.propertiesEdgePropertyTabTools?.() ?? 'Tools'}</Tabs.Trigger>
+			<Tabs.Trigger value="settings">{m.propertiesEdgePropertyTabSettings?.() ?? 'Settings'}</Tabs.Trigger>
 		</Tabs.List>
 
 		<div class="panel-content">
 			<!-- Permissions Tab -->
 			<Tabs.Content value="permissions" class="tab-content">
-				<PropertySection title="Allowed Roles">
+				<PropertySection title={m.propertiesEdgePropertyAllowedRoles?.() ?? 'Allowed Roles'}>
 					<MobileMultiSelect
 						selectedIds={selectedRoleIds}
 						options={roles}
@@ -210,20 +211,20 @@
 						allowCreate={!!onCreateRole}
 						onCreateOption={onCreateRole}
 						onSelectedIdsChange={handleRolesChange}
-						placeholder="Select or search roles..."
+						placeholder={m.propertiesEdgePropertyRolesPlaceholder?.() ?? 'Select or search roles...'}
 						class="w-full"
 					/>
 					<p class="help-text">
-						Only participants with these roles can perform this action. Leave empty to allow all.
+						{m.propertiesEdgePropertyRolesHelp?.() ?? 'Only participants with these roles can perform this action. Leave empty to allow all.'}
 					</p>
 				</PropertySection>
 			</Tabs.Content>
 
 			<!-- Tools Tab -->
 			<Tabs.Content value="tools" class="tab-content">
-				<PropertySection title="Connected Tools" defaultOpen={true}>
+				<PropertySection title={m.propertiesEdgePropertyConnectedTools?.() ?? 'Connected Tools'} defaultOpen={true}>
 					{#if !hasConnectedTools}
-						<p class="empty-text">No tools attached to this connection.</p>
+						<p class="empty-text">{m.propertiesEdgePropertyNoTools?.() ?? 'No tools attached to this connection.'}</p>
 					{:else}
 						<div class="tools-list">
 							{#each sortedTools as tool (tool.id)}
@@ -246,7 +247,7 @@
 										class="delete-btn"
 										type="button"
 										onclick={() => onDeleteTool?.(tool.type, tool.id)}
-										title="Delete tool"
+										title={m.propertiesEdgePropertyDeleteTool?.() ?? 'Delete tool'}
 									>
 										<Trash2 class="h-3.5 w-3.5" />
 									</button>
@@ -260,19 +261,19 @@
 			<!-- Settings Tab -->
 			<Tabs.Content value="settings" class="tab-content">
 				{#if !isEntryConnection}
-				<PropertySection title="Button Appearance">
+				<PropertySection title={m.propertiesEdgePropertyButtonAppearance?.() ?? 'Button Appearance'}>
 					<div class="form-field">
-						<Label for="button-label">Button Label</Label>
+						<Label for="button-label">{m.propertiesEdgePropertyButtonLabel?.() ?? 'Button Label'}</Label>
 						<Input
 							id="button-label"
 							bind:value={buttonLabel}
 							oninput={syncSettings}
-							placeholder="e.g., Submit, Approve, Continue"
+							placeholder={m.propertiesEdgePropertyButtonLabelPlaceholder?.() ?? 'e.g., Submit, Approve, Continue'}
 						/>
 					</div>
 
 					<div class="form-field">
-						<Label for="button-color">Button Color</Label>
+						<Label for="button-color">{m.propertiesEdgePropertyButtonColor?.() ?? 'Button Color'}</Label>
 						<div class="color-picker">
 							<input
 								type="color"
@@ -291,12 +292,12 @@
 					</div>
 				</PropertySection>
 
-				<PropertySection title="Behavior">
+				<PropertySection title={m.propertiesEdgePropertyBehavior?.() ?? 'Behavior'}>
 					<div class="form-field-switch">
 						<div class="switch-info">
-							<Label for="requires-confirmation">Requires Confirmation</Label>
+							<Label for="requires-confirmation">{m.propertiesEdgePropertyRequiresConfirmation?.() ?? 'Requires Confirmation'}</Label>
 							<p class="switch-description">
-								Show a confirmation dialog before performing this action
+								{m.propertiesEdgePropertyRequiresConfirmationDesc?.() ?? 'Show a confirmation dialog before performing this action'}
 							</p>
 						</div>
 						<Switch
@@ -311,19 +312,19 @@
 
 					{#if requiresConfirmation}
 						<div class="form-field">
-							<Label for="confirmation-message">Confirmation Message</Label>
+							<Label for="confirmation-message">{m.propertiesEdgePropertyConfirmationMessage?.() ?? 'Confirmation Message'}</Label>
 							<Input
 								id="confirmation-message"
 								bind:value={confirmationMessage}
 								oninput={syncSettings}
-								placeholder="Are you sure you want to proceed?"
+								placeholder={m.propertiesEdgePropertyConfirmationDefault?.() ?? 'Are you sure you want to proceed?'}
 							/>
 						</div>
 					{/if}
 				</PropertySection>
 				{:else}
 				<p class="text-sm text-muted-foreground text-center py-4">
-					Entry connections are configured from the workflow settings.
+					{m.propertiesEdgePropertyEntryInfo?.() ?? 'Entry connections are configured from the workflow settings.'}
 				</p>
 				{/if}
 			</Tabs.Content>
@@ -334,7 +335,7 @@
 	<div class="panel-footer">
 		<Button variant="destructive" size="sm" onclick={handleDelete} class="w-full">
 			<Trash2 class="h-4 w-4 mr-2" />
-			Delete Action
+			{m.propertiesEdgePropertyDeleteAction?.() ?? 'Delete Action'}
 		</Button>
 	</div>
 </div>

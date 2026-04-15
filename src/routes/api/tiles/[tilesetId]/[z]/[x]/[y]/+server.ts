@@ -59,7 +59,7 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 		// Build file path
 		const tilePath = path.join(
 			process.cwd(),
-			'static',
+			'data',
 			'tiles',
 			tilesetId,
 			String(zNum),
@@ -68,7 +68,7 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 		);
 
 		// Security: Ensure path is within expected directory
-		const tilesDir = path.join(process.cwd(), 'static', 'tiles');
+		const tilesDir = path.join(process.cwd(), 'data', 'tiles');
 		const resolvedPath = path.resolve(tilePath);
 		if (!resolvedPath.startsWith(tilesDir)) {
 			throw error(400, 'Invalid tile path');

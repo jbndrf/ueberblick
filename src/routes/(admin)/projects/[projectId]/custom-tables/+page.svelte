@@ -219,7 +219,7 @@
 		enableShiftSelect={true}
 		showToolbar={true}
 		showEditMode={true}
-		editModeLabel="Edit tables inline"
+		editModeLabel={m.customTablesEditModeLabel?.() ?? 'Edit tables inline'}
 		emptyMessage={m.customTablesNoTables()}
 		emptySubMessage={m.customTablesCreateYourFirst()}
 		rowActions={{
@@ -337,7 +337,7 @@
 						getOptionId={(r) => r.id}
 						getOptionLabel={(r) => r.name}
 						getOptionDescription={(r) => r.description}
-						placeholder="Select roles..."
+						placeholder={m.customTablesSelectRolesPlaceholder?.() ?? 'Select roles...'}
 					/>
 				</div>
 				<input type="hidden" name="visible_to_roles" value={JSON.stringify(createVisibleToRoles)} />
@@ -424,7 +424,7 @@
 							getOptionId={(r) => r.id}
 							getOptionLabel={(r) => r.name}
 							getOptionDescription={(r) => r.description}
-							placeholder="Select roles..."
+							placeholder={m.customTablesSelectRolesPlaceholder?.() ?? 'Select roles...'}
 						/>
 					</div>
 					<input type="hidden" name="visible_to_roles" value={JSON.stringify(editVisibleToRoles)} />

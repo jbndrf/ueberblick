@@ -118,22 +118,22 @@
 		updateAction: 'updateCustomFieldDefinition',
 		deleteAction: 'deleteCustomFieldDefinition',
 		labels: {
-			title: 'Custom Fields',
-			description: 'Define additional fields for participants in this project',
-			addButton: 'Add Field',
-			fieldName: 'Field Name',
-			fieldType: 'Field Type',
-			defaultValue: 'Default Value (Optional)',
-			required: 'Required field',
-			noFields: 'No custom fields defined yet',
-			createSuccess: 'Custom field created successfully',
-			createError: 'Failed to create custom field',
-			updateSuccess: 'Custom field updated successfully',
-			updateError: 'Failed to update custom field',
-			deleteSuccess: 'Custom field deleted successfully',
-			deleteError: 'Failed to delete custom field',
+			title: m.participantsAdminCustomFieldsTitle?.() ?? 'Custom Fields',
+			description: m.participantsAdminCustomFieldsDescription?.() ?? 'Define additional fields for participants in this project',
+			addButton: m.participantsAdminCustomFieldsAddButton?.() ?? 'Add Field',
+			fieldName: m.participantsAdminCustomFieldsFieldName?.() ?? 'Field Name',
+			fieldType: m.participantsAdminCustomFieldsFieldType?.() ?? 'Field Type',
+			defaultValue: m.participantsAdminCustomFieldsDefaultValue?.() ?? 'Default Value (Optional)',
+			required: m.participantsAdminCustomFieldsRequired?.() ?? 'Required field',
+			noFields: m.participantsAdminCustomFieldsNoFields?.() ?? 'No custom fields defined yet',
+			createSuccess: m.participantsAdminCustomFieldsCreateSuccess?.() ?? 'Custom field created successfully',
+			createError: m.participantsAdminCustomFieldsCreateError?.() ?? 'Failed to create custom field',
+			updateSuccess: m.participantsAdminCustomFieldsUpdateSuccess?.() ?? 'Custom field updated successfully',
+			updateError: m.participantsAdminCustomFieldsUpdateError?.() ?? 'Failed to update custom field',
+			deleteSuccess: m.participantsAdminCustomFieldsDeleteSuccess?.() ?? 'Custom field deleted successfully',
+			deleteError: m.participantsAdminCustomFieldsDeleteError?.() ?? 'Failed to delete custom field',
 			deleteConfirm:
-				'Are you sure you want to delete this custom field? This will remove the field definition but preserve existing data in participant metadata.'
+				m.participantsAdminCustomFieldsDeleteConfirm?.() ?? 'Are you sure you want to delete this custom field? This will remove the field definition but preserve existing data in participant metadata.'
 		}
 	};
 
@@ -407,7 +407,7 @@
 						getOptionDescription={(r) => r.description}
 						allowCreate={true}
 						onCreateOption={createRole}
-						placeholder="Select or search roles..."
+						placeholder={m.participantsAdminSelectOrSearchRoles?.() ?? 'Select or search roles...'}
 					/>
 				</div>
 				<Dialog.Footer>
@@ -427,7 +427,7 @@
 		<CustomFieldManagerGeneric fields={data.customFields} config={customFieldConfig} />
 		<Dialog.Footer>
 			<Button variant="outline" onclick={() => (customFieldsDialogOpen = false)}>
-				Close
+				{m.commonClose?.() ?? 'Close'}
 			</Button>
 		</Dialog.Footer>
 	</Dialog.Content>

@@ -3,6 +3,7 @@
 
 	import { Button } from '$lib/components/ui/button';
 	import { Plus, FileText, Lock } from 'lucide-svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	import PropertySection from './PropertySection.svelte';
 
@@ -65,26 +66,26 @@
 	{#if stageGroups().length === 0}
 		<div class="empty-state">
 			<FileText class="h-8 w-8 text-muted-foreground/50" />
-			<p class="empty-text">No stages available</p>
+			<p class="empty-text">{m.propertiesFieldListNoStages?.() ?? 'No stages available'}</p>
 		</div>
 	{:else}
 		{#each stageGroups() as group}
 			<PropertySection
-				title={group.isCurrentStage ? 'This Stage' : group.stageName}
+				title={group.isCurrentStage ? (m.propertiesFieldListThisStage?.() ?? 'This Stage') : group.stageName}
 				defaultOpen={group.isCurrentStage}
 			>
 				{#if group.fields.length === 0}
 					<div class="no-fields">
 						{#if group.isCurrentStage}
-							<p class="no-fields-text">No fields yet. Add fields to capture data at this stage.</p>
+							<p class="no-fields-text">{m.propertiesFieldListNoFieldsYet?.() ?? 'No fields yet. Add fields to capture data at this stage.'}</p>
 							<Button variant="outline" size="sm" class="add-field-btn">
 								<Plus class="h-3.5 w-3.5 mr-1.5" />
-								Add Field
+								{m.propertiesFieldListAddField?.() ?? 'Add Field'}
 							</Button>
 						{:else}
 							<div class="ancestor-empty">
 								<Lock class="h-3.5 w-3.5 text-muted-foreground" />
-								<p class="no-fields-text">No fields from this stage</p>
+								<p class="no-fields-text">{m.propertiesFieldListNoFieldsAncestor?.() ?? 'No fields from this stage'}</p>
 							</div>
 						{/if}
 					</div>
@@ -107,7 +108,7 @@
 						{#if group.isCurrentStage}
 							<Button variant="ghost" size="sm" class="add-field-btn-inline">
 								<Plus class="h-3.5 w-3.5 mr-1.5" />
-								Add Field
+								{m.propertiesFieldListAddField?.() ?? 'Add Field'}
 							</Button>
 						{/if}
 					</div>
@@ -120,8 +121,7 @@
 	{#if ancestors.length > 0}
 		<div class="fields-summary">
 			<p class="summary-text">
-				This stage inherits fields from {ancestors.length} ancestor
-				{ancestors.length === 1 ? 'stage' : 'stages'}
+				{m.propertiesFieldListInheritsFields?.({ count: ancestors.length }) ?? `This stage inherits fields from ${ancestors.length} ancestor ${ancestors.length === 1 ? 'stage' : 'stages'}`}
 			</p>
 		</div>
 	{/if}

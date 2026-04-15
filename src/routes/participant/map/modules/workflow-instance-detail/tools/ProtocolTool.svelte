@@ -14,6 +14,7 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import type { FormFieldWithValue } from '$lib/components/form-renderer';
 	import type { ToolProtocol, FormField, FieldValue } from '../state.svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	// ==========================================================================
 	// Props
@@ -151,11 +152,11 @@
 			const value = editValues[field.id];
 			if (field.is_required) {
 				if (value === null || value === undefined || value === '') {
-					newErrors[field.id] = 'This field is required';
+					newErrors[field.id] = (m.participantProtocolToolFieldRequired?.() ?? 'This field is required');
 					continue;
 				}
 				if (Array.isArray(value) && value.length === 0) {
-					newErrors[field.id] = 'This field is required';
+					newErrors[field.id] = (m.participantProtocolToolFieldRequired?.() ?? 'This field is required');
 					continue;
 				}
 			}
@@ -165,11 +166,11 @@
 			const value = protocolValues[field.id];
 			if (field.is_required) {
 				if (value === null || value === undefined || value === '') {
-					newErrors[field.id] = 'This field is required';
+					newErrors[field.id] = (m.participantProtocolToolFieldRequired?.() ?? 'This field is required');
 					continue;
 				}
 				if (Array.isArray(value) && value.length === 0) {
-					newErrors[field.id] = 'This field is required';
+					newErrors[field.id] = (m.participantProtocolToolFieldRequired?.() ?? 'This field is required');
 					continue;
 				}
 			}
@@ -204,13 +205,13 @@
 				<div
 					class="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2"
 				></div>
-				<p class="text-sm text-muted-foreground">Loading...</p>
+				<p class="text-sm text-muted-foreground">{m.participantProtocolToolLoading?.() ?? 'Loading...'}</p>
 			</div>
 		</div>
 	{:else}
 		{#if hasEditFields}
 			<div class="p-4">
-				<h4 class="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">Lifecycle Fields</h4>
+				<h4 class="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">{m.participantProtocolToolLifecycleFields?.() ?? 'Lifecycle Fields'}</h4>
 				<FormRenderer
 					mode="edit"
 					fields={editableFields}
@@ -229,7 +230,7 @@
 
 		{#if hasProtocolFields}
 			<div class="p-4">
-				<h4 class="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">Protocol Fields</h4>
+				<h4 class="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">{m.participantProtocolToolProtocolFields?.() ?? 'Protocol Fields'}</h4>
 				<FormRenderer
 					mode="fill"
 					fields={protocolFieldsWithValues}
@@ -244,7 +245,7 @@
 
 		{#if !hasEditFields && !hasProtocolFields}
 			<div class="flex-1 flex items-center justify-center p-4 py-12">
-				<p class="text-sm text-muted-foreground">No fields configured for this protocol tool.</p>
+				<p class="text-sm text-muted-foreground">{m.participantProtocolToolNoFields?.() ?? 'No fields configured for this protocol tool.'}</p>
 			</div>
 		{/if}
 	{/if}
@@ -260,7 +261,7 @@
 				class="flex-1"
 			>
 				<X class="w-4 h-4 mr-1" />
-				Cancel
+				{m.commonCancel?.() ?? 'Cancel'}
 			</Button>
 
 			<Button
@@ -270,10 +271,10 @@
 			>
 				{#if isSubmitting}
 					<Loader2 class="w-4 h-4 mr-2 animate-spin" />
-					Saving...
+					{m.participantProtocolToolSaving?.() ?? 'Saving...'}
 				{:else}
 					<Save class="w-4 h-4 mr-2" />
-					Save Protocol
+					{m.participantProtocolToolSave?.() ?? 'Save Protocol'}
 				{/if}
 			</Button>
 		</div>

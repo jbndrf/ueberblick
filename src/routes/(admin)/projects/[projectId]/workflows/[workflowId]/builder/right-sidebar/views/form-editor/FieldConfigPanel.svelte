@@ -24,6 +24,7 @@
 		type MultipleChoiceValidation,
 		type EntitySelectorOptions
 	} from '$lib/workflow-builder';
+	import * as m from '$lib/paraglide/messages';
 
 	type AncestorFieldGroup = {
 		stage: WorkflowStage;
@@ -339,32 +340,32 @@
 	<div class="config-content">
 		<!-- Basic settings -->
 		<div class="config-section">
-			<Label for="field-label">Label</Label>
+			<Label for="field-label">{m.formEditorFieldConfigLabel?.() ?? 'Label'}</Label>
 			<Input
 				id="field-label"
 				bind:value={label}
 				onblur={handleLabelBlur}
-				placeholder="Field label..."
+				placeholder={m.formEditorFieldConfigLabelPlaceholder?.() ?? 'Field label...'}
 			/>
 		</div>
 
 		<div class="config-section">
-			<Label for="field-placeholder">Placeholder</Label>
+			<Label for="field-placeholder">{m.formEditorFieldConfigPlaceholder?.() ?? 'Placeholder'}</Label>
 			<Input
 				id="field-placeholder"
 				bind:value={placeholder}
 				onblur={handlePlaceholderBlur}
-				placeholder="Placeholder text..."
+				placeholder={m.formEditorFieldConfigPlaceholderText?.() ?? 'Placeholder text...'}
 			/>
 		</div>
 
 		<div class="config-section">
-			<Label for="field-help">Help Text</Label>
+			<Label for="field-help">{m.formEditorFieldConfigHelpText?.() ?? 'Help Text'}</Label>
 			<Textarea
 				id="field-help"
 				bind:value={helpText}
 				onblur={handleHelpTextBlur}
-				placeholder="Help text for users..."
+				placeholder={m.formEditorFieldConfigHelpTextPlaceholder?.() ?? 'Help text for users...'}
 				rows={2}
 			/>
 		</div>
@@ -376,17 +377,17 @@
 					checked={isRequired}
 					onCheckedChange={handleRequiredChange}
 				/>
-				<Label for="field-required">Required</Label>
+				<Label for="field-required">{m.formEditorFieldConfigRequired?.() ?? 'Required'}</Label>
 			</div>
 		</div>
 
 		<!-- Text Field Validation -->
 		{#if isTextField}
 			<div class="config-section">
-				<Label>Validation</Label>
+				<Label>{m.formEditorFieldConfigValidation?.() ?? 'Validation'}</Label>
 				<div class="validation-grid">
 					<div class="validation-field">
-						<Label for="min-length">Min Length</Label>
+						<Label for="min-length">{m.formEditorFieldConfigMinLength?.() ?? 'Min Length'}</Label>
 						<Input
 							id="min-length"
 							type="number"
@@ -397,20 +398,20 @@
 						/>
 					</div>
 					<div class="validation-field">
-						<Label for="max-length">Max Length</Label>
+						<Label for="max-length">{m.formEditorFieldConfigMaxLength?.() ?? 'Max Length'}</Label>
 						<Input
 							id="max-length"
 							type="number"
 							min={0}
 							bind:value={textMaxLength}
 							onblur={handleTextValidationBlur}
-							placeholder="No limit"
+							placeholder={m.formEditorFieldConfigNoLimit?.() ?? 'No limit'}
 						/>
 					</div>
 				</div>
 				{#if isShortText}
 					<div class="config-section-inner">
-						<Label for="pattern">Regex Pattern</Label>
+						<Label for="pattern">{m.formEditorFieldConfigRegexPattern?.() ?? 'Regex Pattern'}</Label>
 						<Input
 							id="pattern"
 							bind:value={textPattern}
@@ -425,30 +426,30 @@
 		<!-- Number Field Validation -->
 		{#if isNumberField}
 			<div class="config-section">
-				<Label>Validation</Label>
+				<Label>{m.formEditorFieldConfigValidation?.() ?? 'Validation'}</Label>
 				<div class="validation-grid">
 					<div class="validation-field">
-						<Label for="num-min">Min</Label>
+						<Label for="num-min">{m.formEditorFieldConfigMin?.() ?? 'Min'}</Label>
 						<Input
 							id="num-min"
 							type="number"
 							bind:value={numberMin}
 							onblur={handleNumberValidationBlur}
-							placeholder="No min"
+							placeholder={m.formEditorFieldConfigNoMin?.() ?? 'No min'}
 						/>
 					</div>
 					<div class="validation-field">
-						<Label for="num-max">Max</Label>
+						<Label for="num-max">{m.formEditorFieldConfigMax?.() ?? 'Max'}</Label>
 						<Input
 							id="num-max"
 							type="number"
 							bind:value={numberMax}
 							onblur={handleNumberValidationBlur}
-							placeholder="No max"
+							placeholder={m.formEditorFieldConfigNoMax?.() ?? 'No max'}
 						/>
 					</div>
 					<div class="validation-field">
-						<Label for="num-step">Step</Label>
+						<Label for="num-step">{m.formEditorFieldConfigStep?.() ?? 'Step'}</Label>
 						<Input
 							id="num-step"
 							type="number"
@@ -466,19 +467,19 @@
 		<!-- Date Field Options -->
 		{#if isDateField}
 			<div class="config-section">
-				<Label>Date Mode</Label>
+				<Label>{m.formEditorFieldConfigDateMode?.() ?? 'Date Mode'}</Label>
 				<RadioGroup.Root bind:value={dateMode} onValueChange={handleDateModeChange} class="radio-group">
 					<div class="radio-option">
 						<RadioGroup.Item value="date" id="date-only" />
-						<Label for="date-only">Date only</Label>
+						<Label for="date-only">{m.formEditorFieldConfigDateOnly?.() ?? 'Date only'}</Label>
 					</div>
 					<div class="radio-option">
 						<RadioGroup.Item value="datetime" id="datetime" />
-						<Label for="datetime">Date and Time</Label>
+						<Label for="datetime">{m.formEditorFieldConfigDateAndTime?.() ?? 'Date and Time'}</Label>
 					</div>
 					<div class="radio-option">
 						<RadioGroup.Item value="time" id="time-only" />
-						<Label for="time-only">Time only</Label>
+						<Label for="time-only">{m.formEditorFieldConfigTimeOnly?.() ?? 'Time only'}</Label>
 					</div>
 				</RadioGroup.Root>
 			</div>
@@ -489,7 +490,7 @@
 						checked={prefillNow}
 						onCheckedChange={handlePrefillNowChange}
 					/>
-					<Label for="prefill-now">Prefill with current date/time</Label>
+					<Label for="prefill-now">{m.formEditorFieldConfigPrefillNow?.() ?? 'Prefill with current date/time'}</Label>
 				</div>
 			</div>
 		{/if}
@@ -497,20 +498,20 @@
 		<!-- File Field Options -->
 		{#if isFileField}
 			<div class="config-section">
-				<Label for="file-types">Allowed File Types</Label>
+				<Label for="file-types">{m.formEditorFieldConfigAllowedFileTypes?.() ?? 'Allowed File Types'}</Label>
 				<select
 					id="file-types"
 					class="native-select"
 					value={fileTypes}
 					onchange={(e) => handleFileTypesChange(e.currentTarget.value)}
 				>
-					<option value="all">All files</option>
-					<option value="images">Images only (.jpg, .png, .gif, .webp)</option>
-					<option value="documents">Documents only (.pdf, .doc, .txt)</option>
+					<option value="all">{m.formEditorFieldConfigAllFiles?.() ?? 'All files'}</option>
+					<option value="images">{m.formEditorFieldConfigImagesOnly?.() ?? 'Images only (.jpg, .png, .gif, .webp)'}</option>
+					<option value="documents">{m.formEditorFieldConfigDocumentsOnly?.() ?? 'Documents only (.pdf, .doc, .txt)'}</option>
 				</select>
 			</div>
 			<div class="config-section">
-				<Label for="max-files">Max Files</Label>
+				<Label for="max-files">{m.formEditorFieldConfigMaxFiles?.() ?? 'Max Files'}</Label>
 				<Input
 					id="max-files"
 					type="number"
@@ -524,23 +525,23 @@
 		<!-- Dropdown/Multiple Choice Options (textarea) -->
 		{#if hasOptions}
 			<div class="config-section">
-				<Label for="options-textarea">Options (one per line)</Label>
+				<Label for="options-textarea">{m.formEditorFieldConfigOptionsLabel?.() ?? 'Options (one per line)'}</Label>
 				<Textarea
 					id="options-textarea"
 					bind:value={optionsText}
 					onblur={handleOptionsTextBlur}
-					placeholder={`Option 1\nOption 2\nOption 3, with explanation\nOption 4, to help users select`}
+					placeholder={m.formEditorFieldConfigOptionsPlaceholder?.() ?? `Option 1\nOption 2\nOption 3, with explanation\nOption 4, to help users select`}
 					rows={5}
 				/>
-				<p class="config-hint">One option per line. Use comma to add explanation: "Answer, explanation text"</p>
+				<p class="config-hint">{m.formEditorFieldConfigOptionsHint?.() ?? 'One option per line. Use comma to add explanation: "Answer, explanation text"'}</p>
 			</div>
 
 			{#if isMultipleChoice}
 				<div class="config-section">
-					<Label>Selection Limits</Label>
+					<Label>{m.formEditorFieldConfigSelectionLimits?.() ?? 'Selection Limits'}</Label>
 					<div class="validation-grid">
 						<div class="validation-field">
-							<Label for="min-sel">Min Selections</Label>
+							<Label for="min-sel">{m.formEditorFieldConfigMinSelections?.() ?? 'Min Selections'}</Label>
 							<Input
 								id="min-sel"
 								type="number"
@@ -551,14 +552,14 @@
 							/>
 						</div>
 						<div class="validation-field">
-							<Label for="max-sel">Max Selections</Label>
+							<Label for="max-sel">{m.formEditorFieldConfigMaxSelections?.() ?? 'Max Selections'}</Label>
 							<Input
 								id="max-sel"
 								type="number"
 								min={1}
 								bind:value={maxSelections}
 								onblur={handleMultipleChoiceValidationBlur}
-								placeholder="No limit"
+								placeholder={m.formEditorFieldConfigNoLimit?.() ?? 'No limit'}
 							/>
 						</div>
 					</div>
@@ -596,7 +597,7 @@
 	<div class="config-footer">
 		<Button variant="destructive" size="sm" onclick={onDelete}>
 			<Trash2 class="h-4 w-4 mr-1" />
-			Delete Field
+			{m.formEditorFieldConfigDeleteField?.() ?? 'Delete Field'}
 		</Button>
 	</div>
 </div>

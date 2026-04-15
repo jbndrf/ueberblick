@@ -2,6 +2,7 @@
 	import { onMount, type Snippet } from 'svelte';
 	import type { Action as SvelteAction } from 'svelte/action';
 	import { X } from 'lucide-svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	// ==========================================================================
 	// Types
@@ -44,7 +45,7 @@
 	let {
 		isOpen = $bindable(false),
 		isExpanded = $bindable(false),
-		title = 'Details',
+		title = m.moduleShellDefaultTitle(),
 		subtitle,
 		badge,
 		isLoading = false,
@@ -483,7 +484,7 @@
 						e.stopPropagation();
 						close();
 					}}
-					aria-label="Close"
+					aria-label={m.moduleShellClose()}
 				>
 					<X class="w-4 h-4" />
 				</button>
@@ -499,7 +500,7 @@
 				<div
 					class="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2"
 				></div>
-				<p class="text-sm text-muted-foreground">Loading...</p>
+				<p class="text-sm text-muted-foreground">{m.moduleShellLoading()}</p>
 			</div>
 		</div>
 	{:else if error}
@@ -511,7 +512,7 @@
 				>
 					<X class="w-6 h-6 text-destructive" />
 				</div>
-				<p class="text-sm text-destructive font-medium mb-1">Error</p>
+				<p class="text-sm text-destructive font-medium mb-1">{m.moduleShellError()}</p>
 				<p class="text-xs text-muted-foreground">{error}</p>
 			</div>
 		</div>
@@ -526,7 +527,7 @@
 	{:else}
 		<!-- Empty State -->
 		<div class="flex-1 flex items-center justify-center">
-			<p class="text-sm text-muted-foreground">No content</p>
+			<p class="text-sm text-muted-foreground">{m.moduleShellNoContent()}</p>
 		</div>
 	{/if}
 

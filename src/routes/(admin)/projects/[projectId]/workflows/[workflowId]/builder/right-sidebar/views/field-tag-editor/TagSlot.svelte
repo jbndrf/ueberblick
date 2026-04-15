@@ -2,6 +2,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Label } from '$lib/components/ui/label';
 	import { X } from 'lucide-svelte';
+	import * as m from '$lib/paraglide/messages';
 	import type { TagTypeDefinition } from '$lib/workflow-builder/tools/tag-types';
 	import type { FilterableConfig } from '$lib/workflow-builder/tools/tag-types';
 	import type { TagMapping, ToolsFormField, ToolsForm, WorkflowStage } from '$lib/workflow-builder';
@@ -61,7 +62,7 @@
 		<div class="flex items-center justify-between">
 			<Label class="text-sm font-medium">{tagType.displayName}</Label>
 			{#if mapping}
-				<Button variant="ghost" size="icon" class="h-6 w-6" onclick={handleClear} title="Clear">
+				<Button variant="ghost" size="icon" class="h-6 w-6" onclick={handleClear} title={m.fieldTagEditorSlotClear?.() ?? 'Clear'}>
 					<X class="h-3.5 w-3.5" />
 				</Button>
 			{/if}
@@ -80,7 +81,7 @@
 				onchange={() => handleFilterByChange('stage')}
 				class="accent-primary"
 			/>
-			Filter by Stage
+			{m.fieldTagEditorSlotFilterByStage?.() ?? 'Filter by Stage'}
 		</label>
 		<label class="flex items-center gap-1.5 text-sm cursor-pointer">
 			<input
@@ -91,7 +92,7 @@
 				onchange={() => handleFilterByChange('field')}
 				class="accent-primary"
 			/>
-			Filter by Field
+			{m.fieldTagEditorSlotFilterByField?.() ?? 'Filter by Field'}
 		</label>
 	</div>
 
@@ -103,7 +104,7 @@
 				value={mapping?.fieldId ?? ''}
 				onchange={handleFieldSelect}
 			>
-				<option value="">-- Select a field --</option>
+				<option value="">{m.fieldTagEditorSlotSelectField?.() ?? '-- Select a field --'}</option>
 				{#each compatibleFieldGroups as group}
 					<optgroup label="{group.stage.stage_name} / {group.form.name}">
 						{#each group.fields as field}
@@ -118,7 +119,7 @@
 	<!-- Stage mode hint -->
 	{#if mapping && filterBy === 'stage'}
 		<p class="text-xs text-muted-foreground">
-			Participants will filter by workflow stage. Configure stage icons in the icon designer.
+			{m.fieldTagEditorSlotStageModeHint?.() ?? 'Participants will filter by workflow stage. Configure stage icons in the icon designer.'}
 		</p>
 	{/if}
 </div>

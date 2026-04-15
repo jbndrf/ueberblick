@@ -1,4 +1,5 @@
 <script lang="ts">
+	import * as m from '$lib/paraglide/messages';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Type } from 'lucide-svelte';
 	import { fieldTypeIcons, type ToolsFormField } from '$lib/workflow-builder';
@@ -40,9 +41,9 @@
 			class="prefill-toggle"
 			class:prefill-off={!prefillEnabled}
 			onclick={(e) => { e.stopPropagation(); onTogglePrefill?.(); }}
-			title={prefillEnabled ? 'Pre-fill enabled (click to disable)' : 'Pre-fill disabled (click to enable)'}
+			title={(prefillEnabled ? (m.editToolAncestorFieldItemPrefillEnabled?.() ?? 'Pre-fill enabled (click to disable)') : (m.editToolAncestorFieldItemPrefillDisabled?.() ?? 'Pre-fill disabled (click to enable)'))}
 		>
-			{prefillEnabled ? 'prefill' : 'no prefill'}
+			{(prefillEnabled ? (m.editToolAncestorFieldItemPrefill?.() ?? 'prefill') : (m.editToolAncestorFieldItemNoPrefill?.() ?? 'no prefill'))}
 		</button>
 	{/if}
 	<div class="field-type-icon">

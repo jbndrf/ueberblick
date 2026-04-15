@@ -3,6 +3,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { z } from 'zod';
 import { superValidate } from 'sveltekit-superforms';
 import { zod } from 'sveltekit-superforms/adapters';
+import * as m from '$lib/paraglide/messages';
 
 const customTableSchema = z.object({
 	table_name: z
@@ -43,7 +44,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 		};
 	} catch (err) {
 		console.error('Error fetching custom tables:', err);
-		throw error(500, 'Failed to load custom tables');
+		throw error(500, m.customTablesServerLoadError?.() ?? 'Failed to load custom tables');
 	}
 };
 
@@ -81,7 +82,7 @@ export const actions: Actions = {
 			console.error('Error creating custom table:', err);
 			return fail(500, {
 				form,
-				message: 'Failed to create custom table'
+				message: m.customTablesServerCreateError?.() ?? 'Failed to create custom table'
 			});
 		}
 	},
@@ -119,7 +120,7 @@ export const actions: Actions = {
 			console.error('Error updating custom table:', err);
 			return fail(500, {
 				form,
-				message: 'Failed to update custom table'
+				message: m.customTablesServerUpdateError?.() ?? 'Failed to update custom table'
 			});
 		}
 	},
@@ -131,12 +132,12 @@ export const actions: Actions = {
 		const value = formData.get('value') as string;
 
 		if (!tableId || !field) {
-			return fail(400, { message: 'Table ID and field are required' });
+			return fail(400, { message: m.customTablesServerFieldRequired?.() ?? 'Table ID and field are required' });
 		}
 
 		// Validate allowed fields
 		if (!['table_name', 'display_name', 'description', 'main_column', 'visible_to_roles'].includes(field)) {
-			return fail(400, { message: 'Invalid field' });
+			return fail(400, { message: m.customTablesServerInvalidField?.() ?? 'Invalid field' });
 		}
 
 		// Basic validation based on field
@@ -147,7 +148,7 @@ export const actions: Actions = {
 		}
 
 		if (field === 'display_name' && (!value || value.trim().length < 1)) {
-			return fail(400, { message: 'Display name is required' });
+			return fail(400, { message: m.customTablesServerDisplayNameRequired?.() ?? 'Display name is required' });
 		}
 
 		if (field === 'main_column') {
@@ -175,7 +176,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating custom table field:', err);
-			return fail(500, { message: 'Failed to update custom table' });
+			return fail(500, { message: m.customTablesServerUpdateError?.() ?? 'Failed to update custom table' });
 		}
 	},
 
@@ -184,7 +185,7 @@ export const actions: Actions = {
 		const tableId = formData.get('id') as string;
 
 		if (!tableId) {
-			return fail(400, { message: 'Table ID is required' });
+			return fail(400, { message: m.customTablesServerTableIdRequired?.() ?? 'Table ID is required' });
 		}
 
 		try {
@@ -210,7 +211,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error deleting custom table:', err);
-			return fail(500, { message: 'Failed to delete custom table' });
+			return fail(500, { message: m.customTablesServerDeleteError?.() ?? 'Failed to delete custom table' });
 		}
 	}
 };

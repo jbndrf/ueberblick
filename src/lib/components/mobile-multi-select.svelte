@@ -1,6 +1,7 @@
 <script lang="ts" generics="T extends Record<string, any>">
 	import { onMount, tick } from 'svelte';
 	import { X, ChevronDown, Search, Plus } from 'lucide-svelte';
+	import * as m from '$lib/paraglide/messages';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { cn } from '$lib/utils';
@@ -108,17 +109,17 @@
 		getOptionId,
 		getOptionLabel,
 		getOptionDescription,
-		placeholder = 'Select options...',
+		placeholder = (m.mobileMultiSelectPlaceholder?.() ?? 'Select options...'),
 		singleSelect = false,
 		disabled = false,
 		class: className = '',
 		allowCreate = false,
 		onCreateOption,
-		createLabel = (query: string) => `Create "${query}"`,
+		createLabel = (query: string) => (m.mobileMultiSelectCreateLabel?.({ query }) ?? `Create "${query}"`),
 		hideSelected = false,
 		autoAddCreated = false,
-		emptyLabel = 'No options found',
-		createHintLabel = 'Press Enter to create',
+		emptyLabel = (m.mobileMultiSelectEmptyLabel?.() ?? 'No options found'),
+		createHintLabel = (m.mobileMultiSelectCreateHint?.() ?? 'Press Enter to create'),
 		summarizeMultiple = false,
 		onSelectedIdsChange,
 		disablePortal = false
@@ -422,7 +423,7 @@
 							'rounded-full hover:bg-muted-foreground/20 focus:outline-none',
 							isLg ? 'ml-1 focus:ring-1 focus:ring-ring' : 'ml-0.5'
 						)}
-						aria-label="Remove {getOptionLabel(option)}"
+						aria-label={m.mobileMultiSelectRemoveOption?.({ option: getOptionLabel(option) }) ?? `Remove ${getOptionLabel(option)}`}
 					>
 						<X class="h-3 w-3" />
 					</button>
@@ -434,7 +435,7 @@
 			type="text"
 			bind:value={searchQuery}
 			onkeydown={handleSearchKeydown}
-			placeholder={selectedOptions.length === 0 ? 'Search...' : ''}
+			placeholder={selectedOptions.length === 0 ? (m.mobileMultiSelectSearch?.() ?? 'Search...') : ''}
 			class={cn(
 				'flex-1 bg-transparent outline-none placeholder:text-muted-foreground',
 				isLg ? 'text-base min-w-[80px]' : 'text-sm min-w-[60px]'
@@ -548,7 +549,7 @@
 		{:else if selectedOptions.length === 1}
 			<span class="flex-1 text-left truncate">{getOptionLabel(selectedOptions[0])}</span>
 		{:else if summarizeMultiple || isOpen}
-			<span class="flex-1 text-left truncate">{selectedOptions.length} selected</span>
+			<span class="flex-1 text-left truncate">{m.mobileMultiSelectCountSelected?.({ count: selectedOptions.length }) ?? `${selectedOptions.length} selected`}</span>
 		{:else}
 			<div class="flex-1 flex flex-wrap gap-1 overflow-hidden pointer-events-none">
 				{#each selectedOptions as option (getOptionId(option))}
@@ -572,7 +573,7 @@
 					onclick={close}
 					role="button"
 					tabindex="-1"
-					aria-label="Close"
+					aria-label={m.mobileMultiSelectClose?.() ?? 'Close'}
 				></div>
 
 				<!-- Modal Content - uses visualViewport height for keyboard awareness -->
@@ -581,7 +582,7 @@
 					style="top: {viewportHeight * 0.1}px; height: {viewportHeight * 0.8}px;"
 					role="dialog"
 					aria-modal="true"
-					aria-label="Select options"
+					aria-label={m.mobileMultiSelectDialogLabel?.() ?? 'Select options'}
 				>
 					<!-- Header: Search box with inline badges -->
 					<div class="p-4 border-b border-border shrink-0">
@@ -605,7 +606,11 @@
 					<!-- Footer -->
 					<div class="p-4 border-t border-border shrink-0">
 						<Button class="w-full" onclick={close}>
-							Done {#if selectedOptions.length > 0}({selectedOptions.length}){/if}
+							{#if selectedOptions.length > 0}
+								{m.mobileMultiSelectDoneWithCount?.({ count: selectedOptions.length }) ?? `Done (${selectedOptions.length})`}
+							{:else}
+								{m.mobileMultiSelectDone?.() ?? 'Done'}
+							{/if}
 						</Button>
 					</div>
 				</div>
@@ -619,7 +624,7 @@
 			class="fixed z-[9999] bg-popover border border-border rounded-md shadow-lg overflow-hidden"
 			style="top: {dropdownPosition.top}px; left: {dropdownPosition.left}px; width: {dropdownPosition.width}px;{openUpward ? ' transform: translateY(-100%);' : ''}"
 			role="listbox"
-			aria-label="Options"
+			aria-label={m.mobileMultiSelectOptionsLabel?.() ?? 'Options'}
 			use:portal={!disablePortal}
 		>
 			<!-- Search input with inline badges -->

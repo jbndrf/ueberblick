@@ -5,6 +5,7 @@
 	import { ChevronDown, EllipsisVertical, Download, Upload } from 'lucide-svelte';
 	import { toast } from 'svelte-sonner';
 	import { invalidateAll } from '$app/navigation';
+	import * as m from '$lib/paraglide/messages';
 
 	let { data } = $props();
 	let fileInput: HTMLInputElement;
@@ -33,10 +34,10 @@
 			a.download = `${projectName.toLowerCase().replace(/\s+/g, '-')}-schema.json`;
 			a.click();
 			URL.revokeObjectURL(url);
-			toast.success('Project schema exported');
+			toast.success(m.projectsExportSuccess?.() ?? 'Project schema exported');
 		} catch (err) {
 			console.error('Error exporting:', err);
-			toast.error('Failed to export project schema');
+			toast.error(m.projectsExportError?.() ?? 'Failed to export project schema');
 		} finally {
 			exporting = false;
 		}
@@ -55,13 +56,13 @@
 			const result = await response.json();
 			if (result.type === 'success') {
 				await invalidateAll();
-				toast.success('Project imported successfully');
+				toast.success(m.projectsImportSuccess?.() ?? 'Project imported successfully');
 			} else {
-				toast.error(result.data?.message || 'Failed to import project');
+				toast.error(result.data?.message || (m.projectsImportError?.() ?? 'Failed to import project'));
 			}
 		} catch (err) {
 			console.error('Error importing:', err);
-			toast.error('Failed to import project');
+			toast.error(m.projectsImportError?.() ?? 'Failed to import project');
 		} finally {
 			importing = false;
 		}
@@ -87,9 +88,9 @@
 
 <div class="container mx-auto p-6">
 	<div class="mb-6 flex items-center justify-between">
-		<h1 class="text-3xl font-bold">Projects</h1>
+		<h1 class="text-3xl font-bold">{m.navProjects?.() ?? 'Projects'}</h1>
 		<div class="flex">
-			<Button href="/projects/new" class="rounded-r-none">Create Project</Button>
+			<Button href="/projects/new" class="rounded-r-none">{m.projectsCreateProject?.() ?? 'Create Project'}</Button>
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger>
 					{#snippet child({ props })}
@@ -105,7 +106,7 @@
 				<DropdownMenu.Content align="end">
 					<DropdownMenu.Item onclick={() => fileInput.click()}>
 						<Upload class="mr-2 size-4" />
-						Import from File
+						{m.projectsImportFromFile?.() ?? 'Import from File'}
 					</DropdownMenu.Item>
 				</DropdownMenu.Content>
 			</DropdownMenu.Root>
@@ -123,7 +124,7 @@
 								<Card.Description>{project.description}</Card.Description>
 							{:else if project.created}
 								<Card.Description>
-									Created: {new Date(project.created).toLocaleDateString()}
+									{m.projectsCreatedLabel?.() ?? 'Created'}: {new Date(project.created).toLocaleDateString()}
 								</Card.Description>
 							{/if}
 						</div>
@@ -141,7 +142,7 @@
 									disabled={exporting}
 								>
 									<Download class="mr-2 size-4" />
-									Export Schema
+									{m.projectsExportSchema?.() ?? 'Export Schema'}
 								</DropdownMenu.Item>
 							</DropdownMenu.Content>
 						</DropdownMenu.Root>
@@ -149,16 +150,16 @@
 				</Card.Header>
 				<Card.Content>
 					<Button href="/projects/{project.id}/participants" class="w-full">
-						Open Project
+						{m.projectsOpenProject?.() ?? 'Open Project'}
 					</Button>
 				</Card.Content>
 			</Card.Root>
 		{:else}
 			<div class="col-span-full text-center">
 				<p class="mb-4 text-muted-foreground">
-					No projects found. Create your first project to get started.
+					{m.projectsEmptyState?.() ?? 'No projects found. Create your first project to get started.'}
 				</p>
-				<Button href="/projects/new">Create Project</Button>
+				<Button href="/projects/new">{m.projectsCreateProject?.() ?? 'Create Project'}</Button>
 			</div>
 		{/each}
 	</div>

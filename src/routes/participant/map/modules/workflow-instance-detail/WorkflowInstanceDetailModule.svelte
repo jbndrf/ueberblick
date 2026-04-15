@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import * as m from '$lib/paraglide/messages';
 	import ModuleShell from '$lib/components/module-shell.svelte';
 	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
 	import {
@@ -148,8 +149,8 @@
 	// ==========================================================================
 
 	const tabs = [
-		{ id: 'activity', label: 'Activity' },
-		{ id: 'data', label: 'Data' }
+		{ id: 'activity', label: m.participantWorkflowInstanceDetailTabActivity?.() ?? 'Activity' },
+		{ id: 'data', label: m.participantWorkflowInstanceDetailTabData?.() ?? 'Data' }
 	];
 
 	// ==========================================================================
@@ -248,10 +249,10 @@
 		const diffH = Math.floor(diffMs / 3600000);
 		const diffDays = Math.floor(diffMs / 86400000);
 
-		if (diffMin < 1) return 'Just now';
+		if (diffMin < 1) return (m.participantWorkflowInstanceDetailJustNow?.() ?? 'Just now');
 		if (diffMin < 60) return `${diffMin}m ago`;
 		if (diffH < 24) return `${diffH}h ago`;
-		if (diffDays === 1) return 'Yesterday';
+		if (diffDays === 1) return (m.participantWorkflowInstanceDetailYesterday?.() ?? 'Yesterday');
 		if (diffDays < 7) return `${diffDays}d ago`;
 		return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 	}
@@ -317,27 +318,27 @@
 	function getEntryLabel(metadata: ToolUsageRecord['metadata']): string {
 		switch (metadata.action) {
 			case 'instance_created':
-				return 'Created';
+				return (m.participantWorkflowInstanceDetailEntryCreated?.() ?? 'Created');
 			case 'form_fill':
-				return 'Data recorded';
+				return (m.participantWorkflowInstanceDetailEntryDataRecorded?.() ?? 'Data recorded');
 			case 'edit':
 			case 'admin_edit': {
 				if (metadata.changes?.length === 1) {
 					const fieldDef = detailState?.formFields.find(f => f.id === metadata.changes![0].field_key);
-					return `${fieldDef?.field_label || 'Field'} updated`;
+					return `${fieldDef?.field_label || (m.participantWorkflowInstanceDetailFieldFallback?.() ?? 'Field')} ${(m.participantWorkflowInstanceDetailUpdatedSuffix?.() ?? 'updated')}`;
 				}
 				return metadata.action === 'admin_edit'
-					? `Admin updated ${metadata.changes?.length || ''} fields`
-					: `${metadata.changes?.length || ''} fields updated`;
+					? `${(m.participantWorkflowInstanceDetailAdminUpdated?.() ?? 'Admin updated')} ${metadata.changes?.length || ''} ${(m.participantWorkflowInstanceDetailFieldsNoun?.() ?? 'fields')}`
+					: `${metadata.changes?.length || ''} ${(m.participantWorkflowInstanceDetailFieldsUpdated?.() ?? 'fields updated')}`;
 			}
 			case 'location_edit':
-				return 'Location updated';
+				return (m.participantWorkflowInstanceDetailEntryLocationUpdated?.() ?? 'Location updated');
 			case 'protocol':
-				return 'Inspection recorded';
+				return (m.participantWorkflowInstanceDetailEntryInspectionRecorded?.() ?? 'Inspection recorded');
 			case 'conflict_resolution':
-				return 'Sync conflict resolved';
+				return (m.participantWorkflowInstanceDetailEntryConflictResolved?.() ?? 'Sync conflict resolved');
 			default:
-				return 'Action';
+				return (m.participantWorkflowInstanceDetailEntryAction?.() ?? 'Action');
 		}
 	}
 
@@ -1204,8 +1205,8 @@
 						<AlertTriangle class="h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
 						<span class="text-sm text-amber-800 dark:text-amber-200">
 							{pendingConflicts.length === 1
-								? 'One of your changes was overridden. Tap to review.'
-								: `${pendingConflicts.length} changes were overridden. Tap to review.`}
+								? (m.participantWorkflowInstanceDetailConflictOne?.() ?? 'One of your changes was overridden. Tap to review.')
+								: (m.participantWorkflowInstanceDetailConflictMany?.({ count: pendingConflicts.length }) ?? `${pendingConflicts.length} changes were overridden. Tap to review.`)}
 						</span>
 					</button>
 				{/if}
@@ -1258,7 +1259,7 @@
 						<!-- ACTIVITY TAB - Grouped by stage -->
 						{#if activitySections.length === 0}
 							<div class="text-center py-12 text-muted-foreground">
-								<p class="text-sm">No activity yet</p>
+								<p class="text-sm">{m.participantWorkflowInstanceDetailNoActivity?.() ?? 'No activity yet'}</p>
 							</div>
 						{:else}
 							<div class="space-y-1">
@@ -1273,7 +1274,7 @@
 										>
 											<div class="flex-1 min-w-0">
 												<p class="text-sm font-semibold text-blue-900 dark:text-blue-100">
-													Moved to: {section.stageName}
+													{m.participantWorkflowInstanceDetailMovedTo?.({ stageName: section.stageName }) ?? `Moved to: ${section.stageName}`}
 												</p>
 												<p class="text-xs text-blue-700/70 dark:text-blue-300/70">
 													{relativeTime(section.transitionEntry.executed_at)}{transBy ? ` \u00b7 ${transBy}` : ''}
@@ -1321,7 +1322,7 @@
 														{#if metadata.action === 'instance_created' && metadata.created_fields}
 															{#if metadata.location}
 																<div class="flex gap-1.5 text-xs mb-0.5">
-																	<span class="text-muted-foreground shrink-0">Location:</span>
+																	<span class="text-muted-foreground shrink-0">{m.participantWorkflowInstanceDetailLocationLabel?.() ?? 'Location'}:</span>
 																	<span class="font-medium truncate">{metadata.location.lat.toFixed(5)}, {metadata.location.lon.toFixed(5)}</span>
 																</div>
 															{/if}
@@ -1364,7 +1365,7 @@
 																{#if metadata.before}
 																	<span class="line-through text-muted-foreground/60">{metadata.before.lat.toFixed(5)}, {metadata.before.lon.toFixed(5)}</span>
 																{:else}
-																	<span class="text-muted-foreground">(no location)</span>
+																	<span class="text-muted-foreground">({m.participantWorkflowInstanceDetailNoLocation?.() ?? 'no location'})</span>
 																{/if}
 																<span class="text-muted-foreground mx-0.5">-></span>
 																{#if metadata.after}
@@ -1394,7 +1395,7 @@
 																	{#each fileValues.slice(0, 4) as fv}
 																		<img
 																			src="/api/files/workflow_instance_field_values/{fv.id}/{fv.file_value}"
-																			alt="Attachment"
+																			alt={m.participantWorkflowInstanceDetailAttachmentAlt?.() ?? 'Attachment'}
 																			class="h-12 w-12 rounded object-cover border border-border"
 																			loading="lazy"
 																		/>
@@ -1445,7 +1446,7 @@
 								</Tabs.Root>
 							{:else}
 								<div class="text-center py-8 text-muted-foreground">
-									<p class="text-sm">No data yet</p>
+									<p class="text-sm">{m.participantWorkflowInstanceDetailNoData?.() ?? 'No data yet'}</p>
 								</div>
 							{/if}
 						</div>
@@ -1466,14 +1467,14 @@
 	<AlertDialog.Content>
 		<AlertDialog.Header>
 			<AlertDialog.Title>
-				{pendingConfirmConnection?.visual_config?.button_label || pendingConfirmConnection?.action_name || 'Confirm action'}
+				{pendingConfirmConnection?.visual_config?.button_label || pendingConfirmConnection?.action_name || (m.participantWorkflowInstanceDetailConfirmAction?.() ?? 'Confirm action')}
 			</AlertDialog.Title>
 			<AlertDialog.Description>
-				{pendingConfirmConnection?.visual_config?.confirmation_message || 'Are you sure you want to proceed?'}
+				{pendingConfirmConnection?.visual_config?.confirmation_message || (m.participantWorkflowInstanceDetailConfirmProceed?.() ?? 'Are you sure you want to proceed?')}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<AlertDialog.Footer>
-			<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+			<AlertDialog.Cancel>{m.commonCancel?.() ?? 'Cancel'}</AlertDialog.Cancel>
 			<AlertDialog.Action
 				onclick={async () => {
 					const connection = pendingConfirmConnection;
@@ -1481,7 +1482,7 @@
 					if (connection) await proceedConnection(connection);
 				}}
 			>
-				Continue
+				{m.mapWorkflowContinue?.() ?? 'Continue'}
 			</AlertDialog.Action>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>

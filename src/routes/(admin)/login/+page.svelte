@@ -28,7 +28,7 @@
 </script>
 
 <svelte:head>
-	<title>{m.loginTitle()} - Überblick Sector</title>
+	<title>{m.loginTitle?.() ?? 'Sign In'} - Überblick Sector</title>
 </svelte:head>
 
 <div class="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-slate-100 to-slate-50 p-4 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
@@ -43,20 +43,20 @@
 			<div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
 				<Lock class="h-6 w-6 text-primary" />
 			</div>
-			<Card.Title class="text-2xl font-bold">{m.loginTitle()}</Card.Title>
-			<Card.Description>{m.loginSubtitle()}</Card.Description>
+			<Card.Title class="text-2xl font-bold">{m.loginTitle?.() ?? 'Sign In'}</Card.Title>
+			<Card.Description>{m.loginSubtitle?.() ?? 'Enter your credentials to access the admin interface'}</Card.Description>
 		</Card.Header>
 
 		<Card.Content>
 			<form method="POST" use:enhance class="space-y-4">
 				<!-- Email Field -->
 				<div class="space-y-2">
-					<Label for="email">{m.loginEmailLabel()}</Label>
+					<Label for="email">{m.loginEmailLabel?.() ?? 'Email'}</Label>
 					<Input
 						id="email"
 						name="email"
 						type="email"
-						placeholder={m.loginEmailPlaceholder()}
+						placeholder={m.loginEmailPlaceholder?.() ?? 'admin@example.com'}
 						autocomplete="email"
 						required
 						bind:value={$formData.email}
@@ -69,13 +69,13 @@
 
 				<!-- Password Field -->
 				<div class="space-y-2">
-					<Label for="password">{m.loginPasswordLabel()}</Label>
+					<Label for="password">{m.loginPasswordLabel?.() ?? 'Password'}</Label>
 					<div class="relative">
 						<Input
 							id="password"
 							name="password"
 							type={showPassword ? 'text' : 'password'}
-							placeholder={m.loginPasswordPlaceholder()}
+							placeholder={m.loginPasswordPlaceholder?.() ?? 'Enter your password'}
 							autocomplete="current-password"
 							required
 							bind:value={$formData.password}
@@ -85,7 +85,7 @@
 							type="button"
 							onclick={togglePasswordVisibility}
 							class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-							aria-label={showPassword ? m.loginHidePassword() : m.loginShowPassword()}
+							aria-label={showPassword ? (m.loginHidePassword?.() ?? 'Hide password') : (m.loginShowPassword?.() ?? 'Show password')}
 						>
 							{#if showPassword}
 								<EyeOff class="h-4 w-4" />
@@ -103,7 +103,7 @@
 				<div class="flex items-center space-x-2">
 					<Checkbox id="remember" name="remember" bind:checked={$formData.remember} />
 					<Label for="remember" class="text-sm font-normal cursor-pointer">
-						{m.loginRememberMe()}
+						{m.loginRememberMe?.() ?? 'Remember me for 30 days'}
 					</Label>
 				</div>
 
@@ -118,9 +118,9 @@
 				<!-- Submit Button -->
 				<Button type="submit" class="w-full" disabled={$delayed}>
 					{#if $delayed}
-						{m.loginSigningIn()}
+						{m.loginSigningIn?.() ?? 'Signing in...'}
 					{:else}
-						{m.loginSignIn()}
+						{m.loginSignIn?.() ?? 'Sign In'}
 					{/if}
 				</Button>
 			</form>

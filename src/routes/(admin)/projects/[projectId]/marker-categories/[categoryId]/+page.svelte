@@ -53,22 +53,22 @@
 		updateAction: 'updateField',
 		deleteAction: 'deleteField',
 		labels: {
-			title: 'Manage Custom Fields',
-			description: 'Define custom fields for markers in this category',
-			addButton: 'Add Field',
-			fieldName: 'Field Name',
-			fieldType: 'Field Type',
-			defaultValue: 'Default Value (Optional)',
-			required: 'Required field',
-			noFields: 'No custom fields defined',
-			createSuccess: 'Field created successfully',
-			createError: 'Failed to create field',
-			updateSuccess: 'Field updated successfully',
-			updateError: 'Failed to update field',
-			deleteSuccess: 'Field deleted successfully',
-			deleteError: 'Failed to delete field',
+			title: m.markerCategoryDetailManageFieldsTitle?.() ?? 'Manage Custom Fields',
+			description: m.markerCategoryDetailManageFieldsDescription?.() ?? 'Define custom fields for markers in this category',
+			addButton: m.markerCategoryDetailAddField?.() ?? 'Add Field',
+			fieldName: m.markerCategoryDetailFieldName?.() ?? 'Field Name',
+			fieldType: m.markerCategoryDetailFieldType?.() ?? 'Field Type',
+			defaultValue: m.markerCategoryDetailDefaultValue?.() ?? 'Default Value (Optional)',
+			required: m.markerCategoryDetailRequiredField?.() ?? 'Required field',
+			noFields: m.markerCategoryDetailNoFields?.() ?? 'No custom fields defined',
+			createSuccess: m.markerCategoryDetailFieldCreateSuccess?.() ?? 'Field created successfully',
+			createError: m.markerCategoryDetailFieldCreateError?.() ?? 'Failed to create field',
+			updateSuccess: m.markerCategoryDetailFieldUpdateSuccess?.() ?? 'Field updated successfully',
+			updateError: m.markerCategoryDetailFieldUpdateError?.() ?? 'Failed to update field',
+			deleteSuccess: m.markerCategoryDetailFieldDeleteSuccess?.() ?? 'Field deleted successfully',
+			deleteError: m.markerCategoryDetailFieldDeleteError?.() ?? 'Failed to delete field',
 			deleteConfirm: (fieldName: string) =>
-				`Are you sure you want to delete the field '${fieldName}'? This will permanently remove all data in this field.`
+				(m.markerCategoryDetailFieldDeleteConfirm?.({ fieldName }) ?? `Are you sure you want to delete the field '${fieldName}'? This will permanently remove all data in this field.`)
 		}
 	};
 
@@ -91,7 +91,7 @@
 		const standardColumns: BaseColumnConfig<MarkerRow>[] = [
 			{
 				id: 'title',
-				header: 'Title',
+				header: m.markerCategoryDetailColumnTitle?.() ?? 'Title',
 				accessorKey: 'title',
 				fieldType: 'text',
 				capabilities: {
@@ -114,13 +114,13 @@
 					if (result.type === 'success') {
 						await invalidateAll();
 					} else {
-						throw new Error(result.data?.message || 'Failed to update field');
+						throw new Error(result.data?.message || (m.markerCategoryDetailFieldUpdateError?.() ?? 'Failed to update field'));
 					}
 				}
 			},
 			{
 				id: 'description',
-				header: 'Description',
+				header: m.markerCategoryDetailColumnDescription?.() ?? 'Description',
 				accessorKey: 'description',
 				fieldType: 'text',
 				capabilities: {
@@ -143,7 +143,7 @@
 					if (result.type === 'success') {
 						await invalidateAll();
 					} else {
-						throw new Error(result.data?.message || 'Failed to update field');
+						throw new Error(result.data?.message || (m.markerCategoryDetailFieldUpdateError?.() ?? 'Failed to update field'));
 					}
 				}
 			}
@@ -178,7 +178,7 @@
 					if (result.type === 'success') {
 						await invalidateAll();
 					} else {
-						throw new Error(result.data?.message || 'Failed to update property');
+						throw new Error(result.data?.message || (m.markerCategoryDetailPropertyUpdateError?.() ?? 'Failed to update property'));
 					}
 				}
 			};
@@ -212,7 +212,7 @@
 		if (result.type === 'success') {
 			await invalidateAll();
 		} else {
-			toast.error('Failed to update');
+			toast.error(m.markerCategoryDetailMetaUpdateError?.() ?? 'Failed to update');
 		}
 	}
 
@@ -230,18 +230,18 @@
 			if (result.type === 'success') {
 				iconDesignerOpen = false;
 				await invalidateAll();
-				toast.success('Icon configuration saved');
+				toast.success(m.markerCategoryDetailIconSaveSuccess?.() ?? 'Icon configuration saved');
 			} else {
-				toast.error('Failed to save icon configuration');
+				toast.error(m.markerCategoryDetailIconSaveError?.() ?? 'Failed to save icon configuration');
 			}
 		} catch (error) {
-			toast.error('Error saving icon configuration');
+			toast.error(m.markerCategoryDetailIconSaveException?.() ?? 'Error saving icon configuration');
 		}
 	}
 
 	const csvImportTargetFields: TargetField[] = $derived([
-		{ id: 'title', label: 'Title', type: 'text', required: true },
-		{ id: 'description', label: 'Description', type: 'text', required: false },
+		{ id: 'title', label: m.markerCategoryDetailColumnTitle?.() ?? 'Title', type: 'text', required: true },
+		{ id: 'description', label: m.markerCategoryDetailColumnDescription?.() ?? 'Description', type: 'text', required: false },
 		...data.fields.map((field) => ({
 			id: field.field_name,
 			label: field.field_name,
@@ -251,8 +251,8 @@
 	]);
 
 	const csvImportSpecialColumns: SpecialColumn[] = [
-		{ key: 'latitude', label: 'Latitude', required: false },
-		{ key: 'longitude', label: 'Longitude', required: false }
+		{ key: 'latitude', label: m.markerCategoryDetailLatitude?.() ?? 'Latitude', required: false },
+		{ key: 'longitude', label: m.markerCategoryDetailLongitude?.() ?? 'Longitude', required: false }
 	];
 
 	async function handleCsvImport(importData: MappedImportData, onProgress: ImportProgressCallback): Promise<{ success: boolean; count: number; error?: string }> {
@@ -298,7 +298,7 @@
 		{#snippet actions()}
 			<Button variant="outline" size="sm" onclick={() => (iconDesignerOpen = true)}>
 				<Palette class="mr-2 h-4 w-4" />
-				Icon
+				{m.markerCategoryDetailIconButton?.() ?? 'Icon'}
 			</Button>
 			<Button variant="outline" size="sm" onclick={() => (importDialogOpen = true)}>
 				<Upload class="mr-2 h-4 w-4" />
@@ -321,8 +321,8 @@
 		enableShiftSelect={true}
 		showToolbar={true}
 		showEditMode={true}
-		editModeLabel="Edit mode"
-		emptyMessage="No markers in this category"
+		editModeLabel={m.markerCategoryDetailEditMode?.() ?? 'Edit mode'}
+		emptyMessage={m.markerCategoryDetailNoMarkers?.() ?? 'No markers in this category'}
 		rowActions={{
 			header: m.rolesActions(),
 			onDelete: (marker) => {
@@ -339,7 +339,7 @@
 		}}
 		inlineRowCreation={{
 			enabled: true,
-			createButtonLabel: 'Add Marker',
+			createButtonLabel: m.markerCategoryDetailAddMarker?.() ?? 'Add Marker',
 			requiredFields: ['title', ...data.fields
 				.filter((field) => field.is_required)
 				.map((field) => field.field_name)],
@@ -365,10 +365,10 @@
 				const result = await response.json();
 				if (result.type === 'success') {
 					await invalidateAll();
-					toast.success('Marker created successfully');
+					toast.success(m.markerCategoryDetailMarkerCreateSuccess?.() ?? 'Marker created successfully');
 				} else {
-					toast.error('Failed to create marker');
-					throw new Error(result.data?.message || 'Failed to create marker');
+					toast.error(m.markerCategoryDetailMarkerCreateError?.() ?? 'Failed to create marker');
+					throw new Error(result.data?.message || (m.markerCategoryDetailMarkerCreateError?.() ?? 'Failed to create marker'));
 				}
 			},
 			getDefaultValues: () => {
@@ -400,9 +400,9 @@
 <AlertDialog.Root bind:open={deleteMarkerOpen}>
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>Delete Marker</AlertDialog.Title>
+			<AlertDialog.Title>{m.markerCategoryDetailDeleteMarkerTitle?.() ?? 'Delete Marker'}</AlertDialog.Title>
 			<AlertDialog.Description>
-				Are you sure you want to delete this marker? This action cannot be undone.
+				{m.markerCategoryDetailDeleteMarkerConfirm?.() ?? 'Are you sure you want to delete this marker? This action cannot be undone.'}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		{#if selectedMarker}
@@ -414,9 +414,9 @@
 					use:enhance={() => {
 						return async ({ result }) => {
 							if (result.type === 'success') {
-								handleSuccess('Marker deleted successfully');
+								handleSuccess(m.markerCategoryDetailMarkerDeleteSuccess?.() ?? 'Marker deleted successfully');
 							} else if (result.type === 'failure') {
-								handleError('Failed to delete marker');
+								handleError(m.markerCategoryDetailMarkerDeleteError?.() ?? 'Failed to delete marker');
 							}
 						};
 					}}

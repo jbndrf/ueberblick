@@ -1,6 +1,7 @@
 import { error, fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { superValidate } from 'sveltekit-superforms';
+import * as m from '$lib/paraglide/messages';
 import { zod } from 'sveltekit-superforms/adapters';
 import { mapLayerSchema, projectMapDefaultsSchema } from '$lib/schemas/map-settings';
 import type { MapLayer } from '$lib/types/map-layer';
@@ -109,7 +110,7 @@ export const load: PageServerLoad = async ({ locals: { pb }, params }) => {
 		};
 	} catch (err) {
 		console.error('Error loading project settings:', err);
-		throw error(500, 'Failed to load project settings');
+		throw error(500, m.settingsServerLoadError?.() ?? 'Failed to load project settings');
 	}
 };
 
@@ -143,7 +144,7 @@ export const actions: Actions = {
 			return { form, success: true };
 		} catch (err) {
 			console.error('Error saving map defaults:', err);
-			return fail(500, { form, message: 'Failed to save map defaults' });
+			return fail(500, { form, message: m.settingsServerSaveMapDefaultsError?.() ?? 'Failed to save map defaults' });
 		}
 	},
 
@@ -184,7 +185,7 @@ export const actions: Actions = {
 			return { form, success: true };
 		} catch (err) {
 			console.error('Error creating map layer:', err);
-			return fail(500, { form, message: 'Failed to create map layer' });
+			return fail(500, { form, message: m.settingsServerCreateLayerError?.() ?? 'Failed to create map layer' });
 		}
 	},
 
@@ -196,12 +197,12 @@ export const actions: Actions = {
 		const layerType = (formData.get('layer_type') as string) || 'base';
 
 		if (!presetId) {
-			return fail(400, { message: 'Preset ID is required' });
+			return fail(400, { message: m.settingsServerPresetIdRequired?.() ?? 'Preset ID is required' });
 		}
 
 		const preset = PRESET_SOURCES.find((p) => p.id === presetId);
 		if (!preset) {
-			return fail(400, { message: 'Invalid preset' });
+			return fail(400, { message: m.settingsServerInvalidPreset?.() ?? 'Invalid preset' });
 		}
 
 		try {
@@ -254,7 +255,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error adding preset layer:', err);
-			return fail(500, { message: 'Failed to add preset' });
+			return fail(500, { message: m.settingsServerAddPresetError?.() ?? 'Failed to add preset' });
 		}
 	},
 
@@ -268,10 +269,10 @@ export const actions: Actions = {
 		const layerType = (formData.get('layer_type') as string) || 'overlay';
 
 		if (!name?.trim()) {
-			return fail(400, { message: 'Name is required' });
+			return fail(400, { message: m.settingsServerNameRequired?.() ?? 'Name is required' });
 		}
 		if (!url?.trim()) {
-			return fail(400, { message: 'URL is required' });
+			return fail(400, { message: m.settingsServerUrlRequired?.() ?? 'URL is required' });
 		}
 
 		try {
@@ -293,7 +294,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error adding tile layer:', err);
-			return fail(500, { message: 'Failed to add tile layer' });
+			return fail(500, { message: m.settingsServerAddTileLayerError?.() ?? 'Failed to add tile layer' });
 		}
 	},
 
@@ -310,9 +311,9 @@ export const actions: Actions = {
 		const version = formData.get('version') as string;
 		const layerType = (formData.get('layer_type') as string) || 'overlay';
 
-		if (!name?.trim()) return fail(400, { message: 'Name is required' });
-		if (!url?.trim()) return fail(400, { message: 'URL is required' });
-		if (!layers?.trim()) return fail(400, { message: 'WMS layers parameter is required' });
+		if (!name?.trim()) return fail(400, { message: m.settingsServerNameRequired?.() ?? 'Name is required' });
+		if (!url?.trim()) return fail(400, { message: m.settingsServerUrlRequired?.() ?? 'URL is required' });
+		if (!layers?.trim()) return fail(400, { message: m.settingsServerWmsLayersRequired?.() ?? 'WMS layers parameter is required' });
 
 		try {
 			const config: WmsSourceConfig = { layers: layers.trim() };
@@ -334,7 +335,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error adding WMS layer:', err);
-			return fail(500, { message: 'Failed to add WMS layer' });
+			return fail(500, { message: m.settingsServerAddWmsLayerError?.() ?? 'Failed to add WMS layer' });
 		}
 	},
 
@@ -345,7 +346,7 @@ export const actions: Actions = {
 		const id = formData.get('id') as string;
 
 		if (!id) {
-			return fail(400, { message: 'Layer ID is required' });
+			return fail(400, { message: m.settingsServerLayerIdRequired?.() ?? 'Layer ID is required' });
 		}
 
 		const form = await superValidate(formData, zod(mapLayerSchema));
@@ -381,7 +382,7 @@ export const actions: Actions = {
 			return { form, success: true };
 		} catch (err) {
 			console.error('Error updating map layer:', err);
-			return fail(500, { form, message: 'Failed to update map layer' });
+			return fail(500, { form, message: m.settingsServerUpdateLayerError?.() ?? 'Failed to update map layer' });
 		}
 	},
 
@@ -391,7 +392,7 @@ export const actions: Actions = {
 		const id = formData.get('id') as string;
 
 		if (!id) {
-			return fail(400, { message: 'Layer ID is required' });
+			return fail(400, { message: m.settingsServerLayerIdRequired?.() ?? 'Layer ID is required' });
 		}
 
 		try {
@@ -411,7 +412,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error deleting layer:', err);
-			return fail(500, { message: 'Failed to delete layer' });
+			return fail(500, { message: m.settingsServerDeleteLayerError?.() ?? 'Failed to delete layer' });
 		}
 	},
 
@@ -421,7 +422,7 @@ export const actions: Actions = {
 		const id = formData.get('id') as string;
 
 		if (!id) {
-			return fail(400, { message: 'Layer ID is required' });
+			return fail(400, { message: m.settingsServerLayerIdRequired?.() ?? 'Layer ID is required' });
 		}
 
 		try {
@@ -431,7 +432,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error toggling layer type:', err);
-			return fail(500, { message: 'Failed to toggle layer type' });
+			return fail(500, { message: m.settingsServerToggleLayerTypeError?.() ?? 'Failed to toggle layer type' });
 		}
 	},
 
@@ -442,14 +443,14 @@ export const actions: Actions = {
 		const roleIdsJson = formData.get('roleIds') as string;
 
 		if (!layerId) {
-			return fail(400, { message: 'Layer ID is required' });
+			return fail(400, { message: m.settingsServerLayerIdRequired?.() ?? 'Layer ID is required' });
 		}
 
 		let roleIds: string[] = [];
 		try {
 			roleIds = JSON.parse(roleIdsJson);
 		} catch {
-			return fail(400, { message: 'Invalid role IDs format' });
+			return fail(400, { message: m.settingsServerInvalidRoleIdsFormat?.() ?? 'Invalid role IDs format' });
 		}
 
 		try {
@@ -459,7 +460,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating layer roles:', err);
-			return fail(500, { message: 'Failed to update layer roles' });
+			return fail(500, { message: m.settingsServerUpdateLayerRolesError?.() ?? 'Failed to update layer roles' });
 		}
 	},
 
@@ -472,7 +473,7 @@ export const actions: Actions = {
 		const centerLng = formData.get('center_lng');
 
 		if (!layerId) {
-			return fail(400, { message: 'Layer ID is required' });
+			return fail(400, { message: m.settingsServerLayerIdRequired?.() ?? 'Layer ID is required' });
 		}
 
 		try {
@@ -494,7 +495,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating base layer defaults:', err);
-			return fail(500, { message: 'Failed to update base layer defaults' });
+			return fail(500, { message: m.settingsServerUpdateBaseLayerDefaultsError?.() ?? 'Failed to update base layer defaults' });
 		}
 	},
 
@@ -510,31 +511,31 @@ export const actions: Actions = {
 		const visibleToRolesJson = formData.get('visible_to_roles') as string;
 
 		if (!name?.trim()) {
-			return fail(400, { message: 'Package name is required' });
+			return fail(400, { message: m.settingsServerPackageNameRequired?.() ?? 'Package name is required' });
 		}
 
 		if (!regionGeojsonStr?.trim()) {
-			return fail(400, { message: 'Region GeoJSON is required' });
+			return fail(400, { message: m.settingsServerRegionGeojsonRequired?.() ?? 'Region GeoJSON is required' });
 		}
 
 		let regionGeojson: object;
 		try {
 			regionGeojson = JSON.parse(regionGeojsonStr);
 			if (!isValidPolygon(regionGeojson)) {
-				return fail(400, { message: 'Invalid GeoJSON polygon' });
+				return fail(400, { message: m.settingsServerInvalidGeojsonPolygon?.() ?? 'Invalid GeoJSON polygon' });
 			}
 		} catch {
-			return fail(400, { message: 'Invalid JSON format' });
+			return fail(400, { message: m.settingsServerInvalidJsonFormat?.() ?? 'Invalid JSON format' });
 		}
 
 		let layerIds: string[] = [];
 		try {
 			layerIds = JSON.parse(layersJson);
 			if (!Array.isArray(layerIds) || layerIds.length === 0) {
-				return fail(400, { message: 'At least one layer must be selected' });
+				return fail(400, { message: m.settingsServerAtLeastOneLayer?.() ?? 'At least one layer must be selected' });
 			}
 		} catch {
-			return fail(400, { message: 'Invalid layers format' });
+			return fail(400, { message: m.settingsServerInvalidLayersFormat?.() ?? 'Invalid layers format' });
 		}
 
 		let visibleToRoles: string[] = [];
@@ -567,7 +568,7 @@ export const actions: Actions = {
 			});
 		} catch (err) {
 			console.error('Error creating package record:', err);
-			return fail(500, { message: 'Failed to create package' });
+			return fail(500, { message: m.settingsServerCreatePackageError?.() ?? 'Failed to create package' });
 		}
 
 		// Fetch layer details (source data is now inline)
@@ -661,7 +662,7 @@ export const actions: Actions = {
 				// Ignore update error
 			}
 
-			return fail(500, { message: 'Failed to create tile package' });
+			return fail(500, { message: m.settingsServerCreateTilePackageError?.() ?? 'Failed to create tile package' });
 		}
 	},
 
@@ -671,7 +672,7 @@ export const actions: Actions = {
 		const id = formData.get('id') as string;
 
 		if (!id) {
-			return fail(400, { message: 'Package ID is required' });
+			return fail(400, { message: m.settingsServerPackageIdRequired?.() ?? 'Package ID is required' });
 		}
 
 		try {
@@ -679,7 +680,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error deleting package:', err);
-			return fail(500, { message: 'Failed to delete package' });
+			return fail(500, { message: m.settingsServerDeletePackageError?.() ?? 'Failed to delete package' });
 		}
 	},
 
@@ -690,14 +691,14 @@ export const actions: Actions = {
 		const roleIdsJson = formData.get('roleIds') as string;
 
 		if (!packageId) {
-			return fail(400, { message: 'Package ID is required' });
+			return fail(400, { message: m.settingsServerPackageIdRequired?.() ?? 'Package ID is required' });
 		}
 
 		let roleIds: string[] = [];
 		try {
 			roleIds = JSON.parse(roleIdsJson);
 		} catch {
-			return fail(400, { message: 'Invalid role IDs format' });
+			return fail(400, { message: m.settingsServerInvalidRoleIdsFormat?.() ?? 'Invalid role IDs format' });
 		}
 
 		try {
@@ -707,7 +708,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating package roles:', err);
-			return fail(500, { message: 'Failed to update package roles' });
+			return fail(500, { message: m.settingsServerUpdatePackageRolesError?.() ?? 'Failed to update package roles' });
 		}
 	},
 
@@ -725,10 +726,10 @@ export const actions: Actions = {
 		const sort_order = parseInt(formData.get('sort_order') as string) || 0;
 
 		if (!title?.trim()) {
-			return fail(400, { message: 'Title is required' });
+			return fail(400, { message: m.settingsServerTitleRequired?.() ?? 'Title is required' });
 		}
 		if (!content?.trim()) {
-			return fail(400, { message: 'Content is required' });
+			return fail(400, { message: m.settingsServerContentRequired?.() ?? 'Content is required' });
 		}
 
 		try {
@@ -740,7 +741,7 @@ export const actions: Actions = {
 			});
 		} catch (error) {
 			console.error('Failed to create info page:', error);
-			return fail(500, { message: 'Failed to create info page' });
+			return fail(500, { message: m.infoPagesCreateError?.() ?? 'Failed to create info page' });
 		}
 
 		return { success: true };
@@ -756,14 +757,14 @@ export const actions: Actions = {
 		const content = formData.get('content') as string;
 		const sort_order = parseInt(formData.get('sort_order') as string) || 0;
 
-		if (!id) return fail(400, { message: 'ID is required' });
+		if (!id) return fail(400, { message: m.settingsServerIdRequired?.() ?? 'ID is required' });
 		if (!title?.trim()) return fail(400, { message: 'Title is required' });
-		if (!content?.trim()) return fail(400, { message: 'Content is required' });
+		if (!content?.trim()) return fail(400, { message: m.settingsServerContentRequired?.() ?? 'Content is required' });
 
 		try {
 			const record = await pb.collection('info_pages').getOne(id);
 			if (record.project_id !== projectId) {
-				return fail(403, { message: 'Unauthorized' });
+				return fail(403, { message: m.settingsServerUnauthorized?.() ?? 'Unauthorized' });
 			}
 
 			await pb.collection('info_pages').update(id, {
@@ -773,7 +774,7 @@ export const actions: Actions = {
 			});
 		} catch (error) {
 			console.error('Failed to update info page:', error);
-			return fail(500, { message: 'Failed to update info page' });
+			return fail(500, { message: m.infoPagesUpdateError?.() ?? 'Failed to update info page' });
 		}
 
 		return { success: true };
@@ -794,7 +795,7 @@ export const actions: Actions = {
 		const iconFile = formData.get('icon') as File;
 
 		if (!iconFile || iconFile.size === 0) {
-			return fail(400, { message: 'Icon file is required' });
+			return fail(400, { message: m.settingsServerIconFileRequired?.() ?? 'Icon file is required' });
 		}
 
 		try {
@@ -804,7 +805,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error uploading icon:', err);
-			return fail(500, { message: 'Failed to upload icon' });
+			return fail(500, { message: m.settingsServerUploadIconError?.() ?? 'Failed to upload icon' });
 		}
 	},
 
@@ -817,7 +818,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error removing icon:', err);
-			return fail(500, { message: 'Failed to remove icon' });
+			return fail(500, { message: m.settingsServerRemoveIconError?.() ?? 'Failed to remove icon' });
 		}
 	},
 
@@ -841,7 +842,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error saving display name:', err);
-			return fail(500, { message: 'Failed to save display name' });
+			return fail(500, { message: m.settingsServerSaveDisplayNameError?.() ?? 'Failed to save display name' });
 		}
 	}
 };

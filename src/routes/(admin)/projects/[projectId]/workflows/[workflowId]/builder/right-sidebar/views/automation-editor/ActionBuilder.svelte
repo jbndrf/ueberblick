@@ -2,6 +2,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Trash2 } from 'lucide-svelte';
 	import { ExpressionInput } from '$lib/components/expression-input';
+	import * as m from '$lib/paraglide/messages';
 
 	import type { AutomationAction } from '$lib/workflow-builder';
 
@@ -37,17 +38,17 @@
 				<div class="action-fields">
 					<span class="action-type-label">
 						{#if action.type === 'set_instance_status'}
-							Set Status
+							{m.automationActionBuilderSetStatus?.() ?? 'Set Status'}
 						{:else if action.type === 'set_field_value'}
-							Set Field Value
+							{m.automationActionBuilderSetFieldValue?.() ?? 'Set Field Value'}
 						{:else if action.type === 'set_stage'}
-							Set Stage
+							{m.automationActionBuilderSetStage?.() ?? 'Set Stage'}
 						{/if}
 					</span>
 
 					{#if action.type === 'set_instance_status'}
 						<div class="action-param-row">
-							<span class="param-label">Status:</span>
+							<span class="param-label">{m.automationActionBuilderStatusLabel?.() ?? 'Status:'}</span>
 							<select
 								class="status-select"
 								value={action.params.status}
@@ -65,7 +66,7 @@
 						</div>
 					{:else if action.type === 'set_field_value'}
 						<div class="action-param-row">
-							<span class="param-label">Field:</span>
+							<span class="param-label">{m.automationActionBuilderFieldLabel?.() ?? 'Field:'}</span>
 							<select
 								class="field-select"
 								value={action.params.field_key}
@@ -76,14 +77,14 @@
 									});
 								}}
 							>
-								<option value="">Select field...</option>
+								<option value="">{m.automationActionBuilderSelectField?.() ?? 'Select field...'}</option>
 								{#each fieldOptions as opt}
 									<option value={opt.key}>{opt.label}</option>
 								{/each}
 							</select>
 						</div>
 						<div class="action-param-row">
-							<span class="param-label">Value:</span>
+							<span class="param-label">{m.automationActionBuilderValueLabel?.() ?? 'Value:'}</span>
 						</div>
 						<ExpressionInput
 							value={action.params.value}
@@ -94,11 +95,11 @@
 									params: { ...action.params, value: v }
 								});
 							}}
-							placeholder="Value or expression..."
+							placeholder={m.automationActionBuilderValuePlaceholder?.() ?? 'Value or expression...'}
 						/>
 					{:else if action.type === 'set_stage'}
 						<div class="action-param-row">
-							<span class="param-label">Stage:</span>
+							<span class="param-label">{m.automationActionBuilderStageLabel?.() ?? 'Stage:'}</span>
 							<select
 								class="stage-select"
 								value={action.params.stage_id}
@@ -109,7 +110,7 @@
 									});
 								}}
 							>
-								<option value="">Select stage...</option>
+								<option value="">{m.automationActionBuilderSelectStage?.() ?? 'Select stage...'}</option>
 								{#each stageOptions as stage}
 									<option value={stage.id}>{stage.name}</option>
 								{/each}

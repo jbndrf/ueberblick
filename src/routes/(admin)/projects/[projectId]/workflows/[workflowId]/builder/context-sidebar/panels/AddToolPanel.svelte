@@ -2,6 +2,7 @@
 	import { Globe } from 'lucide-svelte';
 	import type { SelectionContext } from '../context';
 	import { ToolPicker } from '$lib/workflow-builder/components';
+	import * as m from '$lib/paraglide/messages';
 
 	type Props = {
 		context: Extract<SelectionContext, { type: 'addTool' }>;
@@ -16,12 +17,12 @@
 	);
 
 	const title = $derived(
-		context.attachedTo.type === 'global' ? 'Global Tools' :
-		context.attachedTo.type === 'stage' ? 'Stage Tools' : 'Connection Tools'
+		context.attachedTo.type === 'global' ? (m.workflowBuilderAddToolPanelGlobalTools?.() ?? 'Global Tools') :
+		context.attachedTo.type === 'stage' ? (m.workflowBuilderAddToolPanelStageTools?.() ?? 'Stage Tools') : (m.workflowBuilderAddToolPanelConnectionTools?.() ?? 'Connection Tools')
 	);
 
 	const subtitle = $derived(
-		context.attachedTo.type === 'global' ? 'Available on all stages' : 'Select a tool to add'
+		context.attachedTo.type === 'global' ? (m.workflowBuilderAddToolPanelAvailableAllStages?.() ?? 'Available on all stages') : (m.workflowBuilderAddToolPanelSelectToolToAdd?.() ?? 'Select a tool to add')
 	);
 </script>
 

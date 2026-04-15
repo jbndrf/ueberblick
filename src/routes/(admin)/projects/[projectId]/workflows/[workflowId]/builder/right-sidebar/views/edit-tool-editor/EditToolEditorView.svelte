@@ -4,6 +4,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import * as m from '$lib/paraglide/messages';
 
 	import AncestorFieldsPanel from './AncestorFieldsPanel.svelte';
 	import FieldSelectionPreview from './FieldSelectionPreview.svelte';
@@ -127,13 +128,13 @@
 				<Edit3 class="h-4 w-4" />
 			</div>
 			<div class="header-title">
-				<Label for="edit-tool-name" class="sr-only">Edit Tool Name</Label>
+				<Label for="edit-tool-name" class="sr-only">{m.editToolEditorViewNameLabel?.() ?? 'Edit Tool Name'}</Label>
 				<Input
 					id="edit-tool-name"
 					bind:value={editToolName}
 					onblur={handleNameBlur}
 					class="name-input"
-					placeholder="Edit tool name..."
+					placeholder={m.editToolEditorViewNamePlaceholder?.() ?? 'Edit tool name...'}
 				/>
 			</div>
 			<Button variant="ghost" size="icon" onclick={onClose}>
@@ -147,13 +148,13 @@
 		<!-- Left Panel: Mode selection + content -->
 		<div class="left-panel">
 			<div class="mode-header">
-				<span class="mode-label">Edit Mode</span>
+				<span class="mode-label">{m.editToolEditorViewEditMode?.() ?? 'Edit Mode'}</span>
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger class="mode-dropdown-trigger">
 						{#if editTool.edit_mode === 'form_fields'}
-							<span>Form Fields</span>
+							<span>{m.editToolEditorViewModeFormFields?.() ?? 'Form Fields'}</span>
 						{:else}
-							<span>Location</span>
+							<span>{m.editToolEditorViewModeLocation?.() ?? 'Location'}</span>
 						{/if}
 						<ChevronDown class="h-3.5 w-3.5" />
 					</DropdownMenu.Trigger>
@@ -162,13 +163,13 @@
 							onclick={() => onEditModeChange?.('form_fields')}
 							class={editTool.edit_mode === 'form_fields' ? 'bg-accent' : ''}
 						>
-							Form Fields
+							{m.editToolEditorViewModeFormFields?.() ?? 'Form Fields'}
 						</DropdownMenu.Item>
 						<DropdownMenu.Item
 							onclick={() => onEditModeChange?.('location')}
 							class={editTool.edit_mode === 'location' ? 'bg-accent' : ''}
 						>
-							Location
+							{m.editToolEditorViewModeLocation?.() ?? 'Location'}
 						</DropdownMenu.Item>
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
@@ -184,7 +185,7 @@
 				<div class="location-panel">
 					<MapPin class="h-6 w-6 location-icon" />
 					<p class="location-text">
-						Participants can update the instance location on the map.
+						{m.editToolEditorViewLocationPanelText?.() ?? 'Participants can update the instance location on the map.'}
 					</p>
 				</div>
 			{/if}
@@ -204,9 +205,9 @@
 					<div class="location-notice">
 						<MapPin class="h-8 w-8 location-icon" />
 						<div class="location-notice-content">
-							<span class="location-notice-title">Location Edit</span>
+							<span class="location-notice-title">{m.editToolEditorViewLocationPreviewTitle?.() ?? 'Location Edit'}</span>
 							<p class="location-notice-text">
-								Participants will see a map picker to update the workflow instance location.
+								{m.editToolEditorViewLocationPreviewText?.() ?? 'Participants will see a map picker to update the workflow instance location.'}
 							</p>
 						</div>
 					</div>
@@ -219,9 +220,9 @@
 						<Link class="h-4 w-4" />
 					</div>
 					<div class="notice-content">
-						<span class="notice-title">Inherits from Connection</span>
+						<span class="notice-title">{m.editToolEditorViewInheritsTitle?.() ?? 'Inherits from Connection'}</span>
 						<p class="notice-text">
-							Button appearance and allowed roles are configured on the connection's Tools tab.
+							{m.editToolEditorViewInheritsText?.() ?? "Button appearance and allowed roles are configured on the connection's Tools tab."}
 						</p>
 					</div>
 				</div>
@@ -230,7 +231,7 @@
 			<div class="editor-footer">
 				<Button variant="destructive" size="sm" onclick={onDelete} class="w-full">
 					<Trash2 class="h-4 w-4 mr-2" />
-					Delete Edit Tool
+					{m.editToolEditorViewDeleteButton?.() ?? 'Delete Edit Tool'}
 				</Button>
 			</div>
 		</div>

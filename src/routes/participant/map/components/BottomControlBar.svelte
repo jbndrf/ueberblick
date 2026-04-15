@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Layers, Filter, Navigation, Settings, Plus } from 'lucide-svelte';
 	import type { Map as LeafletMap } from 'leaflet';
+	import * as m from '$lib/paraglide/messages';
 	import WorkflowSelector from './WorkflowSelector.svelte';
 
 	interface Workflow {
@@ -55,19 +56,19 @@
 		<button
 			onclick={onLayersClick}
 			class="flex h-16 w-14 flex-col items-center justify-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
-			title="Layers"
+			title={m.participantBottomControlBarLayers?.() ?? 'Layers'}
 		>
 			<Layers class="h-5 w-5" />
-			<span class="text-[0.625rem]">Layers</span>
+			<span class="text-[0.625rem]">{m.participantBottomControlBarLayers?.() ?? 'Layers'}</span>
 		</button>
 
 		<button
 			onclick={onFiltersClick ?? (() => {})}
 			class="flex h-16 w-14 flex-col items-center justify-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
-			title="Filters"
+			title={m.mapFilters?.() ?? 'Filters'}
 		>
 			<Filter class="h-5 w-5" />
-			<span class="text-[0.625rem]">Filters</span>
+			<span class="text-[0.625rem]">{m.mapFilters?.() ?? 'Filters'}</span>
 		</button>
 
 		<!-- Center raised button - square that rotates -->
@@ -76,7 +77,7 @@
 				onclick={handleCenterClick}
 				class="center-button -mt-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-lg active:scale-95"
 				class:is-open={workflowSelectorOpen}
-				aria-label={workflowSelectorOpen ? 'Close menu' : 'New workflow'}
+				aria-label={workflowSelectorOpen ? (m.mapCloseMenu?.() ?? 'Close menu') : (m.participantBottomControlBarNewWorkflow?.() ?? 'New workflow')}
 			>
 				<Plus class="h-6 w-6" />
 			</button>
@@ -86,19 +87,19 @@
 		<button
 			onclick={onLocationClick ?? (() => {})}
 			class="flex h-16 w-14 flex-col items-center justify-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
-			title="My Location"
+			title={m.mapMyLocation?.() ?? 'My Location'}
 		>
 			<Navigation class="h-5 w-5" />
-			<span class="text-[0.625rem]">Location</span>
+			<span class="text-[0.625rem]">{m.participantBottomControlBarLocation?.() ?? 'Location'}</span>
 		</button>
 
 		<button
 			onclick={onToolsClick ?? (() => {})}
 			class="flex h-16 w-14 flex-col items-center justify-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
-			title="Tools"
+			title={m.mapTools?.() ?? 'Tools'}
 		>
 			<Settings class="h-5 w-5" />
-			<span class="text-[0.625rem]">Settings</span>
+			<span class="text-[0.625rem]">{m.participantBottomControlBarSettings?.() ?? 'Settings'}</span>
 		</button>
 	</div>
 {/if}

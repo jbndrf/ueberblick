@@ -53,6 +53,7 @@
 	import type { ColumnPosition } from '$lib/workflow-builder';
 	import { deserialize } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
+	import * as m from '$lib/paraglide/messages';
 
 	let { data }: { data: PageData } = $props();
 
@@ -111,10 +112,10 @@
 			if (result.type === 'success') {
 				builderState.markAsSaved();
 			} else {
-				saveError = (result.data as any)?.message || 'Failed to save';
+				saveError = (result.data as any)?.message || (m.workflowBuilderFailedToSave?.() ?? 'Failed to save');
 			}
 		} catch (err) {
-			saveError = err instanceof Error ? err.message : 'Failed to save';
+			saveError = err instanceof Error ? err.message : (m.workflowBuilderFailedToSave?.() ?? 'Failed to save');
 		}
 
 		isSaving = false;
@@ -135,7 +136,7 @@
 			await invalidateAll();
 			return result.data.entity;
 		}
-		throw new Error('Failed to create role');
+		throw new Error(m.workflowBuilderFailedToCreateRole?.() ?? 'Failed to create role');
 	}
 
 	// ==========================================================================
@@ -152,7 +153,7 @@
 			config: {
 				toolType: 'form',
 				formId: form.data.id,
-				buttonLabel: form.data.name || 'Form'
+				buttonLabel: form.data.name || (m.workflowBuilderDefaultFormLabel?.() ?? 'Form')
 			} as FormToolConfig,
 			order: index
 		}));
@@ -168,7 +169,7 @@
 			config: {
 				toolType: 'edit',
 				editableFields: tool.data.editable_fields,
-				buttonLabel: tool.data.name || 'Edit'
+				buttonLabel: tool.data.name || (m.workflowBuilderDefaultEditLabel?.() ?? 'Edit')
 			} as EditToolConfig,
 			order: index + 100 // Offset to keep forms first
 		}));
@@ -183,7 +184,7 @@
 			toolType: 'protocol',
 			config: {
 				toolType: 'protocol',
-				buttonLabel: tool.data.name || 'Protocol'
+				buttonLabel: tool.data.name || (m.workflowBuilderDefaultProtocolLabel?.() ?? 'Protocol')
 			} as ProtocolToolConfig,
 			order: index + 200 // Offset to keep forms and edit tools first
 		}));
@@ -287,7 +288,7 @@
 					y: targetY + 10 // Slightly below center for visual alignment
 				},
 				data: {
-					label: conn.visual_config?.button_label || conn.action_name || 'Entry',
+					label: conn.visual_config?.button_label || conn.action_name || (m.workflowBuilderEntryLabel?.() ?? 'Entry'),
 					connectionId: conn.id
 				},
 				draggable: false,
@@ -693,7 +694,7 @@
 			for (const tf of connForms) {
 				const fields = builderState.getFieldsForForm(tf.data.id).map((f) => f.data);
 				incomingForms.push({
-					connectionName: c.data.action_name || 'Connection',
+					connectionName: c.data.action_name || (m.workflowBuilderConnectionFallback?.() ?? 'Connection'),
 					form: tf.data,
 					fields
 				});
@@ -755,7 +756,7 @@
 			for (const c of incoming) {
 				for (const f of builderState.getFormsForConnection(c.data.id)) {
 					groups.push({
-						formName: f.data.name || 'Unnamed form',
+						formName: f.data.name || (m.workflowBuilderUnnamedForm?.() ?? 'Unnamed form'),
 						allowedRoles: f.data.allowed_roles || [],
 						fields: builderState.getFieldsForForm(f.data.id).map(ff => ff.data as unknown as FormFieldWithValue)
 					});
@@ -764,7 +765,7 @@
 			// Stage-attached forms
 			for (const f of builderState.getFormsForStage(s.data.id)) {
 				groups.push({
-					formName: f.data.name || 'Unnamed form',
+					formName: f.data.name || (m.workflowBuilderUnnamedForm?.() ?? 'Unnamed form'),
 					allowedRoles: f.data.allowed_roles || [],
 					fields: builderState.getFieldsForForm(f.data.id).map(ff => ff.data as unknown as FormFieldWithValue)
 				});
@@ -1155,8 +1156,8 @@
 		const newField = builderState.addFormField(formId, 'short_text', 0, 'full', nextPage);
 		if (newField) {
 			builderState.updateFormField(newField.id, {
-				page_title: `Page ${nextPage}`,
-				field_label: 'New Field'
+				page_title: (m.workflowBuilderPageTitleDefault?.({ page: nextPage }) ?? `Page ${nextPage}`),
+				field_label: (m.workflowBuilderNewFieldLabel?.() ?? 'New Field')
 			});
 		}
 	}
@@ -1588,10 +1589,10 @@
 			>
 				{#if isSaving}
 					<Loader2 class="h-4 w-4 mr-2 animate-spin" />
-					Saving...
+					{m.workflowBuilderSaving?.() ?? 'Saving...'}
 				{:else}
 					<Save class="h-4 w-4 mr-2" />
-					Save{builderState.isDirty ? '*' : ''}
+					{(m.workflowBuilderSave?.() ?? 'Save') + (builderState.isDirty ? '*' : '')}
 				{/if}
 			</Button>
 		</div>
@@ -1601,9 +1602,9 @@
 				value={builderState.workflowName}
 				oninput={(e) => (builderState.workflowName = e.currentTarget.value)}
 				class="w-64 h-8"
-				placeholder="Workflow name..."
+				placeholder={m.workflowBuilderWorkflowNamePlaceholder?.() ?? 'Workflow name...'}
 			/>
-			<Button variant="ghost" size="icon" class="h-8 w-8" title="Help">
+			<Button variant="ghost" size="icon" class="h-8 w-8" title={m.workflowBuilderHelp?.() ?? 'Help'}>
 				<CircleHelp class="h-4 w-4" />
 			</Button>
 		</div>
@@ -1653,7 +1654,7 @@
 
 			<!-- Global Tools - same style as stage/edge toolbars -->
 			<div class="global-tools-bar">
-				<button class="global-tools-label" onclick={handleGlobalToolsLabelClick}>Global Tools</button>
+				<button class="global-tools-label" onclick={handleGlobalToolsLabelClick}>{m.workflowBuilderGlobalTools?.() ?? 'Global Tools'}</button>
 				<ToolBar
 					tools={globalToolInstances}
 					selectedToolId={selectedGlobalToolId}

@@ -6,6 +6,7 @@
 	import { Package, Download, Loader2, CheckCircle, AlertCircle, Upload } from 'lucide-svelte';
 	import { getPocketBase } from '$lib/pocketbase';
 	import { onMount } from 'svelte';
+	import * as m from '$lib/paraglide/messages';
 	import {
 		extractAndStoreTiles,
 		getPackageMetadata,
@@ -95,7 +96,7 @@
 			});
 		} catch (err) {
 			console.error('Failed to load packages:', err);
-			loadError = 'Failed to load available packages';
+			loadError = m.mapPackageSelectorLoadError();
 		} finally {
 			isLoading = false;
 		}
@@ -161,14 +162,14 @@
 		const bboxFilter = `location.lat >= ${bbox.minLat} && location.lat <= ${bbox.maxLat} && location.lon >= ${bbox.minLon} && location.lon <= ${bbox.maxLon}`;
 
 		// Download markers within region
-		downloadProgress = { phase: 'extracting', progress: 60, message: 'Downloading markers...' };
+		downloadProgress = { phase: 'extracting', progress: 60, message: m.mapPackageSelectorProgressMarkers() };
 		const markers = await pb.collection('markers').getFullList({
 			filter: `project_id = "${pkg.project_id}" && ${bboxFilter}`
 		});
 		await storeRecords('markers', markers);
 
 		// Download workflow instances within region
-		downloadProgress = { phase: 'extracting', progress: 65, message: 'Downloading workflow instances...' };
+		downloadProgress = { phase: 'extracting', progress: 65, message: m.mapPackageSelectorProgressWorkflowInstances() };
 		const instances = await pb.collection('workflow_instances').getFullList({
 			filter: bboxFilter
 		});
@@ -176,7 +177,7 @@
 
 		// Download field values for instances
 		if (instances.length > 0) {
-			downloadProgress = { phase: 'extracting', progress: 70, message: 'Downloading field values...' };
+			downloadProgress = { phase: 'extracting', progress: 70, message: m.mapPackageSelectorProgressFieldValues() };
 			const instanceIds = instances.map((i) => i.id);
 			const batchSize = 20;
 			for (let i = 0; i < instanceIds.length; i += batchSize) {
@@ -190,19 +191,19 @@
 		}
 
 		// Download reference data (non-geo)
-		downloadProgress = { phase: 'extracting', progress: 75, message: 'Downloading categories...' };
+		downloadProgress = { phase: 'extracting', progress: 75, message: m.mapPackageSelectorProgressCategories() };
 		const categories = await pb.collection('marker_categories').getFullList({
 			filter: `project_id = "${pkg.project_id}"`
 		});
 		await storeRecords('marker_categories', categories);
 
-		downloadProgress = { phase: 'extracting', progress: 78, message: 'Downloading roles...' };
+		downloadProgress = { phase: 'extracting', progress: 78, message: m.mapPackageSelectorProgressRoles() };
 		const roles = await pb.collection('roles').getFullList({
 			filter: `project_id = "${pkg.project_id}"`
 		});
 		await storeRecords('roles', roles);
 
-		downloadProgress = { phase: 'extracting', progress: 80, message: 'Downloading workflows...' };
+		downloadProgress = { phase: 'extracting', progress: 80, message: m.mapPackageSelectorProgressWorkflows() };
 		const workflows = await pb.collection('workflows').getFullList({
 			filter: `project_id = "${pkg.project_id}"`
 		});
@@ -212,19 +213,19 @@
 			const workflowIds = workflows.map((w) => w.id);
 			const workflowFilter = workflowIds.map((id) => `workflow_id = "${id}"`).join(' || ');
 
-			downloadProgress = { phase: 'extracting', progress: 83, message: 'Downloading stages...' };
+			downloadProgress = { phase: 'extracting', progress: 83, message: m.mapPackageSelectorProgressStages() };
 			const stages = await pb.collection('workflow_stages').getFullList({
 				filter: workflowFilter
 			});
 			await storeRecords('workflow_stages', stages);
 
-			downloadProgress = { phase: 'extracting', progress: 86, message: 'Downloading connections...' };
+			downloadProgress = { phase: 'extracting', progress: 86, message: m.mapPackageSelectorProgressConnections() };
 			const connections = await pb.collection('workflow_connections').getFullList({
 				filter: workflowFilter
 			});
 			await storeRecords('workflow_connections', connections);
 
-			downloadProgress = { phase: 'extracting', progress: 89, message: 'Downloading forms...' };
+			downloadProgress = { phase: 'extracting', progress: 89, message: m.mapPackageSelectorProgressForms() };
 			const forms = await pb.collection('tools_forms').getFullList({
 				filter: workflowFilter
 			});
@@ -239,7 +240,7 @@
 			}
 
 			if (stages.length > 0) {
-				downloadProgress = { phase: 'extracting', progress: 92, message: 'Downloading edit tools...' };
+				downloadProgress = { phase: 'extracting', progress: 92, message: m.mapPackageSelectorProgressEditTools() };
 				const stageFilter = stages.map((s) => `stage_id ~ "${s.id}"`).join(' || ');
 				const editTools = await pb.collection('tools_edit').getFullList({
 					filter: stageFilter
@@ -249,7 +250,7 @@
 		}
 
 		// Download map layers (source data is now inline)
-		downloadProgress = { phase: 'extracting', progress: 95, message: 'Downloading map layers...' };
+		downloadProgress = { phase: 'extracting', progress: 95, message: m.mapPackageSelectorProgressMapLayers() };
 		const mapLayers = await pb.collection('map_layers').getFullList({
 			filter: `project_id = "${pkg.project_id}" && is_active = true`
 		});
@@ -281,7 +282,7 @@
 		if (!file) return;
 
 		isImporting = true;
-		downloadProgress = { phase: 'extracting', progress: 0, message: 'Reading file...' };
+		downloadProgress = { phase: 'extracting', progress: 0, message: m.mapPackageSelectorProgressReadingFile() };
 
 		try {
 			// Read file as ArrayBuffer
@@ -293,7 +294,7 @@
 			const packageName = metadata?.name as string || file.name.replace('.zip', '');
 			const packageId = metadata?.id as string || `imported-${Date.now()}`;
 
-			downloadProgress = { phase: 'extracting', progress: 0, message: 'Extracting tiles...' };
+			downloadProgress = { phase: 'extracting', progress: 0, message: m.mapPackageSelectorProgressExtractingTiles() };
 
 			// Extract tiles to IndexedDB
 			const tileCount = await extractAndStoreTiles(zipData, (progress: ZipExtractionProgress) => {
@@ -301,7 +302,7 @@
 				downloadProgress = {
 					phase: 'extracting',
 					progress: pct,
-					message: `Extracting tiles... ${progress.extracted}/${progress.total}`
+					message: m.mapPackageSelectorProgressExtractingTilesCount({ extracted: progress.extracted, total: progress.total })
 				};
 			});
 
@@ -318,7 +319,7 @@
 			};
 			await db.put('packages', downloadedPkg);
 
-			downloadProgress = { phase: 'complete', progress: 100, message: `Imported ${tileCount} tiles` };
+			downloadProgress = { phase: 'complete', progress: 100, message: m.mapPackageSelectorImportComplete({ tileCount }) };
 			downloadedPackageIds = new Set([...downloadedPackageIds, packageId]);
 
 			// Signal download complete
@@ -330,7 +331,7 @@
 			downloadProgress = {
 				phase: 'error',
 				progress: 0,
-				message: err instanceof Error ? err.message : 'Import failed'
+				message: err instanceof Error ? err.message : m.mapPackageSelectorImportFailed()
 			};
 		} finally {
 			isImporting = false;
@@ -348,12 +349,12 @@
 
 	async function handleDownload(pkg: OfflinePackage) {
 		if (!pkg.archive_file) {
-			downloadProgress = { phase: 'error', progress: 0, message: 'Package has no archive file' };
+			downloadProgress = { phase: 'error', progress: 0, message: m.mapPackageSelectorNoArchiveFile() };
 			return;
 		}
 
 		downloadingPackageId = pkg.id;
-		downloadProgress = { phase: 'fetching', progress: 0, message: 'Downloading package...' };
+		downloadProgress = { phase: 'fetching', progress: 0, message: m.mapPackageSelectorProgressDownloadingPackage() };
 
 		try {
 			const pb = getPocketBase();
@@ -365,7 +366,7 @@
 			// Fetch the ZIP file
 			const response = await fetch(archiveUrl);
 			if (!response.ok) {
-				throw new Error(`Download failed: ${response.status}`);
+				throw new Error(m.mapPackageSelectorDownloadHttpError({ status: response.status }));
 			}
 
 			const contentLength = response.headers.get('content-length');
@@ -374,7 +375,7 @@
 			// Read the response as a stream for progress tracking
 			const reader = response.body?.getReader();
 			if (!reader) {
-				throw new Error('Failed to read response');
+				throw new Error(m.mapPackageSelectorReadResponseFailed());
 			}
 
 			const chunks: Uint8Array[] = [];
@@ -392,7 +393,7 @@
 					downloadProgress = {
 						phase: 'fetching',
 						progress,
-						message: `Downloading... ${formatFileSize(receivedLength)} / ${formatFileSize(totalSize)}`
+						message: m.mapPackageSelectorProgressDownloadingSize({ received: formatFileSize(receivedLength), total: formatFileSize(totalSize) })
 					};
 				}
 			}
@@ -406,11 +407,11 @@
 			}
 
 			// Save ZIP to user's downloads folder for offline import later
-			downloadProgress = { phase: 'fetching', progress: 100, message: 'Saving to downloads...' };
+			downloadProgress = { phase: 'fetching', progress: 100, message: m.mapPackageSelectorProgressSavingToDownloads() };
 			saveZipToDownloads(zipData, pkg.name);
 
 			// Extract tiles
-			downloadProgress = { phase: 'extracting', progress: 0, message: 'Extracting tiles...' };
+			downloadProgress = { phase: 'extracting', progress: 0, message: m.mapPackageSelectorProgressExtractingTiles() };
 
 			const tileCount = await extractAndStoreTiles(zipData, (progress: ZipExtractionProgress) => {
 				// Scale progress to 0-50% for tile extraction
@@ -418,7 +419,7 @@
 				downloadProgress = {
 					phase: 'extracting',
 					progress: pct,
-					message: `Extracting tiles... ${progress.extracted}/${progress.total}`
+					message: m.mapPackageSelectorProgressExtractingTilesCount({ extracted: progress.extracted, total: progress.total })
 				};
 			});
 
@@ -438,7 +439,7 @@
 			};
 			await db.put('packages', downloadedPkg);
 
-			downloadProgress = { phase: 'complete', progress: 100, message: 'Package ready for offline use' };
+			downloadProgress = { phase: 'complete', progress: 100, message: m.mapPackageSelectorDownloadComplete() };
 			downloadedPackageIds = new Set([...downloadedPackageIds, pkg.id]);
 
 			// Signal download complete
@@ -450,7 +451,7 @@
 			downloadProgress = {
 				phase: 'error',
 				progress: 0,
-				message: err instanceof Error ? err.message : 'Download failed'
+				message: err instanceof Error ? err.message : m.mapPackageSelectorDownloadFailed()
 			};
 		} finally {
 			// Clear downloading state after a delay
@@ -478,10 +479,10 @@
 		<Dialog.Header>
 			<Dialog.Title class="flex items-center gap-2">
 				<Package class="h-5 w-5" />
-				Offline Packages
+				{m.mapPackageSelectorTitle()}
 			</Dialog.Title>
 			<Dialog.Description>
-				Select a package to download for offline use
+				{m.mapPackageSelectorDescription()}
 			</Dialog.Description>
 		</Dialog.Header>
 
@@ -495,15 +496,15 @@
 					<AlertCircle class="h-8 w-8 text-destructive mb-2" />
 					<p class="text-sm text-destructive">{loadError}</p>
 					<Button variant="outline" size="sm" class="mt-4" onclick={loadPackages}>
-						Try Again
+						{m.mapPackageSelectorTryAgain()}
 					</Button>
 				</div>
 			{:else if packages.length === 0}
 				<div class="flex flex-col items-center justify-center py-8 text-center">
 					<Package class="h-8 w-8 text-muted-foreground mb-2" />
-					<p class="text-sm text-muted-foreground">No packages available</p>
+					<p class="text-sm text-muted-foreground">{m.mapPackageSelectorNoneAvailable()}</p>
 					<p class="text-xs text-muted-foreground mt-1">
-						Ask your project admin to create an offline package
+						{m.mapPackageSelectorNoneAvailableHint()}
 					</p>
 				</div>
 			{:else}
@@ -521,7 +522,7 @@
 								<div class="flex-1 min-w-0">
 									<div class="font-medium truncate">{pkg.name}</div>
 									<div class="text-xs text-muted-foreground mt-1 space-y-0.5">
-										<div>Zoom: {pkg.zoom_min}-{pkg.zoom_max}</div>
+										<div>{m.mapPackageSelectorZoomRange({ min: pkg.zoom_min, max: pkg.zoom_max })}</div>
 										<div>
 											{pkg.tile_count?.toLocaleString() ?? '?'} tiles,
 											{formatFileSize(pkg.file_size_bytes)}
@@ -533,12 +534,12 @@
 									{#if isDownloaded && !isDownloading}
 										<Badge variant="outline" class="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
 											<CheckCircle class="h-3 w-3 mr-1" />
-											Downloaded
+											{m.mapPackageSelectorDownloaded()}
 										</Badge>
 									{:else if isDownloading}
 										<Badge variant="secondary">
 											<Loader2 class="h-3 w-3 mr-1 animate-spin" />
-											{downloadProgress?.phase === 'fetching' ? 'Downloading' : 'Extracting'}
+											{(downloadProgress?.phase === 'fetching' ? m.mapPackageSelectorBadgeDownloading() : m.mapPackageSelectorBadgeExtracting())}
 										</Badge>
 									{:else}
 										<Button
@@ -548,7 +549,7 @@
 											disabled={!!downloadingPackageId}
 										>
 											<Download class="h-4 w-4 mr-1" />
-											Download
+											{m.mapPackageSelectorDownloadButton()}
 										</Button>
 									{/if}
 								</div>
@@ -576,7 +577,7 @@
 			<!-- Import from file section -->
 			<div class="mt-4 pt-4 border-t">
 				<p class="text-sm text-muted-foreground mb-3">
-					Have a previously downloaded package? Import it here:
+					{m.mapPackageSelectorImportHint()}
 				</p>
 				<input
 					type="file"
@@ -594,10 +595,10 @@
 				>
 					{#if isImporting}
 						<Loader2 class="h-4 w-4 mr-2 animate-spin" />
-						Importing...
+						{m.mapPackageSelectorImporting()}
 					{:else}
 						<Upload class="h-4 w-4 mr-2" />
-						Import Package from File
+						{m.mapPackageSelectorImportButton()}
 					{/if}
 				</Button>
 
@@ -619,8 +620,8 @@
 				disabled={(downloadingPackageId !== null || isImporting) && downloadProgress?.phase !== 'complete' && downloadProgress?.phase !== 'error'}
 			>
 				{(downloadingPackageId || isImporting) && downloadProgress?.phase !== 'complete' && downloadProgress?.phase !== 'error'
-					? (isImporting ? 'Importing...' : 'Downloading...')
-					: 'Close'}
+					? (isImporting ? m.mapPackageSelectorImporting() : m.mapPackageSelectorProgressDownloadingPackage())
+					: m.mapPackageSelectorClose()}
 			</Button>
 		</Dialog.Footer>
 	</Dialog.Content>

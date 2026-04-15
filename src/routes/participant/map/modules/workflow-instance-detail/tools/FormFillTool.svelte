@@ -10,6 +10,7 @@
 	import { FormRenderer } from '$lib/components/form-renderer';
 	import { Button } from '$lib/components/ui/button';
 	import { ChevronLeft, ChevronRight, Send, Loader2 } from 'lucide-svelte';
+	import * as m from '$lib/paraglide/messages';
 	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
 	import {
 		loadConnectionForm,
@@ -194,13 +195,13 @@
 				<div
 					class="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2"
 				></div>
-				<p class="text-sm text-muted-foreground">Loading form...</p>
+				<p class="text-sm text-muted-foreground">{m.participantFormFillToolLoading?.() ?? 'Loading form...'}</p>
 			</div>
 		</div>
 	{:else if formState?.loadError}
 		<div class="flex-1 flex items-center justify-center p-4 py-12">
 			<div class="text-center">
-				<p class="text-sm text-destructive font-medium mb-1">Error</p>
+				<p class="text-sm text-destructive font-medium mb-1">{m.participantFormFillToolError?.() ?? 'Error'}</p>
 				<p class="text-xs text-muted-foreground">{formState.loadError}</p>
 			</div>
 		</div>
@@ -220,7 +221,7 @@
 		</div>
 	{:else if formState}
 		<div class="flex-1 flex flex-col items-center justify-center p-4 py-12">
-			<p class="text-sm text-muted-foreground mb-4">No additional information required.</p>
+			<p class="text-sm text-muted-foreground mb-4">{m.participantFormFillToolNoFields?.() ?? 'No additional information required.'}</p>
 		</div>
 	{/if}
 {/snippet}
@@ -234,7 +235,7 @@
 					<button
 						class="w-2 h-2 rounded-full transition-colors {currentPage === i + 1 ? 'bg-primary' : 'bg-muted-foreground/30'}"
 						onclick={() => handlePageChange(i + 1)}
-						aria-label="Go to page {i + 1}"
+						aria-label={(m.participantFormFillToolGoToPage?.({ page: i + 1 }) ?? `Go to page ${i + 1}`)}
 					></button>
 				{/each}
 			</div>
@@ -250,7 +251,7 @@
 					class="flex-1"
 				>
 					<ChevronLeft class="w-4 h-4 mr-1" />
-					Back
+					{m.participantFormFillToolBack?.() ?? 'Back'}
 				</Button>
 			{:else}
 				<Button
@@ -259,7 +260,7 @@
 					disabled={isSubmitting}
 					class="flex-1"
 				>
-					Cancel
+					{m.commonCancel?.() ?? 'Cancel'}
 				</Button>
 			{/if}
 
@@ -269,7 +270,7 @@
 					disabled={isSubmitting}
 					class="flex-1"
 				>
-					Next
+					{m.participantFormFillToolNext?.() ?? 'Next'}
 					<ChevronRight class="w-4 h-4 ml-1" />
 				</Button>
 			{:else}
@@ -280,10 +281,10 @@
 				>
 					{#if isSubmitting}
 						<Loader2 class="w-4 h-4 mr-2 animate-spin" />
-						Submitting...
+						{m.participantFormFillToolSubmitting?.() ?? 'Submitting...'}
 					{:else}
 						<Send class="w-4 h-4 mr-2" />
-						{hasFields ? 'Submit' : 'Create Entry'}
+						{hasFields ? (m.participantFormFillToolSubmit?.() ?? 'Submit') : (m.participantFormFillToolCreateEntry?.() ?? 'Create Entry')}
 					{/if}
 				</Button>
 			{/if}

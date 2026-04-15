@@ -215,7 +215,7 @@
 		},
 		{
 			id: 'assigned_participants',
-			header: m.rolesParticipants?.() ?? 'Assigned Participants',
+			header: m.rolesAssignedParticipants?.() ?? 'Assigned Participants',
 			accessorFn: (row) => {
 				if (!row.assigned_participants || row.assigned_participants.length === 0) return 0;
 				return row.assigned_participants.length;
@@ -294,7 +294,7 @@
 				enableShiftSelect={true}
 				showToolbar={true}
 				showEditMode={true}
-				editModeLabel="Edit roles inline"
+				editModeLabel={m.rolesEditModeLabel?.() ?? 'Edit roles inline'}
 				emptyMessage={m.rolesNoRoles()}
 				emptySubMessage={m.rolesCreateYourFirst()}
 				rowActions={{
@@ -370,7 +370,7 @@
 					<div class="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
 						<span class="flex items-center gap-1"><Eye class="h-3 w-3" /> {m.permissionsCanView()}</span>
 						<span class="flex items-center gap-1"><FilePlus class="h-3 w-3" /> {m.permissionsCanCreate()}</span>
-						<span class="flex items-center gap-1"><Pencil class="h-3 w-3" /> Update</span>
+						<span class="flex items-center gap-1"><Pencil class="h-3 w-3" /> {m.permissionsCanUpdate?.() ?? 'Update'}</span>
 					</div>
 				</div>
 
@@ -408,7 +408,7 @@
 											<Lock class="h-3.5 w-3.5 text-muted-foreground" />
 										{/if}
 										{#if !wf.isActive}
-											<Badge variant="outline" class="text-xs">Inactive</Badge>
+											<Badge variant="outline" class="text-xs">{m.rolesInactive?.() ?? 'Inactive'}</Badge>
 										{/if}
 										<div class="flex items-center gap-2 shrink-0 w-20 justify-end">
 											{@render permIcon('read', wfCanRead, () => togglePermission('workflows', wf.id, 'visible_to_roles'))}
@@ -475,7 +475,7 @@
 											{#if wf.globalTools.length > 0}
 												<div class="flex items-center gap-2 px-3 py-1.5 pl-6 text-sm">
 													<Wrench class="h-3 w-3 shrink-0 text-muted-foreground {dimmed}" />
-													<span class="text-muted-foreground flex-1 {dimmed}">Global Tools</span>
+													<span class="text-muted-foreground flex-1 {dimmed}">{m.permissionsGlobalTools?.() ?? 'Global Tools'}</span>
 												</div>
 												{#each wf.globalTools as tool}
 													{@const canUse = hasAccess(selectedPermRoleId, tool.allowedRoles)}
@@ -599,7 +599,7 @@
 						getOptionLabel={(p) => p.name}
 						allowCreate={true}
 						onCreateOption={createParticipant}
-						placeholder="Select or search participants..."
+						placeholder={m.rolesSelectOrSearchParticipants?.() ?? 'Select or search participants...'}
 					/>
 				</div>
 				<Dialog.Footer>
@@ -621,7 +621,7 @@
 {#snippet permIcon(type: 'read' | 'create' | 'update', allowed: boolean, onclick: () => void)}
 	<button
 		class="w-5 flex items-center justify-center cursor-pointer hover:scale-125 transition-transform disabled:opacity-50 disabled:cursor-wait"
-		title={type}
+		title={type === 'read' ? m.permissionsCanView() : type === 'create' ? m.permissionsCanCreate() : (m.permissionsCanUpdate?.() ?? 'Update')}
 		disabled={toggling !== null}
 		{onclick}
 	>

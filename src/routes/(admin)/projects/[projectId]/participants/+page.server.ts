@@ -1,8 +1,10 @@
 import { error, fail } from '@sveltejs/kit';
+import { randomBytes } from 'crypto';
 import type { Actions, PageServerLoad } from './$types';
 import { z } from 'zod';
 import { superValidate } from 'sveltekit-superforms';
 import { zod } from 'sveltekit-superforms/adapters';
+import * as m from '$lib/paraglide/messages';
 import {
 	createUpdateFieldAction,
 	createDeleteAction,
@@ -12,28 +14,13 @@ import { normalizeRecords, prepareArrayField } from '$lib/server/pocketbase-help
 import { getAdminPb } from '$lib/server/admin-auth';
 
 const participantSchema = z.object({
-	name: z.string().min(1, 'Name is required'),
+	name: z.string().min(1, m.participantsAdminServer_nameRequired?.() ?? 'Name is required'),
 	email: z.string().email().optional().or(z.literal('')),
 	phone: z.string().optional().or(z.literal(''))
 });
 
-/**
- * Generate a unique access token for participant
- */
 function generateUniqueToken(): string {
-	const timestamp = Date.now().toString(36);
-	const randomPart = Math.random().toString(36).substring(2, 15);
-	const additionalRandom = Math.random().toString(36).substring(2, 8);
-
-	// Add additional entropy using crypto
-	let cryptoRandom = '';
-	if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-		const array = new Uint8Array(4);
-		crypto.getRandomValues(array);
-		cryptoRandom = Array.from(array, (byte) => byte.toString(16).padStart(2, '0')).join('');
-	}
-
-	return `${timestamp}-${randomPart}-${additionalRandom}${cryptoRandom ? '-' + cryptoRandom : ''}`;
+	return randomBytes(16).toString('base64url');
 }
 
 export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
@@ -149,7 +136,7 @@ export const actions: Actions = {
 					} else {
 						return fail(500, {
 							form,
-							message: 'Failed to generate unique token. Please try again.'
+							message: m.participantsAdminServer_tokenGenerationFailed?.() ?? 'Failed to generate unique token. Please try again.'
 						});
 					}
 				}
@@ -157,12 +144,12 @@ export const actions: Actions = {
 				console.error('Error creating participant:', insertError);
 				return fail(500, {
 					form,
-					message: 'Failed to create participant'
+					message: m.participantsCreateError?.() ?? 'Failed to create participant'
 				});
 			}
 		}
 
-		return fail(500, { form, message: 'Unexpected error' });
+		return fail(500, { form, message: m.participantsAdminServer_unexpectedError?.() ?? 'Unexpected error' });
 	},
 
 	update: async ({ request, params, locals: { pb } }) => {
@@ -195,7 +182,7 @@ export const actions: Actions = {
 			console.error('Error updating participant:', updateError);
 			return fail(500, {
 				form,
-				message: 'Failed to update participant'
+				message: m.participantsUpdateError?.() ?? 'Failed to update participant'
 			});
 		}
 
@@ -214,14 +201,14 @@ export const actions: Actions = {
 		const roleIdsJson = formData.get('roleIds') as string;
 
 		if (!participantId) {
-			return fail(400, { message: 'Participant ID is required' });
+			return fail(400, { message: m.participantsAdminServer_participantIdRequired?.() ?? 'Participant ID is required' });
 		}
 
 		let roleIds: string[] = [];
 		try {
 			roleIds = JSON.parse(roleIdsJson || '[]');
 		} catch (e) {
-			return fail(400, { message: 'Invalid role IDs format' });
+			return fail(400, { message: m.participantsAdminServer_invalidRoleIdsFormat?.() ?? 'Invalid role IDs format' });
 		}
 
 		try {
@@ -230,7 +217,7 @@ export const actions: Actions = {
 			});
 		} catch (updateError) {
 			console.error('Error updating participant roles:', updateError);
-			return fail(500, { message: 'Failed to update roles' });
+			return fail(500, { message: m.participantsAdminServer_updateRolesFailed?.() ?? 'Failed to update roles' });
 		}
 
 		return { success: true };
@@ -243,11 +230,11 @@ export const actions: Actions = {
 			validators: {
 				name: (value) => ({
 					valid: value.trim().length >= 1,
-					error: 'Name is required'
+					error: m.participantsAdminServer_nameRequired?.() ?? 'Name is required'
 				}),
 				email: (value) => ({
 					valid: !value || value.includes('@'),
-					error: 'Invalid email format'
+					error: m.participantsAdminServer_invalidEmailFormat?.() ?? 'Invalid email format'
 				})
 			}
 		})(request);
@@ -259,7 +246,7 @@ export const actions: Actions = {
 		const isActive = formData.get('is_active') === 'true';
 
 		if (!participantId) {
-			return fail(400, { message: 'Participant ID is required' });
+			return fail(400, { message: m.participantsAdminServer_participantIdRequired?.() ?? 'Participant ID is required' });
 		}
 
 		try {
@@ -268,7 +255,7 @@ export const actions: Actions = {
 			});
 		} catch (updateError) {
 			console.error('Error toggling participant status:', updateError);
-			return fail(500, { message: 'Failed to update status' });
+			return fail(500, { message: m.participantsAdminServer_updateStatusFailed?.() ?? 'Failed to update status' });
 		}
 
 		return { success: true };
@@ -290,11 +277,11 @@ export const actions: Actions = {
 		const defaultValue = formData.get('defaultValue') as string;
 
 		if (!fieldName || !fieldType) {
-			return fail(400, { message: 'Field name and type are required' });
+			return fail(400, { message: m.participantsAdminServer_fieldNameTypeRequired?.() ?? 'Field name and type are required' });
 		}
 
 		if (!['text', 'number', 'date', 'boolean'].includes(fieldType)) {
-			return fail(400, { message: 'Invalid field type' });
+			return fail(400, { message: m.participantsAdminServer_invalidFieldType?.() ?? 'Invalid field type' });
 		}
 
 		try {
@@ -321,10 +308,10 @@ export const actions: Actions = {
 
 			// Check for duplicate field name
 			if (insertError?.data?.field_name?.message?.includes('unique')) {
-				return fail(400, { message: 'A field with this name already exists' });
+				return fail(400, { message: m.participantsAdminServer_fieldNameExists?.() ?? 'A field with this name already exists' });
 			}
 
-			return fail(500, { message: 'Failed to create custom field' });
+			return fail(500, { message: m.participantsAdminServer_createCustomFieldFailed?.() ?? 'Failed to create custom field' });
 		}
 
 		return { success: true };
@@ -340,11 +327,11 @@ export const actions: Actions = {
 		const defaultValue = formData.get('defaultValue') as string;
 
 		if (!fieldId || !fieldName || !fieldType) {
-			return fail(400, { message: 'Field ID, name, and type are required' });
+			return fail(400, { message: m.participantsAdminServer_fieldIdNameTypeRequired?.() ?? 'Field ID, name, and type are required' });
 		}
 
 		if (!['text', 'number', 'date', 'boolean'].includes(fieldType)) {
-			return fail(400, { message: 'Invalid field type' });
+			return fail(400, { message: m.participantsAdminServer_invalidFieldType?.() ?? 'Invalid field type' });
 		}
 
 		try {
@@ -359,10 +346,10 @@ export const actions: Actions = {
 
 			// Check for duplicate field name
 			if (updateError?.data?.field_name?.message?.includes('unique')) {
-				return fail(400, { message: 'A field with this name already exists' });
+				return fail(400, { message: m.participantsAdminServer_fieldNameExists?.() ?? 'A field with this name already exists' });
 			}
 
-			return fail(500, { message: 'Failed to update custom field' });
+			return fail(500, { message: m.participantsAdminServer_updateCustomFieldFailed?.() ?? 'Failed to update custom field' });
 		}
 
 		return { success: true };
@@ -374,14 +361,14 @@ export const actions: Actions = {
 		const fieldId = formData.get('fieldId') as string;
 
 		if (!fieldId) {
-			return fail(400, { message: 'Field ID is required' });
+			return fail(400, { message: m.participantsAdminServer_fieldIdRequired?.() ?? 'Field ID is required' });
 		}
 
 		try {
 			await pb.collection('participant_custom_fields').delete(fieldId);
 		} catch (deleteError) {
 			console.error('Error deleting custom field:', deleteError);
-			return fail(500, { message: 'Failed to delete custom field' });
+			return fail(500, { message: m.participantsAdminServer_deleteCustomFieldFailed?.() ?? 'Failed to delete custom field' });
 		}
 
 		return { success: true };
@@ -396,7 +383,7 @@ export const actions: Actions = {
 
 		if (!name) {
 			console.error('[createRole] No name provided');
-			return fail(400, { message: 'Role name is required' });
+			return fail(400, { message: m.participantsAdminServer_roleNameRequired?.() ?? 'Role name is required' });
 		}
 
 		try {
@@ -410,7 +397,7 @@ export const actions: Actions = {
 			return { success: true, entity: newRole };
 		} catch (error) {
 			console.error('[createRole] Error creating role:', error);
-			return fail(500, { message: 'Failed to create role' });
+			return fail(500, { message: m.participantsAdminServer_createRoleFailed?.() ?? 'Failed to create role' });
 		}
 	}
 };

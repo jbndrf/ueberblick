@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { ChevronDown, ChevronRight, CheckSquare, Square } from 'lucide-svelte';
 	import { Button } from '$lib/components/ui/button';
+	import * as m from '$lib/paraglide/messages';
 	import AncestorFieldItem from './AncestorFieldItem.svelte';
 	import type { ToolsFormField } from '$lib/workflow-builder';
 
@@ -90,10 +91,10 @@
 			>
 				{#if allSelected}
 					<CheckSquare class="h-3.5 w-3.5" />
-					<span>Deselect all</span>
+					<span>{m.editToolAncestorFieldGroupDeselectAll?.() ?? 'Deselect all'}</span>
 				{:else}
 					<Square class="h-3.5 w-3.5" />
-					<span>Select all</span>
+					<span>{m.editToolAncestorFieldGroupSelectAll?.() ?? 'Select all'}</span>
 				{/if}
 			</button>
 

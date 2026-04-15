@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Play, Square, CircleStop, GripVertical } from 'lucide-svelte';
 	import ToolSection from '../shared/ToolSection.svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	type Props = {
 		hasStartStage: boolean;
@@ -16,7 +17,7 @@
 </script>
 
 <div class="panel">
-	<ToolSection title="Stages">
+	<ToolSection title={m.workflowBuilderDefaultPanelStages?.() ?? 'Stages'}>
 		<div class="tool-grid">
 			<div
 				class="drag-item drag-item-start border border-border"
@@ -28,7 +29,7 @@
 			>
 				<GripVertical class="drag-handle text-muted-foreground" />
 				<Play class="drag-icon text-foreground" />
-				<span class="drag-label text-foreground">Start</span>
+				<span class="drag-label text-foreground">{m.workflowBuilderDefaultPanelStart?.() ?? 'Start'}</span>
 			</div>
 			<div
 				class="drag-item drag-item-stage border border-border"
@@ -39,7 +40,7 @@
 			>
 				<GripVertical class="drag-handle text-muted-foreground" />
 				<Square class="drag-icon text-foreground" />
-				<span class="drag-label text-foreground">Stage</span>
+				<span class="drag-label text-foreground">{m.workflowBuilderDefaultPanelStage?.() ?? 'Stage'}</span>
 			</div>
 			<div
 				class="drag-item drag-item-end border border-border"
@@ -50,13 +51,13 @@
 			>
 				<GripVertical class="drag-handle text-muted-foreground" />
 				<CircleStop class="drag-icon text-foreground" />
-				<span class="drag-label text-foreground">End</span>
+				<span class="drag-label text-foreground">{m.workflowBuilderDefaultPanelEnd?.() ?? 'End'}</span>
 			</div>
 		</div>
 	</ToolSection>
 
 	<div class="panel-hint border-t border-border">
-		<p class="text-muted-foreground">Drag stages onto the canvas to add them.</p>
+		<p class="text-muted-foreground">{m.workflowBuilderDefaultPanelHint?.() ?? 'Drag stages onto the canvas to add them.'}</p>
 	</div>
 </div>
 

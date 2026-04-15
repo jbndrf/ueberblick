@@ -1,6 +1,7 @@
 <script lang="ts">
 	import ModuleShell from '$lib/components/module-shell.svelte';
 	import type { MarkerSelection } from '../types';
+	import * as m from '$lib/paraglide/messages';
 
 	interface Props {
 		selection: MarkerSelection;
@@ -30,7 +31,7 @@
 		if (value == null || value === '') return '-';
 		switch (fieldType) {
 			case 'boolean':
-				return value ? 'Yes' : 'No';
+				return (value ? (m.participantMarkerDetailYes?.() ?? 'Yes') : (m.participantMarkerDetailNo?.() ?? 'No'));
 			case 'date': {
 				const str = String(value);
 				const mode = fieldOptions?.date_mode || 'date';
@@ -101,7 +102,7 @@
 
 				{#if marker.location?.lat != null && marker.location?.lon != null}
 					<div class="flex items-baseline justify-between gap-4 rounded-lg bg-muted/50 px-3 py-2">
-						<span class="text-xs font-medium text-muted-foreground">Location</span>
+						<span class="text-xs font-medium text-muted-foreground">{m.mapLocation?.() ?? 'Location'}</span>
 						<span class="text-sm font-medium tabular-nums">
 							{Number(marker.location.lat).toFixed(5)}, {Number(marker.location.lon).toFixed(5)}
 						</span>
@@ -110,7 +111,7 @@
 
 				{#if marker.created}
 					<div class="flex items-baseline justify-between gap-4 rounded-lg bg-muted/50 px-3 py-2">
-						<span class="text-xs font-medium text-muted-foreground">Created</span>
+						<span class="text-xs font-medium text-muted-foreground">{m.mapCreated?.() ?? 'Created'}</span>
 						<span class="text-sm font-medium">
 							{new Date(marker.created).toLocaleDateString()}
 						</span>

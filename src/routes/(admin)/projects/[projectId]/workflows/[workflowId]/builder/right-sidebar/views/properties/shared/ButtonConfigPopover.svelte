@@ -4,6 +4,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Switch } from '$lib/components/ui/switch';
 	import * as Popover from '$lib/components/ui/popover';
+	import * as m from '$lib/paraglide/messages';
 
 	import type { VisualConfig } from '$lib/workflow-builder';
 
@@ -31,7 +32,7 @@
 	const buttonLabel = $derived(config.button_label || '');
 	const buttonColor = $derived(config.button_color || defaultColor);
 	const requiresConfirmation = $derived(config.requires_confirmation || false);
-	const confirmationMessage = $derived(config.confirmation_message || 'Are you sure you want to proceed?');
+	const confirmationMessage = $derived(config.confirmation_message || (m.propertiesButtonConfigPopoverConfirmationDefault?.() ?? 'Are you sure you want to proceed?'));
 
 	// Display label for the button preview
 	const displayLabel = $derived(buttonLabel || defaultLabel);
@@ -60,7 +61,7 @@
 	function handleConfirmationToggle(checked: boolean) {
 		updateConfig({
 			requires_confirmation: checked || undefined,
-			confirmation_message: checked ? (config.confirmation_message || 'Are you sure you want to proceed?') : undefined
+			confirmation_message: checked ? (config.confirmation_message || (m.propertiesButtonConfigPopoverConfirmationDefault?.() ?? 'Are you sure you want to proceed?')) : undefined
 		});
 	}
 
@@ -83,12 +84,12 @@
 
 	<Popover.Content class="button-config-popover" align="end" sideOffset={4}>
 		<div class="popover-header">
-			<span class="popover-title">Button Configuration</span>
+			<span class="popover-title">{m.propertiesButtonConfigPopoverTitle?.() ?? 'Button Configuration'}</span>
 		</div>
 
 		<div class="popover-content">
 			<div class="form-field">
-				<Label for="btn-label">Button Label</Label>
+				<Label for="btn-label">{m.propertiesButtonConfigPopoverLabelField?.() ?? 'Button Label'}</Label>
 				<Input
 					id="btn-label"
 					value={buttonLabel}
@@ -98,7 +99,7 @@
 			</div>
 
 			<div class="form-field">
-				<Label for="btn-color">Button Color</Label>
+				<Label for="btn-color">{m.propertiesButtonConfigPopoverColorField?.() ?? 'Button Color'}</Label>
 				<div class="color-picker">
 					<input
 						type="color"
@@ -118,9 +119,9 @@
 
 			<div class="form-field-switch">
 				<div class="switch-info">
-					<Label for="btn-confirm">Requires Confirmation</Label>
+					<Label for="btn-confirm">{m.propertiesButtonConfigPopoverRequiresConfirmation?.() ?? 'Requires Confirmation'}</Label>
 					<p class="switch-description">
-						Show a confirmation dialog
+						{m.propertiesButtonConfigPopoverConfirmationDescription?.() ?? 'Show a confirmation dialog'}
 					</p>
 				</div>
 				<Switch
@@ -132,12 +133,12 @@
 
 			{#if requiresConfirmation}
 				<div class="form-field">
-					<Label for="btn-confirm-msg">Confirmation Message</Label>
+					<Label for="btn-confirm-msg">{m.propertiesButtonConfigPopoverConfirmationMessageField?.() ?? 'Confirmation Message'}</Label>
 					<Input
 						id="btn-confirm-msg"
 						value={confirmationMessage}
 						oninput={handleConfirmationMessageChange}
-						placeholder="Are you sure you want to proceed?"
+						placeholder={m.propertiesButtonConfigPopoverConfirmationDefault?.() ?? 'Are you sure you want to proceed?'}
 					/>
 				</div>
 			{/if}

@@ -2,6 +2,7 @@
 	import { X, Edit3, Type } from 'lucide-svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { fieldTypeIcons, type ToolsFormField, type WorkflowStage } from '$lib/workflow-builder';
+	import * as m from '$lib/paraglide/messages';
 
 	type SelectedFieldInfo = {
 		field: ToolsFormField;
@@ -24,7 +25,7 @@
 <div class="field-selection-preview">
 	<div class="preview-header">
 		<Edit3 class="h-4 w-4" />
-		<span class="preview-title">Editable Fields</span>
+		<span class="preview-title">{m.editToolFieldSelectionPreviewTitle?.() ?? 'Editable Fields'}</span>
 		<span class="field-count">{selectedFields.length}</span>
 	</div>
 
@@ -64,9 +65,9 @@
 				<div class="empty-icon">
 					<Edit3 class="h-10 w-10" />
 				</div>
-				<p class="empty-title">No fields selected</p>
+				<p class="empty-title">{m.editToolFieldSelectionPreviewEmptyTitle?.() ?? 'No fields selected'}</p>
 				<p class="empty-description">
-					Select fields from the left panel to make them editable with this tool.
+					{m.editToolFieldSelectionPreviewEmptyDescription?.() ?? 'Select fields from the left panel to make them editable with this tool.'}
 				</p>
 			</div>
 		{/if}

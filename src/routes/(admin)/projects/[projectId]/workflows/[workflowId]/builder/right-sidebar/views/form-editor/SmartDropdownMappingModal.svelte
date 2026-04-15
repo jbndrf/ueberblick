@@ -3,6 +3,7 @@
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import * as m from '$lib/paraglide/messages';
 
 	import type { FieldOption, SmartDropdownMapping } from '$lib/workflow-builder';
 
@@ -128,9 +129,9 @@
 <Dialog.Root bind:open onOpenChange={handleOpenChange}>
 	<Dialog.Content class="smart-dropdown-modal">
 		<Dialog.Header>
-			<Dialog.Title>Configure Conditional Options</Dialog.Title>
+			<Dialog.Title>{m.formEditorSmartDropdownMappingTitle?.() ?? 'Configure Conditional Options'}</Dialog.Title>
 			<Dialog.Description>
-				Source field: <strong>{sourceFieldLabel}</strong>
+				{m.formEditorSmartDropdownMappingSourceField?.() ?? 'Source field:'} <strong>{sourceFieldLabel}</strong>
 			</Dialog.Description>
 		</Dialog.Header>
 
@@ -157,25 +158,25 @@
 				<div class="mapping-tab-contents">
 					{#each tabOptions as option (option.label)}
 						<div class="mapping-tab-content" class:active={effectiveActiveTab === option.label}>
-							<Label>Options when "{option.label}" is selected:</Label>
+							<Label>{m.formEditorSmartDropdownMappingOptionsLabel?.({ label: option.label }) ?? `Options when "${option.label}" is selected:`}</Label>
 							<Textarea
 								value={mappingTexts[option.label] || ''}
 								oninput={(e) => (mappingTexts[option.label] = e.currentTarget.value)}
 								onblur={() => handleMappingTextBlur(option.label)}
-								placeholder={`Option 1\nOption 2\nOption 3, with explanation\nOption 4, to help users select`}
+								placeholder={m.formEditorSmartDropdownMappingPlaceholder?.() ?? `Option 1\nOption 2\nOption 3, with explanation\nOption 4, to help users select`}
 								rows={8}
 							/>
-							<p class="config-hint">One option per line. Use comma to add explanation: "Answer, explanation text"</p>
+							<p class="config-hint">{m.formEditorSmartDropdownMappingHint?.() ?? 'One option per line. Use comma to add explanation: "Answer, explanation text"'}</p>
 						</div>
 					{/each}
 				</div>
 			</div>
 		{:else}
-			<p class="no-options">No options available from source field.</p>
+			<p class="no-options">{m.formEditorSmartDropdownMappingNoOptions?.() ?? 'No options available from source field.'}</p>
 		{/if}
 
 		<Dialog.Footer>
-			<Button onclick={handleDone}>Done</Button>
+			<Button onclick={handleDone}>{m.formEditorSmartDropdownMappingDone?.() ?? 'Done'}</Button>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>

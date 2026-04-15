@@ -3,6 +3,7 @@ import { superValidate } from 'sveltekit-superforms';
 import { zod } from 'sveltekit-superforms/adapters';
 import { loginSchema } from '$lib/schemas/auth';
 import type { Actions, PageServerLoad } from './$types';
+import * as m from '$lib/paraglide/messages';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	// If already logged in as admin user, redirect to admin dashboard
@@ -37,7 +38,7 @@ export const actions: Actions = {
 			console.log('[LOGIN] Auth failed:', error);
 			return fail(400, {
 				form,
-				message: 'Invalid email or password'
+				message: m.loginInvalidCredentials?.() ?? 'Invalid email or password'
 			});
 		}
 

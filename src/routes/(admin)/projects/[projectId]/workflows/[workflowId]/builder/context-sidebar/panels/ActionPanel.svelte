@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { ArrowRight } from 'lucide-svelte';
+	import * as m from '$lib/paraglide/messages';
 	import type { SelectionContext } from '../context';
 	import { ToolPicker } from '$lib/workflow-builder/components';
 
@@ -16,7 +17,7 @@
 	let { context, onAddProgressTool, allowedToolTypes }: Props = $props();
 
 	const isEditAction = $derived(context.action.source === context.action.target);
-	const actionLabel = $derived((context.action.label as string) || 'Unnamed Action');
+	const actionLabel = $derived((context.action.label as string) || (m.workflowBuilderActionPanelUnnamedAction?.() ?? 'Unnamed Action'));
 </script>
 
 <div class="panel">
@@ -24,7 +25,7 @@
 		<ArrowRight class="panel-header-icon text-muted-foreground" />
 		<div class="panel-header-text">
 			<span class="panel-header-title text-foreground">{actionLabel}</span>
-			<span class="panel-header-subtitle text-muted-foreground">{isEditAction ? 'Edit action' : 'Transition action'}</span>
+			<span class="panel-header-subtitle text-muted-foreground">{isEditAction ? (m.workflowBuilderActionPanelEditAction?.() ?? 'Edit action') : (m.workflowBuilderActionPanelTransitionAction?.() ?? 'Transition action')}</span>
 		</div>
 	</div>
 

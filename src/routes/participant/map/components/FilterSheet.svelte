@@ -5,6 +5,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Input } from '$lib/components/ui/input';
 	import { ChevronDown, ChevronRight } from 'lucide-svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	interface Marker {
 		id: string;
@@ -301,15 +302,15 @@
 <Sheet.Root bind:open>
 	<Sheet.ContentNoOverlay side="left" class="w-80">
 		<Sheet.Header>
-			<Sheet.Title>Map Content</Sheet.Title>
-			<Sheet.Description>Show or hide items on the map</Sheet.Description>
+			<Sheet.Title>{m.participantFilterSheetTitle?.() ?? 'Map Content'}</Sheet.Title>
+			<Sheet.Description>{m.participantFilterSheetDescription?.() ?? 'Show or hide items on the map'}</Sheet.Description>
 		</Sheet.Header>
 
 		<div class="space-y-6 py-6 overflow-y-auto max-h-[calc(100vh-12rem)]">
 			<!-- Workflow Instances grouped by Workflow -->
 			{#if instancesByWorkflow.length > 0}
 				<div>
-					<h4 class="mb-3 text-sm font-medium">Workflow Instances</h4>
+					<h4 class="mb-3 text-sm font-medium">{m.participantFilterSheetWorkflowInstances?.() ?? 'Workflow Instances'}</h4>
 					<div class="space-y-2">
 						{#each instancesByWorkflow as { workflowId, workflow, count }}
 							{@const filterable = filterableData.get(workflowId)}
@@ -389,7 +390,7 @@
 			<!-- Markers grouped by Category -->
 			{#if markersByCategory.length > 0}
 				<div>
-					<h4 class="mb-3 text-sm font-medium">Markers</h4>
+					<h4 class="mb-3 text-sm font-medium">{m.participantFilterSheetMarkers?.() ?? 'Markers'}</h4>
 					<div class="space-y-2">
 						{#each markersByCategory as { categoryId, category, count }}
 							<div class="flex items-center justify-between rounded-lg border p-3">
@@ -416,7 +417,7 @@
 
 			{#if instancesByWorkflow.length === 0 && markersByCategory.length === 0}
 				<div class="py-8 text-center text-sm text-muted-foreground">
-					No map content available
+					{m.participantFilterSheetNoContent?.() ?? 'No map content available'}
 				</div>
 			{/if}
 
@@ -425,9 +426,9 @@
 			<div class="space-y-3 rounded-lg border p-3">
 				<div class="flex items-center justify-between">
 					<div class="min-w-0 flex-1 pr-3">
-						<div class="text-sm font-medium">Uncluster</div>
+						<div class="text-sm font-medium">{m.participantFilterSheetUncluster?.() ?? 'Uncluster'}</div>
 						<div class="text-xs text-muted-foreground">
-							Show individual markers in the current view
+							{m.participantFilterSheetUnclusterDescription?.() ?? 'Show individual markers in the current view'}
 						</div>
 					</div>
 					<Switch
@@ -438,7 +439,7 @@
 
 				{#if uncluster}
 					<div class="flex items-center justify-between gap-3">
-						<label for="uncluster-cap" class="text-xs font-medium">Up to</label>
+						<label for="uncluster-cap" class="text-xs font-medium">{m.participantFilterSheetUpTo?.() ?? 'Up to'}</label>
 						<Input
 							id="uncluster-cap"
 							type="number"
@@ -452,9 +453,9 @@
 					{#if unclusterStats && unclusterStats.total > 0}
 						<div class="text-xs text-muted-foreground">
 							{#if unclusterStats.rendered > 0}
-								Showing {unclusterStats.total} individually
+								{(m.participantFilterSheetShowingIndividually?.({ count: unclusterStats.total }) ?? `Showing ${unclusterStats.total} individually`)}
 							{:else}
-								{unclusterStats.total} in view — too many, still clustered
+								{(m.participantFilterSheetTooManyClustered?.({ count: unclusterStats.total }) ?? `${unclusterStats.total} in view — too many, still clustered`)}
 							{/if}
 						</div>
 					{/if}

@@ -7,6 +7,7 @@
 	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 	import { page } from '$app/stores';
 	import { getPocketBase } from '$lib/pocketbase';
+	import * as m from '$lib/paraglide/messages';
 
 	import type { EntitySourceType, EntitySelectorOptions } from '$lib/workflow-builder';
 
@@ -232,30 +233,30 @@
 	// ==========================================================================
 	const sourceTypeLabel = $derived(
 		{
-			custom_table: 'Custom Table',
-			marker_category: 'Markers',
-			participants: 'Participants',
-			roles: 'Roles'
+			custom_table: (m.formEditorEntitySelectorModalSourceCustomTable?.() ?? 'Custom Table'),
+			marker_category: (m.formEditorEntitySelectorModalSourceMarkers?.() ?? 'Markers'),
+			participants: (m.formEditorEntitySelectorModalSourceParticipants?.() ?? 'Participants'),
+			roles: (m.formEditorEntitySelectorModalSourceRoles?.() ?? 'Roles')
 		}[localOptions.source_type]
 	);
 
-	const entityName = $derived(localOptions.source_type === 'participants' ? 'participants' : 'roles');
+	const entityName = $derived(localOptions.source_type === 'participants' ? (m.formEditorEntitySelectorModalEntityParticipants?.() ?? 'participants') : (m.formEditorEntitySelectorModalEntityRoles?.() ?? 'roles'));
 	const selfText = $derived(
-		localOptions.source_type === 'participants' ? 'themselves' : 'their own role'
+		localOptions.source_type === 'participants' ? (m.formEditorEntitySelectorModalSelfTextParticipants?.() ?? 'themselves') : (m.formEditorEntitySelectorModalSelfTextRoles?.() ?? 'their own role')
 	);
 </script>
 
 <Dialog.Root bind:open onOpenChange={handleOpenChange}>
 	<Dialog.Content class="entity-selector-modal" interactOutsideBehavior="ignore" onFocusOutside={(e) => e.preventDefault()}>
 		<Dialog.Header>
-			<Dialog.Title>Configure {sourceTypeLabel} Selector</Dialog.Title>
+			<Dialog.Title>{m.formEditorEntitySelectorModalTitle?.() ?? 'Configure'} {sourceTypeLabel} {m.formEditorEntitySelectorModalTitleSuffix?.() ?? 'Selector'}</Dialog.Title>
 			<Dialog.Description>
 				{#if localOptions.source_type === 'custom_table'}
-					Select which table and field to display.
+					{m.formEditorEntitySelectorModalDescCustomTable?.() ?? 'Select which table and field to display.'}
 				{:else if localOptions.source_type === 'marker_category'}
-					Select which marker category to use.
+					{m.formEditorEntitySelectorModalDescMarkerCategory?.() ?? 'Select which marker category to use.'}
 				{:else}
-					Configure which roles can select {selfText} vs any {entityName}.
+					{m.formEditorEntitySelectorModalDescRolesParticipants?.({ selfText, entityName }) ?? `Configure which roles can select ${selfText} vs any ${entityName}.`}
 				{/if}
 			</Dialog.Description>
 		</Dialog.Header>
@@ -264,8 +265,8 @@
 			<!-- Allow Multiple Toggle (always shown) -->
 			<div class="config-row">
 				<div class="config-row-text">
-					<Label>Allow Multiple Selections</Label>
-					<p class="config-hint">Users can select more than one item.</p>
+					<Label>{m.formEditorEntitySelectorModalAllowMultipleLabel?.() ?? 'Allow Multiple Selections'}</Label>
+					<p class="config-hint">{m.formEditorEntitySelectorModalAllowMultipleHint?.() ?? 'Users can select more than one item.'}</p>
 				</div>
 				<Switch
 					checked={localOptions.allow_multiple ?? false}
@@ -276,7 +277,7 @@
 			<!-- Custom Table Configuration -->
 			{#if localOptions.source_type === 'custom_table'}
 				<div class="config-section">
-					<Label>Custom Table</Label>
+					<Label>{m.formEditorEntitySelectorModalCustomTableLabel?.() ?? 'Custom Table'}</Label>
 					<MobileMultiSelect
 						options={customTables}
 						getOptionId={(t) => t.id}
@@ -284,15 +285,15 @@
 						getOptionDescription={(t) => t.description}
 						singleSelect={true}
 						bind:selectedIds={selectedTableIds}
-						placeholder="Select a table..."
+						placeholder={m.formEditorEntitySelectorModalSelectTablePlaceholder?.() ?? 'Select a table...'}
 						disablePortal
 					/>
 				</div>
 
 				{#if selectedTableIds.length > 0}
 					<div class="config-section">
-						<Label>Display Field</Label>
-						<p class="config-hint">Which column to show as the option label.</p>
+						<Label>{m.formEditorEntitySelectorModalDisplayFieldLabel?.() ?? 'Display Field'}</Label>
+						<p class="config-hint">{m.formEditorEntitySelectorModalDisplayFieldHint?.() ?? 'Which column to show as the option label.'}</p>
 						<MobileMultiSelect
 							options={tableColumns}
 							getOptionId={(c) => c.column_name}
@@ -300,7 +301,7 @@
 							getOptionDescription={(c) => c.column_type}
 							singleSelect={true}
 							bind:selectedIds={selectedColumnIds}
-							placeholder="Select a column..."
+							placeholder={m.formEditorEntitySelectorModalSelectColumnPlaceholder?.() ?? 'Select a column...'}
 							disablePortal
 						/>
 					</div>
@@ -310,7 +311,7 @@
 			<!-- Marker Category Configuration -->
 			{#if localOptions.source_type === 'marker_category'}
 				<div class="config-section">
-					<Label>Marker Category</Label>
+					<Label>{m.formEditorEntitySelectorModalMarkerCategoryLabel?.() ?? 'Marker Category'}</Label>
 					<MobileMultiSelect
 						options={markerCategories}
 						getOptionId={(c) => c.id}
@@ -318,7 +319,7 @@
 						getOptionDescription={(c) => c.description}
 						singleSelect={true}
 						bind:selectedIds={selectedCategoryIds}
-						placeholder="Select a category..."
+						placeholder={m.formEditorEntitySelectorModalSelectCategoryPlaceholder?.() ?? 'Select a category...'}
 						disablePortal
 					/>
 				</div>
@@ -327,29 +328,29 @@
 			<!-- Participants/Roles Configuration -->
 			{#if localOptions.source_type === 'participants' || localOptions.source_type === 'roles'}
 				<div class="config-section">
-					<Label>Self-Select Only</Label>
-					<p class="config-hint">These roles can only select {selfText}.</p>
+					<Label>{m.formEditorEntitySelectorModalSelfSelectLabel?.() ?? 'Self-Select Only'}</Label>
+					<p class="config-hint">{m.formEditorEntitySelectorModalSelfSelectHint?.({ selfText }) ?? `These roles can only select ${selfText}.`}</p>
 					<MobileMultiSelect
 						options={roles}
 						getOptionId={(r) => r.id}
 						getOptionLabel={(r) => r.name}
 						getOptionDescription={(r) => r.description}
 						bind:selectedIds={selfSelectRoleIds}
-						placeholder="Select roles..."
+						placeholder={m.formEditorEntitySelectorModalSelectRolesPlaceholder?.() ?? 'Select roles...'}
 						disablePortal
 					/>
 				</div>
 
 				<div class="config-section">
-					<Label>Can Select Anyone</Label>
-					<p class="config-hint">These roles can select any {entityName} from the project.</p>
+					<Label>{m.formEditorEntitySelectorModalAnySelectLabel?.() ?? 'Can Select Anyone'}</Label>
+					<p class="config-hint">{m.formEditorEntitySelectorModalAnySelectHint?.({ entityName }) ?? `These roles can select any ${entityName} from the project.`}</p>
 					<MobileMultiSelect
 						options={roles}
 						getOptionId={(r) => r.id}
 						getOptionLabel={(r) => r.name}
 						getOptionDescription={(r) => r.description}
 						bind:selectedIds={anySelectRoleIds}
-						placeholder="Select roles..."
+						placeholder={m.formEditorEntitySelectorModalSelectRolesPlaceholder?.() ?? 'Select roles...'}
 						disablePortal
 					/>
 				</div>
@@ -357,7 +358,7 @@
 		</div>
 
 		<Dialog.Footer>
-			<Button onclick={handleDone}>Done</Button>
+			<Button onclick={handleDone}>{m.formEditorEntitySelectorModalDoneButton?.() ?? 'Done'}</Button>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>

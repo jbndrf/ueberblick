@@ -2,6 +2,7 @@
 	import { setLocale, getLocale } from '$lib/paraglide/runtime';
 	import { Button } from '$lib/components/ui/button';
 	import { Languages } from 'lucide-svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	let currentLocale = $state(getLocale());
 
@@ -14,7 +15,7 @@
 <div class="flex items-center justify-between">
 	<div class="flex items-center gap-2 text-sm">
 		<Languages class="h-4 w-4" />
-		<span>Language</span>
+		<span>{m.languageSelectorInlineLabel?.() ?? 'Language'}</span>
 	</div>
 	<div class="flex gap-1">
 		<Button
@@ -22,14 +23,14 @@
 			size="sm"
 			onclick={() => handleLocaleChange('en')}
 		>
-			EN
+			{m.languageSelectorInlineButtonEn?.() ?? 'EN'}
 		</Button>
 		<Button
 			variant={currentLocale === 'de' ? 'default' : 'outline'}
 			size="sm"
 			onclick={() => handleLocaleChange('de')}
 		>
-			DE
+			{m.languageSelectorInlineButtonDe?.() ?? 'DE'}
 		</Button>
 	</div>
 </div>

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { ChevronDown } from 'lucide-svelte';
 	import type { Snippet } from 'svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	type Props = {
 		title: string;
@@ -15,7 +16,7 @@
 
 <div class="tool-section border-b border-border">
 	<button class="tool-section-header bg-muted hover:bg-accent border-b border-border" onclick={() => (isOpen = !isOpen)}>
-		<span class="tool-section-title text-muted-foreground">{title}</span>
+		<span class="tool-section-title text-muted-foreground">{m.workflowBuilderToolSectionTitle?.() ?? title}</span>
 		<ChevronDown class="tool-section-chevron text-muted-foreground {!isOpen ? 'rotated' : ''}" />
 	</button>
 

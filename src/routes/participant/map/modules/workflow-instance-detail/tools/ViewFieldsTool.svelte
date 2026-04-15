@@ -6,6 +6,7 @@
 	 * Used within the workflow instance detail module's Details tab.
 	 */
 	import { FormRenderer, type FormFieldWithValue } from '$lib/components/form-renderer';
+	import * as m from '$lib/paraglide/messages';
 
 	// ==========================================================================
 	// Props
@@ -55,6 +56,6 @@
 	</div>
 {:else}
 	<div class="text-center py-8 text-muted-foreground">
-		<p class="text-sm">No data collected</p>
+		<p class="text-sm">{m.participantViewFieldsToolNoData?.() ?? 'No data collected'}</p>
 	</div>
 {/if}

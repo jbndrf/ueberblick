@@ -1,4 +1,5 @@
 <script lang="ts">
+	import * as m from '$lib/paraglide/messages';
 	import FieldRenderer from './FieldRenderer.svelte';
 	import {
 		type FormMode,

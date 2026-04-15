@@ -2,6 +2,7 @@
 	import { Play, Square, CircleStop } from 'lucide-svelte';
 	import type { SelectionContext } from '../context';
 	import { ToolPicker } from '$lib/workflow-builder/components';
+	import * as m from '$lib/paraglide/messages';
 
 	type Props = {
 		context: Extract<SelectionContext, { type: 'stage' }>;
@@ -25,7 +26,7 @@
 		{/if}
 		<div class="panel-header-text">
 			<span class="panel-header-title text-foreground">{context.stage.data.title}</span>
-			<span class="panel-header-subtitle text-muted-foreground">{context.stage.data.stageType} stage</span>
+			<span class="panel-header-subtitle text-muted-foreground">{context.stage.data.stageType} {(m.workflowBuilderStagePanelStage?.() ?? 'stage')}</span>
 		</div>
 	</div>
 

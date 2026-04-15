@@ -4,9 +4,10 @@ import { z } from 'zod';
 import { superValidate } from 'sveltekit-superforms';
 import { zod } from 'sveltekit-superforms/adapters';
 import { normalizeRecords } from '$lib/server/pocketbase-helpers';
+import * as m from '$lib/paraglide/messages';
 
 const markerCategorySchema = z.object({
-	name: z.string().min(1, 'Category name is required'),
+	name: z.string().min(1, m.markerCategoriesServerNameRequired?.() ?? 'Category name is required'),
 	description: z.string().optional()
 });
 
@@ -40,7 +41,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 		};
 	} catch (err) {
 		console.error('Error fetching marker categories:', err);
-		throw error(500, 'Failed to load marker categories');
+		throw error(500, m.markerCategoriesServerFailedLoad?.() ?? 'Failed to load marker categories');
 	}
 };
 
@@ -68,7 +69,7 @@ export const actions: Actions = {
 			console.error('Error creating marker category:', err);
 			return fail(500, {
 				form,
-				message: 'Failed to create marker category'
+				message: m.markerCategoriesServerFailedCreate?.() ?? 'Failed to create marker category'
 			});
 		}
 	},
@@ -94,7 +95,7 @@ export const actions: Actions = {
 			console.error('Error updating marker category:', err);
 			return fail(500, {
 				form,
-				message: 'Failed to update marker category'
+				message: m.markerCategoriesServerFailedUpdate?.() ?? 'Failed to update marker category'
 			});
 		}
 	},
@@ -106,17 +107,17 @@ export const actions: Actions = {
 		const value = formData.get('value') as string;
 
 		if (!categoryId || !field) {
-			return fail(400, { message: 'Category ID and field are required' });
+			return fail(400, { message: m.markerCategoriesServerCategoryFieldRequired?.() ?? 'Category ID and field are required' });
 		}
 
 		// Validate allowed fields
 		if (!['name', 'description'].includes(field)) {
-			return fail(400, { message: 'Invalid field' });
+			return fail(400, { message: m.markerCategoriesServerInvalidField?.() ?? 'Invalid field' });
 		}
 
 		// Basic validation based on field
 		if (field === 'name' && (!value || value.trim().length < 1)) {
-			return fail(400, { message: 'Category name is required' });
+			return fail(400, { message: m.markerCategoriesServerNameRequired?.() ?? 'Category name is required' });
 		}
 
 		const updateData: Record<string, string | null> = {
@@ -128,7 +129,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating marker category field:', err);
-			return fail(500, { message: 'Failed to update marker category' });
+			return fail(500, { message: m.markerCategoriesServerFailedUpdate?.() ?? 'Failed to update marker category' });
 		}
 	},
 
@@ -137,7 +138,7 @@ export const actions: Actions = {
 		const categoryId = formData.get('id') as string;
 
 		if (!categoryId) {
-			return fail(400, { message: 'Category ID is required' });
+			return fail(400, { message: m.markerCategoriesServerCategoryRequired?.() ?? 'Category ID is required' });
 		}
 
 		try {
@@ -148,7 +149,7 @@ export const actions: Actions = {
 
 			if (markers && markers.items.length > 0) {
 				return fail(400, {
-					message: 'Cannot delete category with existing markers. Please delete or reassign markers first.'
+					message: m.markerCategoriesServerCannotDeleteWithMarkers?.() ?? 'Cannot delete category with existing markers. Please delete or reassign markers first.'
 				});
 			}
 
@@ -157,7 +158,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error deleting marker category:', err);
-			return fail(500, { message: 'Failed to delete marker category' });
+			return fail(500, { message: m.markerCategoriesServerFailedDelete?.() ?? 'Failed to delete marker category' });
 		}
 	},
 
@@ -167,14 +168,14 @@ export const actions: Actions = {
 		const iconConfigJson = formData.get('iconConfig') as string;
 
 		if (!categoryId || !iconConfigJson) {
-			return fail(400, { message: 'Category ID and icon config are required' });
+			return fail(400, { message: m.markerCategoriesServerIconConfigRequired?.() ?? 'Category ID and icon config are required' });
 		}
 
 		let iconConfig;
 		try {
 			iconConfig = JSON.parse(iconConfigJson);
 		} catch (e) {
-			return fail(400, { message: 'Invalid icon config JSON' });
+			return fail(400, { message: m.markerCategoriesServerInvalidIconJson?.() ?? 'Invalid icon config JSON' });
 		}
 
 		try {
@@ -185,7 +186,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating icon config:', err);
-			return fail(500, { message: 'Failed to update icon config' });
+			return fail(500, { message: m.markerCategoriesServerFailedUpdateIcon?.() ?? 'Failed to update icon config' });
 		}
 	},
 
@@ -196,14 +197,14 @@ export const actions: Actions = {
 		const roleIdsJson = formData.get('roleIds') as string;
 
 		if (!categoryId) {
-			return fail(400, { message: 'Category ID is required' });
+			return fail(400, { message: m.markerCategoriesServerCategoryRequired?.() ?? 'Category ID is required' });
 		}
 
 		let roleIds: string[] = [];
 		try {
 			roleIds = JSON.parse(roleIdsJson);
 		} catch (error) {
-			return fail(400, { message: 'Invalid role IDs format' });
+			return fail(400, { message: m.markerCategoriesServerInvalidRoleFormat?.() ?? 'Invalid role IDs format' });
 		}
 
 		try {
@@ -214,7 +215,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating category roles:', err);
-			return fail(500, { message: 'Failed to update category roles' });
+			return fail(500, { message: m.markerCategoriesServerFailedUpdateRoles?.() ?? 'Failed to update category roles' });
 		}
 	},
 
@@ -224,14 +225,14 @@ export const actions: Actions = {
 		const roleIdsJson = formData.get('roleIds') as string;
 
 		if (!categoryId) {
-			return fail(400, { message: 'Category ID is required' });
+			return fail(400, { message: m.markerCategoriesServerCategoryRequired?.() ?? 'Category ID is required' });
 		}
 
 		let roleIds: string[] = [];
 		try {
 			roleIds = JSON.parse(roleIdsJson || '[]');
 		} catch (e) {
-			return fail(400, { message: 'Invalid role IDs format' });
+			return fail(400, { message: m.markerCategoriesServerInvalidRoleFormat?.() ?? 'Invalid role IDs format' });
 		}
 
 		try {
@@ -242,7 +243,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating marker category roles:', err);
-			return fail(500, { message: 'Failed to update roles' });
+			return fail(500, { message: m.markerCategoriesServerFailedUpdateRoles?.() ?? 'Failed to update roles' });
 		}
 	},
 
@@ -252,7 +253,7 @@ export const actions: Actions = {
 		const name = formData.get('name') as string;
 
 		if (!name) {
-			return fail(400, { message: 'Role name is required' });
+			return fail(400, { message: m.markerCategoriesServerRoleNameRequired?.() ?? 'Role name is required' });
 		}
 
 		try {
@@ -265,7 +266,7 @@ export const actions: Actions = {
 			return { success: true, entity: newRole };
 		} catch (error) {
 			console.error('Error creating role:', error);
-			return fail(500, { message: 'Failed to create role' });
+			return fail(500, { message: m.markerCategoriesServerFailedCreateRole?.() ?? 'Failed to create role' });
 		}
 	}
 };

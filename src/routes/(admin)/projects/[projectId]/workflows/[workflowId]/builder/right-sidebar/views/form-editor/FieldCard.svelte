@@ -3,6 +3,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Type } from 'lucide-svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	import { fieldTypeIcons, type ToolsFormField } from '$lib/workflow-builder';
 
@@ -149,7 +150,7 @@
 		onclick={(e) => e.stopPropagation()}
 		role="button"
 		tabindex="0"
-		aria-label="Drag to reorder"
+		aria-label={m.formEditorFieldCardDragToReorder?.() ?? 'Drag to reorder'}
 	>
 		<GripVertical class="h-4 w-4" />
 	</div>
@@ -183,13 +184,13 @@
 		{#if field.field_type === 'short_text' || field.field_type === 'email'}
 			<Input
 				disabled
-				placeholder={field.placeholder || 'Enter text...'}
+				placeholder={field.placeholder || (m.formEditorFieldCardEnterText?.() ?? 'Enter text...')}
 				class="preview-input"
 			/>
 		{:else if field.field_type === 'long_text'}
 			<Textarea
 				disabled
-				placeholder={field.placeholder || 'Enter text...'}
+				placeholder={field.placeholder || (m.formEditorFieldCardEnterText?.() ?? 'Enter text...')}
 				rows={3}
 				class="preview-textarea"
 			/>
@@ -197,7 +198,7 @@
 			<Input
 				type="number"
 				disabled
-				placeholder={field.placeholder || '0'}
+				placeholder={field.placeholder || (m.formEditorFieldCardNumberPlaceholder?.() ?? '0')}
 				class="preview-input"
 			/>
 		{:else if field.field_type === 'date'}
@@ -209,22 +210,22 @@
 		{:else if field.field_type === 'file'}
 			<div class="file-upload-preview">
 				<Upload class="h-4 w-4" />
-				<span>Choose file...</span>
+				<span>{m.formEditorFieldCardChooseFile?.() ?? 'Choose file...'}</span>
 			</div>
 		{:else if field.field_type === 'dropdown' || field.field_type === 'smart_dropdown'}
 			<div class="select-preview">
-				<span class="select-placeholder">{field.placeholder || 'Select...'}</span>
+				<span class="select-placeholder">{field.placeholder || (m.formEditorFieldCardSelectPlaceholder?.() ?? 'Select...')}</span>
 				<ChevronDown class="h-4 w-4" />
 			</div>
 		{:else if field.field_type === 'multiple_choice'}
 			<div class="multiple-choice-preview">
 				<div class="choice-option">
 					<div class="checkbox-preview"></div>
-					<span>Option 1</span>
+					<span>{m.formEditorFieldCardOption1?.() ?? 'Option 1'}</span>
 				</div>
 				<div class="choice-option">
 					<div class="checkbox-preview"></div>
-					<span>Option 2</span>
+					<span>{m.formEditorFieldCardOption2?.() ?? 'Option 2'}</span>
 				</div>
 			</div>
 		{/if}
@@ -238,12 +239,12 @@
 	<!-- Field type and status indicators -->
 	<div class="field-badges">
 		{#if hasValidation}
-			<div class="indicator-badge validation" title="Has validation rules">
+			<div class="indicator-badge validation" title={m.formEditorFieldCardHasValidationRules?.() ?? 'Has validation rules'}>
 				<Shield class="h-2.5 w-2.5" />
 			</div>
 		{/if}
 		{#if hasConditionalLogic}
-			<div class="indicator-badge conditional" title="Has conditional logic">
+			<div class="indicator-badge conditional" title={m.formEditorFieldCardHasConditionalLogic?.() ?? 'Has conditional logic'}>
 				<GitBranch class="h-2.5 w-2.5" />
 			</div>
 		{/if}

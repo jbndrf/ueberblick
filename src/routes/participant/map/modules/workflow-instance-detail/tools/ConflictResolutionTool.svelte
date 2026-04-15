@@ -3,6 +3,7 @@
 	import { AlertTriangle, Check, RotateCcw } from 'lucide-svelte';
 	import type { SyncConflict } from '$lib/participant-state/db';
 	import { getChangedFields } from '../conflict-diff';
+	import * as m from '$lib/paraglide/messages';
 
 	// ==========================================================================
 	// Props
@@ -113,14 +114,14 @@
 	<div class="flex items-center gap-2 text-amber-600 dark:text-amber-400">
 		<AlertTriangle class="h-5 w-5 flex-shrink-0" />
 		<p class="text-sm font-medium">
-			{conflicts.length === 1
-				? 'One of your changes was overridden by a newer server version.'
-				: `${conflicts.length} of your changes were overridden by newer server versions.`}
+			{(conflicts.length === 1
+				? m.participantConflictResolutionSingleOverride?.()
+				: m.participantConflictResolutionMultipleOverride?.({ count: conflicts.length })) ?? (conflicts.length === 1 ? 'One of your changes was overridden by a newer server version.' : `${conflicts.length} of your changes were overridden by newer server versions.`)}
 		</p>
 	</div>
 
 	<p class="text-xs text-muted-foreground">
-		For each field, choose whether to keep the current server value or re-apply your original value.
+		{m.participantConflictResolutionDescription?.() ?? 'For each field, choose whether to keep the current server value or re-apply your original value.'}
 	</p>
 
 	<!-- Conflict List -->
@@ -153,7 +154,7 @@
 								>
 									<div class="mb-1 flex items-center gap-1 text-xs text-muted-foreground">
 										{#if !isLocal}<Check class="h-3 w-3 text-green-600" />{/if}
-										Current value
+										{m.participantConflictResolutionCurrentValue?.() ?? 'Current value'}
 									</div>
 									<div class="text-xs break-all">{formatValue(field.serverValue)}</div>
 								</button>
@@ -169,7 +170,7 @@
 								>
 									<div class="mb-1 flex items-center gap-1 text-xs text-muted-foreground">
 										{#if isLocal}<RotateCcw class="h-3 w-3 text-blue-600" />{/if}
-										Your value
+										{m.participantConflictResolutionYourValue?.() ?? 'Your value'}
 									</div>
 									<div class="text-xs break-all">{formatValue(field.localValue)}</div>
 								</button>
@@ -184,13 +185,13 @@
 	<!-- Action Buttons -->
 	<div class="sticky bottom-0 flex gap-2 bg-background pt-2">
 		<Button variant="outline" class="flex-1" onclick={onCancel} disabled={isSubmitting}>
-			Cancel
+			{m.commonCancel?.() ?? 'Cancel'}
 		</Button>
 		<Button class="flex-1" onclick={handleApply} disabled={isSubmitting}>
 			{#if isSubmitting}
-				Applying...
+				{m.participantConflictResolutionApplying?.() ?? 'Applying...'}
 			{:else}
-				Apply
+				{m.participantConflictResolutionApply?.() ?? 'Apply'}
 			{/if}
 		</Button>
 	</div>

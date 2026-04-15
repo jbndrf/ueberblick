@@ -172,7 +172,7 @@
 		if (result.type === 'success') {
 			await invalidateAll();
 		} else {
-			toast.error('Failed to update');
+			toast.error(m.customTableDetailUpdateError?.() ?? 'Failed to update');
 		}
 	}
 </script>
@@ -210,7 +210,7 @@
 		enableShiftSelect={true}
 		showToolbar={true}
 		showEditMode={true}
-		editModeLabel="Edit mode"
+		editModeLabel={m.customTableDetailEditMode?.() ?? 'Edit mode'}
 		emptyMessage={m.customTableEditNoData()}
 		rowActions={{
 			header: m.rolesActions(),

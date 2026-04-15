@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { GripVertical } from 'lucide-svelte';
+	import * as m from '$lib/paraglide/messages';
 	import type { AutomationStep } from '$lib/workflow-builder';
 
 	type Props = {
@@ -35,7 +36,7 @@
 		if (actionCount > 0) {
 			parts.push(`${actionCount} action${actionCount !== 1 ? 's' : ''}`);
 		}
-		return parts.length > 0 ? parts.join(', ') : 'No conditions or actions';
+		return parts.length > 0 ? parts.join(', ') : (m.automationStepCardNoConditionsOrActions?.() ?? 'No conditions or actions');
 	}
 </script>
 

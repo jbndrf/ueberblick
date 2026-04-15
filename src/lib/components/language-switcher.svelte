@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { setLocale, getLocale } from '$lib/paraglide/runtime';
+	import * as m from '$lib/paraglide/messages';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { Button } from '$lib/components/ui/button';
 	import { Languages, Check } from 'lucide-svelte';
@@ -7,8 +8,8 @@
 	let currentLocale = $state(getLocale());
 
 	const languageOptions = [
-		{ value: 'en', label: 'English' },
-		{ value: 'de', label: 'Deutsch' }
+		{ value: 'en', label: m.languageSwitcherEnglish?.() ?? 'English' },
+		{ value: 'de', label: m.languageSwitcherDeutsch?.() ?? 'Deutsch' }
 	] as const;
 
 	function handleLocaleChange(value: string) {
@@ -17,7 +18,7 @@
 	}
 
 	const currentLabel = $derived(
-		languageOptions.find((l) => l.value === currentLocale)?.label || 'English'
+		languageOptions.find((l) => l.value === currentLocale)?.label || (m.languageSwitcherEnglish?.() ?? 'English')
 	);
 </script>
 

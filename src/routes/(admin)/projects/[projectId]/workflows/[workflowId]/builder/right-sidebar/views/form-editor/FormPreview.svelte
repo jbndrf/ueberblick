@@ -2,6 +2,7 @@
 	import { flip } from 'svelte/animate';
 	import { tick } from 'svelte';
 	import { Plus, X, Pencil, Check, AlignLeft, AlignRight, Maximize2 } from 'lucide-svelte';
+	import * as m from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import FieldCard from './FieldCard.svelte';
@@ -61,7 +62,7 @@
 		const titles: Record<number, string> = {};
 		for (const page of pages) {
 			const firstField = fields.find((f) => (f.data.page ?? 1) === page);
-			titles[page] = firstField?.data.page_title || `Page ${page}`;
+			titles[page] = firstField?.data.page_title || (m.formEditorPreviewPageFallback?.({ page }) ?? `Page ${page}`);
 		}
 		return titles;
 	});
@@ -371,7 +372,7 @@
 
 	function startEditingTitle(page: number) {
 		editingPageTitle = page;
-		editingTitleValue = pageTitles[page] || `Page ${page}`;
+		editingTitleValue = pageTitles[page] || (m.formEditorPreviewPageFallback?.({ page }) ?? `Page ${page}`);
 	}
 
 	function savePageTitle() {
@@ -414,7 +415,7 @@
 {#snippet dropZoneCell(mode: 'new-field' | 'reorder', rowIndex: number, type: 'new-row' | 'between-row', pos: CellPosition, small: boolean = false)}
 	{@const isActive = mode === 'new-field' ? isNewFieldCellActive(rowIndex, type, pos) : isReorderCellActive(rowIndex, getColPosFromCell(pos))}
 	{@const Icon = CELL_ICONS[pos]}
-	{@const previewText = mode === 'new-field' ? 'New field' : 'Move here'}
+	{@const previewText = mode === 'new-field' ? (m.formEditorPreviewNewField?.() ?? 'New field') : (m.formEditorPreviewMoveHere?.() ?? 'Move here')}
 	<div
 		class="drop-zone-cell"
 		class:active={isActive}
@@ -469,7 +470,7 @@
 		? (hoverTarget?.type === 'empty-side' && hoverTarget?.rowIndex === rowIndex && hoverTarget?.position === side)
 		: (reorderTarget?.rowIndex === rowIndex && reorderTarget?.position === side)}
 	{@const Icon = side === 'left' ? AlignLeft : AlignRight}
-	{@const previewText = mode === 'new-field' ? 'New field' : 'Move here'}
+	{@const previewText = mode === 'new-field' ? (m.formEditorPreviewNewField?.() ?? 'New field') : (m.formEditorPreviewMoveHere?.() ?? 'Move here')}
 	<div
 		class="empty-side-indicator"
 		class:reorder-zone={mode === 'reorder'}
@@ -509,7 +510,7 @@
 	ondragleave={handleFormDragLeave}
 	ondrop={handleFormDrop}
 	role="region"
-	aria-label="Form preview"
+	aria-label={m.formEditorPreviewAriaLabel?.() ?? 'Form preview'}
 >
 	<!-- Page Tabs -->
 	{#if pages.length > 1 || fields.length > 0}
@@ -570,8 +571,8 @@
 				<div class="empty-icon">
 					<Plus class="h-8 w-8" />
 				</div>
-				<p class="empty-title">No fields yet</p>
-				<p class="empty-desc">Drag fields from the palette to add</p>
+				<p class="empty-title">{m.formEditorPreviewNoFieldsYet?.() ?? 'No fields yet'}</p>
+				<p class="empty-desc">{m.formEditorPreviewDragToAdd?.() ?? 'Drag fields from the palette to add'}</p>
 			</div>
 		{:else if currentPageFields.length === 0 && isDraggingFieldType}
 			<!-- Empty form - show new row indicator with preview -->
@@ -615,13 +616,13 @@
 						<!-- Preview field on left when squeezing existing field right (new field) -->
 						{#if hoverTarget?.type === 'existing-row' && hoverTarget?.rowIndex === row.rowIndex && hoverTarget?.position === 'left'}
 							<div class="field-wrapper preview-field" data-position="left">
-								<div class="preview-placeholder">New field</div>
+								<div class="preview-placeholder">{m.formEditorPreviewNewField?.() ?? 'New field'}</div>
 							</div>
 						{/if}
 						<!-- Preview field on left when reordering (squeeze) -->
 						{#if reorderTarget?.squeezeFieldId && reorderTarget?.rowIndex === row.rowIndex && reorderTarget?.position === 'left'}
 							<div class="field-wrapper preview-field reorder-preview" data-position="left">
-								<div class="preview-placeholder">Move here</div>
+								<div class="preview-placeholder">{m.formEditorPreviewMoveHere?.() ?? 'Move here'}</div>
 							</div>
 						{/if}
 
@@ -637,7 +638,7 @@
 								tabindex="-1"
 							>
 								{#if hoverTarget?.type === 'empty-side' && hoverTarget?.rowIndex === row.rowIndex && hoverTarget?.position === 'left'}
-									<div class="preview-placeholder">New field</div>
+									<div class="preview-placeholder">{m.formEditorPreviewNewField?.() ?? 'New field'}</div>
 								{:else}
 									<AlignLeft class="zone-icon" />
 								{/if}
@@ -655,7 +656,7 @@
 								tabindex="-1"
 							>
 								{#if reorderTarget?.rowIndex === row.rowIndex && reorderTarget?.position === 'left'}
-									<div class="preview-placeholder">Move here</div>
+									<div class="preview-placeholder">{m.formEditorPreviewMoveHere?.() ?? 'Move here'}</div>
 								{:else}
 									<AlignLeft class="zone-icon" />
 								{/if}
@@ -689,13 +690,13 @@
 						<!-- Preview field on right when squeezing existing field left (new field) -->
 						{#if hoverTarget?.type === 'existing-row' && hoverTarget?.rowIndex === row.rowIndex && hoverTarget?.position === 'right'}
 							<div class="field-wrapper preview-field" data-position="right">
-								<div class="preview-placeholder">New field</div>
+								<div class="preview-placeholder">{m.formEditorPreviewNewField?.() ?? 'New field'}</div>
 							</div>
 						{/if}
 						<!-- Preview field on right when reordering (squeeze) -->
 						{#if reorderTarget?.squeezeFieldId && reorderTarget?.rowIndex === row.rowIndex && reorderTarget?.position === 'right'}
 							<div class="field-wrapper preview-field reorder-preview" data-position="right">
-								<div class="preview-placeholder">Move here</div>
+								<div class="preview-placeholder">{m.formEditorPreviewMoveHere?.() ?? 'Move here'}</div>
 							</div>
 						{/if}
 
@@ -711,7 +712,7 @@
 								tabindex="-1"
 							>
 								{#if hoverTarget?.type === 'empty-side' && hoverTarget?.rowIndex === row.rowIndex && hoverTarget?.position === 'right'}
-									<div class="preview-placeholder">New field</div>
+									<div class="preview-placeholder">{m.formEditorPreviewNewField?.() ?? 'New field'}</div>
 								{:else}
 									<AlignRight class="zone-icon" />
 								{/if}
@@ -729,7 +730,7 @@
 								tabindex="-1"
 							>
 								{#if reorderTarget?.rowIndex === row.rowIndex && reorderTarget?.position === 'right'}
-									<div class="preview-placeholder">Move here</div>
+									<div class="preview-placeholder">{m.formEditorPreviewMoveHere?.() ?? 'Move here'}</div>
 								{:else}
 									<AlignRight class="zone-icon" />
 								{/if}

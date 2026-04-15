@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { ChevronLeft, ChevronRight } from 'lucide-svelte';
+	import * as m from '$lib/paraglide/messages';
 	import type { Edge } from '@xyflow/svelte';
 	import type { WorkflowStage, ToolsForm, ToolsEdit, VisualConfig } from '$lib/workflow-builder';
 	import type { StageAction, TimelineStage, Role, ConfigPanelMode, IncomingFormGroup } from './types';
@@ -163,7 +164,7 @@
 	<!-- Left Panel (config, expandable) -->
 	<div class="left-panel" class:wide={isPanelOpen}>
 		<!-- Toggle button -->
-		<button class="palette-toggle" onclick={handleTogglePanel} title={isPanelOpen ? 'Collapse panel' : 'Select a button to configure'}>
+		<button class="palette-toggle" onclick={handleTogglePanel} title={isPanelOpen ? (m.stagePreviewViewCollapsePanel?.() ?? 'Collapse panel') : (m.stagePreviewViewSelectButton?.() ?? 'Select a button to configure')}>
 			{#if isPanelOpen}
 				<ChevronLeft class="w-3 h-3" />
 			{:else}

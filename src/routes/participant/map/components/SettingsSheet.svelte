@@ -43,6 +43,7 @@
 	import ThemeToggleInline from '$lib/components/theme-toggle-inline.svelte';
 	import FontSizeInline from '$lib/components/font-size-inline.svelte';
 	import LanguageSelectorInline from '$lib/components/language-selector-inline.svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	interface Props {
 		open: boolean;
@@ -242,22 +243,22 @@
 <Sheet.Root bind:open>
 	<Sheet.ContentNoOverlay side="right" class="w-80">
 		<Sheet.Header>
-			<Sheet.Title>Settings</Sheet.Title>
+			<Sheet.Title>{m.participantSettingsSheetTitle?.() ?? 'Settings'}</Sheet.Title>
 		</Sheet.Header>
 
 		<Tabs.Root value="profile" class="mt-2 flex flex-1 flex-col overflow-hidden">
 			<Tabs.List class="w-full shrink-0">
 				<Tabs.Trigger value="profile">
 					<User class="h-4 w-4" />
-					<span>Profile</span>
+					<span>{m.participantSettingsSheetTabProfile?.() ?? 'Profile'}</span>
 				</Tabs.Trigger>
 				<Tabs.Trigger value="preferences">
 					<SlidersHorizontal class="h-4 w-4" />
-					<span>Prefs</span>
+					<span>{m.participantSettingsSheetTabPrefs?.() ?? 'Prefs'}</span>
 				</Tabs.Trigger>
 				<Tabs.Trigger value="offline">
 					<HardDrive class="h-4 w-4" />
-					<span>Offline</span>
+					<span>{m.participantSettingsSheetTabOffline?.() ?? 'Offline'}</span>
 				</Tabs.Trigger>
 			</Tabs.List>
 
@@ -270,10 +271,10 @@
 							<div class="flex items-center gap-2">
 								{#if network.online}
 									<Wifi class="h-4 w-4 text-green-600 dark:text-green-400" />
-									<span class="text-sm font-medium text-green-700 dark:text-green-300">Online</span>
+									<span class="text-sm font-medium text-green-700 dark:text-green-300">{m.participantSettingsSheetOnline?.() ?? 'Online'}</span>
 								{:else}
 									<WifiOff class="h-4 w-4 text-orange-600 dark:text-orange-400" />
-									<span class="text-sm font-medium text-orange-700 dark:text-orange-300">Offline</span>
+									<span class="text-sm font-medium text-orange-700 dark:text-orange-300">{m.participantSettingsSheetOffline?.() ?? 'Offline'}</span>
 								{/if}
 							</div>
 							{#if gateway}
@@ -285,10 +286,10 @@
 								>
 									{#if isSyncing}
 										<Loader2 class="mr-1 h-3 w-3 animate-spin" />
-										Syncing...
+										{m.participantSettingsSheetSyncing?.() ?? 'Syncing...'}
 									{:else}
 										<CloudUpload class="mr-1 h-3 w-3" />
-										Sync Now
+										{m.participantSettingsSheetSyncNow?.() ?? 'Sync Now'}
 									{/if}
 								</Button>
 							{/if}
@@ -298,11 +299,11 @@
 								<p class="mt-1 text-xs text-destructive">{syncError}</p>
 							{:else if gateway.pendingCount > 0}
 								<p class="mt-1 text-xs text-orange-600 dark:text-orange-400">
-									{gateway.pendingCount} unsaved change{gateway.pendingCount === 1 ? '' : 's'} waiting to upload.
+									{m.participantSettingsSheetPendingChanges?.({ count: gateway.pendingCount }) ?? `${gateway.pendingCount} unsaved change${gateway.pendingCount === 1 ? '' : 's'} waiting to upload.`}
 								</p>
 							{:else}
 								<p class="mt-1 text-xs {network.online ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}">
-									{network.online ? 'No changes to sync.' : 'No pending changes, but new edits will queue locally.'}
+									{(network.online ? (m.participantSettingsSheetNoChanges?.() ?? 'No changes to sync.') : (m.participantSettingsSheetOfflineQueue?.() ?? 'No pending changes, but new edits will queue locally.'))}
 								</p>
 							{/if}
 						{/if}
@@ -321,7 +322,7 @@
 							</div>
 							<Button variant="outline" size="sm" class="mt-2 w-full justify-start" onclick={handleLogout}>
 								<LogOut class="mr-2 h-4 w-4" />
-								Logout
+								{m.participantSettingsSheetLogout?.() ?? 'Logout'}
 							</Button>
 						</div>
 					{/if}
@@ -330,7 +331,7 @@
 						<div class="rounded-lg border bg-muted/50 p-3">
 							<div class="mb-2 flex items-center gap-2 text-sm font-medium">
 								<Shield class="h-4 w-4" />
-								<span>Roles</span>
+								<span>{m.participantSettingsSheetRoles?.() ?? 'Roles'}</span>
 							</div>
 							<div class="flex flex-wrap gap-1">
 								{#each roles as role}
@@ -375,10 +376,10 @@
 							<div class="flex items-center gap-2">
 								{#if pwa.isPWA}
 									<Smartphone class="h-4 w-4 text-green-600" />
-									<span class="text-sm font-medium">App Installed</span>
+									<span class="text-sm font-medium">{m.participantSettingsSheetAppInstalled?.() ?? 'App Installed'}</span>
 								{:else}
 									<Globe class="h-4 w-4 text-muted-foreground" />
-									<span class="text-sm font-medium">Running in Browser</span>
+									<span class="text-sm font-medium">{m.participantSettingsSheetRunningInBrowser?.() ?? 'Running in Browser'}</span>
 								{/if}
 							</div>
 							{#if !pwa.isPWA}
@@ -389,28 +390,28 @@
 									disabled={!pwa.canInstall}
 								>
 									<Download class="mr-1 h-3 w-3" />
-									Install
+									{m.participantSettingsSheetInstall?.() ?? 'Install'}
 								</Button>
 							{/if}
 						</div>
 
 						{#if pwa.isPWA}
 							<p class="text-xs text-green-600 dark:text-green-400">
-								Running as a standalone app with full offline support.
+								{m.participantSettingsSheetPwaRunningStandalone?.() ?? 'Running as a standalone app with full offline support.'}
 							</p>
 						{:else}
 							<p class="text-xs text-muted-foreground">
-								You can add this to your home screen as a standalone app. This is required if you want to start the app without an internet connection. Without it, you can only go offline while the app is already open.
+								{m.participantSettingsSheetPwaInstallHint?.() ?? 'You can add this to your home screen as a standalone app. This is required if you want to start the app without an internet connection. Without it, you can only go offline while the app is already open.'}
 							</p>
 						{/if}
 
 						<details class="mt-1">
 							<summary class="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
-								Technical details
+								{m.participantSettingsSheetTechnicalDetails?.() ?? 'Technical details'}
 							</summary>
 							<div class="mt-1 space-y-1 text-xs">
 								<div class="flex justify-between">
-									<span class="text-muted-foreground">Service Worker:</span>
+									<span class="text-muted-foreground">{m.participantSettingsSheetServiceWorker?.() ?? 'Service Worker:'}</span>
 									<span
 										class={pwa.swStatus === 'registered'
 											? 'text-green-600'
@@ -422,9 +423,9 @@
 									</span>
 								</div>
 								<div class="flex justify-between">
-									<span class="text-muted-foreground">Install prompt:</span>
+									<span class="text-muted-foreground">{m.participantSettingsSheetInstallPrompt?.() ?? 'Install prompt:'}</span>
 									<span class={pwa.canInstall ? 'text-green-600' : 'text-yellow-600'}>
-										{pwa.canInstall ? 'available' : 'not available'}
+										{(pwa.canInstall ? (m.participantSettingsSheetAvailable?.() ?? 'available') : (m.participantSettingsSheetNotAvailable?.() ?? 'not available'))}
 									</span>
 								</div>
 								{#if pwa.swError}
@@ -436,13 +437,13 @@
 
 					<!-- OFFLINE DATA -->
 					<div class="space-y-2">
-						<h4 class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Offline Data</h4>
+						<h4 class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{m.participantSettingsSheetOfflineData?.() ?? 'Offline Data'}</h4>
 
 						<!-- Map Tiles -->
 						<div class="rounded-md border p-3 space-y-2">
-							<div class="text-sm font-medium">Map Tiles</div>
+							<div class="text-sm font-medium">{m.participantSettingsSheetMapTiles?.() ?? 'Map Tiles'}</div>
 							<p class="text-xs text-muted-foreground">
-								Map imagery is loaded from online sources while you have a connection. For offline use, your project admin can create downloadable tile packages for specific areas, which can then be imported into the application.
+								{m.participantSettingsSheetMapTilesDesc?.() ?? 'Map imagery is loaded from online sources while you have a connection. For offline use, your project admin can create downloadable tile packages for specific areas, which can then be imported into the application.'}
 							</p>
 
 							{#if downloadProgress && downloadProgress.status === 'downloading'}
@@ -450,7 +451,7 @@
 									<div class="flex items-center gap-2">
 										<Loader2 class="h-4 w-4 animate-spin text-blue-600" />
 										<span class="text-xs font-medium text-blue-700 dark:text-blue-300">
-											Downloading...
+											{m.participantSettingsSheetDownloading?.() ?? 'Downloading...'}
 										</span>
 									</div>
 									<p class="mt-1 text-xs text-blue-600 dark:text-blue-400">
@@ -458,14 +459,14 @@
 									</p>
 									{#if downloadProgress.completed_items > 0}
 										<p class="text-xs text-blue-600 dark:text-blue-400">
-											{downloadProgress.completed_items} items downloaded
+											{m.participantSettingsSheetItemsDownloaded?.({ count: downloadProgress.completed_items }) ?? `${downloadProgress.completed_items} items downloaded`}
 										</p>
 									{/if}
 								</div>
 							{:else if isLoadingPack}
 								<div class="flex items-center gap-2 text-sm text-muted-foreground">
 									<Loader2 class="h-4 w-4 animate-spin" />
-									<span>Loading...</span>
+									<span>{m.participantSettingsSheetLoading?.() ?? 'Loading...'}</span>
 								</div>
 							{:else if currentPack}
 								<div class="rounded-md bg-green-50 p-2 dark:bg-green-950">
@@ -478,7 +479,7 @@
 									<div class="mt-1 space-y-0.5 text-xs text-green-600 dark:text-green-400">
 										<p>{formatDate(currentPack.downloadedAt)}</p>
 										<p>
-											{currentPack.tileCount.toLocaleString()} tiles
+											{m.participantSettingsSheetTileCount?.({ count: currentPack.tileCount.toLocaleString() }) ?? `${currentPack.tileCount.toLocaleString()} tiles`}
 											{#if currentPack.fileSizeBytes}
 												({formatFileSize(currentPack.fileSizeBytes)})
 											{/if}
@@ -494,7 +495,7 @@
 										onclick={handleOpenPackages}
 									>
 										<Package class="mr-1 h-3 w-3" />
-										Change Area
+										{m.participantSettingsSheetChangeArea?.() ?? 'Change Area'}
 									</Button>
 									{#if showDeleteConfirm}
 										<Button
@@ -507,7 +508,7 @@
 											{#if isDeleting}
 												<Loader2 class="mr-1 h-3 w-3 animate-spin" />
 											{/if}
-											Confirm Delete
+											{m.participantSettingsSheetConfirmDelete?.() ?? 'Confirm Delete'}
 										</Button>
 									{:else}
 										<Button
@@ -517,13 +518,13 @@
 											onclick={() => (showDeleteConfirm = true)}
 										>
 											<Trash2 class="mr-1 h-3 w-3" />
-											Delete
+											{m.participantSettingsSheetDelete?.() ?? 'Delete'}
 										</Button>
 									{/if}
 								</div>
 							{:else}
 								<p class="text-xs text-orange-600 dark:text-orange-400">
-									No tiles downloaded. The map will not work offline.
+									{m.participantSettingsSheetNoTiles?.() ?? 'No tiles downloaded. The map will not work offline.'}
 								</p>
 								<Button
 									variant="default"
@@ -532,7 +533,7 @@
 									onclick={handleOpenPackages}
 								>
 									<Package class="mr-2 h-4 w-4" />
-									Download Tiles
+									{m.participantSettingsSheetDownloadTiles?.() ?? 'Download Tiles'}
 								</Button>
 							{/if}
 						</div>
@@ -541,7 +542,7 @@
 						{#if gateway}
 							<div class="rounded-md border p-3 space-y-2">
 								<div class="flex items-center justify-between">
-									<span class="text-sm font-medium">Offline Images</span>
+									<span class="text-sm font-medium">{m.participantSettingsSheetOfflineImages?.() ?? 'Offline Images'}</span>
 									<Switch
 										checked={fullLocalCopy}
 										onCheckedChange={handleToggleFullLocalCopy}
@@ -553,9 +554,7 @@
 									<div class="flex items-center gap-2 text-sm text-blue-600">
 										<Loader2 class="h-4 w-4 animate-spin" />
 										<span>
-											{fullLocalCopy
-												? 'Downloading thumbnails...'
-												: 'Removing cached images...'}
+											{(fullLocalCopy ? (m.participantSettingsSheetDownloadingThumbnails?.() ?? 'Downloading thumbnails...') : (m.participantSettingsSheetRemovingCachedImages?.() ?? 'Removing cached images...'))}
 										</span>
 									</div>
 									{#if downloadProgress}
@@ -565,11 +564,11 @@
 									{/if}
 								{:else if fullLocalCopy}
 									<p class="text-xs text-green-600 dark:text-green-400">
-										Photo thumbnails are cached for offline viewing.
+										{m.participantSettingsSheetThumbnailsCached?.() ?? 'Photo thumbnails are cached for offline viewing.'}
 									</p>
 								{:else}
 									<p class="text-xs text-muted-foreground">
-										When enabled, low-resolution thumbnails of photos are saved to your device so images are visible offline without using too much storage. When disabled, no images are shown while offline. Full-resolution images are always loaded from the server when you have a connection.
+										{m.participantSettingsSheetOfflineImagesDesc?.() ?? 'When enabled, low-resolution thumbnails of photos are saved to your device so images are visible offline without using too much storage. When disabled, no images are shown while offline. Full-resolution images are always loaded from the server when you have a connection.'}
 									</p>
 								{/if}
 							</div>
@@ -579,7 +578,7 @@
 					<!-- STORAGE USAGE -->
 					{#if storageStats}
 						<div class="space-y-2">
-							<h4 class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Storage</h4>
+							<h4 class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{m.participantSettingsSheetStorage?.() ?? 'Storage'}</h4>
 							<div class="rounded-md border p-3 space-y-3">
 								<!-- Usage bar -->
 								{#if storageStats.quota > 0}
@@ -603,23 +602,23 @@
 								<div class="grid grid-cols-3 gap-2 text-center">
 									<div class="rounded bg-muted/50 px-2 py-1.5">
 										<div class="text-sm font-medium">{storageStats.counts.tiles.toLocaleString()}</div>
-										<div class="text-[10px] text-muted-foreground">Tiles</div>
+										<div class="text-[10px] text-muted-foreground">{m.participantSettingsSheetStorageTiles?.() ?? 'Tiles'}</div>
 									</div>
 									<div class="rounded bg-muted/50 px-2 py-1.5">
 										<div class="text-sm font-medium">{storageStats.counts.files.toLocaleString()}</div>
-										<div class="text-[10px] text-muted-foreground">Files</div>
+										<div class="text-[10px] text-muted-foreground">{m.participantSettingsSheetStorageFiles?.() ?? 'Files'}</div>
 									</div>
 									<div class="rounded bg-muted/50 px-2 py-1.5">
 										<div class="text-sm font-medium">{storageStats.counts.records.toLocaleString()}</div>
-										<div class="text-[10px] text-muted-foreground">Records</div>
+										<div class="text-[10px] text-muted-foreground">{m.participantSettingsSheetStorageRecords?.() ?? 'Records'}</div>
 									</div>
 								</div>
 
 								<!-- Persistence status -->
 								<div class="flex items-center justify-between text-xs">
-									<span class="text-muted-foreground">Persistent storage</span>
+									<span class="text-muted-foreground">{m.participantSettingsSheetPersistentStorage?.() ?? 'Persistent storage'}</span>
 									<span class={storageStats.persistent ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}>
-										{storageStats.persistent ? 'Enabled' : 'Not guaranteed'}
+										{(storageStats.persistent ? (m.participantSettingsSheetStorageEnabled?.() ?? 'Enabled') : (m.participantSettingsSheetStorageNotGuaranteed?.() ?? 'Not guaranteed'))}
 									</span>
 								</div>
 							</div>

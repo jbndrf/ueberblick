@@ -3,6 +3,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { X, ChevronDown, ChevronUp, Calculator, GitCompare, Braces, Hash } from 'lucide-svelte';
 	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	type FieldOption = { key: string; label: string };
 
@@ -17,7 +18,7 @@
 		placeholder?: string;
 	};
 
-	let { value, fieldOptions = [], onchange, placeholder = 'Expression...' }: Props = $props();
+	let { value, fieldOptions = [], onchange, placeholder = m.expressionInputPlaceholder() }: Props = $props();
 
 	// --- Parsing & Serialization ---
 
@@ -352,28 +353,28 @@
 
 	// --- Operator data ---
 
-	const OPERATOR_GROUPS = [
+	const OPERATOR_GROUPS = $derived([
 		{
-			label: 'Math',
+			label: m.expressionInputGroupMath(),
 			icon: Calculator,
 			items: ['+', '-', '*', '/', '%', '(', ')']
 		},
 		{
-			label: 'Compare',
+			label: m.expressionInputGroupCompare(),
 			icon: GitCompare,
 			items: ['>', '<', '=', '!=', '>=', '<=']
 		},
 		{
-			label: 'Logic',
+			label: m.expressionInputGroupLogic(),
 			icon: Braces,
 			items: ['AND', 'OR', 'NOT']
 		},
 		{
-			label: 'Func',
+			label: m.expressionInputGroupFunc(),
 			icon: Hash,
 			items: ['IF()', 'SUM()', 'MIN()', 'MAX()', 'ROUND()']
 		}
-	];
+	]);
 
 	// --- Auto-size helper ---
 
@@ -426,7 +427,7 @@
 							type="button"
 							class="badge-remove"
 							onclick={() => removeFieldAtIndex(i)}
-							aria-label="Remove {getFieldLabel(segment.fieldId)}"
+							aria-label={m.expressionInputRemoveField({ label: getFieldLabel(segment.fieldId) })}
 						>
 							<X class="h-2.5 w-2.5" />
 						</button>
@@ -443,7 +444,7 @@
 			selectedIds={selectedFieldIds}
 			getOptionId={(opt) => opt.key}
 			getOptionLabel={(opt) => opt.label}
-			placeholder="Add fields..."
+			placeholder={m.expressionInputAddFields()}
 			onSelectedIdsChange={handleFieldSelectionChange}
 			class="expression-field-select"
 		/>
@@ -453,10 +454,10 @@
 	<button class="operators-toggle" type="button" onclick={() => operatorsOpen = !operatorsOpen}>
 		{#if operatorsOpen}
 			<ChevronUp class="h-3 w-3" />
-			<span>Hide operators</span>
+			<span>{m.expressionInputHideOperators()}</span>
 		{:else}
 			<ChevronDown class="h-3 w-3" />
-			<span>Operators & functions</span>
+			<span>{m.expressionInputShowOperators()}</span>
 		{/if}
 	</button>
 

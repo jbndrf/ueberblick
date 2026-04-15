@@ -62,7 +62,7 @@
 	const columns = $derived.by((): BaseColumnConfig<MarkerCategory>[] => [
 		{
 			id: 'icon_preview',
-			header: 'Icon',
+			header: m.markerCategoriesIcon?.() ?? 'Icon',
 			accessorFn: (row) => row.icon_config,
 			cellRenderer: iconCellRenderer,
 			fieldType: 'text',
@@ -222,12 +222,12 @@
 				iconDesignerOpen = false;
 				selectedCategory = null;
 				await invalidateAll();
-				toast.success('Icon configuration saved successfully');
+				toast.success(m.markerCategoriesIconSaveSuccess?.() ?? 'Icon configuration saved successfully');
 			} else {
-				toast.error('Failed to save icon configuration');
+				toast.error(m.markerCategoriesIconSaveError?.() ?? 'Failed to save icon configuration');
 			}
 		} catch (error) {
-			toast.error('Error saving icon configuration');
+			toast.error(m.markerCategoriesIconSaveException?.() ?? 'Error saving icon configuration');
 		}
 	}
 
@@ -267,7 +267,7 @@
 		enableShiftSelect={true}
 		showToolbar={true}
 		showEditMode={true}
-		editModeLabel="Edit categories inline"
+		editModeLabel={m.markerCategoriesEditInline?.() ?? 'Edit categories inline'}
 		emptyMessage={m.markerCategoriesNoCategories?.() ?? 'No marker categories'}
 		emptySubMessage={m.markerCategoriesCreateYourFirst?.() ?? 'Create your first marker category to get started'}
 		rowActions={{
@@ -287,7 +287,7 @@
 					onClick: openEditRoles
 				},
 				{
-					label: 'Design Icon',
+					label: m.markerCategoriesDesignIcon?.() ?? 'Design Icon',
 					icon: Palette,
 					onClick: (category) => {
 						// Use setTimeout to allow dropdown to close first
@@ -506,7 +506,7 @@
 						getOptionDescription={(r) => r.description}
 						allowCreate={true}
 						onCreateOption={createRole}
-						placeholder="Select or search roles..."
+						placeholder={m.markerCategoriesRolesPlaceholder?.() ?? 'Select or search roles...'}
 					/>
 				</div>
 				<Dialog.Footer>
@@ -550,6 +550,6 @@
 			{@html value.svgContent.replace(/(<svg[^>]*)(>)/, `$1 style="width: ${size * 0.6}px; height: ${size * 0.6}px; fill: ${color};"$2`)}
 		</div>
 	{:else}
-		<span class="text-muted-foreground text-xs">No icon</span>
+		<span class="text-muted-foreground text-xs">{m.markerCategoriesNoIcon?.() ?? 'No icon'}</span>
 	{/if}
 {/snippet}

@@ -1,6 +1,7 @@
 import { error, fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { z } from 'zod';
+import * as m from '$lib/paraglide/messages';
 
 const columnSchema = z.object({
 	column_name: z
@@ -24,7 +25,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 		});
 
 		if (!customTable) {
-			throw error(404, 'Table not found');
+			throw error(404, m.customTableDetailServer_tableNotFound?.() ?? 'Table not found');
 		}
 
 		// Fetch columns for this table, sorted by sort_order then created
@@ -68,7 +69,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 		};
 	} catch (err) {
 		console.error('Error loading table:', err);
-		throw error(500, 'Failed to load table');
+		throw error(500, m.customTableDetailServer_failedLoadTable?.() ?? 'Failed to load table');
 	}
 };
 
@@ -80,12 +81,12 @@ export const actions: Actions = {
 		const value = formData.get('value') as string;
 
 		if (!field) {
-			return fail(400, { message: 'Field name is required' });
+			return fail(400, { message: m.customTableDetailServer_fieldNameRequired?.() ?? 'Field name is required' });
 		}
 
 		const allowedFields = ['display_name', 'description', 'visible_to_roles'];
 		if (!allowedFields.includes(field)) {
-			return fail(400, { message: 'Invalid field' });
+			return fail(400, { message: m.customTableDetailServer_invalidField?.() ?? 'Invalid field' });
 		}
 
 		try {
@@ -99,7 +100,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating table metadata:', err);
-			return fail(500, { message: 'Failed to update table' });
+			return fail(500, { message: m.customTableDetailServer_failedUpdateTable?.() ?? 'Failed to update table' });
 		}
 	},
 
@@ -118,7 +119,7 @@ export const actions: Actions = {
 		const validationResult = columnSchema.safeParse(columnData);
 		if (!validationResult.success) {
 			return fail(400, {
-				message: validationResult.error.errors[0]?.message || 'Invalid column data'
+				message: validationResult.error.errors[0]?.message || (m.customTableDetailServer_invalidColumnData?.() ?? 'Invalid column data')
 			});
 		}
 
@@ -131,7 +132,7 @@ export const actions: Actions = {
 
 			if (existingColumns?.some(col => col.column_name === columnData.column_name)) {
 				return fail(400, {
-					message: 'A column with that name already exists'
+					message: m.customTableDetailServer_columnNameExists?.() ?? 'A column with that name already exists'
 				});
 			}
 
@@ -147,7 +148,7 @@ export const actions: Actions = {
 		} catch (err) {
 			console.error('Error creating column:', err);
 			return fail(500, {
-				message: 'Failed to create column'
+				message: m.customTableDetailServer_failedCreateColumn?.() ?? 'Failed to create column'
 			});
 		}
 	},
@@ -173,7 +174,7 @@ export const actions: Actions = {
 			const validationResult = columnSchema.safeParse(columnData);
 			if (!validationResult.success) {
 				return fail(400, {
-					message: validationResult.error.errors[0]?.message || 'Invalid column data'
+					message: validationResult.error.errors[0]?.message || (m.customTableDetailServer_invalidColumnData?.() ?? 'Invalid column data')
 				});
 			}
 
@@ -184,7 +185,7 @@ export const actions: Actions = {
 
 			if (existingColumns?.some(col => col.column_name === columnData.column_name && col.id !== columnId)) {
 				return fail(400, {
-					message: 'A column with that name already exists'
+					message: m.customTableDetailServer_columnNameExists?.() ?? 'A column with that name already exists'
 				});
 			}
 
@@ -229,7 +230,7 @@ export const actions: Actions = {
 		} catch (err) {
 			console.error('Error updating column:', err);
 			return fail(500, {
-				message: 'Failed to update column'
+				message: m.customTableDetailServer_failedUpdateColumn?.() ?? 'Failed to update column'
 			});
 		}
 	},
@@ -240,7 +241,7 @@ export const actions: Actions = {
 		const columnId = formData.get('fieldId') as string;
 
 		if (!columnId) {
-			return fail(400, { message: 'Column ID is required' });
+			return fail(400, { message: m.customTableDetailServer_columnIdRequired?.() ?? 'Column ID is required' });
 		}
 
 		try {
@@ -274,7 +275,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error deleting column:', err);
-			return fail(500, { message: 'Failed to delete column' });
+			return fail(500, { message: m.customTableDetailServer_failedDeleteColumn?.() ?? 'Failed to delete column' });
 		}
 	},
 
@@ -286,7 +287,7 @@ export const actions: Actions = {
 		const value = formData.get('value') as string;
 
 		if (!rowId || !columnName) {
-			return fail(400, { message: 'Row ID and column name are required' });
+			return fail(400, { message: m.customTableDetailServer_rowIdColumnNameRequired?.() ?? 'Row ID and column name are required' });
 		}
 
 		try {
@@ -296,7 +297,7 @@ export const actions: Actions = {
 			});
 
 			if (!currentRow) {
-				return fail(404, { message: 'Row not found' });
+				return fail(404, { message: m.customTableDetailServer_rowNotFound?.() ?? 'Row not found' });
 			}
 
 			// Update the specific column value
@@ -313,7 +314,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating row data:', err);
-			return fail(500, { message: 'Failed to update row data' });
+			return fail(500, { message: m.customTableDetailServer_failedUpdateRowData?.() ?? 'Failed to update row data' });
 		}
 	},
 
@@ -324,14 +325,14 @@ export const actions: Actions = {
 		const rowDataJson = formData.get('row_data') as string;
 
 		if (!rowId || !rowDataJson) {
-			return fail(400, { message: 'Row ID and row data are required' });
+			return fail(400, { message: m.customTableDetailServer_rowIdRowDataRequired?.() ?? 'Row ID and row data are required' });
 		}
 
 		let rowData: Record<string, any>;
 		try {
 			rowData = JSON.parse(rowDataJson);
 		} catch (e) {
-			return fail(400, { message: 'Invalid row data format' });
+			return fail(400, { message: m.customTableDetailServer_invalidRowDataFormat?.() ?? 'Invalid row data format' });
 		}
 
 		try {
@@ -343,7 +344,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating row:', err);
-			return fail(500, { message: 'Failed to update row' });
+			return fail(500, { message: m.customTableDetailServer_failedUpdateRow?.() ?? 'Failed to update row' });
 		}
 	},
 
@@ -353,7 +354,7 @@ export const actions: Actions = {
 		const rowId = formData.get('row_id') as string;
 
 		if (!rowId) {
-			return fail(400, { message: 'Row ID is required' });
+			return fail(400, { message: m.customTableDetailServer_rowIdRequired?.() ?? 'Row ID is required' });
 		}
 
 		try {
@@ -362,7 +363,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error deleting row:', err);
-			return fail(500, { message: 'Failed to delete row' });
+			return fail(500, { message: m.customTableDetailServer_failedDeleteRow?.() ?? 'Failed to delete row' });
 		}
 	},
 
@@ -372,14 +373,14 @@ export const actions: Actions = {
 		const rowDataJson = formData.get('row_data') as string;
 
 		if (!rowDataJson) {
-			return fail(400, { message: 'Row data is required' });
+			return fail(400, { message: m.customTableDetailServer_rowDataRequired?.() ?? 'Row data is required' });
 		}
 
 		let rowData: Record<string, any>;
 		try {
 			rowData = JSON.parse(rowDataJson);
 		} catch (e) {
-			return fail(400, { message: 'Invalid row data format' });
+			return fail(400, { message: m.customTableDetailServer_invalidRowDataFormat?.() ?? 'Invalid row data format' });
 		}
 
 		try {
@@ -392,7 +393,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error creating row:', err);
-			return fail(500, { message: 'Failed to create row' });
+			return fail(500, { message: m.customTableDetailServer_failedCreateRow?.() ?? 'Failed to create row' });
 		}
 	},
 
@@ -403,14 +404,14 @@ export const actions: Actions = {
 		const replaceData = formData.get('replaceData') === 'true';
 
 		if (!rowsJson) {
-			return fail(400, { message: 'No data provided' });
+			return fail(400, { message: m.customTableDetailServer_noDataProvided?.() ?? 'No data provided' });
 		}
 
 		try {
 			const rows: Array<Record<string, string>> = JSON.parse(rowsJson);
 
 			if (rows.length === 0) {
-				return fail(400, { message: 'No data rows to import' });
+				return fail(400, { message: m.customTableDetailServer_noDataRowsToImport?.() ?? 'No data rows to import' });
 			}
 
 			// Replace existing data if requested
@@ -438,7 +439,7 @@ export const actions: Actions = {
 		} catch (err) {
 			console.error('Error importing CSV:', err);
 			return fail(500, {
-				message: err instanceof Error ? err.message : 'Failed to import CSV'
+				message: err instanceof Error ? err.message : m.customTableDetailServer_failedImportCsv?.() ?? 'Failed to import CSV'
 			});
 		}
 	}

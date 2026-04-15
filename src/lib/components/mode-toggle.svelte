@@ -14,19 +14,19 @@
 		{:else}
 			<Sun class="mr-2 h-4 w-4" />
 		{/if}
-		<span>Theme</span>
+		<span>{m.modeToggleTheme?.() ?? 'Theme'}</span>
 	</DropdownMenu.SubTrigger>
 	<DropdownMenu.SubContent>
 		<DropdownMenu.Item onclick={() => themeStore.set('light')}>
 			<Sun class="mr-2 h-4 w-4" />
-			<span>Light</span>
+			<span>{m.modeToggleLight?.() ?? 'Light'}</span>
 			{#if currentTheme === 'light'}
 				<Check class="ml-auto h-4 w-4" />
 			{/if}
 		</DropdownMenu.Item>
 		<DropdownMenu.Item onclick={() => themeStore.set('dark')}>
 			<Moon class="mr-2 h-4 w-4" />
-			<span>Dark</span>
+			<span>{m.modeToggleDark?.() ?? 'Dark'}</span>
 			{#if currentTheme === 'dark'}
 				<Check class="ml-auto h-4 w-4" />
 			{/if}

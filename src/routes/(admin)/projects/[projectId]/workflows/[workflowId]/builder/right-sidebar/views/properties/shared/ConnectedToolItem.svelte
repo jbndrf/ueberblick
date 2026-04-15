@@ -2,6 +2,7 @@
 	import { Trash2 } from 'lucide-svelte';
 	import { toolRegistry } from '$lib/workflow-builder/tools';
 	import ButtonConfigPopover from './ButtonConfigPopover.svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	import type { VisualConfig } from '$lib/workflow-builder';
 
@@ -61,7 +62,7 @@
 			defaultColor={defaultButtonColor}
 		/>
 		{#if onDelete}
-			<button class="delete-btn" type="button" onclick={onDelete} title="Delete tool">
+			<button class="delete-btn" type="button" onclick={onDelete} title={m.propertiesConnectedToolItemDeleteTool?.() ?? 'Delete tool'}>
 				<Trash2 class="h-3.5 w-3.5" />
 			</button>
 		{/if}

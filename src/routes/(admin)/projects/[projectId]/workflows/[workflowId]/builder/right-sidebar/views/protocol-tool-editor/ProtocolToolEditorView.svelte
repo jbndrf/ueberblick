@@ -4,6 +4,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { Checkbox } from '$lib/components/ui/checkbox';
+	import * as m from '$lib/paraglide/messages';
 
 	import { AncestorFieldsPanel } from '../edit-tool-editor';
 	import { FieldSelectionPreview } from '../edit-tool-editor';
@@ -152,13 +153,13 @@
 				{/if}
 			</div>
 			<div class="header-title">
-				<Label for="protocol-tool-name" class="sr-only">Protocol Tool Name</Label>
+				<Label for="protocol-tool-name" class="sr-only">{m.protocolToolEditorName?.() ?? 'Protocol Tool Name'}</Label>
 				<Input
 					id="protocol-tool-name"
 					bind:value={toolName}
 					onblur={handleNameBlur}
 					class="name-input"
-					placeholder={isRegion ? "Region name..." : "Protocol tool name..."}
+					placeholder={isRegion ? (m.protocolToolEditorRegionNamePlaceholder?.() ?? 'Region name...') : (m.protocolToolEditorToolNamePlaceholder?.() ?? 'Protocol tool name...')}
 				/>
 			</div>
 			<Button variant="ghost" size="icon" onclick={onClose}>
@@ -167,7 +168,7 @@
 		</div>
 		{#if isRegion}
 			<p class="header-description">
-				Automatically snapshots the audit trail when an instance exits this region.
+				{m.protocolToolEditorRegionDescription?.() ?? 'Automatically snapshots the audit trail when an instance exits this region.'}
 			</p>
 		{/if}
 	</div>
@@ -176,7 +177,7 @@
 		<!-- Region mode: stage picker -->
 		<div class="region-content">
 			<div class="panel-header">
-				<span class="panel-label">Region Stages</span>
+				<span class="panel-label">{m.protocolToolEditorRegionStages?.() ?? 'Region Stages'}</span>
 				<span class="stage-count">{selectedStageIds.length} / {allStages.length}</span>
 			</div>
 			<div class="stage-list">
@@ -194,14 +195,14 @@
 					</button>
 				{/each}
 				{#if allStages.length === 0}
-					<p class="empty-message">No stages available.</p>
+					<p class="empty-message">{m.protocolToolEditorNoStages?.() ?? 'No stages available.'}</p>
 				{/if}
 			</div>
 
 			<div class="editor-footer">
 				<Button variant="destructive" size="sm" onclick={onDelete} class="w-full">
 					<Trash2 class="h-4 w-4 mr-2" />
-					Delete Protocol Region
+					{m.protocolToolEditorDeleteRegion?.() ?? 'Delete Protocol Region'}
 				</Button>
 			</div>
 		</div>
@@ -210,7 +211,7 @@
 		<div class="editor-content">
 			<div class="left-panel">
 				<div class="panel-header">
-					<span class="panel-label">Editable Fields</span>
+					<span class="panel-label">{m.protocolToolEditorEditableFields?.() ?? 'Editable Fields'}</span>
 				</div>
 
 				<AncestorFieldsPanel
@@ -234,14 +235,14 @@
 				<div class="form-section">
 					<Button variant="outline" size="sm" onclick={onEditForm} class="w-full">
 						<FileText class="h-4 w-4 mr-2" />
-						{protocolTool.protocol_form_id ? `Edit Protocol Form (${formFieldCount} fields)` : 'Create Protocol Form'}
+						{protocolTool.protocol_form_id ? (m.protocolToolEditorEditForm?.({ count: formFieldCount }) ?? `Edit Protocol Form (${formFieldCount} fields)`) : (m.protocolToolEditorCreateForm?.() ?? 'Create Protocol Form')}
 					</Button>
 				</div>
 
 				<div class="editor-footer">
 					<Button variant="destructive" size="sm" onclick={onDelete} class="w-full">
 						<Trash2 class="h-4 w-4 mr-2" />
-						Delete Protocol Tool
+						{m.protocolToolEditorDeleteTool?.() ?? 'Delete Protocol Tool'}
 					</Button>
 				</div>
 			</div>

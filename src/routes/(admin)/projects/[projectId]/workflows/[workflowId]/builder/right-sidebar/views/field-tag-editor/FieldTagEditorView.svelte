@@ -5,6 +5,7 @@
 	import { getAllTagTypes, type TagTypeDefinition } from '$lib/workflow-builder/tools/tag-types';
 	import type { TagMapping, ToolsFormField, ToolsForm, WorkflowStage } from '$lib/workflow-builder';
 	import TagSlot from './TagSlot.svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	interface FieldGroup {
 		stage: WorkflowStage;
@@ -53,8 +54,8 @@
 	<div class="flex items-center gap-2 border-b px-4 py-3">
 		<Tag class="h-4 w-4 text-amber-500" />
 		<div class="flex-1 min-w-0">
-			<h3 class="text-sm font-semibold leading-tight">Field Tags</h3>
-			<p class="text-xs text-muted-foreground">Assign semantic roles to form fields</p>
+			<h3 class="text-sm font-semibold leading-tight">{m.fieldTagEditorTitle?.() ?? 'Field Tags'}</h3>
+			<p class="text-xs text-muted-foreground">{m.fieldTagEditorSubtitle?.() ?? 'Assign semantic roles to form fields'}</p>
 		</div>
 		{#if onClose}
 			<Button variant="ghost" size="icon" class="h-7 w-7 shrink-0" onclick={onClose}>
@@ -67,7 +68,7 @@
 	<div class="flex-1 overflow-y-auto p-4 space-y-3">
 		{#if tagTypes.length === 0}
 			<p class="text-sm text-muted-foreground text-center py-8">
-				No tag types available.
+				{m.fieldTagEditorNoTagTypes?.() ?? 'No tag types available.'}
 			</p>
 		{:else}
 			{#each tagTypes as tagTypeDef}
@@ -84,7 +85,7 @@
 		{#if allFormFields.length === 0}
 			<Separator />
 			<p class="text-xs text-muted-foreground text-center py-2">
-				No form fields available yet. Add dropdown or multiple choice fields first.
+				{m.fieldTagEditorNoFormFields?.() ?? 'No form fields available yet. Add dropdown or multiple choice fields first.'}
 			</p>
 		{/if}
 	</div>
@@ -93,7 +94,7 @@
 		<div class="shrink-0 border-t px-4 py-3">
 			<Button variant="destructive" size="sm" class="w-full" onclick={onDelete}>
 				<Trash2 class="h-3.5 w-3.5 mr-1.5" />
-				Delete Field Tags
+				{m.fieldTagEditorDeleteButton?.() ?? 'Delete Field Tags'}
 			</Button>
 		</div>
 	{/if}

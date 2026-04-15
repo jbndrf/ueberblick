@@ -16,10 +16,10 @@
 		loading = true;
 		try {
 			await generateQrPdf(selectedParticipants);
-			toast.success(m.participantsQrExportSuccess());
+			toast.success(m.participantsQrExportSuccess?.() ?? 'QR code PDF exported successfully');
 		} catch (e) {
 			console.error('QR PDF export failed:', e);
-			toast.error(m.participantsQrExportError());
+			toast.error(m.participantsQrExportError?.() ?? 'Failed to export QR code PDF');
 		} finally {
 			loading = false;
 		}
@@ -33,6 +33,6 @@
 		{:else}
 			<QrCode class="mr-2 h-4 w-4" />
 		{/if}
-		{m.participantsExportQr({ count: selectedParticipants.length })}
+		{m.participantsExportQr?.({ count: selectedParticipants.length }) ?? `Export QR (${selectedParticipants.length})`}
 	</Button>
 {/if}

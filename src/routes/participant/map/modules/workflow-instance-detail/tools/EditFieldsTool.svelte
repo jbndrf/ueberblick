@@ -15,6 +15,7 @@
 	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
 	import type { FormFieldWithValue } from '$lib/components/form-renderer';
 	import type { ToolEdit, FormField, FieldValue, EditableFieldsByStage } from '../state.svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	// ==========================================================================
 	// Props
@@ -180,11 +181,11 @@
 			// Required check
 			if (field.is_required) {
 				if (value === null || value === undefined || value === '') {
-					newErrors[field.id] = 'This field is required';
+					newErrors[field.id] = (m.participantEditFieldsToolFieldRequired?.() ?? 'This field is required');
 					continue;
 				}
 				if (Array.isArray(value) && value.length === 0) {
-					newErrors[field.id] = 'This field is required';
+					newErrors[field.id] = (m.participantEditFieldsToolFieldRequired?.() ?? 'This field is required');
 					continue;
 				}
 			}
@@ -224,7 +225,7 @@
 				<div
 					class="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2"
 				></div>
-				<p class="text-sm text-muted-foreground">Loading...</p>
+				<p class="text-sm text-muted-foreground">{m.participantEditFieldsToolLoading?.() ?? 'Loading...'}</p>
 			</div>
 		</div>
 	{:else if hasFields}
@@ -271,7 +272,7 @@
 		{/if}
 	{:else}
 		<div class="flex-1 flex items-center justify-center p-4 py-12">
-			<p class="text-sm text-muted-foreground">No editable fields configured.</p>
+			<p class="text-sm text-muted-foreground">{m.participantEditFieldsToolNoFields?.() ?? 'No editable fields configured.'}</p>
 		</div>
 	{/if}
 {/snippet}
@@ -286,7 +287,7 @@
 				class="flex-1"
 			>
 				<X class="w-4 h-4 mr-1" />
-				Cancel
+				{m.commonCancel?.() ?? 'Cancel'}
 			</Button>
 
 			<Button
@@ -296,10 +297,10 @@
 			>
 				{#if isSubmitting}
 					<Loader2 class="w-4 h-4 mr-2 animate-spin" />
-					Saving...
+					{m.participantEditFieldsToolSaving?.() ?? 'Saving...'}
 				{:else}
 					<Save class="w-4 h-4 mr-2" />
-					Save
+					{m.commonSave?.() ?? 'Save'}
 				{/if}
 			</Button>
 		</div>

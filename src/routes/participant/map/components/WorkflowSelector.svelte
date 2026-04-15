@@ -2,6 +2,7 @@
 	import { Plus } from 'lucide-svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { onMount, onDestroy } from 'svelte';
+	import * as m from '$lib/paraglide/messages';
 	import type { Map as LeafletMap, Marker, Polyline, LatLng } from 'leaflet';
 
 	interface Workflow {
@@ -230,7 +231,7 @@
 		<button
 			onclick={closeMenu}
 			class="fixed inset-0 z-[1050]"
-			aria-label="Close menu"
+			aria-label={m.mapCloseMenu?.() ?? 'Close menu'}
 		></button>
 
 		<!-- Popover - Mobile: bottom, Desktop: top below header -->

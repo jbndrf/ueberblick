@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { FIELD_TYPES, type FieldType } from '$lib/workflow-builder';
+	import * as m from '$lib/paraglide/messages';
 
 	type Props = {
 		expanded?: boolean;
@@ -45,7 +46,7 @@
 
 <!-- Custom drag preview (hidden, used by setDragImage) -->
 <div bind:this={dragPreviewRef} class="drag-preview" aria-hidden="true">
-	Field
+	{m.formEditorFieldTypesDragPreview?.() ?? 'Field'}
 </div>
 
 <div class="field-types-palette" class:expanded>

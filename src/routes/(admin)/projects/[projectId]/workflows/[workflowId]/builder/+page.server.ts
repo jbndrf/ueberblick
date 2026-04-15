@@ -1,5 +1,6 @@
 import { error, fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
+import * as m from '$lib/paraglide/messages';
 
 // Helper to safely fetch from a collection (returns empty array if collection doesn't exist)
 async function safeGetFullList(pb: any, collection: string, options: any) {
@@ -23,7 +24,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 
 		// Verify workflow belongs to this project
 		if (workflow.project_id !== projectId) {
-			throw error(404, 'Workflow not found');
+			throw error(404, m.workflowBuilderServerWorkflowNotFound?.() ?? 'Workflow not found');
 		}
 
 		// Load workflow builder data - these collections may not exist yet
@@ -87,10 +88,10 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 		};
 	} catch (err: any) {
 		if (err?.status === 404) {
-			throw error(404, 'Workflow not found');
+			throw error(404, m.workflowBuilderServerWorkflowNotFound?.() ?? 'Workflow not found');
 		}
 		console.error('Error loading workflow:', err);
-		throw error(500, 'Failed to load workflow');
+		throw error(500, m.workflowBuilderServerFailedToLoadWorkflow?.() ?? 'Failed to load workflow');
 	}
 };
 
@@ -101,7 +102,7 @@ export const actions: Actions = {
 		const name = formData.get('name') as string;
 
 		if (!name) {
-			return fail(400, { message: 'Role name is required' });
+			return fail(400, { message: m.workflowBuilderServerRoleNameRequired?.() ?? 'Role name is required' });
 		}
 
 		try {
@@ -114,7 +115,7 @@ export const actions: Actions = {
 			return { success: true, entity: newRole };
 		} catch (err) {
 			console.error('Error creating role:', err);
-			return fail(500, { message: 'Failed to create role' });
+			return fail(500, { message: m.workflowBuilderServerFailedToCreateRole?.() ?? 'Failed to create role' });
 		}
 	},
 
@@ -123,7 +124,7 @@ export const actions: Actions = {
 		const changesJson = formData.get('changes') as string;
 
 		if (!changesJson) {
-			return fail(400, { message: 'No changes provided' });
+			return fail(400, { message: m.workflowBuilderServerNoChangesProvided?.() ?? 'No changes provided' });
 		}
 
 		let changes: {
@@ -140,7 +141,7 @@ export const actions: Actions = {
 		try {
 			changes = JSON.parse(changesJson);
 		} catch {
-			return fail(400, { message: 'Invalid changes format' });
+			return fail(400, { message: m.workflowBuilderServerInvalidChangesFormat?.() ?? 'Invalid changes format' });
 		}
 
 		try {
@@ -274,7 +275,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Failed to save workflow:', err);
-			return fail(500, { message: 'Failed to save workflow' });
+			return fail(500, { message: m.workflowBuilderServerFailedToSaveWorkflow?.() ?? 'Failed to save workflow' });
 		}
 	}
 };

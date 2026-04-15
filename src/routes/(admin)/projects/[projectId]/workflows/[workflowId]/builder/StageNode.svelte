@@ -3,6 +3,7 @@
 	import { Play, Square, CircleStop } from 'lucide-svelte';
 	import { ToolBar } from '$lib/workflow-builder/components';
 	import type { ToolInstance } from '$lib/workflow-builder/tools';
+	import * as m from '$lib/paraglide/messages';
 
 	type RegionInfo = {
 		id: string;
@@ -83,7 +84,7 @@
 		<div class="stage-meta">
 			<span class="stage-key">{data.key}</span>
 			{#if data.maxHours}
-				<span class="stage-hours">{data.maxHours}h</span>
+				<span class="stage-hours">{m.workflowBuilderStageNodeMaxHours?.({ maxHours: data.maxHours }) ?? `${data.maxHours}h`}</span>
 			{/if}
 		</div>
 

@@ -5,6 +5,7 @@
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { toast } from 'svelte-sonner';
 	import { X, Upload, FileCode, Shapes } from 'lucide-svelte';
+	import * as m from '$lib/paraglide/messages';
 	import {
 		ICON_TEMPLATES,
 		BADGE_TEMPLATES,
@@ -120,7 +121,7 @@
 		if (!file) return;
 
 		if (!file.name.endsWith('.svg')) {
-			toast.error('Please upload an SVG file');
+			toast.error(m.adminMarkerIconDesignerUploadSvgOnly());
 			return;
 		}
 
@@ -129,9 +130,9 @@
 		if (result.valid) {
 			customSvgContent = text.trim();
 			customFilename = file.name;
-			toast.success('SVG uploaded');
+			toast.success(m.adminMarkerIconDesignerUploadSuccess());
 		} else {
-			toast.error(result.error || 'Invalid SVG');
+			toast.error(result.error || m.adminMarkerIconDesignerInvalidSvg());
 		}
 	}
 
@@ -145,7 +146,7 @@
 
 	async function handleSave() {
 		if (!hasIcon || !previewSvg) {
-			toast.error('Please select or provide an icon');
+			toast.error(m.adminMarkerIconDesignerNoIconSelected());
 			return;
 		}
 
@@ -180,9 +181,9 @@
 		if (onSave) {
 			try {
 				await onSave(config);
-				toast.success('Icon saved');
+				toast.success(m.adminMarkerIconDesignerSaveSuccess());
 			} catch {
-				toast.error('Error saving icon');
+				toast.error(m.adminMarkerIconDesignerSaveError());
 			}
 		}
 	}
@@ -192,8 +193,8 @@
 	<!-- Header -->
 	<div class="flex items-center justify-between">
 		<div>
-			<h2 class="text-xl font-semibold">Icon Designer</h2>
-			<p class="text-sm text-muted-foreground">Choose a template or provide custom SVG</p>
+			<h2 class="text-xl font-semibold">{m.adminMarkerIconDesignerTitle()}</h2>
+			<p class="text-sm text-muted-foreground">{m.adminMarkerIconDesignerSubtitle()}</p>
 		</div>
 		{#if onCancel}
 			<Button variant="ghost" size="icon" onclick={onCancel}>
@@ -214,7 +215,7 @@
 					onclick={() => (sourceTab = 'templates')}
 				>
 					<Shapes class="mr-2 h-4 w-4" />
-					Templates
+					{m.adminMarkerIconDesignerTabTemplates()}
 				</Button>
 				<Button
 					variant={sourceTab === 'custom' ? 'default' : 'outline'}
@@ -222,14 +223,14 @@
 					onclick={() => (sourceTab = 'custom')}
 				>
 					<FileCode class="mr-2 h-4 w-4" />
-					Custom SVG
+					{m.adminMarkerIconDesignerTabCustomSvg()}
 				</Button>
 			</div>
 
 			<!-- Templates grid -->
 			{#if sourceTab === 'templates'}
 				<div class="space-y-2">
-					<Label>Choose an icon</Label>
+					<Label>{m.adminMarkerIconDesignerChooseIcon()}</Label>
 					<div class="grid grid-cols-5 gap-2">
 						{#each ICON_TEMPLATES as template}
 							<button
@@ -264,7 +265,7 @@
 						/>
 						<Button variant="outline" size="sm" onclick={() => fileInput.click()}>
 							<Upload class="mr-2 h-4 w-4" />
-							Upload SVG
+							{m.adminMarkerIconDesignerUploadButton()}
 						</Button>
 						{#if customFilename}
 							<span class="flex items-center text-xs text-muted-foreground">
@@ -275,7 +276,7 @@
 					<Textarea
 						bind:value={customSvgContent}
 						onpaste={handlePaste}
-						placeholder="Or paste SVG code here..."
+						placeholder={m.adminMarkerIconDesignerPastePlaceholder()}
 						class="font-mono text-xs"
 						rows={6}
 					/>
@@ -284,7 +285,7 @@
 
 			<!-- Icon Color -->
 			<div class="space-y-2">
-				<Label>Icon Color</Label>
+				<Label>{m.adminMarkerIconDesignerIconColor()}</Label>
 				<div class="flex items-center gap-2">
 					<input
 						type="color"
@@ -302,7 +303,7 @@
 
 			<!-- Size -->
 			<div class="space-y-2">
-				<Label>Size (px)</Label>
+				<Label>{m.adminMarkerIconDesignerSize()}</Label>
 				<Input
 					type="number"
 					bind:value={iconSize}
@@ -314,7 +315,7 @@
 
 			<!-- Badge -->
 			<div class="space-y-2">
-				<Label>Badge (optional)</Label>
+				<Label>{m.adminMarkerIconDesignerBadgeLabel()}</Label>
 				<div class="flex flex-wrap gap-1.5">
 					<button
 						type="button"
@@ -324,7 +325,7 @@
 							? 'border-primary bg-primary text-primary-foreground'
 							: 'border-border hover:border-primary/50'}"
 					>
-						None
+						{m.adminMarkerIconDesignerBadgeNone()}
 					</button>
 					{#each BADGE_TEMPLATES as badge}
 						<button
@@ -348,14 +349,14 @@
 
 		<!-- Right: Preview -->
 		<div class="flex w-48 flex-col gap-3">
-			<Label>Preview</Label>
+			<Label>{m.adminMarkerIconDesignerPreview()}</Label>
 			<div
 				class="flex flex-1 items-center justify-center rounded-lg border-2 border-dashed bg-muted/20 p-4"
 			>
 				{#if previewSvg}
 					{@html previewSvg}
 				{:else}
-					<p class="text-center text-xs text-muted-foreground">Select an icon to preview</p>
+					<p class="text-center text-xs text-muted-foreground">{m.adminMarkerIconDesignerPreviewEmpty()}</p>
 				{/if}
 			</div>
 		</div>
@@ -364,8 +365,8 @@
 	<!-- Footer -->
 	<div class="flex justify-end gap-3 border-t pt-3">
 		{#if onCancel}
-			<Button variant="outline" onclick={onCancel}>Cancel</Button>
+			<Button variant="outline" onclick={onCancel}>{m.adminMarkerIconDesignerCancel()}</Button>
 		{/if}
-		<Button onclick={handleSave} disabled={!hasIcon}>Save Icon</Button>
+		<Button onclick={handleSave} disabled={!hasIcon}>{m.adminMarkerIconDesignerSave()}</Button>
 	</div>
 </div>

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy, untrack } from 'svelte';
+	import * as m from '$lib/paraglide/messages';
 	import { getParticipantGateway, resetAllParticipantState } from '$lib/participant-state/context.svelte';
 	import {
 		getDownloadProgress,
@@ -171,20 +172,20 @@
 		const dlProgress = syncDownloadProgress.current;
 		if (instProgress) {
 			if (instProgress.total > 0) {
-				appLoadingMessage.value = `Loading markers (${instProgress.loaded.toLocaleString()}/${instProgress.total.toLocaleString()})...`;
+				appLoadingMessage.value = (m.participantMapLoadingMarkersCount?.({ loaded: instProgress.loaded.toLocaleString(), total: instProgress.total.toLocaleString() }) ?? `Loading markers (${instProgress.loaded.toLocaleString()}/${instProgress.total.toLocaleString()})...`);
 			} else {
-				appLoadingMessage.value = 'Loading markers...';
+				appLoadingMessage.value = (m.participantMapLoadingMarkers?.() ?? 'Loading markers...');
 			}
 		} else if (fieldValueCache.loadedCount > 0 && fieldValueCache.loading) {
-			appLoadingMessage.value = `Loading field data (${fieldValueCache.loadedCount.toLocaleString()})...`;
+			appLoadingMessage.value = (m.participantMapLoadingFieldDataCount?.({ count: fieldValueCache.loadedCount.toLocaleString() }) ?? `Loading field data (${fieldValueCache.loadedCount.toLocaleString()})...`);
 		} else if (fieldValueCache.loading) {
-			appLoadingMessage.value = 'Loading field data...';
+			appLoadingMessage.value = (m.participantMapLoadingFieldData?.() ?? 'Loading field data...');
 		} else if (dlProgress) {
 			const label = dlProgress.currentCollection ?? 'data';
 			if (dlProgress.totalRecords > 0) {
-				appLoadingMessage.value = `Loading ${label} (${dlProgress.loadedRecords.toLocaleString()}/${dlProgress.totalRecords.toLocaleString()})...`;
+				appLoadingMessage.value = (m.participantMapLoadingCollectionCount?.({ label, loaded: dlProgress.loadedRecords.toLocaleString(), total: dlProgress.totalRecords.toLocaleString() }) ?? `Loading ${label} (${dlProgress.loadedRecords.toLocaleString()}/${dlProgress.totalRecords.toLocaleString()})...`);
 			} else {
-				appLoadingMessage.value = `Loading ${label}...`;
+				appLoadingMessage.value = (m.participantMapLoadingCollection?.({ label }) ?? `Loading ${label}...`);
 			}
 		} else {
 			appLoadingMessage.value = null;
@@ -1059,7 +1060,7 @@
 		bind:open={settingsSheetOpen}
 		participant={data.participant ? {
 			id: data.participant.id,
-			name: String(data.participant.name || data.participant.email || 'Participant'),
+			name: String(data.participant.name || data.participant.email || (m.participantMapDefaultName?.() ?? 'Participant')),
 			email: data.participant.email ? String(data.participant.email) : undefined,
 			project_id: data.participant.project_id ? String(data.participant.project_id) : undefined
 		} : undefined}
@@ -1076,7 +1077,7 @@
 			<div class="rounded-lg bg-background/95 p-3 shadow-lg backdrop-blur-sm border">
 				<div class="flex items-center gap-2 mb-2">
 					<Loader2 class="h-4 w-4 animate-spin text-blue-600" />
-					<span class="text-sm font-medium">Downloading offline data...</span>
+					<span class="text-sm font-medium">{m.participantMapDownloadingOfflineData?.() ?? 'Downloading offline data...'}</span>
 				</div>
 				<p class="text-xs text-muted-foreground">{downloadProgress.current_operation}</p>
 			</div>
@@ -1085,7 +1086,7 @@
 
 	{#if isLoading}
 		<div class="absolute inset-0 flex items-center justify-center bg-background/50">
-			<div class="text-muted-foreground">Loading map...</div>
+			<div class="text-muted-foreground">{m.participantMapLoadingMap?.() ?? 'Loading map...'}</div>
 		</div>
 	{/if}
 </div>

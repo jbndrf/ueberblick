@@ -10,6 +10,7 @@
 	import FormPreview from './FormPreview.svelte';
 
 	import type { ToolsForm, ToolsFormField, TrackedFormField, WorkflowStage, ColumnPosition, VisualConfig } from '$lib/workflow-builder';
+	import * as m from '$lib/paraglide/messages';
 
 	type AncestorFieldGroup = {
 		stage: WorkflowStage;
@@ -180,13 +181,13 @@
 	<div class="form-editor-header">
 		<div class="header-content">
 			<div class="header-title">
-				<Label for="form-name" class="sr-only">Form Name</Label>
+				<Label for="form-name" class="sr-only">{m.formEditorViewFormName?.() ?? 'Form Name'}</Label>
 				<Input
 					id="form-name"
 					bind:value={formName}
 					onblur={handleFormNameBlur}
 					class="form-name-input"
-					placeholder="Form name..."
+					placeholder={m.formEditorViewFormNamePlaceholder?.() ?? 'Form name...'}
 				/>
 			</div>
 			{#if isStageAttached}
@@ -195,7 +196,7 @@
 					size="icon"
 					onclick={() => showSettings = !showSettings}
 					class="settings-btn"
-					title="Button & Role Settings"
+					title={m.formEditorViewButtonRoleSettings?.() ?? 'Button & Role Settings'}
 				>
 					<Settings2 class="h-4 w-4" />
 				</Button>
@@ -213,24 +214,24 @@
 			<div class="settings-panel">
 				<div class="settings-section">
 					<div class="settings-header">
-						<span class="settings-title">Button Appearance</span>
+						<span class="settings-title">{m.formEditorViewButtonAppearance?.() ?? 'Button Appearance'}</span>
 					</div>
 					<div class="settings-content">
 						<div class="form-field">
-							<Label for="button-label">Button Label</Label>
+							<Label for="button-label">{m.formEditorViewButtonLabel?.() ?? 'Button Label'}</Label>
 							<Input
 								id="button-label"
-								value={form.visual_config?.button_label || 'Submit'}
+								value={form.visual_config?.button_label || (m.formEditorViewButtonLabelDefault?.() ?? 'Submit')}
 								oninput={(e) => onVisualConfigChange?.({
 									...form.visual_config,
 									button_label: e.currentTarget.value
 								})}
-								placeholder="e.g., Submit, Save, Continue"
+								placeholder={m.formEditorViewButtonLabelPlaceholder?.() ?? 'e.g., Submit, Save, Continue'}
 							/>
 						</div>
 
 						<div class="form-field">
-							<Label for="button-color">Button Color</Label>
+							<Label for="button-color">{m.formEditorViewButtonColor?.() ?? 'Button Color'}</Label>
 							<div class="color-picker">
 								<input
 									type="color"
@@ -256,9 +257,9 @@
 
 						<div class="form-field-switch">
 							<div class="switch-info">
-								<Label for="requires-confirmation">Requires Confirmation</Label>
+								<Label for="requires-confirmation">{m.formEditorViewRequiresConfirmation?.() ?? 'Requires Confirmation'}</Label>
 								<p class="switch-description">
-									Show a confirmation dialog before submitting
+									{m.formEditorViewRequiresConfirmationDesc?.() ?? 'Show a confirmation dialog before submitting'}
 								</p>
 							</div>
 							<Switch
@@ -273,15 +274,15 @@
 
 						{#if form.visual_config?.requires_confirmation}
 							<div class="form-field">
-								<Label for="confirmation-message">Confirmation Message</Label>
+								<Label for="confirmation-message">{m.formEditorViewConfirmationMessage?.() ?? 'Confirmation Message'}</Label>
 								<Input
 									id="confirmation-message"
-									value={form.visual_config?.confirmation_message || 'Are you sure you want to submit?'}
+									value={form.visual_config?.confirmation_message || (m.formEditorViewConfirmationMessageDefault?.() ?? 'Are you sure you want to submit?')}
 									oninput={(e) => onVisualConfigChange?.({
 										...form.visual_config,
 										confirmation_message: e.currentTarget.value
 									})}
-									placeholder="Are you sure you want to submit?"
+									placeholder={m.formEditorViewConfirmationMessageDefault?.() ?? 'Are you sure you want to submit?'}
 								/>
 							</div>
 						{/if}
@@ -290,7 +291,7 @@
 
 				<div class="settings-section">
 					<div class="settings-header">
-						<span class="settings-title">Allowed Roles</span>
+						<span class="settings-title">{m.formEditorViewAllowedRoles?.() ?? 'Allowed Roles'}</span>
 					</div>
 					<div class="settings-content">
 						<div class="roles-list">
@@ -314,11 +315,11 @@
 									{/if}
 								</label>
 							{:else}
-								<p class="no-roles">No roles defined for this project.</p>
+								<p class="no-roles">{m.formEditorViewNoRoles?.() ?? 'No roles defined for this project.'}</p>
 							{/each}
 						</div>
 						<p class="help-text">
-							Only participants with selected roles can use this form. Leave empty to allow all.
+							{m.formEditorViewRolesHelp?.() ?? 'Only participants with selected roles can use this form. Leave empty to allow all.'}
 						</p>
 					</div>
 				</div>

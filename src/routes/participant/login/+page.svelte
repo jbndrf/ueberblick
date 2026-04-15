@@ -45,7 +45,7 @@
 			scannerReady = true;
 		} catch (err) {
 			console.error('Failed to initialize QR scanner:', err);
-			scannerError = 'Failed to initialize QR scanner';
+			scannerError = m.participantLoginQrInitError?.() ?? 'Failed to initialize QR scanner';
 		}
 	}
 
@@ -64,7 +64,7 @@
 		} catch (err: any) {
 			scanningActive = false;
 			console.error('Camera error:', err);
-			scannerError = err?.message || 'Could not access camera. Try uploading an image instead.';
+			scannerError = err?.message || (m.participantLoginQrCameraError?.() ?? 'Could not access camera. Try uploading an image instead.');
 		}
 	}
 
@@ -90,7 +90,7 @@
 			onQrCodeScanned(result);
 		} catch (err: any) {
 			console.error('File scan error:', err);
-			scannerError = 'Could not read QR code from image. Make sure the image contains a valid QR code.';
+			scannerError = m.participantLoginQrFileError?.() ?? 'Could not read QR code from image. Make sure the image contains a valid QR code.';
 		}
 		// Reset input so same file can be selected again
 		input.value = '';
@@ -204,7 +204,7 @@
 
 					<div class="mt-4 text-center text-sm text-muted-foreground">
 						<p>
-							Or <button
+							{m.participantLoginOr?.() ?? 'Or'} <button
 								type="button"
 								class="text-primary hover:underline"
 								onclick={() => (activeTab = 'qr')}
@@ -245,7 +245,7 @@
 									disabled={!scannerReady}
 								>
 									<Camera class="mr-2 h-4 w-4" />
-									{scannerReady ? 'Start Camera' : 'Loading...'}
+									{scannerReady ? (m.participantLoginStartCamera?.() ?? 'Start Camera') : (m.participantLoginLoading?.() ?? 'Loading...')}
 								</Button>
 							{:else}
 								<Button
@@ -255,14 +255,14 @@
 									onclick={stopCameraScanning}
 								>
 									<Loader2 class="mr-2 h-4 w-4 animate-spin" />
-									Stop Camera
+									{m.participantLoginStopCamera?.() ?? 'Stop Camera'}
 								</Button>
 							{/if}
 
 							<Button type="button" variant="outline" class="flex-1" disabled={!scannerReady}>
 								<label class="flex cursor-pointer items-center justify-center">
 									<Upload class="mr-2 h-4 w-4" />
-									Upload QR Image
+									{m.participantLoginUploadQrImage?.() ?? 'Upload QR Image'}
 									<input
 										type="file"
 										accept="image/*"
@@ -274,12 +274,12 @@
 						</div>
 
 						<p class="text-center text-xs text-muted-foreground">
-							Scan a QR code with your camera or upload an image
+							{m.participantLoginQrHint?.() ?? 'Scan a QR code with your camera or upload an image'}
 						</p>
 
 						<div class="text-center text-sm text-muted-foreground">
 							<p>
-								Or <button
+								{m.participantLoginOr?.() ?? 'Or'} <button
 									type="button"
 									class="text-primary hover:underline"
 									onclick={() => (activeTab = 'token')}

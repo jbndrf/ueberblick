@@ -14,6 +14,7 @@
 
 	import { toolRegistry } from '$lib/workflow-builder/tools';
 	import type { ToolsEdit, VisualConfig } from '$lib/workflow-builder';
+	import * as m from '$lib/paraglide/messages';
 
 	type Role = {
 		id: string;
@@ -210,7 +211,7 @@
 					bind:value={stageName}
 					onblur={handleNameBlur}
 					class="header-input"
-					placeholder="Stage name..."
+					placeholder={m.propertiesStagePropertyNamePlaceholder?.() ?? 'Stage name...'}
 				/>
 				<span class="stage-type-badge {getStageTypeBadgeClass(stage.data.stageType)}">
 					{stage.data.stageType}
@@ -222,8 +223,8 @@
 	<!-- Tabs -->
 	<Tabs.Root bind:value={activeTab} class="flex-1 flex flex-col">
 		<Tabs.List class="panel-tabs">
-			<Tabs.Trigger value="permissions">Permissions</Tabs.Trigger>
-			<Tabs.Trigger value="tools">Tools</Tabs.Trigger>
+			<Tabs.Trigger value="permissions">{m.propertiesStagePropertyTabPermissions?.() ?? 'Permissions'}</Tabs.Trigger>
+			<Tabs.Trigger value="tools">{m.propertiesStagePropertyTabTools?.() ?? 'Tools'}</Tabs.Trigger>
 		</Tabs.List>
 
 		<div class="panel-content">
@@ -232,7 +233,7 @@
 				<!-- Stage Visibility - Primary/Prominent Section -->
 				<div class="primary-permission-section">
 					<div class="primary-permission-header">
-						<span class="primary-permission-title">Stage Visibility</span>
+						<span class="primary-permission-title">{m.propertiesStagePropertyVisibilityTitle?.() ?? 'Stage Visibility'}</span>
 					</div>
 					<div class="primary-permission-content">
 						<MobileMultiSelect
@@ -243,18 +244,18 @@
 							getOptionDescription={(r) => r.description}
 							allowCreate={!!onCreateRole}
 							onCreateOption={onCreateRole}
-							placeholder="Select or search roles..."
+							placeholder={m.propertiesStagePropertyRolesPlaceholder?.() ?? 'Select or search roles...'}
 							class="w-full"
 						/>
 						<p class="help-text">
-							Only participants with these roles can see this stage. Leave empty to make visible to all.
+							{m.propertiesStagePropertyVisibilityHelp?.() ?? 'Only participants with these roles can see this stage. Leave empty to make visible to all.'}
 						</p>
 					</div>
 				</div>
 
 				<!-- Tool Permissions Section -->
 				{#if stageEditTools.length > 0}
-					<PropertySection title="Tool Permissions" defaultOpen={true}>
+					<PropertySection title={m.propertiesStagePropertyToolPermissionsTitle?.() ?? 'Tool Permissions'} defaultOpen={true}>
 						<div class="tool-permissions-list">
 							{#each stageEditTools as tool (tool.id)}
 								{@const ToolIcon = getToolIcon('edit')}
@@ -278,7 +279,7 @@
 											getOptionDescription={(r) => r.description}
 											allowCreate={!!onCreateRole}
 											onCreateOption={onCreateRole}
-											placeholder="All roles..."
+											placeholder={m.propertiesStagePropertyAllRolesPlaceholder?.() ?? 'All roles...'}
 											class="w-full"
 										/>
 									</div>
@@ -291,9 +292,9 @@
 
 			<!-- Tools Tab -->
 			<Tabs.Content value="tools" class="tab-content">
-				<PropertySection title="Connected Tools" defaultOpen={true}>
+				<PropertySection title={m.propertiesStagePropertyConnectedToolsTitle?.() ?? 'Connected Tools'} defaultOpen={true}>
 					{#if stageEditTools.length === 0}
-						<p class="empty-text">No tools attached to this stage.</p>
+						<p class="empty-text">{m.propertiesStagePropertyNoTools?.() ?? 'No tools attached to this stage.'}</p>
 					{:else}
 						<div class="tools-list">
 							{#each stageEditTools as tool (tool.id)}
@@ -319,7 +320,7 @@
 	<div class="panel-footer">
 		<Button variant="destructive" size="sm" onclick={handleDelete} class="w-full">
 			<Trash2 class="h-4 w-4 mr-2" />
-			Delete Stage
+			{m.propertiesStagePropertyDeleteStage?.() ?? 'Delete Stage'}
 		</Button>
 	</div>
 </div>

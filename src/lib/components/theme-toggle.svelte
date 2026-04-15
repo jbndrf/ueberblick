@@ -13,7 +13,7 @@
 	variant="outline"
 	size="icon"
 	onclick={toggleTheme}
-	aria-label={themeStore.isDark ? m.switchToLightMode() : m.switchToDarkMode()}
+	aria-label={themeStore.isDark ? (m.switchToLightMode?.() ?? 'Switch to light mode') : (m.switchToDarkMode?.() ?? 'Switch to dark mode')}
 >
 	{#if themeStore.isDark}
 		<Sun class="h-5 w-5" />

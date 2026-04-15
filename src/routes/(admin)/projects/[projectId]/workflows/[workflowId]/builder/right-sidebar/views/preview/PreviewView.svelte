@@ -10,6 +10,7 @@
 		CircleStop,
 		FileText
 	} from 'lucide-svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	type FormGroup = { formName: string; allowedRoles: string[]; fields: FormFieldWithValue[] };
 
@@ -87,7 +88,7 @@
 				class="text-xs bg-primary-foreground/10 rounded px-2 py-1 border-0 outline-none cursor-pointer text-primary-foreground"
 				bind:value={roleFilter}
 			>
-				<option value="all">All roles</option>
+				<option value="all">{m.workflowBuilderPreviewViewAllRoles?.() ?? 'All roles'}</option>
 				{#each roles as role}
 					<option value={role.id}>{role.name}</option>
 				{/each}
@@ -111,10 +112,10 @@
 					style="grid-template-columns: repeat(2, minmax(0, 1fr))"
 				>
 					<Tabs.Trigger value="overview" class="text-xs sm:text-sm">
-						Overview
+						{m.workflowBuilderPreviewViewOverview?.() ?? 'Overview'}
 					</Tabs.Trigger>
 					<Tabs.Trigger value="details" class="text-xs sm:text-sm">
-						Details
+						{m.workflowBuilderPreviewViewDetails?.() ?? 'Details'}
 					</Tabs.Trigger>
 				</Tabs.List>
 
@@ -124,7 +125,7 @@
 				<Tabs.Content value="overview" class="pt-4">
 					{#if stageNodes.length === 0}
 						<p class="text-sm text-muted-foreground text-center py-6">
-							No stages yet. Add stages to the canvas to see a preview.
+							{m.workflowBuilderPreviewViewNoStagesHint?.() ?? 'No stages yet. Add stages to the canvas to see a preview.'}
 						</p>
 					{:else}
 						<div class="space-y-2">
@@ -145,7 +146,7 @@
 										{/if}
 										<div class="stage-card-info">
 											<span class="stage-card-name">{node.data.title}</span>
-											<span class="stage-card-meta">{fieldCount} {fieldCount === 1 ? 'field' : 'fields'}</span>
+											<span class="stage-card-meta">{fieldCount} {fieldCount === 1 ? (m.workflowBuilderPreviewViewField?.() ?? 'field') : (m.workflowBuilderPreviewViewFields?.() ?? 'fields')}</span>
 										</div>
 									</div>
 									<span class="stage-card-type">{stageType}</span>
@@ -161,7 +162,7 @@
 				<Tabs.Content value="details" class="pt-4">
 					{#if stageNodes.length === 0}
 						<p class="text-sm text-muted-foreground text-center py-6">
-							No stages yet
+							{m.workflowBuilderPreviewViewNoStages?.() ?? 'No stages yet'}
 						</p>
 					{:else}
 						<Tabs.Root bind:value={activeStageTab}>
@@ -176,7 +177,7 @@
 								<Tabs.Content value={node.id} class="pt-3">
 									{@const groups = getVisibleGroups(node.id)}
 									{#if groups.length === 0 || groups.every(g => g.fields.length === 0)}
-										<p class="text-xs text-muted-foreground text-center py-4">No form fields for this stage{roleFilter !== 'all' ? ' (for selected role)' : ''}</p>
+										<p class="text-xs text-muted-foreground text-center py-4">{roleFilter !== 'all' ? (m.workflowBuilderPreviewViewNoFormFieldsForRole?.() ?? 'No form fields for this stage (for selected role)') : (m.workflowBuilderPreviewViewNoFormFields?.() ?? 'No form fields for this stage')}</p>
 									{:else}
 										<div class="space-y-3">
 											{#each groups as group}

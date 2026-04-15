@@ -11,13 +11,13 @@
 
 <div class="flex flex-col gap-6 min-w-0 w-full">
 	<div>
-		<h1 class="text-3xl font-bold tracking-tight">{m.navProjectSettings()}</h1>
+		<h1 class="text-3xl font-bold tracking-tight">{m.navProjectSettings?.() ?? 'Project Settings'}</h1>
 	</div>
 
 	<Tabs.Root bind:value={currentTab}>
 		<Tabs.List>
-			<Tabs.Trigger value="map">{m.settingsTabMap()}</Tabs.Trigger>
-			<Tabs.Trigger value="general">{m.settingsTabGeneral()}</Tabs.Trigger>
+			<Tabs.Trigger value="map">{m.settingsTabMap?.() ?? 'Map'}</Tabs.Trigger>
+			<Tabs.Trigger value="general">{m.settingsTabGeneral?.() ?? 'General'}</Tabs.Trigger>
 		</Tabs.List>
 
 		<Tabs.Content value="map">

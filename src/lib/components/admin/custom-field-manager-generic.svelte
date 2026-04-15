@@ -235,13 +235,13 @@
 									<span
 										class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset bg-yellow-50 text-yellow-700 ring-yellow-700/10"
 									>
-										Required
+										{m.adminCustomFieldManagerRequired()}
 									</span>
 								{/if}
 							</div>
 							{#if config.defaultValueColumn && field[config.defaultValueColumn]}
 								<p class="text-xs text-muted-foreground mt-1">
-									Default: {field[config.defaultValueColumn]}
+									{m.adminCustomFieldManagerDefaultPrefix({ value: field[config.defaultValueColumn] })}
 								</p>
 							{/if}
 						</div>
@@ -286,7 +286,7 @@
 					required
 				/>
 				<p class="text-xs text-muted-foreground">
-					Must start with a letter and contain only lowercase letters, numbers, and underscores
+					{m.adminCustomFieldManagerFieldNameHint()}
 				</p>
 			</div>
 			<div class="grid gap-2">
@@ -300,10 +300,10 @@
 								class="w-full justify-between"
 								id="fieldType"
 							>
-								{formData.fieldType === 'text' ? 'Text' :
-								 formData.fieldType === 'number' ? 'Number' :
-								 formData.fieldType === 'date' ? 'Date' :
-								 formData.fieldType === 'boolean' ? 'Boolean' : 'Select type'}
+								{(formData.fieldType === 'text' ? m.adminCustomFieldManagerTypeText() :
+								 formData.fieldType === 'number' ? m.adminCustomFieldManagerTypeNumber() :
+								 formData.fieldType === 'date' ? m.adminCustomFieldManagerTypeDate() :
+								 formData.fieldType === 'boolean' ? m.adminCustomFieldManagerTypeBoolean() : m.adminCustomFieldManagerSelectType())}
 								<ChevronDown class="ml-2 h-4 w-4 opacity-50" />
 							</Button>
 						{/snippet}
@@ -315,7 +315,7 @@
 							{:else}
 								<span class="mr-2 h-4 w-4"></span>
 							{/if}
-							Text
+							{m.adminCustomFieldManagerTypeText()}
 						</DropdownMenu.Item>
 						<DropdownMenu.Item onclick={() => { formData.fieldType = 'number'; }}>
 							{#if formData.fieldType === 'number'}
@@ -323,7 +323,7 @@
 							{:else}
 								<span class="mr-2 h-4 w-4"></span>
 							{/if}
-							Number
+							{m.adminCustomFieldManagerTypeNumber()}
 						</DropdownMenu.Item>
 						<DropdownMenu.Item onclick={() => { formData.fieldType = 'date'; }}>
 							{#if formData.fieldType === 'date'}
@@ -331,7 +331,7 @@
 							{:else}
 								<span class="mr-2 h-4 w-4"></span>
 							{/if}
-							Date
+							{m.adminCustomFieldManagerTypeDate()}
 						</DropdownMenu.Item>
 						<DropdownMenu.Item onclick={() => { formData.fieldType = 'boolean'; }}>
 							{#if formData.fieldType === 'boolean'}
@@ -339,7 +339,7 @@
 							{:else}
 								<span class="mr-2 h-4 w-4"></span>
 							{/if}
-							Boolean
+							{m.adminCustomFieldManagerTypeBoolean()}
 						</DropdownMenu.Item>
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
@@ -347,7 +347,7 @@
 			{#if config.defaultValueColumn}
 				<div class="grid gap-2">
 					<Label for="defaultValue">{config.labels.defaultValue}</Label>
-					<Input id="defaultValue" bind:value={formData.defaultValue} placeholder="Default value" />
+					<Input id="defaultValue" bind:value={formData.defaultValue} placeholder={m.adminCustomFieldManagerDefaultValuePlaceholder()} />
 				</div>
 			{/if}
 			{#if config.isRequiredColumn}
@@ -372,7 +372,7 @@
 <Dialog.Root bind:open={editDialogOpen}>
 	<Dialog.Content>
 		<Dialog.Header>
-			<Dialog.Title>Edit {config.labels.fieldName}</Dialog.Title>
+			<Dialog.Title>{m.adminCustomFieldManagerEditTitle({ fieldName: config.labels.fieldName })}</Dialog.Title>
 		</Dialog.Header>
 		{#if selectedField}
 			<div class="grid gap-4 py-4">
@@ -396,10 +396,10 @@
 									class="w-full justify-between"
 									id="edit-fieldType"
 								>
-									{formData.fieldType === 'text' ? 'Text' :
-									 formData.fieldType === 'number' ? 'Number' :
-									 formData.fieldType === 'date' ? 'Date' :
-									 formData.fieldType === 'boolean' ? 'Boolean' : 'Select type'}
+									{(formData.fieldType === 'text' ? m.adminCustomFieldManagerTypeText() :
+									 formData.fieldType === 'number' ? m.adminCustomFieldManagerTypeNumber() :
+									 formData.fieldType === 'date' ? m.adminCustomFieldManagerTypeDate() :
+									 formData.fieldType === 'boolean' ? m.adminCustomFieldManagerTypeBoolean() : m.adminCustomFieldManagerSelectType())}
 									<ChevronDown class="ml-2 h-4 w-4 opacity-50" />
 								</Button>
 							{/snippet}
@@ -411,7 +411,7 @@
 								{:else}
 									<span class="mr-2 h-4 w-4"></span>
 								{/if}
-								Text
+								{m.adminCustomFieldManagerTypeText()}
 							</DropdownMenu.Item>
 							<DropdownMenu.Item onclick={() => { formData.fieldType = 'number'; }}>
 								{#if formData.fieldType === 'number'}
@@ -419,7 +419,7 @@
 								{:else}
 									<span class="mr-2 h-4 w-4"></span>
 								{/if}
-								Number
+								{m.adminCustomFieldManagerTypeNumber()}
 							</DropdownMenu.Item>
 							<DropdownMenu.Item onclick={() => { formData.fieldType = 'date'; }}>
 								{#if formData.fieldType === 'date'}
@@ -427,7 +427,7 @@
 								{:else}
 									<span class="mr-2 h-4 w-4"></span>
 								{/if}
-								Date
+								{m.adminCustomFieldManagerTypeDate()}
 							</DropdownMenu.Item>
 							<DropdownMenu.Item onclick={() => { formData.fieldType = 'boolean'; }}>
 								{#if formData.fieldType === 'boolean'}
@@ -435,7 +435,7 @@
 								{:else}
 									<span class="mr-2 h-4 w-4"></span>
 								{/if}
-								Boolean
+								{m.adminCustomFieldManagerTypeBoolean()}
 							</DropdownMenu.Item>
 						</DropdownMenu.Content>
 					</DropdownMenu.Root>
@@ -446,7 +446,7 @@
 						<Input
 							id="edit-defaultValue"
 							bind:value={formData.defaultValue}
-							placeholder="Default value"
+							placeholder={m.adminCustomFieldManagerDefaultValuePlaceholder()}
 						/>
 					</div>
 				{/if}
@@ -473,7 +473,7 @@
 <AlertDialog.Root bind:open={deleteDialogOpen}>
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>Delete {config.labels.fieldName}</AlertDialog.Title>
+			<AlertDialog.Title>{m.adminCustomFieldManagerDeleteTitle({ fieldName: config.labels.fieldName })}</AlertDialog.Title>
 			<AlertDialog.Description>
 				{#if selectedField}
 					{typeof config.labels.deleteConfirm === 'function'

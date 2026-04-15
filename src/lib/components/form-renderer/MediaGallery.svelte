@@ -2,6 +2,7 @@
 	import { FileText, Camera, ImagePlus, X, ChevronLeft, ChevronRight } from 'lucide-svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import * as m from '$lib/paraglide/messages';
 	import * as Carousel from '$lib/components/ui/carousel';
 	import type { CarouselAPI } from '$lib/components/ui/carousel/context';
 	import type { MediaFile, FormMode } from './types';
@@ -51,9 +52,11 @@
 	const canAdd = $derived(mode !== 'view' && files.length < maxFiles);
 	const imageFiles = $derived(files.filter((f) => f.isImage));
 	const currentLightboxFile = $derived(imageFiles[lightboxIndex]);
-	const acceptTypes = $derived(allowedTypes?.join(',') || 'image/*,.pdf,.doc,.docx,.txt');
+	const acceptTypes = $derived(
+		allowedTypes?.join(',') || 'image/png,image/jpeg,image/webp,image/gif'
+	);
 
-	const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.heic', '.heif'];
+	const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
 	const acceptsImages = $derived.by(() => {
 		if (!allowedTypes || allowedTypes.length === 0) return true;
 		return allowedTypes.some(
@@ -301,12 +304,12 @@
 				{#if acceptsImages}
 					<Button variant="outline" size="sm" class="flex-1" onclick={handleCameraClick}>
 						<Camera class="w-4 h-4 mr-1" />
-						Camera
+						{m.mediaGalleryCamera()}
 					</Button>
 				{/if}
 				<Button variant="outline" size="sm" class="flex-1" onclick={handleFileClick}>
 					<ImagePlus class="w-4 h-4 mr-1" />
-					Files
+					{m.mediaGalleryFiles()}
 				</Button>
 			</div>
 		{/if}

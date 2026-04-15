@@ -2,6 +2,7 @@
 	import { ArrowLeft, Trash2 } from 'lucide-svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
+	import * as m from '$lib/paraglide/messages';
 
 	import ConditionBuilder from './ConditionBuilder.svelte';
 	import ActionBuilder from './ActionBuilder.svelte';
@@ -47,9 +48,9 @@
 	<div class="config-header">
 		<button class="back-btn" onclick={onBack}>
 			<ArrowLeft class="h-3.5 w-3.5" />
-			<span>Steps</span>
+			<span>{m.automationStepConfigPanelSteps?.() ?? 'Steps'}</span>
 		</button>
-		<span class="step-label">Step {stepIndex + 1}</span>
+		<span class="step-label">{m.automationStepConfigPanelStep?.() ?? 'Step'} {stepIndex + 1}</span>
 	</div>
 
 	<div class="config-content">
@@ -58,14 +59,14 @@
 			<Input
 				value={step.name}
 				oninput={(e) => updateName(e.currentTarget.value)}
-				placeholder="Step name..."
+				placeholder={m.automationStepConfigPanelStepNamePlaceholder?.() ?? 'Step name...'}
 				class="h-7 text-xs"
 			/>
 		</div>
 
 		<!-- Conditions -->
 		<div class="config-section">
-			<span class="section-label">Conditions (guard)</span>
+			<span class="section-label">{m.automationStepConfigPanelConditionsLabel?.() ?? 'Conditions (guard)'}</span>
 			<ConditionBuilder
 				conditions={step.conditions}
 				{fieldOptions}
@@ -76,7 +77,7 @@
 
 		<!-- Actions -->
 		<div class="config-section">
-			<span class="section-label">Actions</span>
+			<span class="section-label">{m.automationStepConfigPanelActionsLabel?.() ?? 'Actions'}</span>
 			<ActionBuilder
 				actions={step.actions}
 				{fieldOptions}
@@ -95,7 +96,7 @@
 		<div class="config-footer">
 			<Button variant="destructive" size="sm" class="h-7 text-xs" onclick={onDelete}>
 				<Trash2 class="h-3 w-3 mr-1" />
-				Delete Step
+				{m.automationStepConfigPanelDeleteStep?.() ?? 'Delete Step'}
 			</Button>
 		</div>
 	</div>

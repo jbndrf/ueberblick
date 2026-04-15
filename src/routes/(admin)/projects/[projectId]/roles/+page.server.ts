@@ -5,6 +5,7 @@ import { superValidate } from 'sveltekit-superforms';
 import { zod } from 'sveltekit-superforms/adapters';
 import { createUpdateFieldAction, createDeleteAction } from '$lib/server/crud-actions';
 import type PocketBase from 'pocketbase';
+import * as m from '$lib/paraglide/messages';
 
 type StagePermissions = {
 	id: string;
@@ -329,7 +330,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 		};
 	} catch (err) {
 		console.error('Error loading roles:', err);
-		throw error(500, 'Failed to load roles');
+		throw error(500, m.rolesServerLoadError?.() ?? 'Failed to load roles');
 	}
 };
 
@@ -354,7 +355,7 @@ export const actions: Actions = {
 			console.error('Error creating role:', err);
 			return fail(500, {
 				form,
-				message: 'Failed to create role'
+				message: m.rolesServerCreateError?.() ?? 'Failed to create role'
 			});
 		}
 	},
@@ -380,7 +381,7 @@ export const actions: Actions = {
 			console.error('Error updating role:', err);
 			return fail(500, {
 				form,
-				message: 'Failed to update role'
+				message: m.rolesServerUpdateError?.() ?? 'Failed to update role'
 			});
 		}
 	},
@@ -392,7 +393,7 @@ export const actions: Actions = {
 			validators: {
 				name: (value) => ({
 					valid: value.trim().length >= 2,
-					error: 'Name must be at least 2 characters'
+					error: m.rolesServerNameMinLength?.() ?? 'Name must be at least 2 characters'
 				})
 			}
 		})(request);
@@ -453,7 +454,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating participant roles:', err);
-			return fail(500, { message: 'Failed to update participant roles' });
+			return fail(500, { message: m.rolesServerUpdateParticipantsError?.() ?? 'Failed to update participant roles' });
 		}
 	},
 
@@ -541,7 +542,7 @@ export const actions: Actions = {
 			return { success: true, entity: newParticipant };
 		} catch (error) {
 			console.error('Error creating participant:', error);
-			return fail(500, { message: 'Failed to create participant' });
+			return fail(500, { message: m.rolesServerCreateParticipantError?.() ?? 'Failed to create participant' });
 		}
 	}
 };

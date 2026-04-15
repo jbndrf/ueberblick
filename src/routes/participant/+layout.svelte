@@ -410,29 +410,29 @@
 					</div>
 				{/if}
 				{#if syncStatus.current}
-					<span class="text-sm text-muted-foreground animate-pulse">Syncing data ({syncStatus.current.done}/{syncStatus.current.total})</span>
+					<span class="text-sm text-muted-foreground animate-pulse">{(m.participantLayoutSyncingData?.({ done: syncStatus.current.done, total: syncStatus.current.total })) ?? `Syncing data (${syncStatus.current.done}/${syncStatus.current.total})`}</span>
 				{:else if appLoadingMessage.value}
 					<span class="text-sm text-muted-foreground animate-pulse">{appLoadingMessage.value}</span>
 				{:else}
-					<span class="font-semibold">{data.projectName ?? 'Überblick'}</span>
+					<span class="font-semibold">{data.projectName ?? (m.participantLayoutAppName?.() ?? 'Überblick')}</span>
 				{/if}
 			</div>
 
 			<!-- Desktop Navigation (hidden on mobile) -->
 			<div class="hidden md:flex items-center gap-1">
-				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onLayersClick?.()} title="Layers">
+				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onLayersClick?.()} title={m.mapFilterLayers?.() ?? 'Layers'}>
 					<Layers class="h-5 w-5" />
 				</Button>
-				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onFiltersClick?.()} title="Filters">
+				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onFiltersClick?.()} title={m.mapFilters?.() ?? 'Filters'}>
 					<Filter class="h-5 w-5" />
 				</Button>
-				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onWorkflowClick?.()} title="New">
+				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onWorkflowClick?.()} title={m.participantLayoutNew?.() ?? 'New'}>
 					<Plus class="h-5 w-5" />
 				</Button>
-				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onLocationClick?.()} title="Location">
+				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onLocationClick?.()} title={m.mapMyLocation?.() ?? 'My Location'}>
 					<Navigation class="h-5 w-5" />
 				</Button>
-				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onToolsClick?.()} title="Tools">
+				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onToolsClick?.()} title={m.mapTools?.() ?? 'Tools'}>
 					<Settings class="h-5 w-5" />
 				</Button>
 			</div>
@@ -451,7 +451,7 @@
 				{@render children()}
 			{:else}
 				<div class="flex h-full items-center justify-center text-sm text-muted-foreground">
-					<span class="animate-pulse">Loading…</span>
+					<span class="animate-pulse">{m.participantLayoutLoading?.() ?? 'Loading…'}</span>
 				</div>
 			{/if}
 		</main>

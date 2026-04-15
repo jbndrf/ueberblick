@@ -56,18 +56,18 @@
 		<Card.Header>
 			<Card.Title class="flex items-center gap-2">
 				<Image class="h-5 w-5" />
-				{m.settingsAppBranding()}
+				{m.settingsAppBranding?.() ?? 'App Branding'}
 			</Card.Title>
-			<Card.Description>{m.settingsAppBrandingDescription()}</Card.Description>
+			<Card.Description>{m.settingsAppBrandingDescription?.() ?? 'Customize the icon and name shown in the participant app'}</Card.Description>
 		</Card.Header>
 		<Card.Content>
 			<div class="flex items-start gap-6">
 				<!-- Current Icon Preview -->
 				<div class="shrink-0">
 					{#if iconPreview}
-						<img src={iconPreview} alt="Icon preview" class="h-20 w-20 rounded-lg border object-cover" />
+						<img src={iconPreview} alt={m.generalSettingsIconPreviewAlt?.() ?? 'Icon preview'} class="h-20 w-20 rounded-lg border object-cover" />
 					{:else if data.iconUrl}
-						<img src={data.iconUrl} alt="Project icon" class="h-20 w-20 rounded-lg border object-cover" />
+						<img src={data.iconUrl} alt={m.generalSettingsProjectIconAlt?.() ?? 'Project icon'} class="h-20 w-20 rounded-lg border object-cover" />
 					{:else}
 						<div class="flex h-20 w-20 items-center justify-center rounded-lg border border-dashed bg-muted/50">
 							<Image class="h-8 w-8 text-muted-foreground" />
@@ -86,16 +86,16 @@
 							return async ({ result }) => {
 								isSavingDisplayName = false;
 								if (result.type === 'success') {
-									toast.success(m.commonSave());
+									toast.success(m.generalSettingsDisplayNameSaved?.() ?? 'Display name saved');
 									await invalidateAll();
 								} else {
-									toast.error('Failed to save display name');
+									toast.error(m.generalSettingsDisplayNameSaveError?.() ?? 'Failed to save display name');
 								}
 							};
 						}}
 					>
 						<div class="space-y-2">
-							<Label for="display_name">{m.settingsDisplayName()}</Label>
+							<Label for="display_name">{m.settingsDisplayName?.() ?? 'App Name'}</Label>
 							<div class="flex items-center gap-3">
 								<Input
 									id="display_name"
@@ -105,10 +105,10 @@
 									class="max-w-xs"
 								/>
 								<Button type="submit" size="sm" disabled={isSavingDisplayName}>
-									{m.commonSave()}
+									{m.commonSave?.() ?? 'Save'}
 								</Button>
 							</div>
-							<p class="text-xs text-muted-foreground">{m.settingsDisplayNameHint()}</p>
+							<p class="text-xs text-muted-foreground">{m.settingsDisplayNameHint?.() ?? 'Name shown in the participant app header. Leave empty to use the project name.'}</p>
 						</div>
 					</form>
 
@@ -122,17 +122,17 @@
 							return async ({ result }) => {
 								isUploadingIcon = false;
 								if (result.type === 'success') {
-									toast.success(m.settingsUploadIcon());
+									toast.success(m.generalSettingsIconUploaded?.() ?? 'Icon uploaded');
 									iconPreview = null;
 									await invalidateAll();
 								} else {
-									toast.error('Failed to upload icon');
+									toast.error(m.generalSettingsIconUploadError?.() ?? 'Failed to upload icon');
 								}
 							};
 						}}
 					>
 						<div class="space-y-2">
-							<Label>{m.settingsUploadIcon()}</Label>
+							<Label>{m.settingsUploadIcon?.() ?? 'Upload Icon'}</Label>
 							<div class="flex items-center gap-3">
 								<Input
 									type="file"
@@ -144,12 +144,12 @@
 								/>
 								<Button type="submit" size="sm" disabled={isUploadingIcon || !iconPreview}>
 									<Upload class="mr-2 h-4 w-4" />
-									{m.settingsUploadIcon()}
+									{m.settingsUploadIcon?.() ?? 'Upload Icon'}
 								</Button>
 							</div>
 						</div>
 					</form>
-					<p class="text-xs text-muted-foreground">{m.settingsIconHint()}</p>
+					<p class="text-xs text-muted-foreground">{m.settingsIconHint?.() ?? 'PNG, JPG, SVG, or WebP. Max 2MB.'}</p>
 
 					{#if data.iconUrl}
 						<form
@@ -158,18 +158,18 @@
 							use:enhance={() => {
 								return async ({ result }) => {
 									if (result.type === 'success') {
-										toast.success(m.settingsRemoveIcon());
+										toast.success(m.generalSettingsIconRemoved?.() ?? 'Icon removed');
 										iconPreview = null;
 										await invalidateAll();
 									} else {
-										toast.error('Failed to remove icon');
+										toast.error(m.generalSettingsIconRemoveError?.() ?? 'Failed to remove icon');
 									}
 								};
 							}}
 						>
 							<Button type="submit" variant="ghost" size="sm" class="text-destructive">
 								<X class="mr-2 h-4 w-4" />
-								{m.settingsRemoveIcon()}
+								{m.settingsRemoveIcon?.() ?? 'Remove Icon'}
 							</Button>
 						</form>
 					{/if}
@@ -185,13 +185,13 @@
 				<div>
 					<Card.Title class="flex items-center gap-2">
 						<FileText class="h-5 w-5" />
-						{m.infoPagesTitle()}
+						{m.infoPagesTitle?.() ?? 'Info Pages'}
 					</Card.Title>
-					<Card.Description>{m.infoPagesDescription()}</Card.Description>
+					<Card.Description>{m.infoPagesDescription?.() ?? 'Manage informational pages shown to participants (e.g. privacy policy, imprint)'}</Card.Description>
 				</div>
 				<Button onclick={openCreate}>
 					<Plus class="mr-2 h-4 w-4" />
-					{m.infoPagesCreate()}
+					{m.infoPagesCreate?.() ?? 'Add Info Page'}
 				</Button>
 			</div>
 		</Card.Header>
@@ -199,8 +199,8 @@
 			{#if data.infoPages.length === 0}
 				<div class="rounded-lg border border-dashed p-8 text-center">
 					<FileText class="mx-auto h-12 w-12 text-muted-foreground" />
-					<h3 class="mt-2 text-sm font-semibold">{m.infoPagesEmpty()}</h3>
-					<p class="mt-1 text-sm text-muted-foreground">{m.infoPagesEmptyDescription()}</p>
+					<h3 class="mt-2 text-sm font-semibold">{m.infoPagesEmpty?.() ?? 'No info pages'}</h3>
+					<p class="mt-1 text-sm text-muted-foreground">{m.infoPagesEmptyDescription?.() ?? 'Create info pages to display legal or informational content to participants'}</p>
 				</div>
 			{:else}
 				<div class="space-y-3">
@@ -215,7 +215,7 @@
 											{@html page.content}
 										</p>
 										<p class="mt-1 text-xs text-muted-foreground">
-											{m.infoPagesSort()}: {page.sort_order || 0}
+											{m.infoPagesSort?.() ?? 'Sort Order'}: {page.sort_order || 0}
 										</p>
 									</div>
 								</div>
@@ -230,18 +230,18 @@
 											use:enhance={() => {
 												return async ({ result }) => {
 													if (result.type === 'success') {
-														toast.success(m.infoPagesDeleteSuccess());
+														toast.success(m.infoPagesDeleteSuccess?.() ?? 'Info page deleted successfully');
 														deleteConfirmId = null;
 														await invalidateAll();
 													} else {
-														toast.error(m.infoPagesDeleteError());
+														toast.error(m.infoPagesDeleteError?.() ?? 'Failed to delete info page');
 													}
 												};
 											}}
 										>
 											<input type="hidden" name="id" value={page.id} />
 											<Button variant="destructive" size="sm" type="submit">
-												{m.commonDelete()}
+												{m.commonDelete?.() ?? 'Delete'}
 											</Button>
 										</form>
 									{:else}
@@ -263,7 +263,7 @@
 	<Dialog.Content class="max-h-[85vh] sm:max-w-lg">
 		<Dialog.Header>
 			<Dialog.Title>
-				{editingPage ? m.infoPagesEdit() : m.infoPagesCreate()}
+				{editingPage ? (m.infoPagesEdit?.() ?? 'Edit Info Page') : (m.infoPagesCreate?.() ?? 'Add Info Page')}
 			</Dialog.Title>
 		</Dialog.Header>
 
@@ -274,12 +274,12 @@
 			use:enhance={() => {
 				return async ({ result }) => {
 					if (result.type === 'success') {
-						toast.success(editingPage ? m.infoPagesUpdateSuccess() : m.infoPagesCreateSuccess());
+						toast.success(editingPage ? (m.infoPagesUpdateSuccess?.() ?? 'Info page updated successfully') : (m.infoPagesCreateSuccess?.() ?? 'Info page created successfully'));
 						dialogOpen = false;
 						editingPage = null;
 						await invalidateAll();
 					} else {
-						toast.error(editingPage ? m.infoPagesUpdateError() : m.infoPagesCreateError());
+						toast.error(editingPage ? (m.infoPagesUpdateError?.() ?? 'Failed to update info page') : (m.infoPagesCreateError?.() ?? 'Failed to create info page'));
 					}
 				};
 			}}
@@ -289,32 +289,32 @@
 			{/if}
 
 			<div class="space-y-2">
-				<Label for="title">{m.infoPagesFieldTitle()}</Label>
+				<Label for="title">{m.infoPagesFieldTitle?.() ?? 'Title'}</Label>
 				<Input
 					id="title"
 					name="title"
 					required
-					placeholder={m.infoPagesFieldTitlePlaceholder()}
+					placeholder={m.infoPagesFieldTitlePlaceholder?.() ?? 'e.g. Privacy Policy, Imprint'}
 					value={editingPage?.title ?? ''}
 				/>
 			</div>
 
 			<div class="space-y-2">
-				<Label for="content">{m.infoPagesFieldContent()}</Label>
+				<Label for="content">{m.infoPagesFieldContent?.() ?? 'Content'}</Label>
 				<Textarea
 					id="content"
 					name="content"
 					required
 					rows={8}
 					class="max-h-[40vh]"
-					placeholder={m.infoPagesFieldContentPlaceholder()}
+					placeholder={m.infoPagesFieldContentPlaceholder?.() ?? 'HTML content of the page...'}
 					value={editingPage?.content ?? ''}
 				/>
-				<p class="text-xs text-muted-foreground">{m.infoPagesContentHint()}</p>
+				<p class="text-xs text-muted-foreground">{m.infoPagesContentHint?.() ?? 'HTML is supported. You can use tags for links, paragraphs, bold, italic, lists, and headings.'}</p>
 			</div>
 
 			<div class="space-y-2">
-				<Label for="sort_order">{m.infoPagesSort()}</Label>
+				<Label for="sort_order">{m.infoPagesSort?.() ?? 'Sort Order'}</Label>
 				<Input
 					id="sort_order"
 					name="sort_order"
@@ -326,10 +326,10 @@
 
 			<Dialog.Footer>
 				<Button variant="outline" type="button" onclick={() => (dialogOpen = false)}>
-					{m.commonCancel()}
+					{m.commonCancel?.() ?? 'Cancel'}
 				</Button>
 				<Button type="submit">
-					{editingPage ? m.commonSave() : m.commonCreate()}
+					{editingPage ? (m.commonSave?.() ?? 'Save') : (m.commonCreate?.() ?? 'Create')}
 				</Button>
 			</Dialog.Footer>
 		</form>

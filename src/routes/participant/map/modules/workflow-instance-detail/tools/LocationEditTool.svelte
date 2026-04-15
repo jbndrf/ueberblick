@@ -8,6 +8,7 @@
 	 */
 	import { onMount, onDestroy } from 'svelte';
 	import type { Map as LeafletMap, Marker, Polyline, LatLng } from 'leaflet';
+	import * as m from '$lib/paraglide/messages';
 
 	interface Props {
 		/** The Leaflet map instance */
@@ -27,7 +28,7 @@
 	let {
 		map = null,
 		initialCoordinates = null,
-		confirmLabel = 'Confirm Location',
+		confirmLabel = (m.participantLocationEditToolConfirmLabel?.() ?? 'Confirm Location'),
 		onConfirm,
 		onCancel,
 		isActive = $bindable(true)

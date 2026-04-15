@@ -3,6 +3,7 @@ import { superValidate } from 'sveltekit-superforms';
 import { zod } from 'sveltekit-superforms/adapters';
 import { participantLoginSchema } from '$lib/schemas/auth';
 import { getAdminPb } from '$lib/server/admin-auth';
+import * as m from '$lib/paraglide/messages';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -37,7 +38,7 @@ export const actions: Actions = {
 				locals.pb.authStore.clear();
 				return fail(400, {
 					form,
-					message: 'This account is inactive'
+					message: m.participantLoginAccountInactive?.() ?? 'This account is inactive'
 				});
 			}
 
@@ -46,7 +47,7 @@ export const actions: Actions = {
 				locals.pb.authStore.clear();
 				return fail(400, {
 					form,
-					message: 'Token has expired'
+					message: m.participantLoginTokenExpired?.() ?? 'Token has expired'
 				});
 			}
 
@@ -62,13 +63,13 @@ export const actions: Actions = {
 			if (error?.status === 400) {
 				return fail(400, {
 					form,
-					message: 'Invalid token'
+					message: m.participantLoginInvalidToken?.() ?? 'Invalid or expired token'
 				});
 			}
 
 			return fail(500, {
 				form,
-				message: 'An error occurred during login. Please try again.'
+				message: m.participantLoginError?.() ?? 'Login failed. Please check your token and try again.'
 			});
 		}
 

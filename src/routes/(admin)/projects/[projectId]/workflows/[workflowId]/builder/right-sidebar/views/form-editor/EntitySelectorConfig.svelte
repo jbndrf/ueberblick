@@ -4,6 +4,7 @@
 	import * as RadioGroup from '$lib/components/ui/radio-group';
 	import { Settings2 } from 'lucide-svelte';
 
+	import * as m from '$lib/paraglide/messages';
 	import type { EntitySourceType, EntitySelectorOptions } from '$lib/workflow-builder';
 	import EntitySelectorModal from './EntitySelectorModal.svelte';
 
@@ -79,10 +80,10 @@
 	// Derived values for summary display
 	// ==========================================================================
 	const sourceTypeLabel = $derived({
-		custom_table: 'Custom Table',
-		marker_category: 'Markers',
-		participants: 'Participants',
-		roles: 'Roles'
+		custom_table: (m.formEditorEntitySelectorConfigCustomTable?.() ?? 'Custom Table'),
+		marker_category: (m.formEditorEntitySelectorConfigMarkers?.() ?? 'Markers'),
+		participants: (m.formEditorEntitySelectorConfigParticipants?.() ?? 'Participants'),
+		roles: (m.formEditorEntitySelectorConfigRoles?.() ?? 'Roles')
 	}[sourceType]);
 
 	const isConfigured = $derived(() => {
@@ -103,24 +104,24 @@
 <div class="entity-selector-config">
 	<!-- Source Type Selection (vertical stack) -->
 	<div class="config-section">
-		<Label>Select From</Label>
+		<Label>{m.formEditorEntitySelectorConfigSelectFrom?.() ?? 'Select From'}</Label>
 		<RadioGroup.Root value={sourceType} onValueChange={handleSourceTypeChange}>
 			<div class="source-type-list">
 				<div class="source-type-option">
 					<RadioGroup.Item value="custom_table" id="src-custom-table" />
-					<Label for="src-custom-table">Custom Table</Label>
+					<Label for="src-custom-table">{m.formEditorEntitySelectorConfigCustomTable?.() ?? 'Custom Table'}</Label>
 				</div>
 				<div class="source-type-option">
 					<RadioGroup.Item value="marker_category" id="src-marker" />
-					<Label for="src-marker">Markers</Label>
+					<Label for="src-marker">{m.formEditorEntitySelectorConfigMarkers?.() ?? 'Markers'}</Label>
 				</div>
 				<div class="source-type-option">
 					<RadioGroup.Item value="participants" id="src-participants" />
-					<Label for="src-participants">Participants</Label>
+					<Label for="src-participants">{m.formEditorEntitySelectorConfigParticipants?.() ?? 'Participants'}</Label>
 				</div>
 				<div class="source-type-option">
 					<RadioGroup.Item value="roles" id="src-roles" />
-					<Label for="src-roles">Roles</Label>
+					<Label for="src-roles">{m.formEditorEntitySelectorConfigRoles?.() ?? 'Roles'}</Label>
 				</div>
 			</div>
 		</RadioGroup.Root>
@@ -134,9 +135,9 @@
 			onclick={() => (modalOpen = true)}
 		>
 			<Settings2 class="h-4 w-4" />
-			Configure {sourceTypeLabel}
+			{m.formEditorEntitySelectorConfigConfigureButton?.({ sourceTypeLabel: sourceTypeLabel ?? '' }) ?? `Configure ${sourceTypeLabel}`}
 			{#if isConfigured()}
-				<span class="configured-badge">Configured</span>
+				<span class="configured-badge">{m.formEditorEntitySelectorConfigConfigured?.() ?? 'Configured'}</span>
 			{/if}
 		</Button>
 	</div>

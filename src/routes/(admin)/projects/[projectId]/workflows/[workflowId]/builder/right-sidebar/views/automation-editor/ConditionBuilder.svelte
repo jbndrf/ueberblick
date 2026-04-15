@@ -2,6 +2,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Plus, Trash2 } from 'lucide-svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	import type { ConditionGroup, ConditionLeaf, ConditionOperator } from '$lib/workflow-builder';
 
@@ -26,15 +27,15 @@
 		{ value: 'gte', label: '>=' },
 		{ value: 'lt', label: '<' },
 		{ value: 'lte', label: '<=' },
-		{ value: 'contains', label: 'contains' },
-		{ value: 'is_empty', label: 'is empty' },
-		{ value: 'is_not_empty', label: 'is not empty' }
+		{ value: 'contains', label: (m.automationConditionBuilderOperatorContains?.() ?? 'contains') },
+		{ value: 'is_empty', label: (m.automationConditionBuilderOperatorIsEmpty?.() ?? 'is empty') },
+		{ value: 'is_not_empty', label: (m.automationConditionBuilderOperatorIsNotEmpty?.() ?? 'is not empty') }
 	];
 
 	const CONDITION_TYPES = [
-		{ value: 'field_value', label: 'Field Value' },
-		{ value: 'instance_status', label: 'Instance Status' },
-		{ value: 'current_stage', label: 'Stage' }
+		{ value: 'field_value', label: (m.automationConditionBuilderTypeFieldValue?.() ?? 'Field Value') },
+		{ value: 'instance_status', label: (m.automationConditionBuilderTypeInstanceStatus?.() ?? 'Instance Status') },
+		{ value: 'current_stage', label: (m.automationConditionBuilderTypeStage?.() ?? 'Stage') }
 	];
 
 	const STATUS_OPTIONS = ['active', 'completed', 'archived', 'deleted'];
@@ -105,16 +106,16 @@
 <div class="condition-builder">
 	{#if hasConditions}
 		<div class="group-operator">
-			<span class="group-label">Only run if</span>
+			<span class="group-label">{m.automationConditionBuilderOnlyRunIf?.() ?? 'Only run if'}</span>
 			<select
 				class="operator-select"
 				value={group.operator}
 				onchange={(e) => updateGroupOperator(e.currentTarget.value as 'AND' | 'OR')}
 			>
-				<option value="AND">All</option>
-				<option value="OR">Any</option>
+				<option value="AND">{m.automationConditionBuilderAll?.() ?? 'All'}</option>
+				<option value="OR">{m.automationConditionBuilderAny?.() ?? 'Any'}</option>
 			</select>
-			<span class="group-label">are true:</span>
+			<span class="group-label">{m.automationConditionBuilderAreTrue?.() ?? 'are true:'}</span>
 		</div>
 	{/if}
 
@@ -152,7 +153,7 @@
 								});
 							}}
 						>
-							<option value="">Select field...</option>
+							<option value="">{m.automationConditionBuilderSelectField?.() ?? 'Select field...'}</option>
 							{#each fieldOptions as opt}
 								<option value={opt.key}>{opt.label}</option>
 							{/each}
@@ -180,12 +181,12 @@
 									class="compare-toggle"
 									class:active={!isFieldCompare}
 									onclick={() => { if (isFieldCompare) toggleCompareMode(index, condition); }}
-								>Value</button>
+								>{m.automationConditionBuilderCompareValue?.() ?? 'Value'}</button>
 								<button
 									class="compare-toggle"
 									class:active={isFieldCompare}
 									onclick={() => { if (!isFieldCompare) toggleCompareMode(index, condition); }}
-								>Field</button>
+								>{m.automationConditionBuilderCompareField?.() ?? 'Field'}</button>
 							</div>
 
 							{#if isFieldCompare}
@@ -199,7 +200,7 @@
 										});
 									}}
 								>
-									<option value="">Select field...</option>
+									<option value="">{m.automationConditionBuilderSelectField?.() ?? 'Select field...'}</option>
 									{#each fieldOptions as opt}
 										<option value={opt.key}>{opt.label}</option>
 									{/each}
@@ -213,7 +214,7 @@
 											params: { ...condition.params, value: e.currentTarget.value }
 										});
 									}}
-									placeholder="Value..."
+									placeholder={m.automationConditionBuilderValuePlaceholder?.() ?? 'Value...'}
 									class="h-7 text-xs"
 								/>
 							{/if}
@@ -257,7 +258,7 @@
 								});
 							}}
 						>
-							<option value="">Select stage...</option>
+							<option value="">{m.automationConditionBuilderSelectStage?.() ?? 'Select stage...'}</option>
 							{#each stageOptions as stage}
 								<option value={stage.id}>{stage.name}</option>
 							{/each}
@@ -274,7 +275,7 @@
 
 	<Button variant="ghost" size="sm" class="add-condition-btn" onclick={addCondition}>
 		<Plus class="h-3 w-3 mr-1" />
-		Add Condition
+		{m.automationConditionBuilderAddCondition?.() ?? 'Add Condition'}
 	</Button>
 </div>
 
