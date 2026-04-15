@@ -80,9 +80,6 @@ git_login.md
 # Data directory (Docker volumes, local data)
 /data
 
-# Cached map tiles
-static/tiles
-
 # Python venv (mkdocs)
 .venv/
 
@@ -96,3 +93,6 @@ stress-tests/results/
 
 # Doc review artifacts
 *_reviewed.md
+
+# Landing page (separate project)
+landing/

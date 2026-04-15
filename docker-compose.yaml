@@ -67,6 +67,7 @@ services:
       - SECURE_COOKIES=${SECURE_COOKIES:-false}
     volumes:
       - ./data/nginx_cache:/var/cache/nginx
+      - ./data/app_data:/app/data
     # Self-hosters: Uncomment to expose on port 80 directly
     ports:
       - "8080:80"

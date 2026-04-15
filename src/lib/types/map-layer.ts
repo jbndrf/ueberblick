@@ -11,7 +11,7 @@
 
 export type MapSourceType = 'tile' | 'wms' | 'uploaded' | 'preset' | 'geojson';
 export type MapLayerType = 'base' | 'overlay';
-export type MapSourceStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export type MapSourceStatus = 'uploading' | 'pending' | 'processing' | 'completed' | 'failed';
 export type TileFormat = 'png' | 'jpg' | 'webp';
 
 // Source configs (stored in map_layers.config JSON field alongside display settings)

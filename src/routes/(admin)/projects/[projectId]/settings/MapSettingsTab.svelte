@@ -55,12 +55,16 @@
 	let isSavingDefaults = $state(false);
 
 	// Upload state
+	const CHUNK_SIZE = 10 * 1024 * 1024;
+	type UploadProgress =
+		| { phase: 'uploading'; loaded: number; total: number; percent: number }
+		| { phase: 'processing'; status: string; percent: number };
 	let uploadFile = $state<File | null>(null);
 	let uploadTileFormat = $state<'png' | 'jpg' | 'webp'>('png');
 	let uploadName = $state('');
 	let isUploading = $state(false);
 	let uploadLayerId = $state<string | null>(null);
-	let uploadProgress = $state<{ status: string; progress: number } | null>(null);
+	let uploadProgress = $state<UploadProgress | null>(null);
 
 	// Tile URL form state
 	let tileUrlName = $state('');
@@ -133,15 +137,15 @@
 
 	async function handleCreatePackage() {
 		if (!selectedRegion) {
-			toast.error('Please draw a region on the map');
+			toast.error(m.mapSettingsRegionRequired?.() ?? 'Please draw a region on the map');
 			return;
 		}
 		if (!packageFormData.name.trim()) {
-			toast.error('Package name is required');
+			toast.error(m.mapSettingsPackageNameRequired?.() ?? 'Package name is required');
 			return;
 		}
 		if (packageFormData.layers.length === 0) {
-			toast.error('At least one layer must be selected');
+			toast.error(m.mapSettingsLayerRequired?.() ?? 'At least one layer must be selected');
 			return;
 		}
 
@@ -164,15 +168,15 @@
 
 			const result = await response.json();
 			if (result.type === 'success') {
-				toast.success('Package created and processing started');
+				toast.success(m.mapSettingsPackageCreatedProcessing?.() ?? 'Package created and processing started');
 				showCreatePackageDialog = false;
 				resetPackageForm();
 				invalidateAll();
 			} else {
-				toast.error(result.data?.message || 'Failed to create package');
+				toast.error(result.data?.message || (m.mapSettingsPackageCreateError?.() ?? 'Failed to create package'));
 			}
 		} catch (error) {
-			toast.error('Failed to create package');
+			toast.error(m.mapSettingsPackageCreateError?.() ?? 'Failed to create package');
 		} finally {
 			isCreatingPackage = false;
 		}
@@ -192,15 +196,15 @@
 
 			const result = await response.json();
 			if (result.type === 'success') {
-				toast.success('Package deleted');
+				toast.success(m.mapSettingsPackageDeleted?.() ?? 'Package deleted');
 				showDeletePackageDialog = false;
 				selectedPackage = null;
 				invalidateAll();
 			} else {
-				toast.error('Failed to delete package');
+				toast.error(m.mapSettingsPackageDeleteError?.() ?? 'Failed to delete package');
 			}
 		} catch {
-			toast.error('Failed to delete package');
+			toast.error(m.mapSettingsPackageDeleteError?.() ?? 'Failed to delete package');
 		}
 	}
 
@@ -224,42 +228,42 @@
 	const packageColumns = $derived.by((): BaseColumnConfig<OfflinePackage>[] => [
 		{
 			id: 'name',
-			header: 'Name',
+			header: m.mapSettingsColumnName?.() ?? 'Name',
 			accessorKey: 'name',
 			fieldType: 'text',
 			capabilities: { sortable: true, filterable: true }
 		},
 		{
 			id: 'status',
-			header: 'Status',
+			header: m.mapSettingsColumnStatus?.() ?? 'Status',
 			accessorKey: 'status',
 			fieldType: 'text',
 			capabilities: { sortable: true, filterable: true }
 		},
 		{
 			id: 'zoom_range',
-			header: 'Zoom',
+			header: m.mapSettingsColumnZoom?.() ?? 'Zoom',
 			accessorFn: (row) => `${row.zoom_min}-${row.zoom_max}`,
 			fieldType: 'text',
 			capabilities: { sortable: false }
 		},
 		{
 			id: 'tile_count',
-			header: 'Tiles',
+			header: m.mapSettingsColumnTiles?.() ?? 'Tiles',
 			accessorFn: (row) => row.tile_count?.toLocaleString() ?? '-',
 			fieldType: 'text',
 			capabilities: { sortable: true }
 		},
 		{
 			id: 'file_size',
-			header: 'Size',
+			header: m.mapSettingsColumnSize?.() ?? 'Size',
 			accessorFn: (row) => formatFileSize(row.file_size_bytes),
 			fieldType: 'text',
 			capabilities: { sortable: true }
 		},
 		{
 			id: 'visible_to_roles',
-			header: 'Visible to Roles',
+			header: m.mapSettingsColumnVisibleToRoles?.() ?? 'Visible to Roles',
 			accessorFn: (row) => {
 				if (!row.visible_to_roles || row.visible_to_roles.length === 0) return [];
 				return row.visible_to_roles;
@@ -287,7 +291,7 @@
 				if (result.type === 'success') {
 					await invalidateAll();
 				} else {
-					throw new Error(result.data?.message || 'Update failed');
+					throw new Error(result.data?.message || (m.mapSettingsUpdateFailed?.() ?? 'Update failed'));
 				}
 			}
 		}
@@ -306,11 +310,11 @@
 		onResult: ({ result }) => {
 			isSavingDefaults = false;
 			if (result.type === 'success') {
-				toast.success('Map defaults saved');
+				toast.success(m.mapSettingsDefaultsSaved?.() ?? 'Map defaults saved');
 				showDefaultsDialog = false;
 				invalidateAll();
 			} else if (result.type === 'failure') {
-				toast.error(result.data?.message || 'Failed to save map defaults');
+				toast.error(result.data?.message || (m.mapSettingsDefaultsSaveError?.() ?? 'Failed to save map defaults'));
 			}
 		}
 	});
@@ -340,14 +344,14 @@
 		},
 		{
 			id: 'source_type',
-			header: 'Type',
+			header: m.mapSettingsColumnType?.() ?? 'Type',
 			accessorFn: (row) => row.source_type.charAt(0).toUpperCase() + row.source_type.slice(1),
 			fieldType: 'text',
 			capabilities: { sortable: true, filterable: true }
 		},
 		{
 			id: 'opacity',
-			header: 'Opacity',
+			header: m.mapSettingsColumnOpacity?.() ?? 'Opacity',
 			accessorFn: (row) => {
 				const opacity = (row.config as MapLayerConfig)?.opacity;
 				return opacity !== undefined ? `${Math.round(opacity * 100)}%` : '100%';
@@ -357,7 +361,7 @@
 		},
 		{
 			id: 'visible_to_roles',
-			header: 'Visible to Roles',
+			header: m.mapSettingsColumnVisibleToRoles?.() ?? 'Visible to Roles',
 			accessorFn: (row) => {
 				if (!row.visible_to_roles || row.visible_to_roles.length === 0) return [];
 				return row.visible_to_roles;
@@ -385,13 +389,13 @@
 				if (result.type === 'success') {
 					await invalidateAll();
 				} else {
-					throw new Error(result.data?.message || 'Update failed');
+					throw new Error(result.data?.message || (m.mapSettingsUpdateFailed?.() ?? 'Update failed'));
 				}
 			}
 		},
 		{
 			id: 'layer_type',
-			header: 'Base',
+			header: m.mapSettingsColumnBase?.() ?? 'Base',
 			accessorFn: (row) => row.layer_type === 'base',
 			fieldType: 'boolean',
 			capabilities: { sortable: true, filterable: true }
@@ -415,14 +419,14 @@
 
 			const result = await response.json();
 			if (result.type === 'success') {
-				toast.success('Layer added');
+				toast.success(m.mapSettingsLayerAdded?.() ?? 'Layer added');
 				showAddLayerDialog = false;
 				invalidateAll();
 			} else {
-				toast.error(result.data?.message || 'Failed to add layer');
+				toast.error(result.data?.message || (m.mapSettingsLayerAddError?.() ?? 'Failed to add layer'));
 			}
 		} catch {
-			toast.error('Failed to add layer');
+			toast.error(m.mapSettingsLayerAddError?.() ?? 'Failed to add layer');
 		} finally {
 			isSubmitting = false;
 		}
@@ -446,7 +450,7 @@
 
 			const result = await response.json();
 			if (result.type === 'success') {
-				toast.success('Tile layer added');
+				toast.success(m.mapSettingsTileLayerAdded?.() ?? 'Tile layer added');
 				showAddLayerDialog = false;
 				tileUrlName = '';
 				tileUrlUrl = '';
@@ -454,10 +458,10 @@
 				tileUrlAsBase = false;
 				invalidateAll();
 			} else {
-				toast.error(result.data?.message || 'Failed to add layer');
+				toast.error(result.data?.message || (m.mapSettingsLayerAddError?.() ?? 'Failed to add layer'));
 			}
 		} catch {
-			toast.error('Failed to add layer');
+			toast.error(m.mapSettingsLayerAddError?.() ?? 'Failed to add layer');
 		} finally {
 			isSubmitting = false;
 		}
@@ -485,7 +489,7 @@
 
 			const result = await response.json();
 			if (result.type === 'success') {
-				toast.success('WMS layer added');
+				toast.success(m.mapSettingsWmsLayerAdded?.() ?? 'WMS layer added');
 				showAddLayerDialog = false;
 				wmsName = '';
 				wmsUrl = '';
@@ -497,44 +501,125 @@
 				wmsAsBase = false;
 				invalidateAll();
 			} else {
-				toast.error(result.data?.message || 'Failed to add layer');
+				toast.error(result.data?.message || (m.mapSettingsLayerAddError?.() ?? 'Failed to add layer'));
 			}
 		} catch {
-			toast.error('Failed to add layer');
+			toast.error(m.mapSettingsLayerAddError?.() ?? 'Failed to add layer');
 		} finally {
 			isSubmitting = false;
 		}
 	}
 
-	// Handle file upload
+	// Handle file upload (chunked)
+	async function putChunk(layerId: string, index: number, buf: ArrayBuffer): Promise<void> {
+		let lastErr: unknown = null;
+		for (let attempt = 0; attempt < 3; attempt++) {
+			try {
+				const res = await fetch(`/api/map-layers/upload/${layerId}/chunk/${index}`, {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/octet-stream' },
+					body: buf
+				});
+				if (res.ok) return;
+				lastErr = new Error(`HTTP ${res.status}`);
+			} catch (e) {
+				lastErr = e;
+			}
+			await new Promise((r) => setTimeout(r, 1000));
+		}
+		throw lastErr ?? new Error('Chunk upload failed');
+	}
+
 	async function handleUpload() {
 		if (!uploadFile || !uploadName.trim()) return;
 		isUploading = true;
+		const file = uploadFile;
 		try {
-			const formData = new FormData();
-			formData.append('name', uploadName);
-			formData.append('tile_format', uploadTileFormat);
-			formData.append('file', uploadFile);
-			formData.append('project_id', data.project.id);
-			formData.append('layer_type', 'overlay');
+			const totalSize = file.size;
+			const totalChunks = Math.max(1, Math.ceil(totalSize / CHUNK_SIZE));
+			uploadProgress = { phase: 'uploading', loaded: 0, total: totalSize, percent: 0 };
 
-			const response = await fetch('/api/map-layers/upload', {
+			const initRes = await fetch('/api/map-layers/upload/init', {
 				method: 'POST',
-				body: formData
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					name: uploadName,
+					tile_format: uploadTileFormat,
+					project_id: data.project.id,
+					layer_type: 'overlay',
+					total_size: totalSize,
+					total_chunks: totalChunks
+				})
 			});
-
-			const result = await response.json();
-			if (response.ok) {
-				uploadLayerId = result.id;
-				toast.success('Upload started, processing...');
-				// Poll for progress
-				pollUploadStatus(result.id);
-			} else {
-				toast.error(result.message || 'Upload failed');
+			if (!initRes.ok) {
+				throw new Error('Upload init failed');
 			}
-		} catch {
-			toast.error('Upload failed');
-		} finally {
+			const initJson = (await initRes.json()) as { layerId: string; chunk_size: number };
+			const { layerId } = initJson;
+			const chunkSize = initJson.chunk_size || CHUNK_SIZE;
+			uploadLayerId = layerId;
+
+			const statusRes = await fetch(`/api/map-layers/upload/${layerId}/chunks`);
+			const chunksInfo = (await statusRes.json()) as { received: number[] };
+			const received = new Set<number>(chunksInfo.received ?? []);
+
+			const chunkLen = (i: number) => Math.min(chunkSize, totalSize - i * chunkSize);
+			let loaded = 0;
+			for (const i of received) loaded += chunkLen(i);
+			uploadProgress = {
+				phase: 'uploading',
+				loaded,
+				total: totalSize,
+				percent: totalSize ? Math.round((loaded / totalSize) * 100) : 0
+			};
+
+			for (let i = 0; i < totalChunks; i++) {
+				if (received.has(i)) continue;
+				const start = i * chunkSize;
+				const end = Math.min(start + chunkSize, totalSize);
+				const buf = await file.slice(start, end).arrayBuffer();
+				await putChunk(layerId, i, buf);
+				loaded += chunkLen(i);
+				uploadProgress = {
+					phase: 'uploading',
+					loaded,
+					total: totalSize,
+					percent: totalSize ? Math.round((loaded / totalSize) * 100) : 0
+				};
+			}
+
+			let finalized = false;
+			for (let pass = 0; pass < 3; pass++) {
+				const finRes = await fetch(`/api/map-layers/upload/${layerId}/finalize`, {
+					method: 'POST'
+				});
+				const finJson = (await finRes.json()) as { ok?: boolean; missing?: number[] };
+				if (finRes.ok && finJson.ok) {
+					finalized = true;
+					break;
+				}
+				if (Array.isArray(finJson.missing) && finJson.missing.length > 0 && pass < 2) {
+					for (const idx of finJson.missing) {
+						const start = idx * chunkSize;
+						const end = Math.min(start + chunkSize, totalSize);
+						const buf = await file.slice(start, end).arrayBuffer();
+						await putChunk(layerId, idx, buf);
+					}
+					continue;
+				}
+				break;
+			}
+			if (!finalized) {
+				throw new Error('Finalize failed');
+			}
+
+			toast.success(m.mapSettingsUploadCompleteProcessing?.() ?? 'Upload complete, processing tiles...');
+			uploadProgress = { phase: 'processing', status: 'pending', percent: 0 };
+			pollUploadStatus(layerId);
+		} catch (err) {
+			console.error('Upload error:', err);
+			toast.error(err instanceof Error ? err.message : (m.mapSettingsUploadFailed?.() ?? 'Upload failed'));
+			uploadProgress = null;
 			isUploading = false;
 		}
 	}
@@ -544,24 +629,29 @@
 			try {
 				const response = await fetch(`/api/map-layers/${layerId}/status`);
 				const result = await response.json();
-				uploadProgress = { status: result.status, progress: result.progress };
+				uploadProgress = {
+					phase: 'processing',
+					status: result.status,
+					percent: result.progress ?? 0
+				};
 
 				if (result.status === 'completed') {
-					toast.success('Tile processing complete');
+					toast.success(m.mapSettingsTileProcessingComplete?.() ?? 'Tile processing complete');
 					uploadFile = null;
 					uploadName = '';
 					uploadLayerId = null;
 					uploadProgress = null;
+					isUploading = false;
 					showAddLayerDialog = false;
 					invalidateAll();
 				} else if (result.status === 'failed') {
-					toast.error(result.error_message || 'Processing failed');
+					toast.error(result.error_message || (m.mapSettingsProcessingFailed?.() ?? 'Processing failed'));
 					uploadProgress = null;
+					isUploading = false;
 				} else {
 					setTimeout(poll, 2000);
 				}
 			} catch {
-				// Retry
 				setTimeout(poll, 3000);
 			}
 		};
@@ -612,13 +702,17 @@
 			const result = await response.json();
 			if (result.type === 'success') {
 				const newType = layer.layer_type === 'base' ? 'overlay' : 'base';
-				toast.success(`Layer set as ${newType}`);
+				toast.success(
+					newType === 'base'
+						? (m.mapSettingsLayerSetAsBase?.() ?? 'Layer set as base')
+						: (m.mapSettingsLayerSetAsOverlay?.() ?? 'Layer set as overlay')
+				);
 				invalidateAll();
 			} else {
-				toast.error('Failed to update layer type');
+				toast.error(m.mapSettingsLayerTypeUpdateError?.() ?? 'Failed to update layer type');
 			}
 		} catch {
-			toast.error('Failed to update layer type');
+			toast.error(m.mapSettingsLayerTypeUpdateError?.() ?? 'Failed to update layer type');
 		}
 	}
 
@@ -632,11 +726,11 @@
 	<!-- Map Defaults Summary -->
 	<div class="flex items-center justify-between">
 		<div class="text-sm text-muted-foreground">
-			Default view: Zoom {effectiveDefaults().zoom}, Center {effectiveDefaults().center.lat.toFixed(4)}, {effectiveDefaults().center.lng.toFixed(4)}
+			{m.mapSettingsDefaultViewLabel?.() ?? 'Default view'}: {m.mapSettingsZoomLabel?.() ?? 'Zoom'} {effectiveDefaults().zoom}, {m.mapSettingsCenterLabel?.() ?? 'Center'} {effectiveDefaults().center.lat.toFixed(4)}, {effectiveDefaults().center.lng.toFixed(4)}
 		</div>
 		<Button variant="ghost" size="sm" class="h-7 text-xs" onclick={() => (showDefaultsDialog = true)}>
 			<Settings class="mr-1 h-3 w-3" />
-			Edit defaults
+			{m.mapSettingsEditDefaults?.() ?? 'Edit defaults'}
 		</Button>
 	</div>
 
@@ -645,11 +739,11 @@
 		<Tabs.List>
 			<Tabs.Trigger value="layers" class="flex items-center gap-2">
 				<Layers class="h-4 w-4" />
-				Layers
+				{m.mapSettingsTabLayers?.() ?? 'Layers'}
 			</Tabs.Trigger>
 			<Tabs.Trigger value="offline" class="flex items-center gap-2">
 				<Package class="h-4 w-4" />
-				Offline Packages
+				{m.mapSettingsTabOfflinePackages?.() ?? 'Offline Packages'}
 			</Tabs.Trigger>
 		</Tabs.List>
 
@@ -661,20 +755,20 @@
 						<div>
 							<Card.Title class="flex items-center gap-2">
 								<Layers class="h-5 w-5" />
-								{m.mapLayersTitle()}
+								{m.mapLayersTitle?.() ?? 'Map Layers'}
 							</Card.Title>
 							<Card.Description>
 								{@const baseLayers = data.mapLayers.filter((l: MapLayer) => l.layer_type === 'base')}
 								{#if baseLayers.length > 0}
-									Base layers: <strong>{baseLayers.map((l: MapLayer) => l.name).join(', ')}</strong>
+									{m.mapSettingsBaseLayersLabel?.() ?? 'Base layers'}: <strong>{baseLayers.map((l: MapLayer) => l.name).join(', ')}</strong>
 								{:else}
-									No base layer configured - add a layer and mark it as base
+									{m.mapSettingsNoBaseLayerConfigured?.() ?? 'No base layer configured - add a layer and mark it as base'}
 								{/if}
 							</Card.Description>
 						</div>
 						<Button onclick={() => (showAddLayerDialog = true)}>
 							<Plus class="mr-2 h-4 w-4" />
-							Add Layer
+							{m.mapSettingsAddLayer?.() ?? 'Add Layer'}
 						</Button>
 					</div>
 				</Card.Header>
@@ -682,13 +776,13 @@
 					{#if data.mapLayers.length === 0}
 						<div class="flex flex-col items-center justify-center py-12 text-center">
 							<Map class="h-12 w-12 text-muted-foreground mb-4" />
-							<p class="text-lg font-medium">No layers yet</p>
+							<p class="text-lg font-medium">{m.mapSettingsNoLayersYet?.() ?? 'No layers yet'}</p>
 							<p class="text-muted-foreground mb-4">
-								Add a preset, tile URL, WMS, or upload tiles to get started
+								{m.mapSettingsNoLayersDescription?.() ?? 'Add a preset, tile URL, WMS, or upload tiles to get started'}
 							</p>
 							<Button onclick={() => (showAddLayerDialog = true)}>
 								<Plus class="mr-2 h-4 w-4" />
-								Add Layer
+								{m.mapSettingsAddLayer?.() ?? 'Add Layer'}
 							</Button>
 						</div>
 					{:else}
@@ -696,17 +790,19 @@
 							data={data.mapLayers}
 							columns={layerColumns}
 							getRowId={(row) => row.id}
-							emptyMessage={m.mapLayersEmpty()}
-							emptySubMessage={m.mapLayersEmptyDescription()}
+							emptyMessage={m.mapLayersEmpty?.() ?? 'No map layers configured'}
+							emptySubMessage={m.mapLayersEmptyDescription?.() ?? 'Map layers will appear here once tile sets are processed'}
 							showToolbar={true}
 							showEditMode={true}
-							editModeLabel="Edit mode"
+							editModeLabel={m.mapSettingsEditMode?.() ?? 'Edit mode'}
 							rowActions={{
-								header: 'Actions',
+								header: m.mapSettingsActions?.() ?? 'Actions',
 								onDelete: openDeleteLayerDialog,
 								customActions: [
 									{
-										label: (row) => row.layer_type === 'base' ? 'Set as Overlay' : 'Set as Base',
+										label: (row) => row.layer_type === 'base'
+											? (m.mapSettingsSetAsOverlay?.() ?? 'Set as Overlay')
+											: (m.mapSettingsSetAsBase?.() ?? 'Set as Base'),
 										icon: Star,
 										onClick: toggleLayerType
 									}
@@ -726,15 +822,15 @@
 						<div>
 							<Card.Title class="flex items-center gap-2">
 								<Package class="h-5 w-5" />
-								Offline Packages
+								{m.mapSettingsOfflinePackagesTitle?.() ?? 'Offline Packages'}
 							</Card.Title>
 							<Card.Description>
-								Create tile packages for offline use by participants
+								{m.mapSettingsOfflinePackagesDescription?.() ?? 'Create tile packages for offline use by participants'}
 							</Card.Description>
 						</div>
 						<Button onclick={openCreatePackageDialog} disabled={data.mapLayers.length === 0}>
 							<Plus class="mr-2 h-4 w-4" />
-							Create Package
+							{m.mapSettingsCreatePackage?.() ?? 'Create Package'}
 						</Button>
 					</div>
 				</Card.Header>
@@ -742,21 +838,21 @@
 					{#if data.mapLayers.length === 0}
 						<div class="flex flex-col items-center justify-center py-12 text-center">
 							<Package class="h-12 w-12 text-muted-foreground mb-4" />
-							<p class="text-lg font-medium">No layers configured</p>
+							<p class="text-lg font-medium">{m.mapSettingsNoLayersConfigured?.() ?? 'No layers configured'}</p>
 							<p class="text-muted-foreground mb-4">
-								Add map layers first before creating offline packages
+								{m.mapSettingsAddLayersFirst?.() ?? 'Add map layers first before creating offline packages'}
 							</p>
 						</div>
 					{:else if !data.offlinePackages || data.offlinePackages.length === 0}
 						<div class="flex flex-col items-center justify-center py-12 text-center">
 							<Package class="h-12 w-12 text-muted-foreground mb-4" />
-							<p class="text-lg font-medium">No offline packages</p>
+							<p class="text-lg font-medium">{m.mapSettingsNoOfflinePackages?.() ?? 'No offline packages'}</p>
 							<p class="text-muted-foreground mb-4">
-								Create your first package to enable offline maps for participants
+								{m.mapSettingsNoOfflinePackagesDescription?.() ?? 'Create your first package to enable offline maps for participants'}
 							</p>
 							<Button onclick={openCreatePackageDialog}>
 								<Plus class="mr-2 h-4 w-4" />
-								Create Package
+								{m.mapSettingsCreatePackage?.() ?? 'Create Package'}
 							</Button>
 						</div>
 					{:else}
@@ -764,13 +860,13 @@
 							data={data.offlinePackages}
 							columns={packageColumns}
 							getRowId={(row) => row.id}
-							emptyMessage="No offline packages"
-							emptySubMessage="Create a package to enable offline maps"
+							emptyMessage={m.mapSettingsNoOfflinePackages?.() ?? 'No offline packages'}
+							emptySubMessage={m.mapSettingsCreatePackageHint?.() ?? 'Create a package to enable offline maps'}
 							showToolbar={true}
 							showEditMode={true}
-							editModeLabel="Edit mode"
+							editModeLabel={m.mapSettingsEditMode?.() ?? 'Edit mode'}
 							rowActions={{
-								header: 'Actions',
+								header: m.mapSettingsActions?.() ?? 'Actions',
 								onDelete: (pkg) => {
 									selectedPackage = pkg;
 									showDeletePackageDialog = true;
@@ -788,18 +884,18 @@
 <Dialog.Root bind:open={showAddLayerDialog}>
 	<Dialog.Content class="max-w-2xl max-h-[90vh] flex flex-col">
 		<Dialog.Header class="shrink-0">
-			<Dialog.Title>Add Map Layer</Dialog.Title>
-			<Dialog.Description>Choose a preset, enter a URL, or upload tiles</Dialog.Description>
+			<Dialog.Title>{m.mapSettingsAddMapLayerTitle?.() ?? 'Add Map Layer'}</Dialog.Title>
+			<Dialog.Description>{m.mapSettingsAddMapLayerDescription?.() ?? 'Choose a preset, enter a URL, or upload tiles'}</Dialog.Description>
 		</Dialog.Header>
 
 		<Tabs.Root bind:value={addLayerMode} class="flex-1 overflow-hidden flex flex-col">
 			<Tabs.List class="shrink-0">
-				<Tabs.Trigger value="preset">Presets</Tabs.Trigger>
-				<Tabs.Trigger value="tile">Tile URL</Tabs.Trigger>
-				<Tabs.Trigger value="wms">WMS</Tabs.Trigger>
+				<Tabs.Trigger value="preset">{m.mapSettingsPresets?.() ?? 'Presets'}</Tabs.Trigger>
+				<Tabs.Trigger value="tile">{m.mapSettingsTileUrl?.() ?? 'Tile URL'}</Tabs.Trigger>
+				<Tabs.Trigger value="wms">{m.mapSettingsWms?.() ?? 'WMS'}</Tabs.Trigger>
 				<Tabs.Trigger value="upload">
 					<Upload class="h-4 w-4 mr-1" />
-					Upload
+					{m.mapSettingsUpload?.() ?? 'Upload'}
 				</Tabs.Trigger>
 			</Tabs.List>
 
@@ -816,11 +912,11 @@
 								<div>
 									<div class="font-medium text-sm">{preset.name}</div>
 									<div class="text-xs text-muted-foreground">
-										{preset.sourceType === 'wms' ? 'WMS' : 'Tiles'} -- Zoom {preset.minZoom ?? 0}-{preset.maxZoom ?? 19}
+										{preset.sourceType === 'wms' ? (m.mapSettingsWms?.() ?? 'WMS') : (m.mapSettingsTiles?.() ?? 'Tiles')} -- {m.mapSettingsZoomLabel?.() ?? 'Zoom'} {preset.minZoom ?? 0}-{preset.maxZoom ?? 19}
 									</div>
 								</div>
 								{#if addedPresetUrls.has(preset.url)}
-									<Badge variant="outline" class="text-xs">Added</Badge>
+									<Badge variant="outline" class="text-xs">{m.mapSettingsAdded?.() ?? 'Added'}</Badge>
 								{:else}
 									<Plus class="h-4 w-4 text-muted-foreground" />
 								{/if}
@@ -833,24 +929,24 @@
 					<!-- Tile URL Form -->
 					<div class="space-y-4">
 						<div class="space-y-2">
-							<Label for="tile_name">Name</Label>
-							<Input id="tile_name" bind:value={tileUrlName} placeholder="My Tile Layer" required />
+							<Label for="tile_name">{m.mapSettingsFieldName?.() ?? 'Name'}</Label>
+							<Input id="tile_name" bind:value={tileUrlName} placeholder={m.mapSettingsTileLayerPlaceholder?.() ?? 'My Tile Layer'} required />
 						</div>
 						<div class="space-y-2">
-							<Label for="tile_url">Tile URL Template</Label>
+							<Label for="tile_url">{m.mapSettingsTileUrlTemplate?.() ?? 'Tile URL Template'}</Label>
 							<Input id="tile_url" bind:value={tileUrlUrl} placeholder={"https://example.com/{z}/{x}/{y}.png"} required />
-							<p class="text-xs text-muted-foreground">Use {"{z}/{x}/{y}"} placeholders</p>
+							<p class="text-xs text-muted-foreground">{m.mapSettingsTilePlaceholderHint?.() ?? 'URL must contain z, x and y placeholders'}</p>
 						</div>
 						<div class="space-y-2">
-							<Label for="tile_attribution">Attribution (optional)</Label>
+							<Label for="tile_attribution">{m.mapSettingsAttributionOptional?.() ?? 'Attribution (optional)'}</Label>
 							<Input id="tile_attribution" bind:value={tileUrlAttribution} />
 						</div>
 						<div class="flex items-center space-x-2">
 							<Switch id="tile_as_base" bind:checked={tileUrlAsBase} />
-							<Label for="tile_as_base">Set as base layer</Label>
+							<Label for="tile_as_base">{m.mapSettingsSetAsBaseLayer?.() ?? 'Set as base layer'}</Label>
 						</div>
 						<Button onclick={handleAddTile} disabled={isSubmitting || !tileUrlName.trim() || !tileUrlUrl.trim()}>
-							{isSubmitting ? 'Adding...' : 'Add Tile Layer'}
+							{isSubmitting ? (m.mapSettingsAdding?.() ?? 'Adding...') : (m.mapSettingsAddTileLayer?.() ?? 'Add Tile Layer')}
 						</Button>
 					</div>
 				</Tabs.Content>
@@ -859,43 +955,43 @@
 					<!-- WMS Form -->
 					<div class="space-y-4">
 						<div class="space-y-2">
-							<Label for="wms_name">Name</Label>
-							<Input id="wms_name" bind:value={wmsName} placeholder="My WMS Layer" required />
+							<Label for="wms_name">{m.mapSettingsFieldName?.() ?? 'Name'}</Label>
+							<Input id="wms_name" bind:value={wmsName} placeholder={m.mapSettingsWmsLayerPlaceholder?.() ?? 'My WMS Layer'} required />
 						</div>
 						<div class="space-y-2">
-							<Label for="wms_url">WMS URL</Label>
+							<Label for="wms_url">{m.mapSettingsWmsUrl?.() ?? 'WMS URL'}</Label>
 							<Input id="wms_url" bind:value={wmsUrl} placeholder="https://example.com/wms" required />
 						</div>
 						<div class="space-y-2">
-							<Label for="wms_layers">Layers</Label>
+							<Label for="wms_layers">{m.mapSettingsLayers?.() ?? 'Layers'}</Label>
 							<Input id="wms_layers" bind:value={wmsLayers} placeholder="layer_name" required />
 						</div>
 						<div class="grid grid-cols-2 gap-4">
 							<div class="space-y-2">
-								<Label for="wms_format">Format</Label>
+								<Label for="wms_format">{m.mapSettingsFormat?.() ?? 'Format'}</Label>
 								<Input id="wms_format" bind:value={wmsFormat} />
 							</div>
 							<div class="space-y-2">
-								<Label for="wms_version">Version</Label>
+								<Label for="wms_version">{m.mapSettingsVersion?.() ?? 'Version'}</Label>
 								<Input id="wms_version" bind:value={wmsVersion} />
 							</div>
 						</div>
 						<div class="space-y-2">
-							<Label for="wms_attribution">Attribution (optional)</Label>
+							<Label for="wms_attribution">{m.mapSettingsAttributionOptional?.() ?? 'Attribution (optional)'}</Label>
 							<Input id="wms_attribution" bind:value={wmsAttribution} />
 						</div>
 						<div class="flex items-center gap-4">
 							<div class="flex items-center space-x-2">
 								<Switch id="wms_transparent" bind:checked={wmsTransparent} />
-								<Label for="wms_transparent">Transparent</Label>
+								<Label for="wms_transparent">{m.mapSettingsTransparent?.() ?? 'Transparent'}</Label>
 							</div>
 							<div class="flex items-center space-x-2">
 								<Switch id="wms_as_base" bind:checked={wmsAsBase} />
-								<Label for="wms_as_base">Base layer</Label>
+								<Label for="wms_as_base">{m.mapSettingsBaseLayer?.() ?? 'Base layer'}</Label>
 							</div>
 						</div>
 						<Button onclick={handleAddWms} disabled={isSubmitting || !wmsName.trim() || !wmsUrl.trim() || !wmsLayers.trim()}>
-							{isSubmitting ? 'Adding...' : 'Add WMS Layer'}
+							{isSubmitting ? (m.mapSettingsAdding?.() ?? 'Adding...') : (m.mapSettingsAddWmsLayer?.() ?? 'Add WMS Layer')}
 						</Button>
 					</div>
 				</Tabs.Content>
@@ -904,11 +1000,11 @@
 					<!-- Upload Form -->
 					<div class="space-y-4">
 						<div class="space-y-2">
-							<Label for="upload_name">Name</Label>
-							<Input id="upload_name" bind:value={uploadName} placeholder="My Custom Tiles" required />
+							<Label for="upload_name">{m.mapSettingsFieldName?.() ?? 'Name'}</Label>
+							<Input id="upload_name" bind:value={uploadName} placeholder={m.mapSettingsCustomTilesPlaceholder?.() ?? 'My Custom Tiles'} required />
 						</div>
 						<div class="space-y-2">
-							<Label>Tile Format</Label>
+							<Label>{m.mapSettingsTileFormat?.() ?? 'Tile Format'}</Label>
 							<div class="flex gap-2">
 								{#each ['png', 'jpg', 'webp'] as fmt}
 									<Button
@@ -922,7 +1018,7 @@
 							</div>
 						</div>
 						<div class="space-y-2">
-							<Label>ZIP File</Label>
+							<Label>{m.mapSettingsZipFile?.() ?? 'ZIP File'}</Label>
 							<Input
 								type="file"
 								accept=".zip"
@@ -934,15 +1030,21 @@
 									}
 								}}
 							/>
-							<p class="text-xs text-muted-foreground">ZIP archive with tiles in z/x/y.ext format</p>
+							<p class="text-xs text-muted-foreground">{m.mapSettingsZipFileHint?.() ?? 'ZIP archive with tiles in z/x/y.ext format'}</p>
 						</div>
 						{#if uploadProgress}
 							<div class="space-y-1">
-								<p class="text-sm">Processing... {uploadProgress.progress}%</p>
+								{#if uploadProgress.phase === 'uploading'}
+									<p class="text-sm">
+										{m.mapSettingsUploadingLabel?.() ?? 'Uploading...'} {(uploadProgress.loaded / 1024 / 1024).toFixed(1)} MB / {(uploadProgress.total / 1024 / 1024).toFixed(1)} MB ({uploadProgress.percent}%)
+									</p>
+								{:else}
+									<p class="text-sm">{m.mapSettingsProcessingLabel?.() ?? 'Processing...'} {uploadProgress.percent}%</p>
+								{/if}
 								<div class="w-full bg-muted rounded-full h-2">
 									<div
 										class="bg-primary h-2 rounded-full transition-all"
-										style="width: {uploadProgress.progress}%"
+										style="width: {uploadProgress.percent}%"
 									></div>
 								</div>
 							</div>
@@ -950,10 +1052,10 @@
 						<Button onclick={handleUpload} disabled={isUploading || !uploadFile || !uploadName.trim()}>
 							{#if isUploading}
 								<Loader2 class="mr-2 h-4 w-4 animate-spin" />
-								Uploading...
+								{m.mapSettingsUploadingLabel?.() ?? 'Uploading...'}
 							{:else}
 								<Upload class="mr-2 h-4 w-4" />
-								Upload Tiles
+								{m.mapSettingsUploadTiles?.() ?? 'Upload Tiles'}
 							{/if}
 						</Button>
 					</div>
@@ -967,14 +1069,14 @@
 <Dialog.Root bind:open={showDefaultsDialog}>
 	<Dialog.Content class="max-w-md">
 		<Dialog.Header>
-			<Dialog.Title>Map Default View</Dialog.Title>
+			<Dialog.Title>{m.mapSettingsDefaultViewTitle?.() ?? 'Map Default View'}</Dialog.Title>
 			<Dialog.Description>
-				Fallback settings when no base layer is configured
+				{m.mapSettingsDefaultViewDescription?.() ?? 'Fallback settings when no base layer is configured'}
 			</Dialog.Description>
 		</Dialog.Header>
 		<form method="POST" action="?/saveDefaults" use:defaultsEnhance class="space-y-4">
 			<div class="space-y-2">
-				<Label for="default_zoom">Default Zoom</Label>
+				<Label for="default_zoom">{m.mapSettingsDefaultZoom?.() ?? 'Default Zoom'}</Label>
 				<Input
 					id="default_zoom"
 					name="zoom"
@@ -987,7 +1089,7 @@
 
 			<div class="grid grid-cols-2 gap-4">
 				<div class="space-y-2">
-					<Label for="min_zoom">Min Zoom</Label>
+					<Label for="min_zoom">{m.mapSettingsMinZoom?.() ?? 'Min Zoom'}</Label>
 					<Input
 						id="min_zoom"
 						name="min_zoom"
@@ -998,7 +1100,7 @@
 					/>
 				</div>
 				<div class="space-y-2">
-					<Label for="max_zoom">Max Zoom</Label>
+					<Label for="max_zoom">{m.mapSettingsMaxZoom?.() ?? 'Max Zoom'}</Label>
 					<Input
 						id="max_zoom"
 						name="max_zoom"
@@ -1012,7 +1114,7 @@
 
 			<div class="grid grid-cols-2 gap-4">
 				<div class="space-y-2">
-					<Label for="center_lat">Center Latitude</Label>
+					<Label for="center_lat">{m.mapSettingsCenterLat?.() ?? 'Center Latitude'}</Label>
 					<Input
 						id="center_lat"
 						name="center.lat"
@@ -1024,7 +1126,7 @@
 					/>
 				</div>
 				<div class="space-y-2">
-					<Label for="center_lng">Center Longitude</Label>
+					<Label for="center_lng">{m.mapSettingsCenterLng?.() ?? 'Center Longitude'}</Label>
 					<Input
 						id="center_lng"
 						name="center.lng"
@@ -1039,10 +1141,10 @@
 
 			<Dialog.Footer>
 				<Button type="button" variant="outline" onclick={() => (showDefaultsDialog = false)}>
-					Cancel
+					{m.mapSettingsCancel?.() ?? 'Cancel'}
 				</Button>
 				<Button type="submit" disabled={isSavingDefaults}>
-					{isSavingDefaults ? 'Saving...' : 'Save Defaults'}
+					{isSavingDefaults ? (m.mapSettingsSaving?.() ?? 'Saving...') : (m.mapSettingsSaveDefaults?.() ?? 'Save Defaults')}
 				</Button>
 			</Dialog.Footer>
 		</form>
@@ -1059,14 +1161,14 @@
 				{#if selectedLayer}
 					<strong class="block mt-2">{selectedLayer.name}</strong>
 					{#if selectedLayer.layer_type === 'base'}
-						<Badge variant="destructive" class="mt-2">This is the base layer</Badge>
+						<Badge variant="destructive" class="mt-2">{m.mapSettingsThisIsBaseLayer?.() ?? 'This is the base layer'}</Badge>
 					{/if}
 				{/if}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<AlertDialog.Footer>
-			<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-			<AlertDialog.Action onclick={handleDeleteLayer}>Delete</AlertDialog.Action>
+			<AlertDialog.Cancel>{m.mapSettingsCancel?.() ?? 'Cancel'}</AlertDialog.Cancel>
+			<AlertDialog.Action onclick={handleDeleteLayer}>{m.mapSettingsDeleteConfirm?.() ?? 'Delete'}</AlertDialog.Action>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>
 </AlertDialog.Root>
@@ -1075,26 +1177,25 @@
 <Dialog.Root bind:open={showCreatePackageDialog}>
 	<Dialog.Content class="max-w-2xl max-h-[90vh] flex flex-col">
 		<Dialog.Header class="shrink-0">
-			<Dialog.Title>Create Offline Package</Dialog.Title>
+			<Dialog.Title>{m.mapSettingsCreateOfflinePackageTitle?.() ?? 'Create Offline Package'}</Dialog.Title>
 			<Dialog.Description>
-				Define a region and select layers to include in the offline package.
-				Participants will be able to download this package for offline use.
+				{m.mapSettingsCreateOfflinePackageDescription?.() ?? 'Define a region and select layers to include in the offline package. Participants will be able to download this package for offline use.'}
 			</Dialog.Description>
 		</Dialog.Header>
 		<div class="grid gap-4 py-4 overflow-y-auto flex-1 pr-2">
 			<div class="grid gap-2">
-				<Label for="package_name">Package Name</Label>
+				<Label for="package_name">{m.mapSettingsPackageNameLabel?.() ?? 'Package Name'}</Label>
 				<Input
 					id="package_name"
 					bind:value={packageFormData.name}
-					placeholder="e.g., Downtown Area"
+					placeholder={m.mapSettingsPackageNamePlaceholder?.() ?? 'e.g., Downtown Area'}
 					required
 				/>
 			</div>
 
 			<div class="grid grid-cols-2 gap-4">
 				<div class="grid gap-2">
-					<Label for="zoom_min">Min Zoom</Label>
+					<Label for="zoom_min">{m.mapSettingsMinZoom?.() ?? 'Min Zoom'}</Label>
 					<Input
 						id="zoom_min"
 						type="number"
@@ -1104,7 +1205,7 @@
 					/>
 				</div>
 				<div class="grid gap-2">
-					<Label for="zoom_max">Max Zoom</Label>
+					<Label for="zoom_max">{m.mapSettingsMaxZoom?.() ?? 'Max Zoom'}</Label>
 					<Input
 						id="zoom_max"
 						type="number"
@@ -1116,34 +1217,34 @@
 			</div>
 
 			<div class="grid gap-2">
-				<Label>Region</Label>
+				<Label>{m.mapSettingsRegionLabel?.() ?? 'Region'}</Label>
 				{#if selectedRegion && regionStats()}
 					<div class="flex items-center justify-between p-3 border rounded-md bg-muted/50">
 						<div class="flex items-center gap-2">
 							<MapPin class="h-4 w-4 text-muted-foreground" />
 							<div>
 								<div class="text-sm font-medium">{formatArea(regionStats()!.area)}</div>
-								<div class="text-xs text-muted-foreground">{formatTileCount(regionStats()!.tiles)} tiles at zoom {packageFormData.zoom_min}-{packageFormData.zoom_max}</div>
+								<div class="text-xs text-muted-foreground">{formatTileCount(regionStats()!.tiles)} {m.mapSettingsTilesAtZoom?.() ?? 'tiles at zoom'} {packageFormData.zoom_min}-{packageFormData.zoom_max}</div>
 							</div>
 						</div>
 						<Button variant="outline" size="sm" onclick={() => (showRegionSelector = true)}>
 							<Pencil class="h-4 w-4 mr-1" />
-							Edit Region
+							{m.mapSettingsEditRegion?.() ?? 'Edit Region'}
 						</Button>
 					</div>
 				{:else}
 					<Button variant="outline" class="w-full justify-start h-auto py-4" onclick={() => (showRegionSelector = true)}>
 						<MapPin class="h-5 w-5 mr-2 text-muted-foreground" />
 						<div class="text-left">
-							<div class="font-medium">Draw Region on Map</div>
-							<div class="text-xs text-muted-foreground">Click to open the map and select an area</div>
+							<div class="font-medium">{m.mapSettingsDrawRegion?.() ?? 'Draw Region on Map'}</div>
+							<div class="text-xs text-muted-foreground">{m.mapSettingsDrawRegionHint?.() ?? 'Click to open the map and select an area'}</div>
 						</div>
 					</Button>
 				{/if}
 			</div>
 
 			<div class="grid gap-2">
-				<Label>Layers to Include</Label>
+				<Label>{m.mapSettingsLayersToInclude?.() ?? 'Layers to Include'}</Label>
 				<div class="border rounded-md p-3 max-h-40 overflow-y-auto space-y-2">
 					{#each data.mapLayers as layer}
 						<label class="flex items-center gap-2 cursor-pointer">
@@ -1161,7 +1262,7 @@
 							/>
 							<span class="text-sm">{layer.name}</span>
 							{#if layer.layer_type === 'base'}
-								<Badge variant="outline" class="text-xs">Base</Badge>
+								<Badge variant="outline" class="text-xs">{m.mapSettingsBaseLayerBadge?.() ?? 'Base'}</Badge>
 							{/if}
 						</label>
 					{/each}
@@ -1169,31 +1270,31 @@
 			</div>
 
 			<div class="grid gap-2">
-				<Label>Visible to Roles</Label>
+				<Label>{m.mapSettingsVisibleToRoles?.() ?? 'Visible to Roles'}</Label>
 				<MobileMultiSelect
 					bind:selectedIds={packageFormData.visible_to_roles}
 					options={data.roles}
 					getOptionId={(r) => r.id}
 					getOptionLabel={(r) => r.name}
 					getOptionDescription={(r) => r.description}
-					placeholder="All roles (leave empty for all)"
+					placeholder={m.mapSettingsAllRolesPlaceholder?.() ?? 'All roles (leave empty for all)'}
 				/>
 				<p class="text-xs text-muted-foreground">
-					Leave empty to make this package available to all roles.
+					{m.mapSettingsAllRolesHelp?.() ?? 'Leave empty to make this package available to all roles.'}
 				</p>
 			</div>
 		</div>
 
 		<Dialog.Footer class="shrink-0">
 			<Button type="button" variant="outline" onclick={() => (showCreatePackageDialog = false)}>
-				Cancel
+				{m.mapSettingsCancel?.() ?? 'Cancel'}
 			</Button>
 			<Button onclick={handleCreatePackage} disabled={isCreatingPackage}>
 				{#if isCreatingPackage}
 					<Loader2 class="mr-2 h-4 w-4 animate-spin" />
-					Creating...
+					{m.mapSettingsCreating?.() ?? 'Creating...'}
 				{:else}
-					Create Package
+					{m.mapSettingsCreatePackage?.() ?? 'Create Package'}
 				{/if}
 			</Button>
 		</Dialog.Footer>
@@ -1204,9 +1305,9 @@
 <AlertDialog.Root bind:open={showDeletePackageDialog}>
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>Delete Package</AlertDialog.Title>
+			<AlertDialog.Title>{m.mapSettingsDeletePackageTitle?.() ?? 'Delete Package'}</AlertDialog.Title>
 			<AlertDialog.Description>
-				Are you sure you want to delete this offline package? This action cannot be undone.
+				{m.mapSettingsDeletePackageConfirmation?.() ?? 'Are you sure you want to delete this offline package? This action cannot be undone.'}
 				{#if selectedPackage}
 					<strong class="block mt-2">{selectedPackage.name}</strong>
 					{#if selectedPackage.status === 'ready'}
@@ -1218,9 +1319,9 @@
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<AlertDialog.Footer>
-			<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+			<AlertDialog.Cancel>{m.mapSettingsCancel?.() ?? 'Cancel'}</AlertDialog.Cancel>
 			<AlertDialog.Action onclick={handleDeletePackage} class="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-				Delete
+				{m.mapSettingsDeleteConfirm?.() ?? 'Delete'}
 			</AlertDialog.Action>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>

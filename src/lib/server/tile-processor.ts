@@ -8,6 +8,39 @@ import path from 'path';
 import type PocketBase from 'pocketbase';
 import type { UploadedSourceConfig } from '$lib/types/map-layer';
 
+const MAX_ENTRY_COUNT = 50_000;
+const MAX_TOTAL_UNCOMPRESSED = 500 * 1024 * 1024;
+const MAX_PER_TILE_SIZE = 2 * 1024 * 1024;
+const MAX_COMPRESSION_RATIO = 1000;
+const MAX_MAGIC_MISMATCH_RATIO = 0.05;
+
+type TileFormat = 'png' | 'jpeg' | 'webp';
+
+function detectTileFormat(buf: Buffer): TileFormat | null {
+	if (buf.length >= 8 &&
+		buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47 &&
+		buf[4] === 0x0d && buf[5] === 0x0a && buf[6] === 0x1a && buf[7] === 0x0a) {
+		return 'png';
+	}
+	if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) {
+		return 'jpeg';
+	}
+	if (buf.length >= 12 &&
+		buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
+		buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) {
+		return 'webp';
+	}
+	return null;
+}
+
+function extensionMatchesFormat(ext: string, format: TileFormat): boolean {
+	const e = ext.toLowerCase();
+	if (format === 'png') return e === 'png';
+	if (format === 'jpeg') return e === 'jpg' || e === 'jpeg';
+	if (format === 'webp') return e === 'webp';
+	return false;
+}
+
 // Use dynamic import for unzipper to handle ESM/CJS
 let unzipper: typeof import('unzipper') | null = null;
 
@@ -50,7 +83,7 @@ export async function processTileUpload(
 	zipPath: string,
 	pb: PocketBase
 ): Promise<void> {
-	const tilesDir = path.join(process.cwd(), 'static', 'tiles', layerId);
+	const tilesDir = path.join(process.cwd(), 'data', 'tiles', layerId);
 
 	try {
 		// Update status to processing
@@ -65,8 +98,28 @@ export async function processTileUpload(
 		// Extract ZIP file
 		const uz = await getUnzipper();
 		const directory = await uz.Open.file(zipPath);
+		const { writeFile } = await import('fs/promises');
+
+		if (directory.files.length > MAX_ENTRY_COUNT) {
+			throw new Error(
+				`Zip entry count ${directory.files.length} exceeds limit ${MAX_ENTRY_COUNT}`
+			);
+		}
+
+		const totalUncompressed = directory.files.reduce(
+			(sum, f) => sum + (f.uncompressedSize || 0),
+			0
+		);
+		if (totalUncompressed > MAX_TOTAL_UNCOMPRESSED) {
+			throw new Error(
+				`Total decompressed size ${totalUncompressed} exceeds limit ${MAX_TOTAL_UNCOMPRESSED}`
+			);
+		}
+
 		const totalFiles = directory.files.length;
 		let processedFiles = 0;
+		let validTileCount = 0;
+		let magicMismatchCount = 0;
 
 		for (const file of directory.files) {
 			if (file.type === 'File') {
@@ -75,39 +128,69 @@ export async function processTileUpload(
 				let z: string, x: string, yWithExt: string;
 
 				if (parts.length === 3) {
-					// z/x/y.ext format
 					[z, x, yWithExt] = parts;
 				} else if (parts.length === 4) {
-					// {tilesetId}/z/x/y.ext format - skip tileset folder
 					[, z, x, yWithExt] = parts;
 				} else {
-					continue; // Skip unknown format
+					processedFiles++;
+					continue;
 				}
 
-				// Validate it looks like tile coordinates
 				if (!/^\d+$/.test(z) || !/^\d+$/.test(x)) {
+					processedFiles++;
 					continue;
 				}
 
-				const y = yWithExt.replace(/\.(png|jpg|jpeg|webp)$/i, '');
-				if (!/^\d+$/.test(y)) {
+				const extMatch = yWithExt.match(/^(\d+)\.(png|jpg|jpeg|webp)$/i);
+				if (!extMatch) {
+					processedFiles++;
+					continue;
+				}
+				const [, y, ext] = extMatch;
+
+				// Per-tile size cap (check central directory metadata before decompressing)
+				if ((file.uncompressedSize || 0) > MAX_PER_TILE_SIZE) {
+					throw new Error(
+						`Tile ${file.path} size ${file.uncompressedSize} exceeds per-tile limit ${MAX_PER_TILE_SIZE}`
+					);
+				}
+
+				// Compression ratio check (zip bomb defense)
+				if (file.compressedSize && file.uncompressedSize) {
+					const ratio = file.uncompressedSize / file.compressedSize;
+					if (ratio > MAX_COMPRESSION_RATIO) {
+						throw new Error(
+							`Tile ${file.path} compression ratio ${ratio.toFixed(0)}:1 exceeds limit ${MAX_COMPRESSION_RATIO}:1`
+						);
+					}
+				}
+
+				validTileCount++;
+				const content = await file.buffer();
+
+				// Magic-byte validation
+				const detected = detectTileFormat(content);
+				if (!detected || !extensionMatchesFormat(ext, detected)) {
+					magicMismatchCount++;
+					processedFiles++;
 					continue;
 				}
 
-				// Create directory structure
 				const tileDir = path.join(tilesDir, z, x);
 				await mkdir(tileDir, { recursive: true });
-
-				// Extract file
 				const tilePath = path.join(tileDir, yWithExt);
-				const content = await file.buffer();
-				const { writeFile } = await import('fs/promises');
 				await writeFile(tilePath, content);
 			}
 
 			processedFiles++;
-			const progress = Math.round((processedFiles / totalFiles) * 80); // 0-80% for extraction
+			const progress = Math.round((processedFiles / totalFiles) * 80);
 			await pb.collection('map_layers').update(layerId, { progress });
+		}
+
+		if (validTileCount > 0 && magicMismatchCount / validTileCount > MAX_MAGIC_MISMATCH_RATIO) {
+			throw new Error(
+				`Too many tiles failed magic-byte validation: ${magicMismatchCount}/${validTileCount}`
+			);
 		}
 
 		// Calculate tile statistics
