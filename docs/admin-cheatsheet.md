@@ -13,7 +13,7 @@ This doc explains every settable field in the Überblick Sector admin UI, for bo
 
 These rules apply everywhere in Überblick. Internalize them before relying on per-field descriptions.
 
-**Empty-array-means-all.** Any `visible_to_roles` or `allowed_roles` field that is an empty array grants access to every participant in the project. A non-empty array restricts access to the listed roles only. This is enforced at the PocketBase rule level via the pattern `(<field>:length = 0 || @request.auth.role_id ?= <field>)`. It applies to: `workflows.visible_to_roles`, `workflows.entry_allowed_roles`, `workflow_stages.visible_to_roles`, `workflow_connections.allowed_roles`, `tools_forms.allowed_roles`, `tools_edit.allowed_roles`, `tools_protocol.allowed_roles`, `marker_categories.visible_to_roles`, `custom_tables.visible_to_roles`, `map_layers.visible_to_roles`, `offline_packages.visible_to_roles`, `info_pages.visible_to_roles`.
+**Empty-array-means-all.** Any `visible_to_roles` or `allowed_roles` field that is an empty array grants access to every participant in the project. A non-empty array restricts access to the listed roles only. This is enforced at the PocketBase rule level via the pattern `(<field>:length = 0 || @request.auth.role_id ?= <field>)`. It applies to: `workflows.visible_to_roles`, `workflows.entry_allowed_roles`, `workflow_stages.visible_to_roles`, `workflow_connections.allowed_roles`, `tools_forms.allowed_roles`, `tools_edit.allowed_roles`, `tools_protocol.allowed_roles`, `marker_categories.visible_to_roles`, `custom_tables.visible_to_roles`, `map_layers.visible_to_roles`, `offline_packages.visible_to_roles`. Note: `info_pages` has no `visible_to_roles` field -- info pages are visible to every participant in the project.
 
 **Participant scope.** Every participant-side query is scoped by `project_id = @request.auth.project_id`. A participant can never see anything outside their assigned project, regardless of roles.
 
@@ -73,13 +73,15 @@ Collection: `projects`, `info_pages`
 ## Page: Project Settings · Map Tab  `/projects/[projectId]/settings`  [DONE]
 
 File: `src/routes/(admin)/projects/[projectId]/settings/MapSettingsTab.svelte`
-Collections: `map_settings`, `map_layers`, `offline_packages`
+Collections: `projects` (map defaults live in `projects.settings.map_defaults` JSON), `map_layers`, `offline_packages`
 
-### Map defaults (`map_settings.config`)
+### Map defaults (`projects.settings.map_defaults`)
 
-- [x] **center_lat** (number, latitude) — Latitude of the initial map center when a participant opens the map. Read from `map_settings.config` and passed to the Leaflet map constructor in `MapCanvas.svelte`.
-- [x] **center_lng** (number, longitude) — Longitude of the initial map center when a participant opens the map. Read from `map_settings.config` and paired with `center_lat` for the initial Leaflet view.
-- [x] **default_zoom** (integer, 0–22) — Initial zoom level applied when the participant map loads. Clamped by `min_zoom` / `max_zoom`.
+Stored as a JSON blob inside the `projects.settings` field (there is no separate `map_settings` collection). Keys documented here are the keys on that JSON object.
+
+- [x] **center.lat** (number, latitude) — Latitude of the initial map center when a participant opens the map. Passed to the Leaflet map constructor in `MapCanvas.svelte`. In the `update_map_settings` MCP tool this is exposed as the `center_lat` parameter, which is persisted under `map_defaults.center.lat`.
+- [x] **center.lng** (number, longitude) — Longitude of the initial map center, paired with `center.lat`. Exposed as `center_lng` in the MCP tool; must be set together with `center.lat`.
+- [x] **zoom** (integer, 0–22) — Initial zoom level applied when the participant map loads. Clamped by `min_zoom` / `max_zoom`. Note: the field is literally named `zoom` on the JSON object (not `default_zoom`).
 - [x] **min_zoom** (integer, 0–22) — Lower bound on how far out a participant can zoom. Enforced via `map.setMinZoom()` in the participant map canvas.
 - [x] **max_zoom** (integer, 0–22) — Upper bound on how far in a participant can zoom. Applied to tile layers and the map's `maxZoom` option.
 - [x] **bounds_geojson** (GeoJSON polygon via RegionSelector) — Optional polygon defining the project's map region. Stored but currently not enforced on the participant map; reserved for future region-restriction use.

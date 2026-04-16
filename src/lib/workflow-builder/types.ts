@@ -195,6 +195,9 @@ export interface EntitySelectorOptions {
 	self_select_roles?: string[];
 	/** Roles that can select anyone from the project */
 	any_select_roles?: string[];
+
+	// For custom_table/marker_category source. Empty/missing = nobody.
+	allowed_roles?: string[];
 }
 
 export type ColumnPosition = 'left' | 'right' | 'full';

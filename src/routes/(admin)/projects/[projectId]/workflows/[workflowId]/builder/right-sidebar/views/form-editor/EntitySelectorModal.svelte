@@ -68,6 +68,7 @@
 	let selectedCategoryIds = $state<string[]>([]);
 	let selfSelectRoleIds = $state<string[]>([]);
 	let anySelectRoleIds = $state<string[]>([]);
+	let allowedRoleIds = $state<string[]>([]);
 
 	// Get project ID from route
 	const projectId = $derived($page.params.projectId);
@@ -104,6 +105,7 @@
 			selectedCategoryIds = options.marker_category_id ? [options.marker_category_id] : [];
 			selfSelectRoleIds = [...(options.self_select_roles || [])];
 			anySelectRoleIds = [...(options.any_select_roles || [])];
+			allowedRoleIds = [...(options.allowed_roles || [])];
 
 			// Track initial table ID
 			previousTableId = tableId;
@@ -211,8 +213,10 @@
 			finalOptions.custom_table_id = selectedTableIds[0];
 			finalOptions.display_field = selectedColumnIds[0];
 			finalOptions.value_field = 'id'; // Always store row ID
+			finalOptions.allowed_roles = allowedRoleIds;
 		} else if (localOptions.source_type === 'marker_category') {
 			finalOptions.marker_category_id = selectedCategoryIds[0];
+			finalOptions.allowed_roles = allowedRoleIds;
 		} else if (localOptions.source_type === 'participants' || localOptions.source_type === 'roles') {
 			finalOptions.self_select_roles = selfSelectRoleIds;
 			finalOptions.any_select_roles = anySelectRoleIds;
@@ -320,6 +324,23 @@
 						singleSelect={true}
 						bind:selectedIds={selectedCategoryIds}
 						placeholder={m.formEditorEntitySelectorModalSelectCategoryPlaceholder?.() ?? 'Select a category...'}
+						disablePortal
+					/>
+				</div>
+			{/if}
+
+			<!-- Allowed roles for Custom Table / Marker Category -->
+			{#if localOptions.source_type === 'custom_table' || localOptions.source_type === 'marker_category'}
+				<div class="config-section">
+					<Label>{m.formEditorEntitySelectorModalAllowedRolesLabel?.() ?? 'Roles Allowed to See Entries'}</Label>
+					<p class="config-hint">{m.formEditorEntitySelectorModalAllowedRolesHint?.() ?? 'Only participants with one of these roles can see any entries. Leave empty to hide from everyone.'}</p>
+					<MobileMultiSelect
+						options={roles}
+						getOptionId={(r) => r.id}
+						getOptionLabel={(r) => r.name}
+						getOptionDescription={(r) => r.description}
+						bind:selectedIds={allowedRoleIds}
+						placeholder={m.formEditorEntitySelectorModalSelectRolesPlaceholder?.() ?? 'Select roles...'}
 						disablePortal
 					/>
 				</div>

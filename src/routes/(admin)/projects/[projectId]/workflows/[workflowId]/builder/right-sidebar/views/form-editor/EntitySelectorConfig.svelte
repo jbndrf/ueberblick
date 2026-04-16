@@ -88,10 +88,17 @@
 
 	const isConfigured = $derived(() => {
 		if (sourceType === 'custom_table') {
-			return !!currentOptions.custom_table_id && !!currentOptions.display_field;
+			return (
+				!!currentOptions.custom_table_id &&
+				!!currentOptions.display_field &&
+				(currentOptions.allowed_roles?.length || 0) > 0
+			);
 		}
 		if (sourceType === 'marker_category') {
-			return !!currentOptions.marker_category_id;
+			return (
+				!!currentOptions.marker_category_id &&
+				(currentOptions.allowed_roles?.length || 0) > 0
+			);
 		}
 		if (sourceType === 'participants' || sourceType === 'roles') {
 			return (currentOptions.self_select_roles?.length || 0) > 0 ||

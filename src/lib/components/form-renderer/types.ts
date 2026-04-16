@@ -55,6 +55,7 @@ export interface CustomTableSelectorOptions {
 	value_field?: string;
 	self_select_roles?: string[];
 	any_select_roles?: string[];
+	allowed_roles?: string[];
 }
 
 export interface ValidationRules {

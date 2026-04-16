@@ -3,13 +3,56 @@ import { superValidate } from 'sveltekit-superforms';
 import { zod } from 'sveltekit-superforms/adapters';
 import { participantLoginSchema } from '$lib/schemas/auth';
 import { getAdminPb } from '$lib/server/admin-auth';
+import {
+	checkLoginRateLimit,
+	clientIpFromEvent,
+	recordLoginFailure,
+	recordLoginSuccess,
+	retryAfterMinutes
+} from '$lib/server/rate-limit';
 import * as m from '$lib/paraglide/messages';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ locals }) => {
+export const load: PageServerLoad = async (event) => {
+	const { locals, url } = event;
 	// If already logged in as participant, redirect to map
 	if (locals.pb.authStore.isValid && locals.pb.authStore.record?.collectionName === 'participants') {
 		redirect(303, '/participant/map');
+	}
+
+	// Auto-login via ?token= query parameter (e.g. from QR code link)
+	const urlToken = url.searchParams.get('token');
+	if (urlToken) {
+		const ipKey = `participant:${clientIpFromEvent(event)}`;
+		const gate = checkLoginRateLimit(ipKey);
+		if (gate.allowed) {
+			try {
+				const authData = await locals.pb.collection('participants').authWithPassword(urlToken, urlToken);
+				const participant = authData.record;
+
+				if (!participant.is_active) {
+					locals.pb.authStore.clear();
+					recordLoginFailure(ipKey);
+				} else if (participant.expires_at && new Date(participant.expires_at) < new Date()) {
+					locals.pb.authStore.clear();
+					recordLoginFailure(ipKey);
+				} else {
+					const adminPb = await getAdminPb();
+					await adminPb.collection('participants').update(participant.id, {
+						last_active: new Date().toISOString()
+					});
+					recordLoginSuccess(ipKey);
+					redirect(303, '/participant/map');
+				}
+			} catch (err: any) {
+				// Don't record a failure for SvelteKit's redirect control-flow throws.
+				if (err?.status && err?.location) throw err;
+				recordLoginFailure(ipKey);
+				// Invalid token -- fall through to show the login page
+			}
+		}
+		// If rate-limited, silently fall through to the login form. The POST
+		// action below surfaces the rate-limit message to the user.
 	}
 
 	const form = await superValidate(zod(participantLoginSchema));
@@ -17,11 +60,24 @@ export const load: PageServerLoad = async ({ locals }) => {
 };
 
 export const actions: Actions = {
-	default: async ({ request, locals }) => {
+	default: async (event) => {
+		const { request, locals } = event;
 		const form = await superValidate(request, zod(participantLoginSchema));
 
 		if (!form.valid) {
 			return fail(400, { form });
+		}
+
+		const ipKey = `participant:${clientIpFromEvent(event)}`;
+		const gate = checkLoginRateLimit(ipKey);
+		if (!gate.allowed) {
+			const minutes = retryAfterMinutes(gate.retryAfterSec);
+			return fail(429, {
+				form,
+				message:
+					m.participantLoginRateLimited?.({ minutes }) ??
+					`Too many login attempts. Please try again in ${minutes} minute(s).`
+			});
 		}
 
 		const { token } = form.data;
@@ -36,6 +92,7 @@ export const actions: Actions = {
 			// Check if participant is active
 			if (!participant.is_active) {
 				locals.pb.authStore.clear();
+				recordLoginFailure(ipKey);
 				return fail(400, {
 					form,
 					message: m.participantLoginAccountInactive?.() ?? 'This account is inactive'
@@ -45,6 +102,7 @@ export const actions: Actions = {
 			// Check if participant has expired
 			if (participant.expires_at && new Date(participant.expires_at) < new Date()) {
 				locals.pb.authStore.clear();
+				recordLoginFailure(ipKey);
 				return fail(400, {
 					form,
 					message: m.participantLoginTokenExpired?.() ?? 'Token has expired'
@@ -59,6 +117,7 @@ export const actions: Actions = {
 
 		} catch (error: any) {
 			console.error('Participant login error:', error);
+			recordLoginFailure(ipKey);
 
 			if (error?.status === 400) {
 				return fail(400, {
@@ -73,6 +132,7 @@ export const actions: Actions = {
 			});
 		}
 
+		recordLoginSuccess(ipKey);
 		// Redirect OUTSIDE try-catch so SvelteKit can process it
 		redirect(303, '/participant/map');
 	}

@@ -2,6 +2,13 @@ import { fail, redirect } from '@sveltejs/kit';
 import { superValidate } from 'sveltekit-superforms';
 import { zod } from 'sveltekit-superforms/adapters';
 import { loginSchema } from '$lib/schemas/auth';
+import {
+	checkLoginRateLimit,
+	clientIpFromEvent,
+	recordLoginFailure,
+	recordLoginSuccess,
+	retryAfterMinutes
+} from '$lib/server/rate-limit';
 import type { Actions, PageServerLoad } from './$types';
 import * as m from '$lib/paraglide/messages';
 
@@ -17,7 +24,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 };
 
 export const actions: Actions = {
-	default: async ({ request, locals, url }) => {
+	default: async (event) => {
+		const { request, locals, url } = event;
 		console.log('[LOGIN] Form action triggered');
 		const form = await superValidate(request, zod(loginSchema));
 
@@ -28,6 +36,18 @@ export const actions: Actions = {
 			return fail(400, { form });
 		}
 
+		const ipKey = `admin:${clientIpFromEvent(event)}`;
+		const gate = checkLoginRateLimit(ipKey);
+		if (!gate.allowed) {
+			const minutes = retryAfterMinutes(gate.retryAfterSec);
+			return fail(429, {
+				form,
+				message:
+					m.loginRateLimited?.({ minutes }) ??
+					`Too many login attempts. Please try again in ${minutes} minute(s).`
+			});
+		}
+
 		const { email, password } = form.data;
 
 		try {
@@ -36,12 +56,14 @@ export const actions: Actions = {
 			console.log('[LOGIN] Auth successful, user:', email);
 		} catch (error) {
 			console.log('[LOGIN] Auth failed:', error);
+			recordLoginFailure(ipKey);
 			return fail(400, {
 				form,
 				message: m.loginInvalidCredentials?.() ?? 'Invalid email or password'
 			});
 		}
 
+		recordLoginSuccess(ipKey);
 		console.log('[LOGIN] Auth successful, redirecting...');
 
 		// Get redirect destination (default to admin dashboard)

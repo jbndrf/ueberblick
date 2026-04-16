@@ -281,6 +281,67 @@ function toPbOptions(options?: ListOptions): Omit<ListOptions, 'priority'> | und
 }
 
 // =============================================================================
+// Selectable Participants (custom hook cache)
+// =============================================================================
+
+// The /api/custom/selectable-entities hook is the only legitimate path for a
+// participant to discover other participants by name (the `participants`
+// listRule restricts rows to self). Stale-while-revalidate its result into
+// the existing `records` store under a pseudo-collection so the entity
+// selector works offline.
+
+const SELECTABLE_PARTICIPANTS_COLLECTION = '_selectable_participants';
+
+export interface SelectableParticipant {
+	id: string;
+	label: string;
+}
+
+export async function getSelectableParticipants(fieldId: string): Promise<SelectableParticipant[]> {
+	if (typeof window === 'undefined') return [];
+	const db = await getDB();
+	const key = `${SELECTABLE_PARTICIPANTS_COLLECTION}/${fieldId}`;
+	const cached = await db.get('records', key);
+
+	if (navigator.onLine) {
+		void refreshSelectableParticipants(fieldId);
+	}
+
+	return (cached?.entities as SelectableParticipant[] | undefined) ?? [];
+}
+
+async function refreshSelectableParticipants(fieldId: string): Promise<void> {
+	try {
+		const pb = getPocketBase();
+		const resp = await pb.send<{ entities: SelectableParticipant[] }>(
+			`/api/custom/selectable-entities?field_id=${encodeURIComponent(fieldId)}`,
+			{ method: 'GET' }
+		);
+		const entities = resp.entities ?? [];
+		const db = await getDB();
+		const key = `${SELECTABLE_PARTICIPANTS_COLLECTION}/${fieldId}`;
+		const existing = await db.get('records', key);
+		const prev = (existing?.entities as SelectableParticipant[] | undefined) ?? [];
+		const unchanged =
+			prev.length === entities.length &&
+			prev.every((p, i) => p.id === entities[i].id && p.label === entities[i].label);
+		if (unchanged && existing) return;
+
+		await db.put('records', {
+			_key: key,
+			_collection: SELECTABLE_PARTICIPANTS_COLLECTION,
+			_status: 'unchanged',
+			id: fieldId,
+			entities,
+			updated: new Date().toISOString()
+		} as unknown as CachedRecord);
+		notifyDataChange(SELECTABLE_PARTICIPANTS_COLLECTION, fieldId, 'update');
+	} catch (e) {
+		console.debug(`[selectable-participants] refresh failed for ${fieldId}:`, e);
+	}
+}
+
+// =============================================================================
 // Gateway Factory
 // =============================================================================
 

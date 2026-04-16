@@ -5,10 +5,11 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 	import MediaGallery from './MediaGallery.svelte';
-	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
 	import { getPocketBase } from '$lib/pocketbase';
 	import { POCKETBASE_URL } from '$lib/config/pocketbase';
 	import { getCachedFileUrlByRecord } from '$lib/participant-state/file-cache';
+	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
+	import { getSelectableParticipants, onDataChange } from '$lib/participant-state/gateway.svelte';
 	import type {
 		FormMode,
 		FormFieldWithValue,
@@ -50,7 +51,6 @@
 		disabled = false
 	}: Props = $props();
 
-	const gateway = getParticipantGateway();
 	const isViewMode = $derived(mode === 'view');
 
 	// ==========================================================================
@@ -118,76 +118,113 @@
 		}
 	});
 
+	// Current caller's role ids, used as a client-side UX filter against
+	// `allowed_roles` for non-participants source types. This is not a
+	// security boundary -- the authoritative gate is each collection's
+	// listRule (see migrations 1768400000 / 1768500002).
+	function getCallerRoleIds(): string[] {
+		const model = getPocketBase().authStore.model as { role_id?: string | string[] } | null;
+		const raw = model?.role_id;
+		if (!raw) return [];
+		return Array.isArray(raw) ? raw : [raw];
+	}
+
+	function intersects(a: string[], b: string[]): boolean {
+		if (!a.length || !b.length) return false;
+		const set = new Set(a);
+		return b.some((v) => set.has(v));
+	}
+
+	function passesAllowedRoles(allowed: string[] | undefined): boolean {
+		// No restriction configured -> visible to everyone.
+		if (!allowed || allowed.length === 0) return true;
+		const caller = getCallerRoleIds();
+		// No caller roles (e.g. admin preview) -> don't hide anything.
+		if (caller.length === 0) return true;
+		return intersects(caller, allowed);
+	}
+
+	async function fetchCollection(
+		sourceType: 'roles' | 'marker_category' | 'custom_table',
+		opts: CustomTableSelectorOptions
+	): Promise<Array<Record<string, unknown>>> {
+		const gateway = getParticipantGateway();
+
+		if (sourceType === 'roles') {
+			if (gateway) return gateway.collection('roles').getFullList();
+			return getPocketBase().collection('roles').getFullList();
+		}
+
+		if (sourceType === 'marker_category') {
+			if (!opts.marker_category_id) return [];
+			const filter = `category_id = "${opts.marker_category_id}"`;
+			if (gateway) return gateway.collection('markers').getFullList({ filter });
+			return getPocketBase().collection('markers').getFullList({ filter });
+		}
+
+		// custom_table
+		if (!opts.custom_table_id) return [];
+		const filter = `table_id = "${opts.custom_table_id}"`;
+		if (gateway) return gateway.collection('custom_table_data').getFullList({ filter });
+		return getPocketBase().collection('custom_table_data').getFullList({ filter });
+	}
+
 	async function loadCustomEntities() {
-		if (!customTableOptions || !gateway) return;
+		if (!customTableOptions || !field.id) return;
+		const opts = customTableOptions;
+		const sourceType = opts.source_type;
 
 		loadingEntities = true;
 		try {
-			let records: any[] = [];
-
-			switch (customTableOptions.source_type) {
-				case 'marker_category':
-					if (customTableOptions.marker_category_id) {
-						records = await gateway.collection('markers').getFullList({
-							filter: `category_id = "${customTableOptions.marker_category_id}"`
-						});
-						customEntities = records.map((r) => ({
-							id: r.id,
-							label: r.title || r.name || r.id,
-							description: r.description
-						}));
-					}
-					break;
-				case 'participants': {
-					// Check if current participant's role allows self-select or any-select
-					const authRecord = getPocketBase().authStore.record;
-					const myRoles: string[] = authRecord?.role_id || [];
-					const selfRoles: string[] = customTableOptions.self_select_roles || [];
-					const anyRoles: string[] = customTableOptions.any_select_roles || [];
-					const canSelfSelect = myRoles.some((r) => selfRoles.includes(r));
-					const canSelectAny = myRoles.some((r) => anyRoles.includes(r));
-
-					if (canSelfSelect || canSelectAny) {
-						// API rule only returns own record for now; any-select will be
-						// expanded in a follow-up (custom hook endpoint).
-						records = await gateway.collection('participants').getFullList();
-						customEntities = records.map((r) => ({
-							id: r.id,
-							label: r.name || r.email || r.id,
-							description: r.email
-						}));
-					} else {
-						customEntities = [];
-					}
-					break;
-				}
-				case 'roles':
-					records = await gateway.collection('roles').getFullList();
-					customEntities = records.map((r) => ({
-						id: r.id,
-						label: r.name || r.id,
-						description: r.description
-					}));
-					break;
-				case 'custom_table':
-					if (customTableOptions.custom_table_id) {
-						records = await gateway
-							.collection('custom_table_data')
-							.getFullList({
-								filter: `table_id = "${customTableOptions.custom_table_id}"`
-							});
-						const displayField = customTableOptions.display_field || 'name';
-						customEntities = records.map((r) => {
-							const rowData = typeof r.row_data === 'string' ? JSON.parse(r.row_data) : r.row_data;
-							return {
-								id: r.id,
-								label: rowData?.[displayField] || r.id,
-								description: undefined
-							};
-						});
-					}
-					break;
+			if (sourceType === 'participants') {
+				customEntities = await getSelectableParticipants(field.id);
+				return;
 			}
+
+			if (!passesAllowedRoles(opts.allowed_roles)) {
+				customEntities = [];
+				return;
+			}
+
+			// Prefer the offline-first gateway when available (participant app);
+			// fall back to the raw PocketBase SDK for admin preview contexts.
+			const records = await fetchCollection(sourceType, opts);
+
+			if (sourceType === 'roles') {
+				customEntities = records.map((r) => ({
+					id: r.id as string,
+					label: (r.name as string) || (r.id as string),
+					description: (r.description as string) || undefined
+				}));
+				return;
+			}
+
+			if (sourceType === 'marker_category') {
+				customEntities = records.map((r) => ({
+					id: r.id as string,
+					label: (r.title as string) || (r.name as string) || (r.id as string),
+					description: (r.description as string) || undefined
+				}));
+				return;
+			}
+
+			if (sourceType === 'custom_table') {
+				const displayField = opts.display_field || 'name';
+				customEntities = records.map((r) => {
+					const rowData =
+						typeof r.row_data === 'string'
+							? (JSON.parse(r.row_data) as Record<string, unknown>)
+							: ((r.row_data as Record<string, unknown>) ?? {});
+					const label = rowData[displayField];
+					return {
+						id: r.id as string,
+						label: typeof label === 'string' && label ? label : (r.id as string)
+					};
+				});
+				return;
+			}
+
+			customEntities = [];
 		} catch (err) {
 			console.error('Failed to load custom entities:', err);
 			customEntities = [];
@@ -195,6 +232,21 @@
 			loadingEntities = false;
 		}
 	}
+
+	// Re-run the loader when the gateway pushes a refreshed participants list
+	// (stale-while-revalidate lands after the initial synchronous read).
+	$effect(() => {
+		const unsubscribe = onDataChange((detail) => {
+			if (
+				detail.collection === '_selectable_participants' &&
+				detail.recordId === field.id &&
+				customTableOptions?.source_type === 'participants'
+			) {
+				void loadCustomEntities();
+			}
+		});
+		return unsubscribe;
+	});
 
 	// ==========================================================================
 	// File Handling
