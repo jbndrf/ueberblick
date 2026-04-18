@@ -17,6 +17,40 @@ export interface GeoPoint {
 	lon: number;
 }
 
+/**
+ * GeoJSON geometry types a workflow instance can take.
+ * Coordinates are [lon, lat] pairs, matching GeoJSON convention.
+ *
+ * A line-typed workflow instance is a LineString when a single line was
+ * drawn, or a MultiLineString when the participant committed multiple lines
+ * in one drawing session. Polygons work the same way. This mirrors the
+ * legacy DrawingTool's "one instance can hold several shapes" behavior.
+ */
+export type InstanceGeometry =
+	| { type: 'Point'; coordinates: [number, number] }
+	| { type: 'LineString'; coordinates: [number, number][] }
+	| { type: 'MultiLineString'; coordinates: [number, number][][] }
+	| { type: 'Polygon'; coordinates: [number, number][][] }
+	| { type: 'MultiPolygon'; coordinates: [number, number][][][] };
+
+/**
+ * Axis-aligned bounding box of an instance's geometry.
+ * Derived server-side by the workflow_instance_geometry hook; used for cheap
+ * viewport / "instances in this area" filtering without SpatiaLite.
+ */
+export interface GeometryBBox {
+	minLon: number;
+	minLat: number;
+	maxLon: number;
+	maxLat: number;
+}
+
+/**
+ * Shape of a workflow_instance instance can take. Admin picks this per workflow;
+ * participants only draw the chosen shape.
+ */
+export type GeometryType = 'point' | 'line' | 'polygon';
+
 // =============================================================================
 // Status Machine
 // =============================================================================
@@ -64,7 +98,13 @@ export interface Marker {
 
 /**
  * Workflow instance - matches `workflow_instances` collection
- * Represents an active workflow for a participant
+ * Represents an active workflow for a participant.
+ *
+ * `geometry` is the canonical shape (point / line / polygon as GeoJSON).
+ * `centroid` and `bbox` are derived server-side by the
+ * workflow_instance_geometry pb_hook on create/update; clients may also
+ * populate them optimistically for offline rendering, and the server
+ * recomputes on sync so values stay in lockstep.
  */
 export interface WorkflowInstance {
 	id: string;
@@ -72,7 +112,9 @@ export interface WorkflowInstance {
 	current_stage_id: string;
 	status: 'active' | 'completed' | 'archived' | 'deleted';
 	created_by: string;
-	location: GeoPoint | null;
+	geometry: InstanceGeometry | null;
+	centroid: GeoPoint | null;
+	bbox: GeometryBBox | null;
 	files: string[];
 	created: string;
 	updated: string;
@@ -229,6 +271,11 @@ export interface Workflow {
 	description: string;
 	project_id: string;
 	workflow_type: string;
+	/**
+	 * Geometry shape participants draw for instances of this workflow.
+	 * Defaults to 'point' on legacy rows via the migration.
+	 */
+	geometry_type: GeometryType;
 	is_active: boolean;
 	marker_color: string;
 	icon_config: Record<string, unknown> | null;
@@ -493,6 +540,76 @@ export interface BatchResult {
 	success: boolean;
 	results: GatewayResult<unknown>[];
 	failedCount: number;
+}
+
+// =============================================================================
+// Participant Tool Configs (generic per-tool user-saved configuration)
+// =============================================================================
+
+/**
+ * A single saved configuration entry for a participant-side tool.
+ * `tool_key` names the owning tool; `config` shape is defined by that tool.
+ * Backed by the `participant_tool_configs` collection.
+ */
+export interface ToolConfigRecord<T = unknown> {
+	id: string;
+	participant_id: string;
+	project_id: string | null;
+	tool_key: string;
+	name: string;
+	config: T;
+	sort_order: number;
+	created: string;
+	updated: string;
+}
+
+// =============================================================================
+// Filter Engine (saved views)
+// =============================================================================
+
+/**
+ * A single filter clause. Clauses are AND-combined inside a ViewDefinition;
+ * within one `in`-clause, `values` behave as OR.
+ *
+ * `stage` and `field_value` are scoped to a specific workflow because stage
+ * ids and field_keys only make sense in that workflow's context.
+ */
+export type FilterClause =
+	| { field: 'stage'; workflow_id: string; op: 'in'; values: string[] }
+	| {
+			field: 'field_value';
+			workflow_id: string;
+			field_key: string;
+			op: 'in';
+			values: string[];
+	  }
+	| {
+			field: 'created' | 'updated';
+			op: 'between';
+			from: string | null;
+			to: string | null;
+	  }
+	| {
+			field: 'created' | 'updated';
+			op: 'older_than_days' | 'newer_than_days';
+			days: number;
+	  }
+	| { field: 'created_by'; op: 'in'; values: string[] };
+
+/**
+ * Full definition of a filter view: top-level scope plus a list of clauses.
+ * Persisted as `config` in a `participant_tool_configs` row with
+ * `tool_key = 'filter.saved_views'`.
+ */
+export interface ViewDefinition {
+	version: 1;
+	/** Empty = all workflows visible */
+	workflow_ids: string[];
+	/** Empty = all categories visible */
+	category_ids: string[];
+	clauses: FilterClause[];
+	uncluster?: boolean;
+	uncluster_cap?: number;
 }
 
 // =============================================================================

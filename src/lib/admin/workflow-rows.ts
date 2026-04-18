@@ -10,7 +10,10 @@ export type InstanceRow = {
 	current_stage_id: string;
 	current_stage_name: string;
 	created_by_name: string;
-	location: any;
+	/** Anchor coordinate (derived centroid) for display in admin tables. */
+	centroid: { lat: number; lon: number } | null;
+	/** Geometry type of the instance so admins can tell shapes apart. */
+	geometry_type: 'Point' | 'LineString' | 'Polygon' | null;
 	created: string;
 	updated: string;
 	fieldData: Record<string, any>;
@@ -148,7 +151,8 @@ export function buildRowsFromInstances(
 		current_stage_id: inst.current_stage_id,
 		current_stage_name: options.stageNameById.get(inst.current_stage_id) || '',
 		created_by_name: options.creatorNameById.get(inst.created_by) || '',
-		location: inst.location,
+		centroid: inst.centroid ?? null,
+		geometry_type: inst.geometry?.type ?? null,
 		created: inst.created,
 		updated: inst.updated,
 		fieldData: fieldValuesByInstance[inst.id] || {},

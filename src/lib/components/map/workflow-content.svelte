@@ -230,13 +230,15 @@
 			<span>Started: {formatDate(instance.created)}</span>
 		</div>
 
-		{#if instance.location}
+		{#if instance.centroid}
 			<div class="flex items-center gap-2 text-muted-foreground">
 				<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path>
 					<circle cx="12" cy="10" r="3"></circle>
 				</svg>
-				<span>{instance.location.lat.toFixed(5)}, {instance.location.lon.toFixed(5)}</span>
+				<span>
+					{instance.centroid.lat.toFixed(5)}, {instance.centroid.lon.toFixed(5)}{instance.geometry && instance.geometry.type !== 'Point' ? ` (${instance.geometry.type})` : ''}
+				</span>
 			</div>
 		{/if}
 	</div>

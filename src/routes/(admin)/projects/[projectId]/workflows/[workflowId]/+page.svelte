@@ -17,7 +17,9 @@
 		Copy,
 		Import,
 		Trash2,
-		Check
+		Check,
+		Spline,
+		Hexagon
 	} from 'lucide-svelte';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
@@ -268,11 +270,11 @@
 				id: 'location',
 				header: m.workflowDetailColLocation?.() ?? 'Location',
 				accessorFn: (row) => {
-					if (!row.location) return '';
-					if (typeof row.location === 'object' && row.location.lat != null) {
-						return `${Number(row.location.lat).toFixed(4)}, ${Number(row.location.lon).toFixed(4)}`;
-					}
-					return String(row.location);
+					if (!row.centroid) return '';
+					const base = `${Number(row.centroid.lat).toFixed(4)}, ${Number(row.centroid.lon).toFixed(4)}`;
+					return row.geometry_type && row.geometry_type !== 'Point'
+						? `${base} (${row.geometry_type})`
+						: base;
 				},
 				fieldType: 'text',
 				capabilities: { sortable: false, filterable: false, readonly: true }
@@ -586,6 +588,20 @@
 		toast.success(m.workflowsTypeChangeSuccess?.() ?? 'Workflow type updated');
 	}
 
+	// True when switching geometry_type is unsafe because instances would be
+	// mismatched. The server blocks it too; we additionally disable the UI
+	// dropdown to avoid the round-trip failure.
+	let geometryTypeLocked = $derived((data.totalInstances ?? 0) > 0);
+
+	async function changeGeometryType(next: 'point' | 'line' | 'polygon') {
+		if (next === data.workflow.geometry_type) return;
+		if (geometryTypeLocked) {
+			toast.error('Geometry type cannot change once instances exist.');
+			return;
+		}
+		await updateMeta('geometry_type', next);
+	}
+
 	// Kebab actions: duplicate / import / delete
 	let importDialogOpen = $state(false);
 	let deleteDialogOpen = $state(false);
@@ -747,6 +763,64 @@
 						</DropdownMenu.Item>
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
+
+				{#if data.workflow.workflow_type === 'incident'}
+					<!-- Geometry type picker. Only shown for incident workflows since
+					     survey workflows don't place anything on the map. Disabled
+					     once instances exist to avoid mismatched shapes; the server
+					     rejects the change too. -->
+					<DropdownMenu.Root>
+						<DropdownMenu.Trigger disabled={geometryTypeLocked}>
+							{#snippet child({ props })}
+								<button
+									type="button"
+									{...props}
+									class="inline-flex items-center rounded-md bg-secondary px-2.5 py-0.5 text-xs font-semibold text-secondary-foreground transition-colors hover:opacity-80 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+									title={geometryTypeLocked
+										? 'Locked: this workflow already has instances'
+										: 'Choose the shape participants draw for this workflow'}
+								>
+									{#if data.workflow.geometry_type === 'line'}
+										<Spline class="mr-1 h-3 w-3" />
+										Line
+									{:else if data.workflow.geometry_type === 'polygon'}
+										<Hexagon class="mr-1 h-3 w-3" />
+										Polygon
+									{:else}
+										<MapPin class="mr-1 h-3 w-3" />
+										Point
+									{/if}
+								</button>
+							{/snippet}
+						</DropdownMenu.Trigger>
+						<DropdownMenu.Content align="start">
+							<DropdownMenu.Item onclick={() => changeGeometryType('point')}>
+								{#if data.workflow.geometry_type === 'point'}
+									<Check class="mr-2 h-4 w-4" />
+								{:else}
+									<span class="mr-2 inline-block h-4 w-4"></span>
+								{/if}
+								Point
+							</DropdownMenu.Item>
+							<DropdownMenu.Item onclick={() => changeGeometryType('line')}>
+								{#if data.workflow.geometry_type === 'line'}
+									<Check class="mr-2 h-4 w-4" />
+								{:else}
+									<span class="mr-2 inline-block h-4 w-4"></span>
+								{/if}
+								Line
+							</DropdownMenu.Item>
+							<DropdownMenu.Item onclick={() => changeGeometryType('polygon')}>
+								{#if data.workflow.geometry_type === 'polygon'}
+									<Check class="mr-2 h-4 w-4" />
+								{:else}
+									<span class="mr-2 inline-block h-4 w-4"></span>
+								{/if}
+								Polygon
+							</DropdownMenu.Item>
+						</DropdownMenu.Content>
+					</DropdownMenu.Root>
+				{/if}
 
 				<div class="flex items-center gap-2 text-sm">
 					<span class="text-muted-foreground">{data.workflow.is_active ? (m.rolesActive?.() ?? 'Active') : (m.rolesInactive?.() ?? 'Inactive')}</span>

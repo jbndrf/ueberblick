@@ -9,6 +9,7 @@
 		id: string;
 		name: string;
 		workflow_type: 'incident' | 'survey';
+		geometry_type?: 'point' | 'line' | 'polygon';
 		description?: string;
 		entry_button_label?: string;
 	}
@@ -17,6 +18,10 @@
 		workflows: Workflow[];
 		map?: LeafletMap | null;
 		onWorkflowSelect?: (workflow: Workflow, coordinates?: { lat: number; lng: number }) => void;
+		/** Called for incident workflows whose geometry_type is line or polygon.
+		 *  Parent mounts the draw tool and runs onWorkflowSelect with the feature
+		 *  once drawn. */
+		onDrawGeometry?: (workflow: Workflow, mode: 'line' | 'polygon') => void;
 		isOpen?: boolean;
 		onOpenChange?: (open: boolean) => void;
 		isSelectingCoordinates?: boolean;
@@ -26,6 +31,7 @@
 		workflows = [],
 		map = null,
 		onWorkflowSelect,
+		onDrawGeometry,
 		isOpen = $bindable(false),
 		onOpenChange,
 		isSelectingCoordinates = $bindable(false)
@@ -76,6 +82,18 @@
 		closeMenu();
 
 		if (workflow.workflow_type === 'incident') {
+			// Geometry shape decides the input UX. Legacy point flow for 'point'
+			// (or missing geometry_type, which the migration back-fills to 'point');
+			// the draw tool handles 'line' and 'polygon'.
+			const geom = workflow.geometry_type ?? 'point';
+			if (geom === 'line' || geom === 'polygon') {
+				// We are not owning a coordinate-selection session for draw mode;
+				// parent mounts the geometry-draw-tool. Clear any transient state
+				// we may have accumulated from a prior incident selection.
+				selectedWorkflow = null;
+				onDrawGeometry?.(workflow, geom);
+				return;
+			}
 			enterCoordinateSelectionMode();
 		} else {
 			onWorkflowSelect?.(workflow);

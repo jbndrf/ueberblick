@@ -15,6 +15,7 @@
 		type EnhancedClusterDetail,
 		type ClusterLeaf
 	} from '$lib/components/map/supercluster-manager';
+	import { displayAnchor } from '$lib/utils/instance-geometry';
 	import {
 		generateDonutSvg,
 		donutSize,
@@ -98,7 +99,12 @@
 		workflow_id: string;
 		current_stage_id?: string;
 		status: string;
-		location?: { lat: number; lon: number };
+		geometry?: {
+			type: 'Point' | 'LineString' | 'Polygon';
+			coordinates: unknown;
+		} | null;
+		centroid?: { lat: number; lon: number } | null;
+		bbox?: { minLon: number; minLat: number; maxLon: number; maxLat: number } | null;
 		expand?: {
 			workflow_id?: WorkflowDef;
 		};
@@ -261,11 +267,13 @@
 		);
 	});
 
-	// Derived: compute which workflow instances should be visible on the map
+	// Derived: compute which workflow instances should be visible on the map.
+	// Uses centroid as the anchor point for all shapes (point/line/polygon);
+	// the centroid is server-derived on write and client-computed optimistically.
 	const visibleWorkflowInstances = $derived.by(() => {
 		return workflowInstances.filter((i) => {
 			if (!visibleWorkflowIdSet.has(i.workflow_id)) return false;
-			if (!i.location?.lat || !i.location?.lon) return false;
+			if (!i.centroid?.lat || !i.centroid?.lon) return false;
 			const allowedValues = visibleTagValues.get(i.workflow_id);
 			if (allowedValues) {
 				const values = parsedFilterValues.get(i.id);
@@ -868,19 +876,26 @@
 			}
 		}
 
-		// Add or update drill-down markers
+		// Add or update drill-down markers. Anchor is displayAnchor:
+		//   - Point: the point itself
+		//   - LineString: along-path midpoint
+		//   - Polygon: pointOnFeature (always inside, even for concave shapes)
+		// This keeps the icon on the stroke / inside the fill rather than at
+		// the raw centroid, which can land outside concave polygons.
 		for (const instanceId of instanceIds) {
 			const key = `point_${instanceId}`;
 			const instance = workflowInstanceDataMap.get(instanceId);
-			if (!instance?.location?.lat || !instance?.location?.lon) continue;
+			if (!instance) continue;
+			const anchor = displayAnchor(instance as { geometry?: any; centroid?: any });
+			if (!anchor?.lat || !anchor?.lon) continue;
 
 			const workflow = instance.expand?.workflow_id;
 			const existing = renderedWorkflowInstances.get(key);
 
 			if (existing) {
 				const current = existing.marker.getLatLng();
-				if (current.lat !== instance.location.lat || current.lng !== instance.location.lon) {
-					existing.marker.setLatLng([instance.location.lat, instance.location.lon]);
+				if (current.lat !== anchor.lat || current.lng !== anchor.lon) {
+					existing.marker.setLatLng([anchor.lat, anchor.lon]);
 				}
 				const nextSig = instanceIconSignature(instance);
 				if (nextSig !== existing.signature) {
@@ -891,7 +906,7 @@
 			}
 
 			const icon = createWorkflowInstanceIcon(L, workflow, instance);
-			const leafletMarker = L.marker([instance.location.lat, instance.location.lon], { icon });
+			const leafletMarker = L.marker([anchor.lat, anchor.lon], { icon });
 			if (onWorkflowInstanceClick) {
 				leafletMarker.on('click', () => onWorkflowInstanceClick!(instance));
 			}

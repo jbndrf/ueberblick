@@ -54,7 +54,7 @@
 	// promises so pages render immediately while the sidebar fills in.
 	const sidebarWorkflowsPromise = $derived(
 		$page.data.sidebarWorkflows as
-			| Promise<Array<{ id: string; name: string; workflow_type: string }>>
+			| Promise<Array<{ id: string; name: string; workflow_type: string; sort_order: number }>>
 			| undefined
 	);
 	const sidebarTablesPromise = $derived(
@@ -72,24 +72,110 @@
 	let workflowsCollapsed = $state(false);
 	let tablesCollapsed = $state(false);
 
+	// Drag-and-drop reordering of workflows in the sidebar
+	type SidebarWorkflow = { id: string; name: string; workflow_type: string; sort_order: number };
+	let workflowDragId = $state<string | null>(null);
+	let workflowDropTargetId = $state<string | null>(null);
+	let workflowDropPos = $state<'before' | 'after' | null>(null);
+	// Optimistic override — when set, renders this order instead of the server promise
+	let workflowOrderOverride = $state<SidebarWorkflow[] | null>(null);
+
+	function onWorkflowDragStart(e: DragEvent, id: string) {
+		workflowDragId = id;
+		if (e.dataTransfer) {
+			e.dataTransfer.effectAllowed = 'move';
+			e.dataTransfer.setData('text/plain', id);
+		}
+	}
+
+	function onWorkflowDragOver(e: DragEvent, overId: string) {
+		if (!workflowDragId || workflowDragId === overId) return;
+		e.preventDefault();
+		if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+		workflowDropTargetId = overId;
+		workflowDropPos = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+	}
+
+	function onWorkflowDragLeave(overId: string) {
+		if (workflowDropTargetId === overId) {
+			workflowDropTargetId = null;
+			workflowDropPos = null;
+		}
+	}
+
+	async function onWorkflowDrop(e: DragEvent, current: SidebarWorkflow[]) {
+		e.preventDefault();
+		const dragId = workflowDragId;
+		const targetId = workflowDropTargetId;
+		const pos = workflowDropPos;
+		workflowDragId = null;
+		workflowDropTargetId = null;
+		workflowDropPos = null;
+		if (!dragId || !targetId || dragId === targetId || !pos) return;
+
+		const from = current.findIndex((w) => w.id === dragId);
+		const targetIndex = current.findIndex((w) => w.id === targetId);
+		if (from < 0 || targetIndex < 0) return;
+
+		const reordered = current.slice();
+		const [moved] = reordered.splice(from, 1);
+		let to = targetIndex > from ? targetIndex - 1 : targetIndex;
+		if (pos === 'after') to += 1;
+		reordered.splice(to, 0, moved);
+
+		// Optimistic local override
+		const withNewOrder = reordered.map((w, i) => ({ ...w, sort_order: i }));
+		workflowOrderOverride = withNewOrder;
+
+		const pb = getPocketBase();
+		try {
+			const changed = withNewOrder.filter((w, i) => current[i]?.id !== w.id);
+			await Promise.all(
+				changed.map((w) => pb.collection('workflows').update(w.id, { sort_order: w.sort_order }))
+			);
+			await refreshSidebar();
+			workflowOrderOverride = null;
+		} catch (err) {
+			console.error('Failed to reorder workflows:', err);
+			toast.error(m.navReorderWorkflowError?.() ?? 'Failed to reorder workflows');
+			workflowOrderOverride = null;
+			await refreshSidebar();
+		}
+	}
+
 	// Refresh sidebar after a quick-create action. Invalidating the project
 	// layout load re-runs it and refreshes $page.data.
 	async function refreshSidebar() {
 		await invalidate('sidebar');
 	}
 
-	// Quick-create functions
+	// Quick-create functions. New workflows default to geometry_type "point" --
+	// admins change it to line/polygon from the workflow detail page. This keeps
+	// the quick-create affordance simple while the richer config lives behind
+	// a proper settings surface.
 	async function createWorkflow(type: 'incident' | 'survey') {
 		if (!currentProjectId) return;
 		const pb = getPocketBase();
 		try {
+			const existing = await pb.collection('workflows').getFullList({
+				filter: `project_id = "${currentProjectId}"`,
+				fields: 'sort_order',
+				requestKey: null
+			});
+			const maxOrder = existing.reduce(
+				(max, r) => Math.max(max, (r as { sort_order?: number }).sort_order ?? -1),
+				-1
+			);
 			const record = await pb.collection('workflows').create({
 				project_id: currentProjectId,
 				name: type === 'incident' ? 'New Incident Workflow' : 'New Survey Workflow',
 				workflow_type: type,
+				geometry_type: 'point',
 				is_active: false,
 				marker_color: type === 'incident' ? '#ff0000' : null,
-				icon_config: {}
+				icon_config: {},
+				sort_order: maxOrder + 1
 			});
 			await goto(`/projects/${currentProjectId}/workflows/${record.id}`);
 			await refreshSidebar();
@@ -268,22 +354,33 @@
 										{#await sidebarWorkflowsPromise ?? Promise.resolve([])}
 											<div class="px-3 py-2 text-xs text-muted-foreground">...</div>
 										{:then sidebarWorkflows}
-											{#each sidebarWorkflows as wf}
+											{@const displayed = workflowOrderOverride ?? sidebarWorkflows}
+											{#each displayed as wf (wf.id)}
 												<Sidebar.MenuItem>
-													<Sidebar.MenuSubButton
-														href="/projects/{currentProjectId}/workflows/{wf.id}"
-														isActive={$page.url.pathname.startsWith(`/projects/${currentProjectId}/workflows/${wf.id}`)}
+													<div
+														role="listitem"
+														draggable="true"
+														ondragstart={(e) => onWorkflowDragStart(e, wf.id)}
+														ondragover={(e) => onWorkflowDragOver(e, wf.id)}
+														ondragleave={() => onWorkflowDragLeave(wf.id)}
+														ondrop={(e) => onWorkflowDrop(e, displayed)}
+														class="relative {workflowDropTargetId === wf.id && workflowDropPos === 'before' ? 'before:absolute before:left-0 before:right-0 before:top-0 before:h-0.5 before:bg-primary' : ''} {workflowDropTargetId === wf.id && workflowDropPos === 'after' ? 'after:absolute after:left-0 after:right-0 after:bottom-0 after:h-0.5 after:bg-primary' : ''} {workflowDragId === wf.id ? 'opacity-50' : ''}"
 													>
-														{#if wf.workflow_type === 'incident'}
-															<MapPin class="h-4 w-4" />
-														{:else}
-															<Workflow class="h-4 w-4" />
-														{/if}
-														<span>{wf.name}</span>
-													</Sidebar.MenuSubButton>
+														<Sidebar.MenuSubButton
+															href="/projects/{currentProjectId}/workflows/{wf.id}"
+															isActive={$page.url.pathname.startsWith(`/projects/${currentProjectId}/workflows/${wf.id}`)}
+														>
+															{#if wf.workflow_type === 'incident'}
+																<MapPin class="h-4 w-4" />
+															{:else}
+																<Workflow class="h-4 w-4" />
+															{/if}
+															<span>{wf.name}</span>
+														</Sidebar.MenuSubButton>
+													</div>
 												</Sidebar.MenuItem>
 											{/each}
-											{#if sidebarWorkflows.length === 0}
+											{#if displayed.length === 0}
 												<div class="px-3 py-2 text-xs text-muted-foreground">
 													{m.navNoWorkflows?.() ?? 'No workflows yet'}
 												</div>

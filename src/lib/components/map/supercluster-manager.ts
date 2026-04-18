@@ -95,25 +95,44 @@ export function markersToFeatures(
 }
 
 /**
- * Convert workflow instance data to GeoJSON features for Supercluster.
+ * Convert workflow instance data to GeoJSON point features for Supercluster.
+ *
+ * Points go in at their own coordinates; lines and polygons go in at their
+ * visual display anchor (along-path midpoint for lines, point-on-feature for
+ * polygons) rather than the raw centroid. The anchor is what the marker icon
+ * will sit on, so using it for clustering keeps the click target aligned with
+ * where the icon actually shows. `displayAnchor` is memoized per-geometry.
+ *
+ * The non-clustered line/polygon outline layer lives separately in
+ * instance-geometry-layer.svelte.
  */
+import { displayAnchor } from '$lib/utils/instance-geometry';
+
+// Relaxed input type: MapCanvas and friends type their instances locally
+// with a slightly different `geometry` shape, so we accept the superset
+// rather than forcing callers to narrow.
 export function workflowInstancesToFeatures(
 	instances: Array<{
 		id: string;
 		workflow_id: string;
 		current_stage_id?: string;
-		location?: { lat: number; lon: number };
+		geometry?: unknown;
+		centroid?: { lat: number; lon: number } | null;
 	}>,
 	filterableValues: Map<string, string>
 ): Supercluster.PointFeature<WorkflowInstanceProperties>[] {
 	const features: Supercluster.PointFeature<WorkflowInstanceProperties>[] = [];
 	for (const i of instances) {
-		if (!i.location?.lat || !i.location?.lon) continue;
+		// Cast via `as any` so the loose `unknown` geometry threads into
+		// displayAnchor's narrower InstanceGeometry union -- displayAnchor
+		// does its own shape checks and safely returns null for bad input.
+		const anchor = displayAnchor(i as any);
+		if (!anchor?.lat || !anchor?.lon) continue;
 		features.push({
 			type: 'Feature',
 			geometry: {
 				type: 'Point',
-				coordinates: [i.location.lon, i.location.lat]
+				coordinates: [anchor.lon, anchor.lat]
 			},
 			properties: {
 				type: 'workflowInstance',

@@ -145,7 +145,10 @@ export interface ToolUsageRecord {
 	metadata: {
 		action: 'instance_created' | 'form_fill' | 'edit' | 'admin_edit' | 'location_edit' | 'stage_transition' | 'protocol' | 'conflict_resolution';
 		stage_name?: string;
-		location?: { lat: number; lon: number } | null;
+		/** Set on instance_created: anchor coordinate of the created instance. */
+		centroid?: { lat: number; lon: number } | null;
+		/** Set on instance_created: geometry kind the participant drew. */
+		geometry_type?: 'Point' | 'LineString' | 'Polygon' | null;
 		created_fields?: Array<{ field_key: string; field_name?: string; value: string }>;
 		changes?: Array<{ field_key: string; field_name?: string; before: string | null; after: string }>;
 		before?: { lat: number; lon: number } | null;

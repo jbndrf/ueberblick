@@ -12,6 +12,26 @@
 	import { appLoadingMessage, downloadProgress as syncDownloadProgress, downloadAllCollections } from '$lib/participant-state/sync.svelte';
 	import { Loader2 } from 'lucide-svelte';
 	import { MapCanvas, BottomControlBar, LayerSheet, FilterSheet, WorkflowSelector, SettingsSheet } from './components';
+	import GeometryDrawTool from '$lib/components/map/geometry-draw-tool.svelte';
+	import InstanceGeometryLayer from '$lib/components/map/instance-geometry-layer.svelte';
+	import { deriveBBox, deriveCentroid, pointGeometry } from '$lib/utils/instance-geometry';
+	import type {
+		FilterClause as FilterClauseType,
+		InstanceGeometry,
+		ToolConfigRecord,
+		ViewDefinition
+	} from '$lib/participant-state/types';
+	import { buildPredicate } from '$lib/filter-engine/predicate';
+	import {
+		createToolConfig,
+		deleteToolConfig,
+		listToolConfigs,
+		updateToolConfig
+	} from '$lib/participant-state/tool-configs';
+	import type { BuilderContext } from './components/view-builder/types';
+
+	const SAVED_VIEWS_KEY = 'filter.saved_views';
+	import type { Feature, LineString, Polygon } from 'geojson';
 	import { WorkflowInstanceDetailModule, MarkerDetailModule, createSelection, type Selection, type Marker } from './modules';
 	import ClusterDetailModule from './modules/cluster-detail/ClusterDetailModule.svelte';
 	import type { EnhancedClusterDetail, WorkflowClusterGroup, WorkflowClusterRow, ClusterLeaf } from '$lib/components/map/supercluster-manager';
@@ -25,6 +45,7 @@
 		id: string;
 		name: string;
 		workflow_type: 'incident' | 'survey';
+		geometry_type?: 'point' | 'line' | 'polygon';
 		description?: string;
 		entry_button_label?: string;
 		entry_allowed_roles?: string[];
@@ -33,7 +54,10 @@
 
 	interface PendingWorkflow {
 		workflow: Workflow;
+		/** Present for point workflows — legacy temp-marker flow. */
 		coordinates?: { lat: number; lng: number };
+		/** Present for line/polygon workflows — drawn via GeometryDrawTool. */
+		geometry?: InstanceGeometry;
 	}
 
 	interface Props {
@@ -134,6 +158,11 @@
 	// Workflow creation state (for new workflows via entry form)
 	let pendingWorkflow = $state<PendingWorkflow | null>(null);
 	let formFillOpen = $state(false);
+
+	// Active draw session for line/polygon workflows. When non-null, the
+	// GeometryDrawTool is mounted over the map; on confirm we hand the drawn
+	// geometry to handleWorkflowSelect which opens FormFillTool as usual.
+	let drawingSession = $state<{ workflow: Workflow; mode: 'line' | 'polygon' } | null>(null);
 
 	// Shared bottom sheet expanded state (preserves peek/expanded when switching sheets)
 	let sheetExpanded = $state(false);
@@ -238,7 +267,13 @@
 			.map(wf => ({
 				...wf,
 				entry_button_label: entryLabelByWorkflow.get(wf.id) || wf.name
-			}));
+			}))
+			.sort((a, b) => {
+				const ao = typeof a.sort_order === 'number' ? a.sort_order : Number.MAX_SAFE_INTEGER;
+				const bo = typeof b.sort_order === 'number' ? b.sort_order : Number.MAX_SAFE_INTEGER;
+				if (ao !== bo) return ao - bo;
+				return (a.name ?? '').localeCompare(b.name ?? '');
+			});
 	});
 
 	// Visual key registry for cluster donut colors (shared between MapCanvas and ClusterDetailModule)
@@ -334,6 +369,17 @@
 	let uncluster = $state(false);
 	let unclusterCap = $state(500);
 	let unclusterStats = $state<{ rendered: number; total: number }>({ rendered: 0, total: 0 });
+
+	// Advanced filter clauses from the Views tab. Empty = no extra filter on
+	// top of the simple quick-filter controls. These are AND-combined.
+	let advancedClauses = $state<FilterClauseType[]>([]);
+
+	// Saved views (participant_tool_configs, tool_key = filter.saved_views),
+	// loaded lazily once the project id is known.
+	let savedViews = $state<ToolConfigRecord<ViewDefinition>[]>([]);
+	let savedViewsLoaded = false;
+	/** id of the view whose switch is currently on; null = none active. */
+	let activeSavedViewId = $state<string | null>(null);
 
 	// ==========================================================================
 	// Initialization Effects (run once when data first arrives)
@@ -513,6 +559,167 @@
 	});
 
 	// ==========================================================================
+	// Advanced filter (Views tab) — builder context + predicate application
+	// ==========================================================================
+
+	/** Build the lookup table the predicate needs for `field_value` clauses. */
+	const fieldValuesByInstance = $derived.by(() => {
+		const map = new Map<string, Array<any>>();
+		for (const fv of fieldValues) {
+			const iid = (fv as any).instance_id;
+			if (!iid) continue;
+			let arr = map.get(iid);
+			if (!arr) {
+				arr = [];
+				map.set(iid, arr);
+			}
+			arr.push(fv);
+		}
+		return map;
+	});
+
+	/** Context passed to the FilterBuilder so each clause can render its picker. */
+	const builderCtx = $derived.by<BuilderContext>(() => {
+		const wfList = (workflows as any[]).map((w) => ({ id: w.id, name: w.name }));
+		const stagesByWorkflow = new Map<string, { id: string; workflow_id: string; name: string }[]>();
+		for (const s of workflowStages as any[]) {
+			let arr = stagesByWorkflow.get(s.workflow_id);
+			if (!arr) {
+				arr = [];
+				stagesByWorkflow.set(s.workflow_id, arr);
+			}
+			arr.push({ id: s.id, workflow_id: s.workflow_id, name: s.stage_name ?? s.id });
+		}
+
+		const filterableFields: BuilderContext['filterableFields'] = [];
+		for (const ft of fieldTags as any[]) {
+			const mappings = (ft.tag_mappings || []) as Array<{ tagType: string; fieldId: string | null }>;
+			for (const mapping of mappings) {
+				if (mapping.tagType !== 'filterable' || !mapping.fieldId) continue;
+				const uniq = new Set<string>();
+				for (const fv of fieldValues as any[]) {
+					if (fv.field_key === mapping.fieldId && fv.value) {
+						for (const v of splitMultiValue(String(fv.value))) uniq.add(v);
+					}
+				}
+				filterableFields.push({
+					workflow_id: ft.workflow_id,
+					field_key: mapping.fieldId,
+					field_label: mapping.fieldId,
+					values: [...uniq].sort((a, b) => a.localeCompare(b))
+				});
+			}
+		}
+
+		const creators = new Map<string, string>();
+		for (const inst of workflowInstances as any[]) {
+			const id = inst.created_by;
+			if (id && !creators.has(id)) creators.set(id, id.slice(0, 8));
+		}
+
+		return {
+			workflows: wfList,
+			stagesByWorkflow,
+			filterableFields,
+			creators: [...creators].map(([id, label]) => ({ id, label }))
+		};
+	});
+
+	// Load saved views once the project id is known. Refresh is handled by
+	// refreshSavedViews() after any mutation.
+	$effect(() => {
+		const pid = (project as any)?.id;
+		if (!pid || savedViewsLoaded) return;
+		savedViewsLoaded = true;
+		refreshSavedViews(pid);
+	});
+
+	async function refreshSavedViews(projectId: string): Promise<void> {
+		try {
+			savedViews = await listToolConfigs<ViewDefinition>(SAVED_VIEWS_KEY, projectId);
+		} catch (err) {
+			console.warn('[saved-views] load failed', err);
+		}
+	}
+
+	function snapshotCurrentView(): ViewDefinition {
+		return {
+			version: 1,
+			workflow_ids: [...visibleWorkflowIds],
+			category_ids: [...visibleCategoryIds],
+			clauses: [...advancedClauses],
+			uncluster,
+			uncluster_cap: unclusterCap
+		};
+	}
+
+	function applySavedView(view: ToolConfigRecord<ViewDefinition>): void {
+		const def = view.config;
+		if (def?.workflow_ids) visibleWorkflowIds = [...def.workflow_ids];
+		if (def?.category_ids) visibleCategoryIds = [...def.category_ids];
+		advancedClauses = [...(def?.clauses ?? [])];
+		if (typeof def?.uncluster === 'boolean') uncluster = def.uncluster;
+		if (typeof def?.uncluster_cap === 'number') unclusterCap = def.uncluster_cap;
+		activeSavedViewId = view.id;
+	}
+
+	function clearActiveView(): void {
+		advancedClauses = [];
+		activeSavedViewId = null;
+	}
+
+	function handleSavedViewToggle(
+		view: ToolConfigRecord<ViewDefinition>,
+		on: boolean
+	): void {
+		if (on) applySavedView(view);
+		else if (activeSavedViewId === view.id) clearActiveView();
+	}
+
+	async function handleSaveCurrentView(name: string): Promise<void> {
+		const pid = (project as any)?.id;
+		if (!pid) return;
+		try {
+			const created = await createToolConfig<ViewDefinition>(SAVED_VIEWS_KEY, {
+				name,
+				config: snapshotCurrentView(),
+				projectId: pid
+			});
+			savedViews = [...savedViews, created];
+		} catch (err) {
+			console.warn('[saved-views] save failed', err);
+		}
+	}
+
+	async function handleRenameView(id: string, name: string): Promise<void> {
+		try {
+			const updated = await updateToolConfig<ViewDefinition>(id, { name });
+			savedViews = savedViews.map((v) => (v.id === id ? updated : v));
+		} catch (err) {
+			console.warn('[saved-views] rename failed', err);
+		}
+	}
+
+	async function handleDeleteView(id: string): Promise<void> {
+		try {
+			await deleteToolConfig(id);
+			savedViews = savedViews.filter((v) => v.id !== id);
+		} catch (err) {
+			console.warn('[saved-views] delete failed', err);
+		}
+	}
+
+	/** Instances drawn on the map, after the advanced-filter clauses are applied. */
+	const filteredInstances = $derived.by(() => {
+		if (advancedClauses.length === 0) return workflowInstances;
+		const predicate = buildPredicate(
+			{ version: 1, workflow_ids: [], category_ids: [], clauses: advancedClauses },
+			{ now: new Date(), fieldValuesByInstance }
+		);
+		return (workflowInstances as any[]).filter((inst) => predicate(inst as any));
+	});
+
+	// ==========================================================================
 	// Cluster Detail Helpers
 	// ==========================================================================
 
@@ -644,11 +851,18 @@
 	const canGoNext = $derived(currentIndex >= 0 && currentIndex < selectableMarkers.length - 1);
 	const canGoPrevious = $derived(currentIndex > 0);
 
+	// True while the user is in any instance-creation flow (point placement,
+	// line draw, polygon draw). Taps on existing geometry must fall through to
+	// the creation tool instead of opening a detail sheet.
+	const isCreatingInstance = $derived(!!drawingSession || isSelectingCoordinates);
+
 	function handleMarkerClick(marker: any) {
+		if (isCreatingInstance) return;
 		selection = createSelection.marker(marker.id);
 	}
 
 	function handleWorkflowInstanceClick(instance: any) {
+		if (isCreatingInstance) return;
 		selection = createSelection.workflowInstance(instance.id);
 	}
 
@@ -723,16 +937,49 @@
 	// Workflow Creation (new workflow via entry form)
 	// ==========================================================================
 
-	function handleWorkflowSelect(workflow: Workflow, coordinates?: { lat: number; lng: number }) {
-		console.log('Workflow selected:', workflow, 'Coordinates:', coordinates);
-		pendingWorkflow = { workflow, coordinates };
+	function handleWorkflowSelect(
+		workflow: Workflow,
+		coordinates?: { lat: number; lng: number },
+		geometry?: InstanceGeometry
+	) {
+		console.log('Workflow selected:', workflow, 'Coordinates:', coordinates, 'Geometry:', !!geometry);
+		pendingWorkflow = { workflow, coordinates, geometry };
 		formFillOpen = true;
+	}
+
+	function handleDrawGeometry(workflow: Workflow, mode: 'line' | 'polygon') {
+		drawingSession = { workflow, mode };
+	}
+
+	function handleDrawConfirm(feature: Feature<LineString | Polygon>) {
+		if (!drawingSession) return;
+		const workflow = drawingSession.workflow;
+		drawingSession = null;
+		handleWorkflowSelect(workflow, undefined, feature.geometry as InstanceGeometry);
+	}
+
+	function handleDrawCancel() {
+		drawingSession = null;
 	}
 
 	async function handleFormSubmit(formValues: Record<string, unknown>, connectionId: string) {
 		if (!pendingWorkflow) return;
 
-		const { workflow, coordinates } = pendingWorkflow;
+		const { workflow, coordinates, geometry: drawnGeometry } = pendingWorkflow;
+
+		// Resolve the instance geometry. Draw tool wins; otherwise fall back to the
+		// tapped coordinate (legacy point flow). Survey workflows may have neither.
+		const geometry: InstanceGeometry | null = drawnGeometry
+			? drawnGeometry
+			: coordinates
+				? pointGeometry(coordinates.lng, coordinates.lat)
+				: null;
+
+		// Compute derived fields client-side for optimistic offline rendering. The
+		// pb_hook will recompute server-side on write so canonical values stay in
+		// lockstep.
+		const centroid = deriveCentroid(geometry);
+		const bbox = deriveBBox(geometry);
 
 		const stages = workflowStages.filter((s: any) => s.workflow_id === workflow.id);
 		const startStage = stages.find((s: any) => s.stage_type === 'start') || stages[0];
@@ -748,7 +995,9 @@
 				current_stage_id: (startStage as any).id,
 				status: 'active',
 				created_by: data.participant.id,
-				location: coordinates ? { lat: coordinates.lat, lon: coordinates.lng } : null,
+				geometry,
+				centroid,
+				bbox,
 				files: []
 			});
 
@@ -781,7 +1030,8 @@
 				metadata: {
 					action: 'instance_created',
 					stage_name: (startStage as any).stage_name || (startStage as any).id,
-					location: coordinates ? { lat: coordinates.lat, lon: coordinates.lng } : null,
+					geometry_type: geometry?.type ?? null,
+					centroid,
 					created_fields: createdFields
 				}
 			}) as { id: string };
@@ -919,7 +1169,7 @@
 		{mapSettings}
 		{markers}
 		{visibleCategoryIds}
-		{workflowInstances}
+		workflowInstances={filteredInstances}
 		{workflowStages}
 		{visibleWorkflowIds}
 		{filterableValues}
@@ -956,6 +1206,7 @@
 		{workflows}
 		{map}
 		onWorkflowSelect={handleWorkflowSelect}
+		onDrawGeometry={handleDrawGeometry}
 		{isEditingLocation}
 	/>
 
@@ -967,8 +1218,40 @@
 			bind:isOpen={workflowSelectorOpen}
 			bind:isSelectingCoordinates
 			onWorkflowSelect={handleWorkflowSelect}
+			onDrawGeometry={handleDrawGeometry}
 		/>
 	</div>
+
+	<!-- Line / Polygon draw session for incident workflows whose geometry_type
+	     is line or polygon. Mounted on top of the map, unmounted on confirm/cancel. -->
+	{#if drawingSession && map}
+		<GeometryDrawTool
+			{map}
+			mode={drawingSession.mode}
+			onConfirm={handleDrawConfirm}
+			onCancel={handleDrawCancel}
+		/>
+	{/if}
+
+	<!-- Non-clustered shape layer for line / polygon instances. Cluster layer
+	     inside MapCanvas still represents these via their centroid so zoom-out
+	     counts remain complete; this layer takes over above the zoom threshold.
+	     `selectedInstanceId` triggers a halo + heavier stroke on all sub-shapes
+	     of a Multi* geometry so the user can see the whole group belong to the
+	     selected instance. `interactive={!drawingSession}` prevents taps from
+	     opening the detail sheet mid-draw -- clicks fall through to the draw
+	     tool instead. -->
+	{#if map}
+		<InstanceGeometryLayer
+			{map}
+			instances={filteredInstances}
+			{workflows}
+			{visibleWorkflowIds}
+			selectedInstanceId={selection.type === 'workflowInstance' ? selection.instanceId : null}
+			interactive={!isCreatingInstance}
+			onInstanceClick={(id) => (selection = createSelection.workflowInstance(id))}
+		/>
+	{/if}
 
 	<LayerSheet
 		bind:open={layerSheetOpen}
@@ -998,6 +1281,16 @@
 		{unclusterCap}
 		onUnclusterCapChange={(next) => (unclusterCap = next)}
 		{unclusterStats}
+		advancedClauses={advancedClauses}
+		{builderCtx}
+		onAdvancedClausesChange={(next) => { advancedClauses = next; activeSavedViewId = null; }}
+		{savedViews}
+		{activeSavedViewId}
+		onSavedViewToggle={handleSavedViewToggle}
+		onSavedViewSave={handleSaveCurrentView}
+		onSavedViewRename={handleRenameView}
+		onSavedViewDelete={handleDeleteView}
+		onManageTabs={() => { filterSheetOpen = false; settingsSheetOpen = true; }}
 	/>
 
 	<!-- Workflow Instance Detail Module (handles tool flows internally) -->

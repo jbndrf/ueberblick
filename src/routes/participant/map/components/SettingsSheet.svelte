@@ -35,6 +35,7 @@
 		resetDownloadProgress
 	} from '$lib/participant-state';
 	import { deleteDownloadedFiles } from '$lib/participant-state/file-cache';
+	import { createPersistedTab } from '$lib/participant-state/ui-state.svelte';
 	import { getPocketBase } from '$lib/pocketbase';
 	import { getDB, getStorageStats, type DownloadedPackage, type StorageStats } from '$lib/participant-state/db';
 	import { createPWAState, initPWAInstallListeners } from '$lib/utils/pwa-detection.svelte';
@@ -43,6 +44,7 @@
 	import ThemeToggleInline from '$lib/components/theme-toggle-inline.svelte';
 	import FontSizeInline from '$lib/components/font-size-inline.svelte';
 	import LanguageSelectorInline from '$lib/components/language-selector-inline.svelte';
+	import AdvancedFeaturesPanel from './AdvancedFeaturesPanel.svelte';
 	import * as m from '$lib/paraglide/messages';
 
 	interface Props {
@@ -78,6 +80,8 @@
 
 	// PWA state
 	const pwa = createPWAState();
+
+	const tab = createPersistedTab('settings', 'profile');
 
 	// Download progress
 	const downloadProgress = $derived(getDownloadProgress());
@@ -246,7 +250,7 @@
 			<Sheet.Title>{m.participantSettingsSheetTitle?.() ?? 'Settings'}</Sheet.Title>
 		</Sheet.Header>
 
-		<Tabs.Root value="profile" class="mt-2 flex flex-1 flex-col overflow-hidden">
+		<Tabs.Root bind:value={tab.value} class="mt-2 flex flex-1 flex-col overflow-hidden">
 			<Tabs.List class="w-full shrink-0">
 				<Tabs.Trigger value="profile">
 					<User class="h-4 w-4" />
@@ -363,6 +367,7 @@
 					<ThemeToggleInline />
 					<FontSizeInline />
 					<LanguageSelectorInline />
+					<AdvancedFeaturesPanel />
 				</div>
 			</Tabs.Content>
 

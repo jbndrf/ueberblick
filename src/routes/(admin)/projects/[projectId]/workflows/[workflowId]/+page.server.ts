@@ -425,17 +425,21 @@ export const actions: Actions = {
 				}
 			}
 
-			// Determine which keys are special (lat, lon) vs form fields
+			// Determine which keys are special (lat, lon) vs form fields.
+			// CSV import currently only supports point-type workflows; line/polygon
+			// geometries would need a GeoJSON-shaped import column and aren't
+			// surfaced here yet.
 			const specialKeys = new Set(['lat', 'lon']);
 			let importedCount = 0;
 
 			for (const row of rows) {
-				// Build location from lat/lon if present
-				let location = null;
+				// Build geometry from lat/lon if present. The pb_hook derives
+				// centroid/bbox server-side so we only ship geometry.
+				let geometry: { type: 'Point'; coordinates: [number, number] } | null = null;
 				const lat = parseFloat(row['lat']);
 				const lon = parseFloat(row['lon']);
 				if (!isNaN(lat) && !isNaN(lon)) {
-					location = { lat, lon };
+					geometry = { type: 'Point', coordinates: [lon, lat] };
 				}
 
 				// Create the workflow instance at the selected stage
@@ -443,7 +447,7 @@ export const actions: Actions = {
 					workflow_id: workflowId,
 					current_stage_id: instanceStageId,
 					status: 'active',
-					location
+					geometry
 				});
 
 				// Create field values with correct stage_id per field
@@ -524,7 +528,7 @@ export const actions: Actions = {
 			return fail(400, { message: m.workflowDetailServerFieldNameRequired?.() ?? 'Field name is required' });
 		}
 
-		const allowedFields = ['name', 'description', 'is_active', 'workflow_type', 'private_instances', 'visible_to_roles'];
+		const allowedFields = ['name', 'description', 'is_active', 'workflow_type', 'geometry_type', 'private_instances', 'visible_to_roles'];
 		if (!allowedFields.includes(field)) {
 			return fail(400, { message: m.workflowDetailServerInvalidField?.() ?? 'Invalid field' });
 		}
@@ -536,6 +540,22 @@ export const actions: Actions = {
 			}
 			if (field === 'visible_to_roles') {
 				parsedValue = value ? JSON.parse(value) : [];
+			}
+			if (field === 'geometry_type') {
+				// Changing the geometry_type of a workflow that already has instances
+				// would leave the existing shapes mismatched against what the
+				// participant UI would draw next time. Block the change in that case
+				// rather than silently corrupting the collection.
+				const existing = await pb.collection('workflow_instances').getList(1, 1, {
+					filter: `workflow_id = "${workflowId}"`,
+					fields: 'id'
+				});
+				if (existing.totalItems > 0 && parsedValue !== (await pb.collection('workflows').getOne(workflowId)).geometry_type) {
+					return fail(409, { message: 'Cannot change geometry type after instances have been created.' });
+				}
+				if (!['point', 'line', 'polygon'].includes(parsedValue)) {
+					return fail(400, { message: 'Invalid geometry type' });
+				}
 			}
 			await pb.collection('workflows').update(workflowId, {
 				[field]: parsedValue

@@ -201,7 +201,7 @@ interface ParticipantStateDB extends DBSchema {
 // so upgrades can remove the old global DB on first boot after this change.
 const LEGACY_DB_NAME = 'participant-state';
 const DB_NAME_PREFIX = 'participant-state__';
-const DB_VERSION = 8;
+const DB_VERSION = 10;
 
 function participantDbName(participantId: string): string {
 	return `${DB_NAME_PREFIX}${participantId}`;
@@ -263,7 +263,11 @@ export function getActiveParticipantId(): string | null {
 /**
  * Schema upgrade logic -- shared between primary open and recovery retry.
  */
-function upgradeSchema(db: IDBPDatabase<ParticipantStateDB>, oldVersion: number): void {
+function upgradeSchema(
+	db: IDBPDatabase<ParticipantStateDB>,
+	oldVersion: number,
+	upgradeTransaction?: IDBTransaction | ReturnType<IDBPDatabase<ParticipantStateDB>['transaction']>
+): void {
 	// Delete all old stores when upgrading to v3
 	if (oldVersion < 3) {
 		const oldStores = [
@@ -354,6 +358,69 @@ function upgradeSchema(db: IDBPDatabase<ParticipantStateDB>, oldVersion: number)
 		store.createIndex('by_instance', 'instanceId');
 		store.createIndex('by_status', 'status');
 	}
+
+	// v9 / v10: workflow_instances shape changed -- `location` was replaced by
+	// `geometry` + `centroid` + `bbox`. v9 purged cached workflow_instances
+	// rows but left child `workflow_instance_field_values` + `_tool_usage`
+	// records pointing at parent IDs that will never sync, so the queued
+	// child pushes fail with 400. v10 does a full family sweep:
+	//   - drop cached rows for all three collections
+	//   - clear their sync_metadata cursors (forces a clean refetch)
+	//   - drop queued operation_log entries for those collections
+	//
+	// App is under construction, so this re-download cost is accepted.
+	if (oldVersion >= 3 && oldVersion < 10 && upgradeTransaction) {
+		try {
+			const tx = upgradeTransaction as unknown as IDBTransaction;
+			const staleCollections = [
+				'workflow_instances',
+				'workflow_instance_field_values',
+				'workflow_instance_tool_usage'
+			];
+
+			// Purge records by collection via the `by_collection` index.
+			const recordsStore = tx.objectStore('records');
+			const collectionIdx = recordsStore.index('by_collection');
+			for (const name of staleCollections) {
+				const cursorReq = collectionIdx.openCursor(IDBKeyRange.only(name));
+				cursorReq.onsuccess = () => {
+					const cursor = cursorReq.result;
+					if (cursor) {
+						cursor.delete();
+						cursor.continue();
+					}
+				};
+			}
+
+			// Clear the sync cursor so the next poll pulls these collections
+			// fresh from the server.
+			const syncMeta = tx.objectStore('sync_metadata');
+			for (const name of staleCollections) {
+				syncMeta.delete(name);
+			}
+
+			// Purge any queued operation_log entries for these collections --
+			// they reference the now-gone records and would fail to replay.
+			if (tx.objectStoreNames.contains('operation_log')) {
+				const opLog = tx.objectStore('operation_log');
+				if (opLog.indexNames.contains('by-collection')) {
+					const byCollection = opLog.index('by-collection');
+					for (const name of staleCollections) {
+						const req = byCollection.openCursor(IDBKeyRange.only(name));
+						req.onsuccess = () => {
+							const cursor = req.result;
+							if (cursor) {
+								cursor.delete();
+								cursor.continue();
+							}
+						};
+					}
+				}
+			}
+		} catch (err) {
+			console.warn('[DB v10] Failed to purge stale workflow_instance family:', err);
+		}
+	}
 }
 
 /**
@@ -368,8 +435,8 @@ async function doOpenDB(): Promise<IDBPDatabase<ParticipantStateDB>> {
 	const dbName = participantDbName(activeParticipantId);
 	try {
 		return await openDB<ParticipantStateDB>(dbName, DB_VERSION, {
-			upgrade(db, oldVersion) {
-				upgradeSchema(db, oldVersion);
+			upgrade(db, oldVersion, _newVersion, transaction) {
+				upgradeSchema(db, oldVersion, transaction);
 			},
 			blocked(currentVersion, blockedVersion) {
 				// Another connection (old tab/SW) is preventing our upgrade.
@@ -407,8 +474,8 @@ async function doOpenDB(): Promise<IDBPDatabase<ParticipantStateDB>> {
 
 		// Retry with a fresh database (non-recursive: calls openDB directly).
 		return await openDB<ParticipantStateDB>(dbName, DB_VERSION, {
-			upgrade(db, oldVersion) {
-				upgradeSchema(db, oldVersion);
+			upgrade(db, oldVersion, _newVersion, transaction) {
+				upgradeSchema(db, oldVersion, transaction);
 			}
 		});
 	}

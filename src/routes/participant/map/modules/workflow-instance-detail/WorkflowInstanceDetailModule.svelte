@@ -1014,7 +1014,9 @@
 		if (!detailState || !gateway) return;
 
 		try {
-			// 1. Create tool_usage record with location change (audit trail)
+			// 1. Create tool_usage record with location change (audit trail).
+			//    Location edit only supports point-type instances; line/polygon
+			//    editing will require its own tool (scope for later).
 			const locationStageId = detailState.instance?.current_stage_id;
 			await gateway.collection('workflow_instance_tool_usage').create({
 				instance_id: detailState.instanceId,
@@ -1024,16 +1026,26 @@
 				metadata: {
 					action: 'location_edit',
 					stage_name: locationStageId ? (getStageName(locationStageId) || locationStageId) : null,
-					before: detailState.instance?.location
-						? { lat: detailState.instance.location.lat, lon: detailState.instance.location.lon }
+					before: detailState.instance?.centroid
+						? { lat: detailState.instance.centroid.lat, lon: detailState.instance.centroid.lon }
 						: null,
 					after: { lat: coordinates.lat, lon: coordinates.lng }
 				}
 			});
 
-			// 2. Update instance location
+			// 2. Update instance geometry. Client-derived centroid/bbox go along
+			//    for optimistic offline rendering; the pb_hook will recompute on
+			//    the server so values stay authoritative.
+			const newGeometry = { type: 'Point' as const, coordinates: [coordinates.lng, coordinates.lat] as [number, number] };
 			await gateway.collection('workflow_instances').update(detailState.instanceId, {
-				location: { lat: coordinates.lat, lon: coordinates.lng }
+				geometry: newGeometry,
+				centroid: { lat: coordinates.lat, lon: coordinates.lng },
+				bbox: {
+					minLon: coordinates.lng,
+					minLat: coordinates.lat,
+					maxLon: coordinates.lng,
+					maxLat: coordinates.lat
+				}
 			});
 
 			// Close location picker (this triggers cleanup)
@@ -1320,10 +1332,10 @@
 													<div class="pb-2 pt-0.5">
 														<!-- instance_created -->
 														{#if metadata.action === 'instance_created' && metadata.created_fields}
-															{#if metadata.location}
+															{#if metadata.centroid}
 																<div class="flex gap-1.5 text-xs mb-0.5">
 																	<span class="text-muted-foreground shrink-0">{m.participantWorkflowInstanceDetailLocationLabel?.() ?? 'Location'}:</span>
-																	<span class="font-medium truncate">{metadata.location.lat.toFixed(5)}, {metadata.location.lon.toFixed(5)}</span>
+																	<span class="font-medium truncate">{metadata.centroid.lat.toFixed(5)}, {metadata.centroid.lon.toFixed(5)}{metadata.geometry_type && metadata.geometry_type !== 'Point' ? ` (${metadata.geometry_type})` : ''}</span>
 																</div>
 															{/if}
 															{#each metadata.created_fields as field}
@@ -1488,13 +1500,17 @@
 	</AlertDialog.Content>
 </AlertDialog.Root>
 
-<!-- Location Edit Tool (rendered as map overlay) -->
+<!-- Location Edit Tool (rendered as map overlay).
+     Anchor is the centroid so point, line, and polygon instances all have a
+     usable starting coordinate for the picker; the edit still writes a point
+     geometry for now, which is fine for point workflows and intentionally
+     lossy for shapes (a dedicated shape-edit tool is out of current scope). -->
 {#if isLocationPickerActive && map && detailState}
-	{@const location = detailState.instance?.location as { lat: number; lon: number } | null}
+	{@const centroid = detailState.instance?.centroid as { lat: number; lon: number } | null}
 	{@const buttonLabel = (activeLocationEditTool?.visual_config?.button_label as string) || 'Update Location'}
 	<LocationEditTool
 		{map}
-		initialCoordinates={location ? { lat: location.lat, lng: location.lon } : null}
+		initialCoordinates={centroid ? { lat: centroid.lat, lng: centroid.lon } : null}
 		confirmLabel={buttonLabel}
 		bind:isActive={isLocationPickerActive}
 		onConfirm={handleLocationConfirm}

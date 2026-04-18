@@ -13,13 +13,13 @@ export const load: LayoutServerLoad = async ({ params, depends, locals: { pb } }
 		.collection('workflows')
 		.getFullList({
 			filter: `project_id = "${projectId}"`,
-			fields: 'id,name,workflow_type',
-			sort: 'name',
+			fields: 'id,name,workflow_type,sort_order',
+			sort: 'sort_order,name',
 			requestKey: null
 		})
 		.catch((err) => {
 			console.error('Error fetching sidebar workflows:', err);
-			return [] as Array<{ id: string; name: string; workflow_type: string }>;
+			return [] as Array<{ id: string; name: string; workflow_type: string; sort_order: number }>;
 		});
 
 	const sidebarTables = pb

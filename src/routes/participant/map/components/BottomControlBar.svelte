@@ -8,6 +8,7 @@
 		id: string;
 		name: string;
 		workflow_type: 'incident' | 'survey';
+		geometry_type?: 'point' | 'line' | 'polygon';
 		description?: string;
 		entry_button_label?: string;
 	}
@@ -20,6 +21,7 @@
 		workflows?: Workflow[];
 		map?: LeafletMap | null;
 		onWorkflowSelect?: (workflow: Workflow, coordinates?: { lat: number; lng: number }) => void;
+		onDrawGeometry?: (workflow: Workflow, mode: 'line' | 'polygon') => void;
 		/** Whether location editing is active (hides nav bar) */
 		isEditingLocation?: boolean;
 	}
@@ -32,6 +34,7 @@
 		workflows = [],
 		map = null,
 		onWorkflowSelect,
+		onDrawGeometry,
 		isEditingLocation = false
 	}: Props = $props();
 
@@ -110,6 +113,7 @@
 	{map}
 	bind:isOpen={workflowSelectorOpen}
 	onWorkflowSelect={handleWorkflowSelect}
+	{onDrawGeometry}
 	bind:isSelectingCoordinates
 />
 

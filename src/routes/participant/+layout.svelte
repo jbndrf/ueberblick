@@ -24,6 +24,7 @@
 	} from '$lib/participant-state/context.svelte';
 	import { setSyncCollections, startPushListener, runCatchUpSync, syncStatus, appLoadingMessage } from '$lib/participant-state/sync.svelte';
 	import { setupRealtime } from '$lib/participant-state/realtime.svelte';
+	import { initEnabledFeatures } from '$lib/participant-state/enabled-features.svelte';
 
 	// Register service worker for PWA using absolute path.
 	// virtual:pwa-register generates relative "./sw.js" which breaks on sub-paths like /participant/map.
@@ -214,6 +215,7 @@
 		gateway = createParticipantGateway(newId, newProjectId);
 		setParticipantGateway(gateway);
 		setupPersistence(gateway);
+		initEnabledFeatures(newId, (participant as { enabled_features?: unknown }).enabled_features);
 	} else {
 		// No server-authenticated participant. Leave the active DB unset here
 		// and let the offline-session check below restore it from the hint

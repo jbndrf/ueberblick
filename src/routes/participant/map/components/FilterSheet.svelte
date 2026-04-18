@@ -1,11 +1,19 @@
 <script lang="ts">
 	import * as Sheet from '$lib/components/ui/sheet';
+	import * as Tabs from '$lib/components/ui/tabs';
 	import { Switch } from '$lib/components/ui/switch';
 	import { Separator } from '$lib/components/ui/separator';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Input } from '$lib/components/ui/input';
-	import { ChevronDown, ChevronRight } from 'lucide-svelte';
+	import { Button } from '$lib/components/ui/button';
+	import { ChevronDown, ChevronRight, Sparkles, Sliders } from 'lucide-svelte';
+	import { isFeatureEnabled } from '$lib/participant-state/enabled-features.svelte';
+	import { createPersistedTab } from '$lib/participant-state/ui-state.svelte';
 	import * as m from '$lib/paraglide/messages';
+	import type { FilterClause, ToolConfigRecord, ViewDefinition } from '$lib/participant-state/types';
+	import FilterBuilder from './view-builder/FilterBuilder.svelte';
+	import SavedViewsList from './view-builder/SavedViewsList.svelte';
+	import type { BuilderContext } from './view-builder/types';
 
 	interface Marker {
 		id: string;
@@ -35,7 +43,7 @@
 		status: string;
 		workflow_id: string;
 		current_stage_id?: string;
-		location?: { lat: number; lon: number };
+		centroid?: { lat: number; lon: number } | null;
 		expand?: {
 			workflow_id?: {
 				name: string;
@@ -116,6 +124,20 @@
 		unclusterCap?: number;
 		onUnclusterCapChange?: (next: number) => void;
 		unclusterStats?: { rendered: number; total: number };
+		/** Advanced-filter clauses driving the Views tab. Empty array = no extra filter. */
+		advancedClauses?: FilterClause[];
+		/** Context (workflows / stages / fields / creators) for the builder UI. */
+		builderCtx?: BuilderContext;
+		onAdvancedClausesChange?: (next: FilterClause[]) => void;
+		/** Saved views (from participant_tool_configs, tool_key = filter.saved_views). */
+		savedViews?: ToolConfigRecord<ViewDefinition>[];
+		activeSavedViewId?: string | null;
+		onSavedViewToggle?: (view: ToolConfigRecord<ViewDefinition>, on: boolean) => void;
+		onSavedViewSave?: (name: string) => void | Promise<void>;
+		onSavedViewRename?: (id: string, name: string) => void | Promise<void>;
+		onSavedViewDelete?: (id: string) => void | Promise<void>;
+		/** Called when the user taps the "Manage tabs" button in the header. */
+		onManageTabs?: () => void;
 	}
 
 	let {
@@ -136,8 +158,32 @@
 		onUnclusterToggle,
 		unclusterCap = 500,
 		onUnclusterCapChange,
-		unclusterStats
+		unclusterStats,
+		advancedClauses = [],
+		builderCtx,
+		onAdvancedClausesChange,
+		savedViews = [],
+		activeSavedViewId = null,
+		onSavedViewToggle,
+		onSavedViewSave,
+		onSavedViewRename,
+		onSavedViewDelete,
+		onManageTabs
 	}: Props = $props();
+
+	// Power tabs — hidden by default, shown when the matching feature flag is on.
+	// The "Views" tab is currently gated by `filter.field_filters` (the same
+	// opt-in slot the previous Fields placeholder used). It combines quick
+	// filters, the advanced filter builder, and — once wired — saved views.
+	const showViews = $derived(isFeatureEnabled('filter.field_filters'));
+	const hasAnyPowerTab = $derived(showViews);
+
+	const tab = createPersistedTab('filter', 'simple');
+	$effect(() => {
+		if (tab.value === 'views' && !showViews) {
+			tab.value = 'simple';
+		}
+	});
 
 	function handleCapInput(event: Event) {
 		const raw = (event.target as HTMLInputElement).value;
@@ -182,7 +228,9 @@
 		return Array.from(grouped.values());
 	});
 
-	// Group instances by workflow for display
+	// Group instances by workflow for display, ordered by the admin-defined
+	// `sort_order` (carried by the `workflows` prop). Workflows not present
+	// in that list fall to the end and tie-break on insertion order.
 	const instancesByWorkflow = $derived.by(() => {
 		const grouped = new Map<string, { workflowId: string; workflow: any; count: number }>();
 
@@ -202,7 +250,12 @@
 			grouped.get(wfId)!.count++;
 		}
 
-		return Array.from(grouped.values());
+		const orderIndex = new Map(workflows.map((w, i) => [w.id, i]));
+		return Array.from(grouped.values()).sort((a, b) => {
+			const ai = orderIndex.get(a.workflowId) ?? Number.MAX_SAFE_INTEGER;
+			const bi = orderIndex.get(b.workflowId) ?? Number.MAX_SAFE_INTEGER;
+			return ai - bi;
+		});
 	});
 
 	/**
@@ -299,14 +352,8 @@
 	}
 </script>
 
-<Sheet.Root bind:open>
-	<Sheet.ContentNoOverlay side="left" class="w-80">
-		<Sheet.Header>
-			<Sheet.Title>{m.participantFilterSheetTitle?.() ?? 'Map Content'}</Sheet.Title>
-			<Sheet.Description>{m.participantFilterSheetDescription?.() ?? 'Show or hide items on the map'}</Sheet.Description>
-		</Sheet.Header>
-
-		<div class="space-y-6 py-6 overflow-y-auto max-h-[calc(100vh-12rem)]">
+{#snippet simpleBody()}
+	<div class="space-y-6 py-6 overflow-y-auto max-h-[calc(100vh-14rem)]">
 			<!-- Workflow Instances grouped by Workflow -->
 			{#if instancesByWorkflow.length > 0}
 				<div>
@@ -461,6 +508,69 @@
 					{/if}
 				{/if}
 			</div>
-		</div>
+	</div>
+{/snippet}
+
+<Sheet.Root bind:open>
+	<Sheet.ContentNoOverlay side="left" class="w-80">
+		<Sheet.Header class="relative pr-10">
+			<Sheet.Title>{m.participantFilterSheetTitle?.() ?? 'Map Content'}</Sheet.Title>
+			<Sheet.Description>{m.participantFilterSheetDescription?.() ?? 'Show or hide items on the map'}</Sheet.Description>
+			{#if onManageTabs}
+				<Button
+					variant="ghost"
+					size="icon"
+					class="absolute right-1 top-1 h-7 w-7"
+					title="Manage tabs"
+					onclick={onManageTabs}
+				>
+					<Sparkles class="h-4 w-4" />
+				</Button>
+			{/if}
+		</Sheet.Header>
+
+		{#if hasAnyPowerTab}
+			<Tabs.Root bind:value={tab.value} class="mt-2 flex flex-1 flex-col overflow-hidden">
+				<Tabs.List class="w-full shrink-0">
+					<Tabs.Trigger value="simple">
+						<Sliders class="h-4 w-4" />
+						<span>{m.participantFilterSheetTabSimple?.() ?? 'Simple'}</span>
+					</Tabs.Trigger>
+					{#if showViews}
+						<Tabs.Trigger value="views">
+							<Sparkles class="h-4 w-4" />
+							<span>{m.participantFilterSheetTabViews?.() ?? 'Views'}</span>
+						</Tabs.Trigger>
+					{/if}
+				</Tabs.List>
+				<Tabs.Content value="simple" class="overflow-y-auto">
+					{@render simpleBody()}
+				</Tabs.Content>
+				{#if showViews}
+					<Tabs.Content value="views" class="overflow-y-auto">
+						<div class="space-y-6 px-1 py-6">
+							<SavedViewsList
+								views={savedViews}
+								activeViewId={activeSavedViewId}
+								onToggle={(v, on) => onSavedViewToggle?.(v, on)}
+								onSaveCurrent={async (name) => { await onSavedViewSave?.(name); }}
+								onRename={async (id, name) => { await onSavedViewRename?.(id, name); }}
+								onDelete={async (id) => { await onSavedViewDelete?.(id); }}
+							/>
+							<Separator />
+							{#if builderCtx}
+								<FilterBuilder
+									clauses={advancedClauses}
+									ctx={builderCtx}
+									onChange={(next) => onAdvancedClausesChange?.(next)}
+								/>
+							{/if}
+						</div>
+					</Tabs.Content>
+				{/if}
+			</Tabs.Root>
+		{:else}
+			{@render simpleBody()}
+		{/if}
 	</Sheet.ContentNoOverlay>
 </Sheet.Root>
