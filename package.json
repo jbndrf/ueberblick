@@ -20,7 +20,10 @@
 		"test": "npm run test:unit -- --run && npm run test:e2e",
 		"test:e2e": "playwright test",
 		"storybook": "storybook dev -p 6006",
-		"build-storybook": "storybook build"
+		"build-storybook": "storybook build",
+		"docs:serve": "mkdocs serve",
+		"docs:build": "mkdocs build --strict",
+		"docs:check": "mkdocs build --strict --quiet --site-dir /tmp/ueberblick-docs-check"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.4.0",

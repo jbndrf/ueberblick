@@ -1,75 +1,208 @@
 # Überblick
 
-Kartenbasierte Prozesssteuerung mit Offline-Synchronisation und rollenbasierter Zugriffskontrolle
+Überblick ist eine Open-Source-Plattform für die Verwaltung raumbezogener
+Geodaten und deren Verknüpfung mit kollaborativem Prozessmanagement.
+Angelegte Prozesse resultieren automatisch in einer mobilen, offline-fähigen
+Anwendung. Die Webanwendung erlaubt es Benutzern ohne Installation einer
+Anwendung, in der ihnen zugewiesenen Rolle an einem Prozess teilzunehmen.
+So wird jeder Punkt auf der Karte ein lebendiger Vorgang mit einem Anfang
+und einem Ende. Oder, sofern gewünscht: keinem Ende. So lassen sich bspw.
+Bürgermeldungen von der Aufnahme bis zur Erledigung abbilden oder auch
+regelmäßige Begehungen mit definierten Protokollierungen und
+Eskalationsstufen anlegen.
 
-## Zusammenfassung
+Wir möchten mit Überblick eine bunte Community schaffen, die
+es einer Vielzahl von Nutzern erlaubt, ihre eigenen Anwendungen zu
+erstellen, mit deren Hilfe sie ihre räumlichen Daten pflegen können.
 
-Überblick ist eine offene, selbst hostbare Kartenanwendung zur Abbildung räumlicher Arbeitsabläufe. Die Anwendung richtet sich an Organisationen, die Tätigkeiten im Feld koordinieren bspw. Gebäudemanagement, kommunale Infrastrukturpflege, Bauprojekte, Reinigungsdienste oder Vermessungsarbeiten.
+Lizenz: AGPL v3.
 
-Überblick besteht aus zwei Komponenten: einer mobilen Teilnehmeranwendung für den Einsatz vor Ort und Überblick SECTOR (Spatial Engine for Collaboration and Task Orchestration with Role-scoped Data Access). Welche die administrative Konfigurationsoberfläche darstellt. In Überblick SECTOR werden Karten, Workflows, Rollen und Berechtigungen definiert die Teilnehmeranwendung generiert sich daraus automatisch.
 
----
+## Die zwei Oberflächen
 
-## Funktionsumfang
+Überblick besteht aus zwei Teilen, die zusammengehören. Überblick **SECTOR** (Spatial
+Engine for Collaboration, Task Orchestration and Role-Based Access) ist die
+Admin-Oberfläche. Hier legen Sie Projekte an, konfigurieren Karten, Rollen,
+Stammdaten und Arbeitsprozesse. **Überblick** ist die Teilnehmer-App, welche für
+Smartphones konzipiert und offline-fähig ist. Sie kann außerdem als PWA installiert werden. Die Teilnehmer-App rendert sich
+vollständig aus der Projektkonfiguration, die Sie in SECTOR angelegt haben.
+Sie müssen also keine eigene Oberfläche für Ihre Teilnehmer bauen. So können Sie beliebig komplizierte Prozesse abbilden und Endnutzer werden sauber durch den Prozess durch geleitet, da die Anwendung keine Handlungsmöglichkeiten anzeigt (und auch nicht erlaubt), die nicht für den jeweiligen Punkt anstehen. Jede Rolle sieht nur, was sie im aktuellen Schritt bedienen darf.
+Die Teinehmer-App ist bewusst darauf ausgelegt durch wenige UI Elemente nicht zu überfordern, aber gleichzeitig vollständige Funktionalität zu ermöglichen. Darüber hinaus werden langfristig Opt-in Funktionalitäten hinzugefügt, die jeder Teinehmer selbst aktivieren kann.
 
-### Kartenverwaltung
 
-Administratoren laden eigene Kartendaten hoch -- Gebäudegrundrisse, Lagepläne, Katasterkarten oder beliebige georeferenzierte Daten. Überblick unterstützt gängige Geodatenformate und ermöglicht die Darstellung mehrerer Layer übereinander. Teilnehmer können Kartenpakete auf ihr Endgerät herunterladen und vollständig offline nutzen.
+## Wie die Teilnehmer-UI entsteht
 
-### Workflow-Definition
+Stellen Sie sich eine Schadensmeldung an einer Ampel vor. Ein Bürger öffnet
+die Teilnehmer-App, tippt auf die Karte und meldet den Schaden. Danach
+sieht er nur noch, dass sein Vorgang gemeldet ist. Er kann ihn nicht
+verändern, weil Sie im Workflow für die öffentliche Rolle keine weiteren
+Aktionen vorgesehen haben.
 
-Arbeitsprozesse werden in Überblick SECTOR als Zustandsmodelle definiert. Jeder Punkt auf der Karte durchläuft festgelegte Stufen. Der Übergang zwischen Stufen wird durch Aktionen ausgelöst -- etwa das Ausfüllen eines Formulars, eine Statusänderung oder eine automatisierte Hintergrundaktion wie der Versand einer E-Mail oder Benachrichtigung. Die gesamte Konfiguration erfolgt visuell über einen Drag-and-Drop-Editor. Programmierkenntnisse sind nicht erforderlich.
+Ein Disponent öffnet denselben Vorgang und sieht zwei Buttons: Übernehmen
+und Ablehnen. Mehr nicht, weil der Workflow an dieser Stufe für die Rolle
+Disponent genau diese beiden Übergänge vorsieht. Weder Priorität noch
+Termin tauchen auf, denn diese Felder sind der nächsten Stufe zugeordnet.
 
-### Rollenbasierte Zugriffskontrolle
+Nach dem Klick auf Übernehmen wandert der Vorgang in die nächste Stufe.
+Jetzt sieht der zuständige Techniker die Felder für Priorität, Termin und
+Material, und erst jetzt. Der Bürger von oben sieht währenddessen nur noch
+den Hinweis "In Bearbeitung". Alles andere existiert für ihn schlicht
+nicht.
 
-Überblick trennt Daten strikt nach Rollen. Teilnehmer sehen ausschließlich die Informationen, die für ihre Zuständigkeit relevant sind. Interne Prozesszustände können von externen Ansichten entkoppelt werden -- so bleiben betriebsinterne Abläufe geschützt, während Dienstleister oder Partner nur die für sie bestimmten Daten erhalten.
+Der entscheidende Punkt ist, dass Sie diese drei Ansichten nicht einzeln
+gebaut haben. Sie haben einen Workflow konfiguriert und Rollen vergeben.
+Die Teilnehmer-App leitet daraus automatisch ab, was jeder Teilnehmer an
+jedem Punkt zu sehen bekommt.
 
-### Offline-Betrieb und Synchronisation
 
-Die Teilnehmeranwendung ist für den Einsatz ohne durchgängige Netzverbindung konzipiert. Nach dem Herunterladen eines Kartenpakets arbeiten Teilnehmer vollständig offline -- in Untergeschossen, auf weitläufigen Geländen oder in Gebieten ohne Mobilfunkabdeckung. Bei Wiederherstellung der Verbindung synchronisiert die Anwendung automatisch alle erfassten Daten mit dem Server. Die Synchronisation erfolgt konfliktfrei über eine eigens entwickelte Sync-Engine.
+## Was Sie in SECTOR konfigurieren
 
-### Versionierung und Audit Trail
+Ein **Projekt** bündelt alles, was zu einem Einsatzzweck gehört. Es enthält
+Workflows, Rollen, Karten, Stammdaten und Teilnehmer. Teilnehmer aus
+Projekt A sehen nichts von Projekt B.
 
-Sämtliche Änderungen an Datenpunkten und Workflowzuständen werden versioniert und mit Zeitstempel sowie Benutzerkennung protokolliert. Der lückenlose Audit Trail ermöglicht die vollständige Nachvollziehbarkeit aller Vorgänge -- eine Voraussetzung für den Einsatz in regulierten Umgebungen und bei öffentlichen Auftraggebern.
+Ein **Workflow** beschreibt einen Ablauf aus Stufen und Übergängen. Eine
+Schadensmeldung könnte durch "Gemeldet", "In Bearbeitung" und "Erledigt"
+laufen. Eine Baumkontrolle durch "Geplant", "Begangen", "Kontrolliert".
+Übergänge sind Buttons in der Teilnehmer-App mit eigenem Text, eigener
+Farbe und optionaler Bestätigungsabfrage. Workflows können kartenbasiert
+sein, dann ist jeder Vorgang ein Marker, oder kartenlos als reine
+Formular-Abläufe etwa für Checklisten.
 
-### Visuelle Konfiguration
+**Formulare und Werkzeuge** hängen Sie an Stufen oder Übergänge. Ein
+Formular öffnet sich beim Übergang, ein Bearbeitungs-Werkzeug erlaubt
+Korrekturen ohne Stufenwechsel. Protokoll-Werkzeuge eignen sich für
+wiederkehrende Kontrollen und schreiben einen eigenen Eintrag neben dem
+lebenden Vorgang.
 
-Überblick SECTOR stellt einen visuellen Editor bereit, über den Workflows, Formulare und die gesamte Teilnehmeroberfläche konfiguriert werden. Was in SECTOR definiert wird, rendert die mobile Anwendung automatisch als einsatzfertige Benutzeroberfläche -- angepasst an die jeweilige Rolle des Teilnehmers.
+**Rollen** legen fest, wer was darf. Jede Workflow-Stufe, jeder Übergang,
+jedes Formular, jede Karten-Ebene und jede Stammdaten-Tabelle lässt sich
+pro Rolle freigeben oder sperren. Ein leeres Rollenfeld bedeutet
+"sichtbar für alle Teilnehmer im Projekt".
 
----
+**Automatisierungen** reagieren auf Statuswechsel, Feldänderungen oder
+einen Zeitplan. Eine Regel kann Felder setzen, den Status ändern oder
+einen Vorgang in eine andere Stufe schieben. So archivieren Sie zum
+Beispiel erledigte Vorgänge nach vierzehn Tagen automatisch.
 
-## Betrieb und Bereitstellung
+**Stammdaten-Tabellen** (Custom Tables) sind projekteigene Nachschlagewerke,
+etwa eine Baumarten-Liste oder ein Gebäudeverzeichnis. Formulare können
+darauf zugreifen und den Teilnehmern passende Auswahlen anbieten.
 
-Überblick ist Open Source und kann auf eigener Infrastruktur betrieben werden. Alternativ bieten wir gehostete Instanzen an. Jeder Mandant erhält dabei eine dedizierte Instanz mit eigener Datenbank in einem isolierten Container. Eine Vermischung von Kundendaten findet nicht statt.
+**Karten und Offline-Pakete** richten Sie ebenfalls im Projekt ein. Sie
+kombinieren beliebige Kachel- oder WMS-Quellen, laden eigene Kachelarchive
+hoch und legen pro Rolle fest, welche Ebenen sichtbar sind. Für den Einsatz
+ohne Netz definieren Sie eine Region und den gewünschten Zoom-Bereich. Die
+Teilnehmer laden das Paket aufs Gerät und arbeiten komplett offline weiter.
 
-Die Anwendung basiert auf PocketBase als Backend und Svelte als Frontend-Framework. Der Betrieb erfordert keine komplexe Infrastruktur -- eine einzelne Serverinstanz genügt.
+**Teilnehmer** erhalten keinen Benutzernamen und kein Passwort. Sie
+erzeugen in SECTOR einen Teilnehmer mit Rolle und exportieren einen
+QR-Code. Die Teilnehmer scannen diesen QR-Code in der App und sind
+angemeldet.
 
----
 
-## Einsatzbeispiele
+## Tech-Stack
 
-**Gebäudereinigung.** Räume werden als Punkte auf dem Gebäudeplan dargestellt. Reinigungskräfte sehen ihre zugewiesenen Bereiche, dokumentieren die Durchführung per Formular und der Auftraggeber erhält den aktuellen Status -- ohne Einblick in interne Personalplanung.
-
-**Kommunale Infrastruktur.** Straßenschäden, Grünflächenpflege oder Spielplatzinspektionen werden räumlich erfasst, mit Workflows versehen und über Rollen an die zuständigen Abteilungen verteilt.
-
-**Bauprojekte.** Gewerke werden auf dem Lageplan verortet, Abnahmen als Workflow-Stufen abgebildet. Der Bauleiter konfiguriert den Prozess in SECTOR, Subunternehmer arbeiten mit Überblick auf der Baustelle -- auch ohne WLAN.
-
-**Vermessung und Feldforschung.** Messpunkte oder Erhebungsstandorte werden auf eigenen Karten markiert. Erfasste Daten synchronisieren automatisch, sobald das Feldteam wieder im Netzbereich ist.
-
----
-
-## Technische Eckdaten
-
-| Eigenschaft | Details |
+| Bereich | Verwendet |
 |---|---|
-| Lizenz | Open Source |
-| Backend | PocketBase |
-| Frontend | Svelte |
-| Geodaten | GeoJSON, eigene Kartenuploads |
-| Offline | Eigene Sync-Engine, lokale Kartenpakete |
-| Mandantentrennung | Dedizierte Instanzen, isolierte Container |
-| Audit | Vollständige Versionierung mit Zeitstempel und Benutzerkennung |
+| Frontend | SvelteKit 5, Svelte 5, Tailwind 4, bits-ui, Leaflet |
+| Backend | PocketBase (Go) |
+| Offline | IndexedDB (`idb`), `leaflet.offline` |
+| i18n | Paraglide (Deutsch, Englisch) |
+| Forms | sveltekit-superforms + Zod |
+| Tests | Vitest (Unit + Browser), Playwright (E2E) |
 
----
 
-Überblick -- Kartenbasierte Prozesssteuerung. Offline-fähig. Rollenbasiert. Open Source.
+## Quickstart
+
+Für einen selbstgehosteten Betrieb kopieren Sie `.env.example` nach `.env`,
+tragen `POCKETBASE_ADMIN_EMAIL` und `POCKETBASE_ADMIN_PASSWORD` ein und
+starten das Ganze mit Docker Compose:
+
+```bash
+cp .env.example .env
+docker-compose up --build
+```
+
+Das Frontend erreichen Sie danach unter <http://localhost:8080>. Das
+PocketBase-Admin-UI bleibt standardmäßig verborgen. Wenn Sie darauf zugreifen
+möchten, setzen Sie `EXPOSE_PB_ADMIN=true` in der `.env`. Es liegt dann
+unter `/_/`.
+
+Für lokale Entwicklung installieren Sie die Abhängigkeiten und starten
+Backend und Frontend in zwei Terminals:
+
+```bash
+npm install
+npm run backend    # Terminal 1, PocketBase auf :8090
+npm run dev        # Terminal 2, Vite auf :5173
+```
+
+Weitere Skripte sind `npm run check` (svelte-check), `npm run lint`,
+`npm run test:unit`, `npm run test:e2e` und `npm run db:clear`, um die
+lokalen PocketBase-Daten zu verwerfen.
+
+
+## Ersten Vorgang anlegen
+
+Ein typischer Einstieg sieht so aus. Sie legen in SECTOR ein Projekt an
+und definieren die Rollen, die in Ihrem Szenario vorkommen, zum Beispiel
+Bürger, Disponent und Techniker. Anschließend fügen Sie im Karten-Tab
+mindestens eine Kartenebene hinzu (das OSM-Preset reicht für den Start)
+und setzen Startposition und Zoom.
+
+Danach bauen Sie Ihren Workflow. Sie legen die Stufen an, ziehen
+Verbindungen zwischen ihnen und vergeben pro Verbindung einen Button-Text.
+An den Stufen hängen Sie Formulare oder Werkzeuge, und unter Permissions
+weisen Sie den Rollen ihre Rechte zu.
+
+Zum Schluss erzeugen Sie Teilnehmer, exportieren die QR-Codes als
+Sammel-PDF und verteilen sie. Sobald ein Teilnehmer den Code scannt, ist er
+in der App angemeldet und sieht genau die Oberfläche, die sich aus Ihrer
+Konfiguration ergeben hat.
+
+Eine vollständige Referenz jedes Admin-Feldes steht in
+[`docs/reference/admin-cheatsheet.md`](docs/reference/admin-cheatsheet.md);
+konzeptionelle Erklärungen finden Sie im
+[Handbuch](docs/handbuch/index.md).
+
+
+## Projektstruktur
+
+```
+src/routes/(admin)/        SECTOR, Admin-Oberfläche
+src/routes/participant/    Teilnehmer-App
+src/lib/participant-state/ IndexedDB-Speicher und Sync-Queue
+src/lib/automation/        Automation-Engine
+src/lib/workflow-builder/  Workflow-Builder (Canvas, Formulare, Tools)
+src/lib/components/        shadcn-svelte und eigene Komponenten
+pb/                        PocketBase-Backend, Migrations, Hooks
+messages/                  Paraglide-Übersetzungen (de, en)
+e2e/                       Playwright-Tests
+docs/                      Handbuch und Entwicklerdokumentation
+```
+
+
+## Roadmap
+
+Die Anwendung ist in aktiver Entwicklung. Als nächste Schwerpunkte sind
+Projekt-Templates vorgesehen, mit denen sich wiederkehrende Abläufe wie
+Mängelmelder oder Baumkataster als Vorlage teilen lassen. Die
+Automation-Engine soll um weitere Aktions- und Bedingungstypen wachsen,
+insbesondere um zusätzliche Expression-Funktionen und neue Trigger. Für
+Protokolle ist die Anbindung externer Timestamp-Anbieter geplant, um
+rechtssichere Nachweise zu ermöglichen. Beim Offline-Betrieb liegt der
+Fokus auf robusterer Konfliktlösung, wenn größere Datenmengen nach langen
+Offline-Phasen synchronisiert werden.
+
+
+## Mitwirken
+
+Issues und Pull Requests sind willkommen. Der Code steht unter AGPL v3.
+Wer eine modifizierte Version als Service anbietet, muss die Änderungen
+ebenfalls unter AGPL veröffentlichen.
+
+
+## Lizenz
+
+AGPL v3. Siehe `LICENSE`.

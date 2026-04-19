@@ -4,14 +4,13 @@
 
 ---
 
-**Neu hier?** Starte mit dem [Sector Guide](ueberblick-sector-guide.md) -- die vollstaendige Referenz fuer Admins. Erklaert alle Konzepte, Einstellungen und deren Auswirkung auf die Teilnehmer-App.
+**Neu hier?** Starte im [Handbuch](handbuch/index.md) mit den Konzepten, die fuer deinen Aufgabenbereich relevant sind. Unter [Was sieht der Teilnehmer?](handbuch/teilnehmer-sicht.md) findest du eine Matrix Admin-Einstellung -> Teilnehmer-Erlebnis.
 
 ---
 
-| Bereich | Beschreibung |
-|---------|-------------|
-| [Sector Guide](ueberblick-sector-guide.md) | Vollstaendige Admin-Referenz mit Berechtigungsmodell und Einstellungs-Wirkung |
-| [Handbuch](handbuch/) | Kompakte Einzelreferenz zu jedem Konzept |
-| [Tutorials](tutorials/) | Schritt-fuer-Schritt Anleitungen |
-| [Entwicklung](dev/) | Architektur, Konventionen, Erweiterbarkeit |
-| [Intern](internal/history.md) | Projekthistorie |
+| Bereich | Beschreibung | Sprache |
+|---------|-------------|---------|
+| [Handbuch](handbuch/index.md) | Konzept-Referenz fuer Admins und Projektmanager | DE |
+| [Tutorials](tutorials/index.md) | Schritt-fuer-Schritt Anleitungen | DE |
+| [Reference](reference/admin-cheatsheet.md) | Feld-fuer-Feld-Referenz (Single Source of Truth) | EN |
+| [Entwicklung](dev/index.md) | Architektur, Konventionen, Erweiterbarkeit | EN/DE |

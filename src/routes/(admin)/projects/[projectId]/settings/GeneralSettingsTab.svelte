@@ -13,6 +13,7 @@
 	import { FileText, Plus, Pencil, Trash2, Upload, X, Image, AlertTriangle } from 'lucide-svelte';
 	import { toast } from 'svelte-sonner';
 	import { getPocketBase } from '$lib/pocketbase';
+	import { stripHtml } from '$lib/sanitize-html';
 
 	let { data } = $props();
 
@@ -297,7 +298,7 @@
 									<div class="min-w-0">
 										<h3 class="font-medium">{page.title}</h3>
 										<p class="mt-1 text-sm text-muted-foreground line-clamp-2">
-											{@html page.content}
+											{stripHtml(page.content)}
 										</p>
 										<p class="mt-1 text-xs text-muted-foreground">
 											{m.infoPagesSort?.() ?? 'Sort Order'}: {page.sort_order || 0}

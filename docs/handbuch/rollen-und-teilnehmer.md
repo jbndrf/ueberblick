@@ -1,6 +1,6 @@
 # Rollen & Teilnehmer
 
-Rollen und Teilnehmer bilden zusammen das Berechtigungssystem innerhalb eines [Projekts](projekte_reviewed.md). Ueber Rollen steuern Sie, wer welche Workflows sieht, wer Vorgaenge anlegen darf und wer bestimmte Uebergaenge ausfuehren kann. Teilnehmer sind die konkreten Personen, denen Sie diese Rollen zuweisen.
+Rollen und Teilnehmer bilden zusammen das Berechtigungssystem innerhalb eines [Projekts](projekte.md). Ueber Rollen steuern Sie, wer welche Workflows sieht, wer Vorgaenge anlegen darf und wer bestimmte Uebergaenge ausfuehren kann. Teilnehmer sind die konkreten Personen, denen Sie diese Rollen zuweisen.
 
 
 ## Administratoren und Teilnehmer
@@ -34,7 +34,7 @@ An vielen Stellen in Ueberblick koennen Sie festlegen, welche Rollen eine bestim
 - Wer einen bestimmten Uebergang zwischen Stufen ausfuehren darf
 - Wer ein bestimmtes Tool verwenden darf
 
-Auf der Rollen-Seite gibt es einen Tab "Berechtigungen", der Ihnen auf einen Blick zeigt, welche Rolle auf welche Workflows, Stufen, Tools und Datentabellen Zugriff hat. Dort koennen Sie Berechtigungen auch direkt per Klick ein- und ausschalten. Fuer die Hintergruende lesen Sie die Seite [Zugriffskontrolle](zugriffskontrolle_reviewed.md).
+Auf der Rollen-Seite gibt es einen Tab "Berechtigungen", der Ihnen auf einen Blick zeigt, welche Rolle auf welche Workflows, Stufen, Tools und Datentabellen Zugriff hat. Dort koennen Sie Berechtigungen auch direkt per Klick ein- und ausschalten. Fuer die Hintergruende lesen Sie die Seite [Zugriffskontrolle](zugriffskontrolle.md).
 
 
 ## Teilnehmer einrichten
@@ -74,7 +74,7 @@ Ein Foerster im Forstprojekt sieht also alle Workflows und darf ueberall handeln
 ---
 
 **Siehe auch:**
-- [Projekte](projekte_reviewed.md) -- Projektstruktur
-- [Workflows](workflows_reviewed.md) -- Wo Rollen an Verbindungen greifen
-- [Zugriffskontrolle](zugriffskontrolle_reviewed.md) -- Detailregeln
-- Tutorial: [Projekt einrichten](../tutorials/01-projekt-einrichten_reviewed.md)
+- [Projekte](projekte.md) -- Projektstruktur
+- [Workflows](workflows.md) -- Wo Rollen an Verbindungen greifen
+- [Zugriffskontrolle](zugriffskontrolle.md) -- Detailregeln
+- Tutorial: [Projekt einrichten](../tutorials/01-projekt-einrichten.md)

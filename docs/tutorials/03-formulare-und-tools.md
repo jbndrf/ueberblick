@@ -1,8 +1,8 @@
 # Tutorial 3: Formulare und Tools
 
-> Konzepte: [Formulare](../handbuch/formulare_reviewed.md) | [Tools](../handbuch/tools_reviewed.md)
+> Konzepte: [Formulare](../handbuch/formulare.md) | [Tools](../handbuch/tools.md)
 
-Voraussetzung: [Tutorial 2](02-erster-workflow_reviewed.md) (Permission Test Workflow mit Entry-Formular, drei Stufen und Verbindungen).
+Voraussetzung: [Tutorial 2](02-erster-workflow.md) (Permission Test Workflow mit Entry-Formular, drei Stufen und Verbindungen).
 
 In Tutorial 2 wurde bereits ein einfaches Entry-Formular mit zwei Textfeldern angelegt. Hier erweitern wir den Workflow um weitere Feldtypen, ein Edit Tool und fortgeschrittene Auswahlelemente.
 

@@ -63,3 +63,23 @@ export function sanitizeHtml(html: string): string {
 	div.appendChild(fragment);
 	return div.innerHTML;
 }
+
+export function stripHtml(html: string): string {
+	let text: string;
+	if (typeof DOMParser !== 'undefined') {
+		const doc = new DOMParser().parseFromString(html, 'text/html');
+		text = doc.body.textContent ?? '';
+	} else {
+		text = html
+			.replace(/<script[\s\S]*?<\/script>/gi, '')
+			.replace(/<style[\s\S]*?<\/style>/gi, '')
+			.replace(/<[^>]+>/g, ' ')
+			.replace(/&nbsp;/g, ' ')
+			.replace(/&amp;/g, '&')
+			.replace(/&lt;/g, '<')
+			.replace(/&gt;/g, '>')
+			.replace(/&quot;/g, '"')
+			.replace(/&#39;/g, "'");
+	}
+	return text.replace(/\s+/g, ' ').trim();
+}

@@ -1,6 +1,6 @@
 # Workflows
 
-Ein Workflow bildet einen wiederkehrenden Ablauf in Ihrem [Projekt](projekte_reviewed.md) ab. Sie definieren, welche Schritte ein Vorgang durchlaeuft -- von der Erfassung bis zum Abschluss. Ueberblick fuehrt Ihre Teilnehmer dann durch genau diese Schritte.
+Ein Workflow bildet einen wiederkehrenden Ablauf in Ihrem [Projekt](projekte.md) ab. Sie definieren, welche Schritte ein Vorgang durchlaeuft -- von der Erfassung bis zum Abschluss. Ueberblick fuehrt Ihre Teilnehmer dann durch genau diese Schritte.
 
 Stellen Sie sich vor, Sie verwalten die Reinigung eines Gebaeudes: Jeder Raum beginnt im Zustand "Offen", wird von der Reinigungskraft als "Erledigt" markiert und kann bei Bedarf zurueckgesetzt werden. Oder denken Sie an eine Sicherheitsbegehung, bei der ein Mangel erfasst, bewertet, behoben und nachkontrolliert wird. Beides sind Workflows.
 
@@ -26,7 +26,7 @@ Bei jeder Verbindung koennen Sie den Button-Text, die Button-Farbe und einen opt
 
 Verbindungen koennen auch von einer Stufe zu sich selbst fuehren (sogenannte Self-Loops). Das ermoeglicht Bearbeitungen ohne Stufenwechsel -- z.B. ein Bearbeitungs-Tool, das Felder aktualisiert, waehrend der Eintrag in derselben Stufe bleibt. In der Praxis wird das haeufig genutzt, um Teilnehmern eine Korrekturmoeglichkeit zu geben, ohne den Fortschritt im Workflow zu beeinflussen.
 
-**[Tools](tools_reviewed.md)** sind Funktionsbausteine, die Sie an Verbindungen oder Stufen anhaengen. So koennen Sie z.B. beim Uebergang von "Erfasst" zu "Bewertet" ein Bewertungsformular einblenden oder bei einer Statusaenderung automatisch einen Wert setzen lassen.
+**[Tools](tools.md)** sind Funktionsbausteine, die Sie an Verbindungen oder Stufen anhaengen. So koennen Sie z.B. beim Uebergang von "Erfasst" zu "Bewertet" ein Bewertungsformular einblenden oder bei einer Statusaenderung automatisch einen Wert setzen lassen.
 
 **Eintraege** (auch Instanzen genannt) sind die konkreten Vorgaenge, die den Workflow durchlaufen -- also der einzelne Raum, der gereinigt wird, oder der einzelne Mangel, der bearbeitet wird.
 
@@ -42,13 +42,13 @@ stateDiagram-v2
     Ende --> [*]
 ```
 
-Ein Teilnehmer erstellt einen neuen Eintrag -- bei kartenbasierten Workflows durch Tippen auf die Karte, bei Formular-Workflows ueber einen Button. Dabei fuellt er ein [Formular](formulare_reviewed.md) aus, und der Eintrag landet in der Startstufe.
+Ein Teilnehmer erstellt einen neuen Eintrag -- bei kartenbasierten Workflows durch Tippen auf die Karte, bei Formular-Workflows ueber einen Button. Dabei fuellt er ein [Formular](formulare.md) aus, und der Eintrag landet in der Startstufe.
 
 Technisch wird beim Erstellen automatisch eine unsichtbare Verbindung zur Startstufe erzeugt -- die sogenannte Entry-Verbindung. An dieser haengt das Anfangsformular. Im Builder ist sie nicht als Pfeil sichtbar, sondern wird ueber die Startstufe konfiguriert.
 
 Ab jetzt sieht der Teilnehmer die verfuegbaren Verbindungen als Buttons. Welche Buttons erscheinen, haengt von der aktuellen Stufe und der Rolle des Teilnehmers ab. So koennen Sie z.B. bei einer Baustellen-Doppelbewertung festlegen, dass der OUe-Pruefer und der Pruefingenieur jeweils nur ihren eigenen Bewertungsbutton sehen.
 
-Jede Verbindung kann [Tools](tools_reviewed.md) ausfuehren -- etwa ein weiteres Formular anzeigen oder Werte automatisch setzen. Erreicht der Eintrag eine Endstufe, ist der Vorgang abgeschlossen.
+Jede Verbindung kann [Tools](tools.md) ausfuehren -- etwa ein weiteres Formular anzeigen oder Werte automatisch setzen. Erreicht der Eintrag eine Endstufe, ist der Vorgang abgeschlossen.
 
 Neben der aktuellen Stufe hat jeder Eintrag einen Status: aktiv, abgeschlossen oder archiviert. Dieser Status ist unabhaengig von der Stufe -- ein Eintrag kann z.B. in der Stufe "Erledigt" stehen, aber erst durch eine Automatisierung den Status "abgeschlossen" erhalten. Automatisierungen koennen diesen Status aendern, etwa um abgeschlossene Eintraege nach einer bestimmten Zeit automatisch zu archivieren.
 
@@ -73,8 +73,24 @@ Wenn Sie moechten, dass Teilnehmer nur ihre eigenen Eintraege sehen, koennen Sie
 
 ---
 
+## Feld-Referenz
+
+Die genaue technische Bedeutung der Felder, die Sie im Workflow-Builder und in den Workflow-Einstellungen konfigurieren. Diese Beschreibungen werden direkt aus [`reference/admin-cheatsheet.md`](../reference/admin-cheatsheet.md) eingebunden und bleiben so automatisch synchron mit der Code-Referenz.
+
+### Workflow-Grundeinstellungen
+
+--8<-- "reference/admin-cheatsheet.md:workflows-name"
+--8<-- "reference/admin-cheatsheet.md:workflows-description"
+--8<-- "reference/admin-cheatsheet.md:workflows-workflow_type"
+--8<-- "reference/admin-cheatsheet.md:workflows-is_active"
+--8<-- "reference/admin-cheatsheet.md:workflows-geometry_type"
+--8<-- "reference/admin-cheatsheet.md:workflows-private_instances"
+
+---
+
 **Siehe auch:**
-- [Tools](tools_reviewed.md) -- Funktionsbausteine fuer Formulare, Bearbeitungen und Automatisierungen
-- [Formulare](formulare_reviewed.md) -- Feldtypen und Validierung
-- [Rollen & Teilnehmer](rollen-und-teilnehmer_reviewed.md) -- Rollenbasierte Sichtbarkeit
-- Tutorial: [Erster Workflow](../tutorials/02-erster-workflow_reviewed.md)
+
+- [Tools](tools.md) -- Funktionsbausteine fuer Formulare, Bearbeitungen und Automatisierungen
+- [Formulare](formulare.md) -- Feldtypen und Validierung
+- [Rollen & Teilnehmer](rollen-und-teilnehmer.md) -- Rollenbasierte Sichtbarkeit
+- Tutorial: [Erster Workflow](../tutorials/02-erster-workflow.md)

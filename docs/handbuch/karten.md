@@ -55,6 +55,6 @@ Sie koennen festlegen, welche Rollen ein bestimmtes Paket herunterladen duerfen.
 ---
 
 **Siehe auch:**
-- [Offline & Sync](offline-und-sync_reviewed.md) -- Wie die Synchronisation funktioniert
-- [Projekte](projekte_reviewed.md) -- Karten-Layer als Projektbestandteil
-- Tutorial: [Projekt einrichten](../tutorials/01-projekt-einrichten_reviewed.md)
+- [Offline & Sync](offline-und-sync.md) -- Wie die Synchronisation funktioniert
+- [Projekte](projekte.md) -- Karten-Layer als Projektbestandteil
+- Tutorial: [Projekt einrichten](../tutorials/01-projekt-einrichten.md)

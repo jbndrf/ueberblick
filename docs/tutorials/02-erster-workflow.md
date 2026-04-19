@@ -1,8 +1,8 @@
 # Tutorial 2: Erster Workflow
 
-> Konzepte: [Workflows](../handbuch/workflows_reviewed.md) | [Tools](../handbuch/tools_reviewed.md) | [Zugriffskontrolle](../handbuch/zugriffskontrolle_reviewed.md)
+> Konzepte: [Workflows](../handbuch/workflows.md) | [Tools](../handbuch/tools.md) | [Zugriffskontrolle](../handbuch/zugriffskontrolle.md)
 
-Voraussetzung: [Tutorial 1](01-projekt-einrichten_reviewed.md) (Projekt mit 3 Rollen und 3 Teilnehmern).
+Voraussetzung: [Tutorial 1](01-projekt-einrichten.md) (Projekt mit 3 Rollen und 3 Teilnehmern).
 
 ## 1. Workflow erstellen
 

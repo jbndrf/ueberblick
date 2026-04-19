@@ -16,7 +16,7 @@ Nicht alle Browser unterstuetzen die Installation gleich gut. Chrome und Edge au
 
 ### Karten-Tiles herunterladen
 
-Ohne heruntergeladene Karten-Tiles sieht der Teilnehmer offline nur einen leeren Kartenhintergrund. Als Projektleiter stellen Sie Offline-Pakete bereit (siehe [Karten](karten_reviewed.md) > Offline-Tile-Pakete). Ihre Teilnehmer laden diese dann auf ihr Geraet:
+Ohne heruntergeladene Karten-Tiles sieht der Teilnehmer offline nur einen leeren Kartenhintergrund. Als Projektleiter stellen Sie Offline-Pakete bereit (siehe [Karten](karten.md) > Offline-Tile-Pakete). Ihre Teilnehmer laden diese dann auf ihr Geraet:
 
 1. Im Abschnitt **Karten-Tiles** auf **Tiles herunterladen** tippen.
 2. Die Paketauswahl zeigt alle verfuegbaren Gebiete mit Zoom-Stufen, Tile-Anzahl und Dateigroesse.
@@ -73,7 +73,7 @@ Beim naechsten Oeffnen des betroffenen Datensatzes erscheint ein Konflikt-Dialog
 
 Die App speichert alle Daten, die Ihre Teilnehmer zum Arbeiten brauchen:
 
-- **Kartenmaterial**: Ueber die Offline-Kartenpakete, die Sie als Projektleiter bereitstellen (siehe [Karten](karten_reviewed.md)). Fuer zuverlaessige Abdeckung im Feld ist ein Offline-Paket notwendig.
+- **Kartenmaterial**: Ueber die Offline-Kartenpakete, die Sie als Projektleiter bereitstellen (siehe [Karten](karten.md)). Fuer zuverlaessige Abdeckung im Feld ist ein Offline-Paket notwendig.
 - **Erfasste Daten**: Alle Marker, Formulareintraege und Tabellendaten, die zum Projekt gehoeren.
 - **Fotos und Dokumente**: Wenn der Offline-Bilder-Schalter aktiviert ist, werden Vorschaubilder lokal gespeichert. Auch offline aufgenommene Fotos werden lokal vorgehalten und beim naechsten Sync hochgeladen.
 - **Aenderungsprotokoll**: Eine lokale Aufzeichnung aller Aktionen, damit nach der Synchronisation nichts fehlt.
@@ -84,5 +84,5 @@ Die Synchronisation uebertraegt nur die tatsaechlich geaenderten Datensaetze, ni
 
 **Siehe auch:**
 
-- [Karten](karten_reviewed.md) -- Offline-Kartenpakete einrichten
-- [Workflows](workflows_reviewed.md) -- Instanz-Lebenszyklus
+- [Karten](karten.md) -- Offline-Kartenpakete einrichten
+- [Workflows](workflows.md) -- Instanz-Lebenszyklus

@@ -643,7 +643,7 @@
 			<Dialog.Title>{selectedInfoPage?.title ?? ''}</Dialog.Title>
 		</Dialog.Header>
 		{#if selectedInfoPage}
-			<div class="prose prose-sm dark:prose-invert max-w-none min-h-0 flex-1 overflow-y-auto break-words">
+			<div class="info-content min-h-0 flex-1 overflow-y-auto break-words">
 				{@html sanitizeHtml(selectedInfoPage.content)}
 			</div>
 		{/if}

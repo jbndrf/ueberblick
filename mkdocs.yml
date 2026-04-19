@@ -1,34 +1,49 @@
-site_name: Ueberblick Docs
-site_description: Dokumentation fuer Ueberblick -- Geodaten-Erfassung mit Offline-Support
-repo_url: https://github.com/your-org/punktstudio
-edit_uri: edit/main/docs/
+site_name: Ueberblick Dokumentation
+site_description: Konzepte, Tutorials und Feld-Referenz fuer Ueberblick / Ueberblick Sector
+site_url: http://localhost:8000/
+docs_dir: docs
+site_dir: docs-site
+use_directory_urls: true
 
 theme:
   name: material
   language: de
+  features:
+    - navigation.instant
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - toc.follow
+    - content.code.copy
+    - content.tabs.link
+    - search.suggest
+    - search.highlight
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
       primary: indigo
       toggle:
-        icon: material/brightness-7
-        name: Dunkelmodus
+        icon: material/weather-night
+        name: Dunkles Theme
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
       primary: indigo
       toggle:
-        icon: material/brightness-4
-        name: Hellmodus
-  features:
-    - navigation.sections
-    - navigation.expand
-    - navigation.indexes
-    - search.highlight
-    - content.code.copy
+        icon: material/weather-sunny
+        name: Helles Theme
 
 markdown_extensions:
   - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
   - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
@@ -36,54 +51,46 @@ markdown_extensions:
           format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.tabbed:
       alternate_style: true
-  - pymdownx.highlight:
-      anchor_linenums: true
-  - pymdownx.inlinehilite
-  - tables
-  - attr_list
+  - pymdownx.snippets:
+      base_path:
+        - docs
+      check_paths: true
+      auto_append: []
+      url_download: false
+
+exclude_docs: |
+  site/
+  _history.md
+  internal/
+  /*.json
 
 nav:
   - Start: index.md
-  - Sector Guide: ueberblick-sector-guide.md
-
   - Handbuch:
-    - handbuch/index.md
-    - Projekte: handbuch/projekte.md
-    - Rollen & Teilnehmer: handbuch/rollen-und-teilnehmer.md
-    - Workflows: handbuch/workflows.md
-    - Tools: handbuch/tools.md
-    - Formulare: handbuch/formulare.md
-    - Karten: handbuch/karten.md
-    - Offline & Sync: handbuch/offline-und-sync.md
-    - Automatisierungen: handbuch/automatisierungen.md
-    - Zugriffskontrolle: handbuch/zugriffskontrolle.md
-    - Custom Tables: handbuch/custom-tables.md
-
+      - handbuch/index.md
+      - Projekte: handbuch/projekte.md
+      - Rollen & Teilnehmer: handbuch/rollen-und-teilnehmer.md
+      - Zugriffskontrolle: handbuch/zugriffskontrolle.md
+      - Workflows: handbuch/workflows.md
+      - Formulare: handbuch/formulare.md
+      - Tools: handbuch/tools.md
+      - Automatisierungen: handbuch/automatisierungen.md
+      - Karten: handbuch/karten.md
+      - Custom Tables: handbuch/custom-tables.md
+      - Offline & Sync: handbuch/offline-und-sync.md
+      - Was sieht der Teilnehmer?: handbuch/teilnehmer-sicht.md
   - Tutorials:
-    - tutorials/index.md
-    - Projekt einrichten: tutorials/01-projekt-einrichten.md
-    - Erster Workflow: tutorials/02-erster-workflow.md
-    - Formulare & Tools: tutorials/03-formulare-und-tools.md
-    - Automatisierungen: tutorials/04-automatisierungen.md
-
+      - tutorials/index.md
+      - tutorials/01-projekt-einrichten.md
+      - tutorials/02-erster-workflow.md
+      - tutorials/03-formulare-und-tools.md
+      - tutorials/04-automatisierungen.md
+  - Reference:
+      - Admin Cheatsheet: reference/admin-cheatsheet.md
+      - Audit: reference/admin-cheatsheet-audit.md
   - Entwicklung:
-    - dev/index.md
-    - Architektur: dev/architecture.md
-    - Getting Started: dev/getting-started.md
-    - Konventionen: dev/conventions.md
-    - Gotchas: dev/gotchas.md
-    - Erweitern:
-      - dev/extending/index.md
-      - Neue Admin-Seite: dev/extending/new-admin-page.md
-      - Neues Tool: dev/extending/new-tool.md
-      - Neuer Formularfeld-Typ: dev/extending/new-form-field-type.md
-      - Neue Teilnehmer-Ansicht: dev/extending/new-participant-view.md
-      - Gateway: dev/extending/gateway-usage.md
-      - Workflow-Builder Views: dev/extending/workflow-builder-views.md
-    - Datenbank:
-      - Migrationen: dev/db/migrations.md
-      - Schema-Referenz: dev/db/schema-reference.md
-
-  - Intern:
-    - internal/history.md
-    - internal/claude-workflow-instructions.md
+      - dev/index.md
+      - Architektur: dev/architecture.md
+      - Setup: dev/getting-started.md
+      - Konventionen: dev/conventions.md
+      - Gotchas: dev/gotchas.md

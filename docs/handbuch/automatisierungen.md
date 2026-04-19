@@ -74,6 +74,6 @@ Der Mindestabstand zwischen zwei Ausfuehrungen betraegt 15 Minuten.
 ---
 
 **Siehe auch:**
-- [Workflows](workflows_reviewed.md) -- Stufen und Verbindungen
-- [Zugriffskontrolle](zugriffskontrolle_reviewed.md) -- Rollenbasierte Einschraenkungen
+- [Workflows](workflows.md) -- Stufen und Verbindungen
+- [Zugriffskontrolle](zugriffskontrolle.md) -- Rollenbasierte Einschraenkungen
 - Tutorial: [Automatisierungen](../tutorials/04-automatisierungen.md)

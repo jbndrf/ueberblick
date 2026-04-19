@@ -52,8 +52,12 @@ Notes: List page only. Cards are read-only; no inline field editing. The only ac
 File: `src/routes/(admin)/projects/new/+page.svelte`
 Collection: `projects`
 
+<!-- --8<-- [start:projects-name] -->
 - [x] **name** (text, required, max 255) — Display label for the project. Shown in the participant app layout header as a fallback when `projects.settings.display_name` is empty, and used as the project title throughout the admin UI.
+<!-- --8<-- [end:projects-name] -->
+<!-- --8<-- [start:projects-description] -->
 - [x] **description** (text, optional, max 1000) — Admin-only metadata for documenting what the project is about. Not surfaced to participants anywhere.
+<!-- --8<-- [end:projects-description] -->
 
 ---
 
@@ -84,22 +88,20 @@ Stored as a JSON blob inside the `projects.settings` field (there is no separate
 - [x] **zoom** (integer, 0–22) — Initial zoom level applied when the participant map loads. Clamped by `min_zoom` / `max_zoom`. Note: the field is literally named `zoom` on the JSON object (not `default_zoom`).
 - [x] **min_zoom** (integer, 0–22) — Lower bound on how far out a participant can zoom. Enforced via `map.setMinZoom()` in the participant map canvas.
 - [x] **max_zoom** (integer, 0–22) — Upper bound on how far in a participant can zoom. Applied to tile layers and the map's `maxZoom` option.
-- [x] **bounds_geojson** (GeoJSON polygon via RegionSelector) — Optional polygon defining the project's map region. Stored but currently not enforced on the participant map; reserved for future region-restriction use.
-
 ### Map layer — Preset source
 
 - [x] **preset_source** (select from `PRESET_SOURCES`) — Picks one of the built-in map sources (OSM, CartoDB, ESRI, NRW) defined in `src/lib/types/map-layer.ts`. Creates a `map_layers` row with URL, attribution and WMS config pre-filled from the preset.
 
 ### Map layer — Tile URL
 
-- [x] **tile.name** (text, required) — Display name for the layer, shown in the participant map layer picker (`LayerSheet.svelte`). Stored as `map_layers.layer_name`.
+- [x] **tile.name** (text, required) — Display name for the layer, shown in the participant map layer picker (`LayerSheet.svelte`). Stored as `map_layers.name`.
 - [x] **tile.tile_url** (text, XYZ template) — XYZ tile URL template (e.g. `https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png`). Used by the participant map's tile layer and by the offline tile cache keyed as `{layerId}/{z}/{x}/{y}`.
 - [x] **tile.attribution** (text, optional) — Attribution string displayed in the map's attribution control. Passed to Leaflet's tile layer options when the layer renders.
 - [x] **tile.as_base** (boolean, base vs overlay) — If true, the layer is a mutually-exclusive base layer (rendered as radio buttons); if false, it's an overlay the participant can toggle independently.
 
 ### Map layer — WMS
 
-- [x] **wms.name** (text, required) — Display name for the WMS layer in the participant map layer picker. Stored as `map_layers.layer_name` alongside the WMS config.
+- [x] **wms.name** (text, required) — Display name for the WMS layer in the participant map layer picker. Stored as `map_layers.name` alongside the WMS config.
 - [x] **wms.url** (text, WMS endpoint) — Base WMS service URL (e.g. `https://www.wms.nrw.de/geobasis/wms_nw_dop`). Used by the participant map's WMS tile loader as the GetMap endpoint.
 - [x] **wms.layers** (text, comma-separated layer list) — Comma-separated WMS layer names sent as the `LAYERS` parameter. Determines which server-side layers are composited into the returned image.
 - [x] **wms.format** (select: image/png, image/jpeg, …) — Image format the WMS server returns. Sent as the `FORMAT` parameter; PNG supports transparency, JPEG is smaller.
@@ -117,6 +119,15 @@ Stored as a JSON blob inside the `projects.settings` field (there is no separate
 ### Map layer — row-level
 
 - [x] **map_layers.visible_to_roles** (relation multi, roles) — Restricts which participant roles can see and toggle the layer in the map layer picker. Empty array means visible to everyone in the project.
+- [x] **map_layers.source_type** (select: tile/wms/uploaded/preset/geojson) — Categorises the layer and selects which editor fields and participant-side loader apply. Written implicitly when picking the preset/tile/WMS/upload variant; participants never see it directly.
+- [x] **map_layers.url** (text) — Layer source URL: XYZ tile template, WMS endpoint, or GeoJSON location depending on `source_type`. Same field is used by all non-uploaded layer types and is read by the participant map to fetch remote data.
+- [x] **map_layers.config** (json) — Source-specific JSON blob holding attribution, WMS parameters (`layers`, `format`, `version`, `transparent`), upload format, and similar metadata. The tile/WMS/upload field entries above are really sub-keys of this object.
+- [x] **map_layers.display_order** (integer) — Stacking order in the participant layer picker. Lower values render beneath higher ones; controls both the on-map z-order and the list position.
+- [x] **map_layers.is_active** (boolean) — Master switch: when false the layer disappears from the participant layer picker regardless of role permissions, so admins can stage layers without exposing them.
+- [x] **map_layers.status** (select: uploading/pending/processing/completed/failed) — Pipeline state for uploaded tile archives. Only `completed` layers are served to participants; other states are admin-only while processing or triaging failures.
+- [x] **map_layers.progress** (integer, 0–100) — Upload/tile-generation progress percentage. Shown in the admin Map tab while an uploaded layer is still being processed.
+- [x] **map_layers.error_message** (text) — Populated when `status = "failed"` to explain why tile extraction died. Admin-only diagnostic.
+- [x] **map_layers.tile_count** (integer) — Number of tiles found inside the uploaded archive. Used for progress estimation and as an admin sanity check after upload.
 
 ### Offline package
 
@@ -126,6 +137,11 @@ Stored as a JSON blob inside the `projects.settings` field (there is no separate
 - [x] **offline_package.region_geojson** (GeoJSON polygon via RegionSelector) — Polygon defining the geographic area to download. Tile generation walks this polygon at every zoom level between `zoom_min` and `zoom_max`.
 - [x] **offline_package.layers** (relation multi, `map_layers`) — Which map layers are packaged into the offline archive. Participants downloading the package get cached tiles for exactly these layers.
 - [x] **offline_package.visible_to_roles** (relation multi, roles) — Restricts which participant roles can download this package. Empty array means all roles in the project can see the package once it reaches `status = "ready"`.
+- [x] **offline_package.status** (select: draft/processing/ready/failed) — Pipeline state gating participant visibility. Only `ready` packages appear in the participant offline list; the other states are admin-only while the server is still building or has failed.
+- [x] **offline_package.error_message** (text) — Populated when `status = "failed"`. Admin-only diagnostic shown in the package row.
+- [x] **offline_package.tile_count** (integer) — Number of tiles written into the archive. Used for size estimation and a progress read-out in the admin package list.
+- [x] **offline_package.file_size_bytes** (integer) — Archive size in bytes. Displayed to participants in the offline download list so they can estimate bandwidth and local storage.
+- [x] **offline_package.archive_file** (file, auth-protected) — The generated ZIP / MBTiles archive. Served as the participant download target; not directly uploaded by admins — the server writes it after region + layer selection.
 
 ---
 
@@ -134,12 +150,21 @@ Stored as a JSON blob inside the `projects.settings` field (there is no separate
 File: `src/routes/(admin)/projects/[projectId]/participants/+page.svelte`
 Collections: `participants`, `participant_custom_fields`
 
+<!-- --8<-- [start:participants-name] -->
 - [x] **name** (text, required, max 255) — Human-readable participant label, shown in the admin table and embedded into generated QR-code labels. Not used for authentication.
-- [x] **email** (email, optional) — Optional contact email. PocketBase auth is configured to use `token` as the identity field, so email is purely informational; a placeholder is auto-generated on create when left blank.
+<!-- --8<-- [end:participants-name] -->
+<!-- --8<-- [start:participants-phone] -->
 - [x] **phone** (text, optional) — Optional contact phone number. Admin-only metadata with no participant-side effect.
+<!-- --8<-- [end:participants-phone] -->
+<!-- --8<-- [start:participants-token] -->
 - [x] **token** (text, unique, readonly in UI, auto-generated on create) — The participant's login credential. PocketBase auth uses `token` as both identity and password (`authWithPassword(token, token)` in `src/routes/participant/login/+page.server.ts`), and it is embedded in generated QR codes.
+<!-- --8<-- [end:participants-token] -->
+<!-- --8<-- [start:participants-role_id] -->
 - [x] **role_id** (relation multi, `roles`) — The participant's assigned roles. Every `visible_to_roles` / `allowed_roles` check across workflows, stages, forms, edit tools, marker categories, custom tables, map layers, and offline packages compares against this array.
+<!-- --8<-- [end:participants-role_id] -->
+<!-- --8<-- [start:participants-is_active] -->
 - [x] **is_active** (boolean, toggled via status button) — If false, login fails with "This account is inactive" in `src/routes/participant/login/+page.server.ts` even when the token is correct. Used to temporarily disable a participant without deleting them.
+<!-- --8<-- [end:participants-is_active] -->
 - [x] **metadata.{custom_field}** (per-field value stored in JSON) — Per-participant values for any `participant_custom_fields` defined on the project. Stored as a JSON object keyed by `field_name`; values are preserved even if the field definition is later removed.
 
 ### Participant custom field definitions
@@ -160,8 +185,12 @@ Collections: `participants`, `participant_custom_fields`
 File: `src/routes/(admin)/projects/[projectId]/roles/+page.svelte`
 Collection: `roles`
 
+<!-- --8<-- [start:roles-name] -->
 - [x] **roles.name** (text, required, max 255) — Display name for the role, shown in role pickers, the permissions matrix, and the participant edit dialog. Core identifier used for assignment.
+<!-- --8<-- [end:roles-name] -->
+<!-- --8<-- [start:roles-description] -->
 - [x] **roles.description** (text, optional) — Admin-only note describing what the role is for. Not surfaced to participants.
+<!-- --8<-- [end:roles-description] -->
 - [x] **roles.assigned_participants** (reverse relation; edits `participants.role_id`) — Convenience editor that writes back to `participants.role_id` for every selected participant. Changing it immediately affects what each participant can see once they reload.
 
 ---
@@ -189,11 +218,12 @@ Action: `?/toggleRole` — toggles a role in/out of a `visible_to_roles` or `all
 File: `src/routes/(admin)/projects/[projectId]/custom-tables/+page.svelte`
 Collection: `custom_tables`
 
-- [x] **table_name** (text, snake_case, readonly after create) — Unique internal identifier enforcing lowercase letters, numbers, and underscores; locked after creation. Participants never see this field.
+- [x] **table_name** (text, snake_case) — Unique internal identifier enforcing lowercase letters, numbers, and underscores. The admin UI locks the input after creation, but the underlying PocketBase schema has no readonly constraint, so direct API edits can still rename it — treat as "change with care". Participants never see this field.
 - [x] **display_name** (text, required) — Human-readable name displayed in the admin UI and form field labels when tables are used as custom_table_selector field sources. Required field with max 255 characters.
 - [x] **description** (text, optional) — Admin-facing documentation stored up to 1000 characters; not displayed to participants. Contextual field for table purpose.
-- [x] **main_column** (text, required, readonly after create) — The primary display column in snake_case format; when this table is used in custom_table_selector fields, this column's value becomes the selectable label. Locked after creation.
+- [x] **main_column** (text, required, snake_case) — The primary display column; when this table is used in custom_table_selector fields, this column's value becomes the selectable label. The admin UI marks it as non-editable after creation, but (like `table_name`) the schema does not enforce readonly — renaming via API will leave stored values orphaned.
 - [x] **visible_to_roles** (relation multi, roles) — Controls which participant roles can read/query this table and use it in form field selectors. Empty array = visible to all roles. Toggled via permissions tab.
+- [x] **sort_order** (integer, ≥0) — Display rank for tables in the admin list and in form-field selector dropdowns. Admin-only; lets admins pin frequently-used tables to the top.
 
 ---
 
@@ -214,6 +244,7 @@ Collections: `custom_tables` (meta), `custom_table_columns`, `custom_table_data`
 - [x] **custom_table_columns.column_type** (select: text/number/date/boolean) — Defines the data type for validation and rendering in the admin UI. Cannot be changed after creation; affects how values are interpreted in row_data cells.
 - [x] **custom_table_columns.is_required** (boolean) — If true, rows cannot be created/updated without a value in this column. Enforced at the API level for data consistency.
 - [x] **custom_table_columns.default_value** (text) — Optional fallback value (stored as text, max 1000 chars) applied when creating new rows if no value is provided; must match column_type semantics.
+- [x] **custom_table_columns.sort_order** (integer, ≥0) — Display order of columns in the admin row editor and CSV import/export. Admin-only UI affordance.
 
 ### Row data
 
@@ -229,7 +260,7 @@ Collection: `marker_categories`
 
 - [x] **name** (text, required, max 255) — Display name of the marker category, shown next to the icon in the participant map's filter sheet (`FilterSheet.svelte` groups markers by category and labels each row with `category.name`). Also used as the column header in the admin list and as the heading on the category detail page.
 - [x] **description** (text, optional, max 1000) — Admin-facing note describing what the category is for. Not surfaced anywhere on the participant map.
-- [x] **visible_to_roles** (JSON array of role IDs) — Restricts which participant roles see markers from this category on the map and in the filter sheet. Empty array means all roles in the project see the category; markers inherit visibility from their category.
+- [x] **visible_to_roles** (relation multi, roles) — Restricts which participant roles see markers from this category on the map and in the filter sheet. Empty array means all roles in the project see the category; markers inherit visibility from their category.
 - [x] **icon_config** (JSON via `MarkerIconDesigner`: `svgContent`, `color`, `size`, optional badge) — Defines the pin appearance for every marker in the category. The participant map and filter sheet render the inline `svgContent` recolored with `color` at `size` pixels for both individual pins and donut cluster slices.
 
 ---
@@ -243,7 +274,7 @@ Collections: `marker_categories` (meta + fields schema), `markers`
 
 - [x] **marker_categories.name** (text, required, max 255) — Display name of the category, shown in the participant map's filter sheet beside the icon and used as the page heading in the admin detail view. Same field surfaced on the list page.
 - [x] **marker_categories.description** (text, optional, max 1000) — Admin-only context describing the category. Never displayed to participants.
-- [x] **marker_categories.visible_to_roles** (JSON array of role IDs) — Controls which participant roles can see markers belonging to this category on the map and in the filter sheet. Empty array means visible to every role in the project.
+- [x] **marker_categories.visible_to_roles** (relation multi, roles) — Controls which participant roles can see markers belonging to this category on the map and in the filter sheet. Empty array means visible to every role in the project.
 - [x] **marker_categories.icon_config** (JSON via `MarkerIconDesigner`: `svgContent`, `color`, `size`, optional badge) — Drives how every marker in this category is drawn on the participant map, including the inline SVG recolored with `color` at `size` pixels. The same icon is rendered next to the category name in the filter sheet and in donut cluster slices.
 
 ### Custom field definitions (stored inside `marker_categories.fields` JSON array)
@@ -257,7 +288,7 @@ Collections: `marker_categories` (meta + fields schema), `markers`
 
 - [x] **markers.title** (text, required, max 500) — Primary label of the marker, shown as the heading in the participant marker detail module and used in marker lists. Required on every row.
 - [x] **markers.description** (text, optional, max 5000) — Long-form text shown in the participant marker detail module below the title. Optional and rendered only when set.
-- [x] **markers.location** (JSON `{lat, lon}`, required) — Geographic position used to place the pin on the participant Leaflet map. The map filter and renderer in `participant/map/+page.svelte` keep markers with `m.location?.lat` and `m.location?.lon` and feed them to the supercluster manager.
+- [x] **markers.location** (geoPoint `{lat, lon}`, required) — Geographic position used to place the pin on the participant Leaflet map. The map filter and renderer in `participant/map/+page.svelte` keep markers with `m.location?.lat` and `m.location?.lon` and feed them to the supercluster manager.
 - [x] **markers.properties.{field}** (JSON object keyed by `field_name`) — Per-marker values for the custom fields defined on the parent category. Read in `MarkerDetailModule.svelte` as `marker.properties?.[field.field_name]` and formatted by `field_type` for display.
 - [x] **CSV import** (bulk marker insert, replace-or-append) — Admin action on the category detail page that parses CSV, maps columns to title/description/location/custom fields, and batch-creates marker rows via the `?/importCSV` form action. Supports clearing existing markers in the category before import.
 
@@ -268,13 +299,24 @@ Collections: `marker_categories` (meta + fields schema), `markers`
 File: `src/routes/(admin)/projects/[projectId]/workflows/+page.svelte`
 Collection: `workflows`
 
+<!-- --8<-- [start:workflows-name] -->
 - [x] **workflows.name** (text, required) — Display name of the workflow shown in the participant `WorkflowSelector` menu and on the bottom control bar entry button. Also used as the row label on the admin workflows list table.
+<!-- --8<-- [end:workflows-name] -->
+<!-- --8<-- [start:workflows-description] -->
 - [x] **workflows.description** (text, optional) — Short subtitle shown under the workflow name in the participant workflow picker. Surfaces verbatim to participants when they pick which workflow to start.
+<!-- --8<-- [end:workflows-description] -->
+<!-- --8<-- [start:workflows-workflow_type] -->
 - [x] **workflows.workflow_type** (select: incident/survey) — Determines the entry flow in the participant app: `incident` puts the user into coordinate-selection mode to drop a map marker before the form opens, while `survey` skips coordinate selection and opens the form directly without placing a marker (`WorkflowSelector.svelte` line 77).
+<!-- --8<-- [end:workflows-workflow_type] -->
+<!-- --8<-- [start:workflows-is_active] -->
 - [x] **workflows.is_active** (boolean, toggle) — Master switch that gates all participant access to the workflow. The `workflows` listRule only returns rows where `is_active = true` to participants, so toggling it off makes the workflow and all its instances vanish from the participant app.
+<!-- --8<-- [end:workflows-is_active] -->
 - [x] **workflows.icon_config** (JSON, via `WorkflowIconDesigner`) — Default marker icon used on the participant map for instances of this workflow. `MapCanvas.createWorkflowInstanceIcon` falls back to this icon when no filter-value or stage icon is set.
 - [x] **workflow_stages.icon_config** (per-stage JSON, edited from same designer) — Stored on `workflow_stages.visual_config.icon_config`; overrides the workflow icon for instances currently sitting in that stage. Second step in the `MapCanvas` icon fallback chain (filter value -> stage -> workflow -> default circle).
 - [x] **workflows.filter_value_icons** (JSON map from field value to icon config) — Map keyed by a filterable form-field value; `MapCanvas` looks up the instance's current filter value and uses the matching icon as the highest-priority entry in the fallback chain. `FilterSheet.svelte` also reads it to render the per-value icons in the filter list.
+<!-- --8<-- [start:workflows-geometry_type] -->
+- [x] **workflows.geometry_type** (select: point/line/polygon) — Shape the participant draws when starting an instance. `point` keeps the classic single-coordinate behaviour; `line`/`polygon` switch the participant app into sketch-mode (multi-vertex) and populate `workflow_instances.geometry` instead of (or in addition to) `location`.
+<!-- --8<-- [end:workflows-geometry_type] -->
 
 ---
 
@@ -289,13 +331,20 @@ Collections: `workflows` (meta), `workflow_instances`, `workflow_instance_field_
 - [x] **workflows.description** (text, inline editable) — Same field as on the list page; the inline edit posts to `updateWorkflowMeta` and updates the subtitle shown under the workflow name in the participant picker.
 - [x] **workflows.visible_to_roles** (relation multi) — Restricts which participant roles can see the workflow and its instances. Enforced in the `workflow_instances`/`workflow_instance_field_values` listRules (`1776200000_filter_instance_status_for_participants.js`): empty array means visible to all, otherwise the participant's `role_id` must be in the list.
 - [x] **workflows.is_active** (boolean toggle) — Header-level toggle (lines 559-635 of `+page.svelte`) wired to `updateWorkflowMeta`. Same effect as on the list page: when false, the workflow disappears entirely from the participant app via the `workflows` listRule.
+<!-- --8<-- [start:workflows-private_instances] -->
 - [x] **workflows.private_instances** (boolean toggle) — When true, participants can only see instances they themselves created. The `workflow_instances` listRule adds `(workflow_id.private_instances != true || created_by = @request.auth.id)`, so other participants' instances of the same workflow stay hidden.
+<!-- --8<-- [end:workflows-private_instances] -->
 
 ### Instance rows
 
 - [x] **workflow_instances.is_active** (boolean) — Conceptual flag backed by the `workflow_instances.status` select field (values `active`/`completed`/`archived`/`deleted`). Participant listRules in `1776200000_filter_instance_status_for_participants.js` filter out rows where `status = "deleted" || status = "archived"`, so marking an instance inactive removes it from the participant map and detail views while admins keep seeing it.
 - [x] **workflow_instances.is_archived** (boolean) — Conceptual flag backed by `workflow_instances.status = "archived"`. Archived instances are explicitly excluded from participants by the listRule status filter (`status != "archived"`), so they remain visible to admins in the data viewer but disappear from the participant app.
 - [x] **workflow_instance_field_values.value** (per-instance, per-field value; typed by the form field definition) — One row per (instance, field_key, stage_id) holding the answer a participant submitted via a form, edit tool, or protocol tool. The data viewer renders one column per form field and inline edits go through the `updateFieldValue` action, which also writes a `workflow_instance_tool_usage` audit row.
+- [x] **workflow_instance_field_values.file_value** (file, max 99 × 10MB) — Per-field file attachments for `file` form fields. Participant uploads land here instead of in `value`; the data viewer surfaces download links for each attached file.
+- [x] **workflow_instances.geometry** (GeoJSON, optional) — The full drawn geometry when the parent workflow's `geometry_type` is `line` or `polygon`. The participant map renders this as a polyline/polygon overlay; for `point` workflows it stays empty and only `location` is used.
+- [x] **workflow_instances.centroid** (geoPoint, derived) — Center point derived from `geometry` when present. Used as the fallback pin coordinate and as the anchor for map clustering when the shape is not a point.
+- [x] **workflow_instances.bbox** (JSON `{minLon, minLat, maxLon, maxLat}`, derived) — Bounding box derived from `geometry`. Used by the participant map to fit the viewport when zooming to a line/polygon instance and as a spatial pre-filter server-side.
+- [x] **workflow_instances.files** (file multi, max 99 × 10MB) — Instance-level file attachments independent of any form field (e.g. photos attached from the detail view's generic upload slot).
 - [x] **CSV import** (bulk create instances into a selectable start stage, fields filtered by stage reachability) — The `importCSV` action parses uploaded rows, optionally wipes existing instances, then creates one `workflow_instances` row per CSV row at the chosen target stage (defaulting to the workflow's `start` stage). `lat`/`lon` columns become the instance `location`, and remaining columns are written as `workflow_instance_field_values` keyed by the form field id, each tagged with the field's owning stage from `fieldStageMap`.
 
 ---
@@ -307,6 +356,8 @@ Collection: `workflow_stages`
 
 - [x] **workflow_stages.stage_name** (text) — Display label for the stage shown in the participant workflow instance detail header and breadcrumb (`{stage.stage_name}` in `WorkflowInstanceDetailModule.svelte` line 1434). Edited inline via the panel header input and persisted through the `onRename` callback.
 - [x] **workflow_stages.visible_to_roles** (relation multi) — Restricts which participant roles see this stage in the workflow view; instances sitting in a hidden stage vanish from those roles detail panels. Empty selection means visible to all participants in the project.
+- [x] **workflow_stages.stage_type** (select: start/intermediate/end) — Semantic role of the stage. `start` is the entry point a new instance lands in after creation; `end` marks terminal stages the automation engine treats as "completed" signals; `intermediate` covers everything in between. Drives the stage icon and a few validation rules in the builder.
+- [x] **workflow_stages.stage_order** (integer) — Vertical sort order of stages in list views (e.g. the stage picker in the data viewer). Admin-only affordance; set when the admin reorders stages.
 - [x] **tools_edit.allowed_roles** (relation multi — attached-to-stage edit tool permission) — Per-tool override on the Permissions tab limiting which roles can open the stages edit tool and modify its fields. Empty means all roles allowed; the participant detail module hides the tools button when the participants role is not listed.
 
 ---
@@ -317,6 +368,8 @@ File: `src/routes/(admin)/projects/[projectId]/workflows/[workflowId]/builder/ri
 Collection: `workflow_connections`
 
 - [x] **workflow_connections.action_name** (text) — Internal name of the transition, used as the fallback button label when `visual_config.button_label` is empty (`conn.visual_config?.button_label || conn.action_name` in `WorkflowInstanceDetailModule.svelte` line 198). Also shown in the edge header in the builder.
+- [x] **workflow_connections.from_stage_id** (relation, nullable) — Source stage of the transition, set when the admin draws an edge on the canvas. `null` marks an "entry connection" — the transition that spawns new instances at the `start` stage, with no predecessor.
+- [x] **workflow_connections.to_stage_id** (relation, required) — Destination stage the transition moves the instance to. Always required; set by drawing the edge head onto a stage node in the builder canvas.
 - [x] **workflow_connections.allowed_roles** (relation multi) — Restricts which participant roles can trigger this transition by tapping its action button in the workflow detail panel. Empty array allows all roles; hiding the connection also hides any buttons attached to it.
 - [x] **workflow_connections.visual_config.button_label** (text) — Overrides `action_name` as the visible label on the stage action button in the participant workflow detail. Stored under the connections JSON `visual_config` and applied on Settings tab edit via `syncSettings`.
 - [x] **workflow_connections.visual_config.button_color** (color) — Hex background color applied to the stage action button rendered in the participant detail toolbar. Configured via a color picker plus paired text input that both write into `visual_config.button_color`.
@@ -385,10 +438,19 @@ Collection: `tools_form_fields`
 
 ### Entity selector / custom_table_selector
 
-- [x] **field_options.source_type** (select: custom_table/participants/role_list) — Picks where the selectable entities come from in `FieldRenderer.svelte`'s `loadCustomEntities`: `custom_table` queries `custom_table_data` rows, `marker_category` queries `markers` filtered by category, `participants` queries `participants` (gated by `self_select_roles`/`any_select_roles`), and `roles` queries the `roles` collection.
+- [x] **field_options.source_type** (select: custom_table/marker_category/participants/roles) — Picks where the selectable entities come from in `FieldRenderer.svelte`'s `loadCustomEntities`: `custom_table` queries `custom_table_data` rows, `marker_category` queries `markers` filtered by category, `participants` queries `participants` (gated by `self_select_roles`/`any_select_roles`), and `roles` queries the `roles` collection.
 - [x] **field_options.custom_table_id** (relation: custom_tables) — When `source_type = custom_table`, identifies which `custom_tables` row the entities are pulled from. Each row in that table becomes a selectable option in the participant's `MobileMultiSelect`.
+- [x] **field_options.marker_category_id** (relation: marker_categories) — When `source_type = marker_category`, identifies which marker category's markers become the selectable options. Each marker in that category shows up as one picker entry.
 - [x] **field_options.display_field** (text: column to show as label) — Name of the column inside `custom_table_data.row_data` whose value becomes the option label shown to participants. Falls back to `"name"` if unset and to the row id when the column value is missing.
 - [x] **field_options.allow_multiple** (boolean) — If true, the participant can pick more than one entity (`MobileMultiSelect` runs in multi-select mode and the value is stored as an array); if false, exactly one is allowed and the value is stored as a single ID.
+- [x] **field_options.allowed_roles** (relation multi, optional) — For `custom_table` and `marker_category` sources: restricts which participant roles see this selector at all. Empty means every role that can see the form can use it.
+- [x] **field_options.self_select_roles** (relation multi, optional) — For `participants` and `roles` sources: the listed roles may only pick themselves (their own participant row or their own role). Useful for "sign off" patterns where a user confirms their own identity.
+- [x] **field_options.any_select_roles** (relation multi, optional) — For `participants` and `roles` sources: the listed roles may pick any entity in the project. Pair with `self_select_roles` to implement "everyone picks themselves, supervisors pick anyone".
+
+### Grid layout
+
+- [x] **tools_form_fields.row_index** (integer, ≥0) — Zero-based row the field occupies in the form's two-column grid. Fields with the same `row_index` sit side-by-side; set automatically when the admin drops fields into rows in the builder.
+- [x] **tools_form_fields.column_position** (select: left/right/full) — Horizontal placement within a row. `left` and `right` each take half the row width, `full` spans the entire row. Together with `row_index` this drives the responsive grid in `FieldRenderer.svelte`.
 
 ### Field type palette
 
@@ -404,6 +466,9 @@ Collection: `tools_edit`
 - [x] **tools_edit.name** (text) — Internal label for the edit tool, used as the fallback button label in the participant instance detail view when no `visual_config.button_label` is set.
 - [x] **tools_edit.editable_fields** (relation multi, `tools_form_fields`) — In `form_fields` mode, the exact subset of ancestor form fields that participants can change when they open this tool; only these fields appear in the edit sheet, all other field values stay locked.
 - [x] **tools_edit.edit_mode** (select: form_fields/location) — Switches the tool between editing form field values (opens an inline edit form on the instance) and editing the instance's geolocation (opens a map picker so participants can drag the pin to a new spot).
+- [x] **tools_edit.is_global** (boolean) — When true, the edit tool is a "global" tool that appears on every instance across the listed `stage_id` set; when false it is pinned to a single stage (or connection). Admins toggle this when promoting a per-stage tool to a multi-stage one.
+- [x] **tools_edit.stage_id** (relation multi, up to 99 stages) — Stages at which the edit tool is offered to participants. A non-global tool usually lists one stage; a global tool (`is_global = true`) lists every stage where it should be available.
+- [x] **tools_edit.connection_id** (relation, optional) — When set, the edit tool is attached to a workflow connection (transition step) instead of a stage — the participant sees it as part of that transition's flow rather than on the stage's detail view.
 - [x] **tools_edit.visual_config.button_label** (text) — Custom label shown on the edit tool's button inside the participant instance detail view; falls back to `tools_edit.name` when empty.
 - [x] **tools_edit.visual_config.button_color** (color) — Custom background color for the edit tool's button in the participant instance detail view, letting admins make critical edits visually distinct.
 
@@ -421,6 +486,9 @@ Collection: `tools_protocol`
 - [x] **tools_protocol.visual_config.button_label** (text) — Custom label shown on the protocol tool's button inside the participant instance detail view; falls back to `tools_protocol.name` when empty.
 - [x] **tools_protocol.visual_config.button_color** (color) — Custom background color for the protocol tool's button in the participant instance detail view, useful for highlighting recurring inspection or check-in actions.
 - [x] **tools_protocol.allowed_roles** (relation multi) — Restricts which participant roles may launch this protocol tool; an empty list means every participant on the project can use it. The PocketBase access rules enforce the same check on the API layer.
+- [x] **tools_protocol.is_global** (boolean) — Toggles the tool between "per-stage" mode (false; tool is a button on a single stage) and "region" mode (true; tool spans the stages listed in `stage_id` and the system auto-snapshots whenever an instance leaves that region).
+- [x] **tools_protocol.connection_id** (relation, optional) — When set, the protocol tool is attached to a workflow connection (transition step) rather than a stage — useful when the protocol should only run as part of a specific transition.
+- [x] **tools_protocol.protocol_form_id** (relation: `tools_forms`, optional) — Links an extra protocol-only form whose fields are merged into the protocol sheet alongside `editable_fields`. Used when the protocol needs its own one-off questions (e.g. "reason for status change") that don't live on any regular stage form.
 
 ---
 
@@ -443,6 +511,7 @@ Collection: `tools_automation`
 - [x] **tools_automation.name** (text) — Admin label for the automation, shown in the automation list in the workflow builder and recorded in `workflow_instance_tool_usage.metadata.automation_name` whenever the automation fires (`logAutomationExecution` in `pb/pb_hooks/automation.js`). Participants never see this name; it is purely for admin identification and audit logs.
 - [x] **tools_automation.is_enabled** (boolean) — Master on/off switch. The hooks in `pb/pb_hooks/main.pb.js` filter automations with `is_enabled = true` for every trigger type (`on_transition`, `on_field_change`, scheduled cron); when false the automation is fully skipped at runtime even if it remains saved.
 - [x] **tools_automation.execution_mode** (select: run_all/first_match) — Controls how multiple steps in `steps[]` are evaluated by `runAutomation()`. `run_all` executes every step whose conditions match in order (later steps see DB writes from earlier ones); `first_match` stops after the first step whose conditions evaluate true.
+- [x] **tools_automation.last_run_at** (date, auto-maintained) — Timestamp of the most recent scheduled execution. The scheduler in `main.pb.js` reads this field to enforce a 50-second deduplication window, so a `scheduled` automation cannot fire twice within one minute even if the cron tick overlaps with a manual run. Admins do not set this directly.
 
 ### Trigger
 
@@ -453,6 +522,7 @@ Collection: `tools_automation`
 - [x] **trigger_config.field_key** (on_field_change) — Optional filter restricting the trigger to changes on a specific form field (matched against `workflow_instance_field_values.field_key`). Empty means any field change on the workflow fires it.
 - [x] **trigger_config.cron** (scheduled) — Standard 5-field cron expression (`minute hour dom month dow`) parsed by `cronMatchesNow()`; supports `*`, ranges, lists, and `*/step`. The scheduler tick runs every minute and executes the automation against every active workflow instance whenever the expression matches the current time.
 - [x] **trigger_config.target_stage_id** (scheduled) — Optional filter narrowing the scheduled run to instances currently sitting in this stage (`current_stage_id = {:targetStage}` in `main.pb.js`). Empty means the cron sweeps all active, non-archived instances of the workflow.
+- [x] **trigger_config.inactive_days** (number, scheduled, optional) — When set, the scheduled run only picks up instances whose `last_activity_at` is older than this many days. Useful for "nag if nothing has happened for N days" patterns. Zero or unset disables the filter so every matching instance fires on every tick.
 
 ### Step
 

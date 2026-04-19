@@ -35,6 +35,6 @@ Sie koennen festlegen, welche Rollen auf eine Datentabelle zugreifen duerfen. Te
 ---
 
 **Siehe auch:**
-- [Formulare](formulare_reviewed.md) -- Feldtypen und Datenauswahl
-- [Projekte](projekte_reviewed.md) -- Custom Tables als Projektbestandteil
+- [Formulare](formulare.md) -- Feldtypen und Datenauswahl
+- [Projekte](projekte.md) -- Custom Tables als Projektbestandteil
 - Tutorial: [Formulare und Tools](../tutorials/03-formulare-und-tools.md)

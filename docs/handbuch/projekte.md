@@ -9,9 +9,9 @@ Ein typisches Projekt koennte zum Beispiel "Sicherheitsbegehung Werk Sued" heiss
 
 Ein Projekt setzt sich aus mehreren Bausteinen zusammen, die Sie im Administrationsbereich (Ueberblick Sector) einzeln konfigurieren:
 
-- **[Workflows](workflows_reviewed.md)** beschreiben, wie ein Vorgang ablaeuft -- von der Erfassung bis zum Abschluss. Ein Projekt kann mehrere Workflows enthalten, etwa einen fuer Maengelmeldungen und einen fuer Routinepruefungen.
+- **[Workflows](workflows.md)** beschreiben, wie ein Vorgang ablaeuft -- von der Erfassung bis zum Abschluss. Ein Projekt kann mehrere Workflows enthalten, etwa einen fuer Maengelmeldungen und einen fuer Routinepruefungen.
 
-- **[Rollen](rollen-und-teilnehmer_reviewed.md)** legen fest, wer was darf und was sieht. In einem Brandschutzprojekt koennten das zum Beispiel "Brandschutzbeauftragter", "Sicherheitsbeauftragter" und "Evakuierungshelfer" sein. Bei einer einfachen Reinigungsloesung reicht eine einzige Rolle fuer alle.
+- **[Rollen](rollen-und-teilnehmer.md)** legen fest, wer was darf und was sieht. In einem Brandschutzprojekt koennten das zum Beispiel "Brandschutzbeauftragter", "Sicherheitsbeauftragter" und "Evakuierungshelfer" sein. Bei einer einfachen Reinigungsloesung reicht eine einzige Rolle fuer alle.
 
 - **Teilnehmer** sind die Personen, die mit der App im Feld arbeiten. Jeder Teilnehmer gehoert zu genau einem Projekt und bekommt eine oder mehrere Rollen zugewiesen.
 
@@ -19,7 +19,7 @@ Ein Projekt setzt sich aus mehreren Bausteinen zusammen, die Sie im Administrati
 
 - **Marker-Kategorien** sorgen dafuer, dass Marker auf der Karte visuell unterscheidbar sind. Sie legen Icons und Farben fest, damit etwa Maengel anders aussehen als Pruefpunkte.
 
-- **[Custom Tables](custom-tables_reviewed.md)** sind eigene Datentabellen, die Sie nach Bedarf anlegen koennen -- etwa fuer Geraete- oder Raumlisten, auf die Workflows Bezug nehmen.
+- **[Custom Tables](custom-tables.md)** sind eigene Datentabellen, die Sie nach Bedarf anlegen koennen -- etwa fuer Geraete- oder Raumlisten, auf die Workflows Bezug nehmen.
 
 ```mermaid
 graph TD
@@ -50,6 +50,6 @@ Ueber den Schalter **Aktiv** steuern Sie, ob ein Projekt fuer Teilnehmer sichtba
 ---
 
 **Siehe auch:**
-- [Rollen & Teilnehmer](rollen-und-teilnehmer_reviewed.md) -- Berechtigungsmodell
-- [Workflows](workflows_reviewed.md) -- Datenerfassung konfigurieren
-- Tutorial: [Projekt einrichten](../tutorials/01-projekt-einrichten_reviewed.md)
+- [Rollen & Teilnehmer](rollen-und-teilnehmer.md) -- Berechtigungsmodell
+- [Workflows](workflows.md) -- Datenerfassung konfigurieren
+- Tutorial: [Projekt einrichten](../tutorials/01-projekt-einrichten.md)

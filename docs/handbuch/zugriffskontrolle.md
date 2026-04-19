@@ -86,6 +86,6 @@ Bei einem einfachen Reinigungsprojekt mit nur einer Rolle brauchen Sie sich um B
 ---
 
 **Siehe auch:**
-- [Rollen & Teilnehmer](rollen-und-teilnehmer_reviewed.md) -- Rollendefinition und -zuweisung
-- [Workflows](workflows_reviewed.md) -- Stufen und Verbindungen
-- [Tools](tools_reviewed.md) -- Tool-Berechtigungen
+- [Rollen & Teilnehmer](rollen-und-teilnehmer.md) -- Rollendefinition und -zuweisung
+- [Workflows](workflows.md) -- Stufen und Verbindungen
+- [Tools](tools.md) -- Tool-Berechtigungen

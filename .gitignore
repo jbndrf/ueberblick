@@ -83,6 +83,9 @@ git_login.md
 # Python venv (mkdocs)
 .venv/
 
+# MkDocs build output
+/docs-site/
+
 # Personal/local config
 .mcp.json
 .claude/settings.local.json

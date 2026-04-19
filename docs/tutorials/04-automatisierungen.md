@@ -1,6 +1,6 @@
 # Tutorial 4: Automatisierungen
 
-> Konzepte: [Automatisierungen](../handbuch/automatisierungen_reviewed.md) | [Workflows](../handbuch/workflows_reviewed.md)
+> Konzepte: [Automatisierungen](../handbuch/automatisierungen.md) | [Workflows](../handbuch/workflows.md)
 
 Voraussetzung: [Tutorial 3](03-formulare-und-tools.md) (Permission Test Workflow mit Formularen und Edit Tool).
 

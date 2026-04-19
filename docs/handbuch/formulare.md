@@ -1,6 +1,6 @@
 # Formulare
 
-Mit Formularen erfassen Ihre Teilnehmer strukturierte Daten direkt vor Ort -- zum Beispiel den Zustand eines Raums bei der Reinigung, eine Gefaehrdungsbeurteilung bei der Sicherheitsbegehung oder den Fortschritt auf einer Baustelle. Formulare gehoeren immer zu einem [Tool](tools_reviewed.md) vom Typ "Formular" und werden im Workflow-Builder zusammengestellt.
+Mit Formularen erfassen Ihre Teilnehmer strukturierte Daten direkt vor Ort -- zum Beispiel den Zustand eines Raums bei der Reinigung, eine Gefaehrdungsbeurteilung bei der Sicherheitsbegehung oder den Fortschritt auf einer Baustelle. Formulare gehoeren immer zu einem [Tool](tools.md) vom Typ "Formular" und werden im Workflow-Builder zusammengestellt.
 
 ## Aufbau eines Formulars
 
@@ -43,7 +43,7 @@ In einer kuenftigen Version werden Felder bedingt ein- oder ausgeblendet werden 
 ---
 
 **Siehe auch:**
-- [Tools](tools_reviewed.md) -- Anhaengepunkte und Tool-Typen
-- [Workflows](workflows_reviewed.md) -- Wo Formulare im Lebenszyklus stehen
-- [Custom Tables](custom-tables_reviewed.md) -- Datenquelle fuer Custom Table Selector
+- [Tools](tools.md) -- Anhaengepunkte und Tool-Typen
+- [Workflows](workflows.md) -- Wo Formulare im Lebenszyklus stehen
+- [Custom Tables](custom-tables.md) -- Datenquelle fuer Custom Table Selector
 - Tutorial: [Formulare & Tools](../tutorials/03-formulare-und-tools.md)
