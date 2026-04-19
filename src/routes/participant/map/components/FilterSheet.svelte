@@ -176,11 +176,15 @@
 	// opt-in slot the previous Fields placeholder used). It combines quick
 	// filters, the advanced filter builder, and — once wired — saved views.
 	const showViews = $derived(isFeatureEnabled('filter.field_filters'));
-	const hasAnyPowerTab = $derived(showViews);
+	const showCluster = $derived(isFeatureEnabled('tools.cluster'));
+	const hasAnyPowerTab = $derived(showViews || showCluster);
 
 	const tab = createPersistedTab('filter', 'simple');
 	$effect(() => {
 		if (tab.value === 'views' && !showViews) {
+			tab.value = 'simple';
+		}
+		if (tab.value === 'cluster' && !showCluster) {
 			tab.value = 'simple';
 		}
 	});
@@ -468,46 +472,49 @@
 				</div>
 			{/if}
 
-			<Separator />
+	</div>
+{/snippet}
 
-			<div class="space-y-3 rounded-lg border p-3">
-				<div class="flex items-center justify-between">
-					<div class="min-w-0 flex-1 pr-3">
-						<div class="text-sm font-medium">{m.participantFilterSheetUncluster?.() ?? 'Uncluster'}</div>
-						<div class="text-xs text-muted-foreground">
-							{m.participantFilterSheetUnclusterDescription?.() ?? 'Show individual markers in the current view'}
-						</div>
+{#snippet clusterBody()}
+	<div class="space-y-3 px-1 py-6">
+		<div class="space-y-3 rounded-lg border p-3">
+			<div class="flex items-center justify-between">
+				<div class="min-w-0 flex-1 pr-3">
+					<div class="text-sm font-medium">{m.participantFilterSheetUncluster?.() ?? 'Uncluster'}</div>
+					<div class="text-xs text-muted-foreground">
+						{m.participantFilterSheetUnclusterDescription?.() ?? 'Show individual markers in the current view'}
 					</div>
-					<Switch
-						checked={uncluster}
-						onCheckedChange={(checked) => onUnclusterToggle?.(checked)}
+				</div>
+				<Switch
+					checked={uncluster}
+					onCheckedChange={(checked) => onUnclusterToggle?.(checked)}
+				/>
+			</div>
+
+			{#if uncluster}
+				<div class="flex items-center justify-between gap-3">
+					<label for="uncluster-cap" class="text-xs font-medium">{m.participantFilterSheetUpTo?.() ?? 'Up to'}</label>
+					<Input
+						id="uncluster-cap"
+						type="number"
+						min="1"
+						step="50"
+						class="h-8 w-24 text-right"
+						value={unclusterCap}
+						onchange={handleCapInput}
 					/>
 				</div>
-
-				{#if uncluster}
-					<div class="flex items-center justify-between gap-3">
-						<label for="uncluster-cap" class="text-xs font-medium">{m.participantFilterSheetUpTo?.() ?? 'Up to'}</label>
-						<Input
-							id="uncluster-cap"
-							type="number"
-							min="1"
-							step="50"
-							class="h-8 w-24 text-right"
-							value={unclusterCap}
-							onchange={handleCapInput}
-						/>
+				{#if unclusterStats && unclusterStats.total > 0}
+					<div class="text-xs text-muted-foreground">
+						{#if unclusterStats.rendered > 0}
+							{(m.participantFilterSheetShowingIndividually?.({ count: unclusterStats.total }) ?? `Showing ${unclusterStats.total} individually`)}
+						{:else}
+							{(m.participantFilterSheetTooManyClustered?.({ count: unclusterStats.total }) ?? `${unclusterStats.total} in view — too many, still clustered`)}
+						{/if}
 					</div>
-					{#if unclusterStats && unclusterStats.total > 0}
-						<div class="text-xs text-muted-foreground">
-							{#if unclusterStats.rendered > 0}
-								{(m.participantFilterSheetShowingIndividually?.({ count: unclusterStats.total }) ?? `Showing ${unclusterStats.total} individually`)}
-							{:else}
-								{(m.participantFilterSheetTooManyClustered?.({ count: unclusterStats.total }) ?? `${unclusterStats.total} in view — too many, still clustered`)}
-							{/if}
-						</div>
-					{/if}
 				{/if}
-			</div>
+			{/if}
+		</div>
 	</div>
 {/snippet}
 
@@ -542,6 +549,12 @@
 							<span>{m.participantFilterSheetTabViews?.() ?? 'Views'}</span>
 						</Tabs.Trigger>
 					{/if}
+					{#if showCluster}
+						<Tabs.Trigger value="cluster">
+							<Sparkles class="h-4 w-4" />
+							<span>{m.participantFilterSheetTabCluster?.() ?? 'Cluster'}</span>
+						</Tabs.Trigger>
+					{/if}
 				</Tabs.List>
 				<Tabs.Content value="simple" class="overflow-y-auto">
 					{@render simpleBody()}
@@ -566,6 +579,11 @@
 								/>
 							{/if}
 						</div>
+					</Tabs.Content>
+				{/if}
+				{#if showCluster}
+					<Tabs.Content value="cluster" class="overflow-y-auto">
+						{@render clusterBody()}
 					</Tabs.Content>
 				{/if}
 			</Tabs.Root>

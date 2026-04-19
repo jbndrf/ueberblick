@@ -17,6 +17,7 @@
 	import * as Tabs from '$lib/components/ui/tabs';
 	import { ChevronRight } from 'lucide-svelte';
 	import { FormFillTool, EditFieldsTool, ViewFieldsTool, LocationEditTool, ConflictResolutionTool, ProtocolTool } from './tools';
+	import FieldValueImage from './FieldValueImage.svelte';
 	import { getConflictsForInstance, resolveConflict } from '$lib/participant-state/sync.svelte';
 	import type { SyncConflict } from '$lib/participant-state/db';
 	import { getChangedFields } from './conflict-diff';
@@ -83,6 +84,7 @@
 		const _count = selection.openCount; // Force re-run on re-click of same instance
 		if (!gateway || !instanceId) return;
 
+		const previous = untrack(() => detailState);
 		const newState = createWorkflowInstanceDetailState(instanceId, gateway, fieldValueCache);
 		detailState = newState;
 		activeTab = 'activity';
@@ -97,6 +99,9 @@
 
 		// Check for pending conflicts on this instance
 		loadConflicts(instanceId);
+
+		previous?.dispose();
+		return () => newState.dispose();
 	});
 
 	async function loadConflicts(instanceId: string) {
@@ -1405,11 +1410,11 @@
 															{#if fileValues.length > 0}
 																<div class="flex gap-1.5 mt-1.5 flex-wrap">
 																	{#each fileValues.slice(0, 4) as fv}
-																		<img
-																			src="/api/files/workflow_instance_field_values/{fv.id}/{fv.file_value}"
+																		<FieldValueImage
+																			recordId={fv.id}
+																			fileName={fv.file_value}
 																			alt={m.participantWorkflowInstanceDetailAttachmentAlt?.() ?? 'Attachment'}
 																			class="h-12 w-12 rounded object-cover border border-border"
-																			loading="lazy"
 																		/>
 																	{/each}
 																	{#if fileValues.length > 4}

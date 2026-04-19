@@ -15,18 +15,8 @@ import { getPocketBase } from '$lib/pocketbase';
 export type FeatureKey =
 	// Filter sheet
 	| 'filter.field_filters'
-	// reserved for future slices — listed here so the registry drives the UI
-	| 'filter.meta'
-	| 'filter.saved'
-	// Layer sheet
-	| 'layers.opacity'
-	| 'layers.custom'
 	// Map tools sheet
-	| 'tools.measure'
-	| 'tools.draw'
-	| 'tools.search'
-	| 'tools.coordinates'
-	| 'tools.legend';
+	| 'tools.cluster';
 
 export interface FeatureDefinition {
 	key: FeatureKey;
@@ -41,15 +31,7 @@ export interface FeatureDefinition {
  */
 export const FEATURE_REGISTRY: readonly FeatureDefinition[] = [
 	{ key: 'filter.field_filters', group: 'filter', available: true },
-	{ key: 'filter.meta', group: 'filter', available: false },
-	{ key: 'filter.saved', group: 'filter', available: false },
-	{ key: 'layers.opacity', group: 'layers', available: false },
-	{ key: 'layers.custom', group: 'layers', available: false },
-	{ key: 'tools.measure', group: 'tools', available: false },
-	{ key: 'tools.draw', group: 'tools', available: false },
-	{ key: 'tools.search', group: 'tools', available: false },
-	{ key: 'tools.coordinates', group: 'tools', available: false },
-	{ key: 'tools.legend', group: 'tools', available: false }
+	{ key: 'tools.cluster', group: 'tools', available: true }
 ] as const;
 
 const STORAGE_KEY = 'ueberblick_enabled_features';

@@ -31,6 +31,12 @@
 	import type { BuilderContext } from './components/view-builder/types';
 
 	const SAVED_VIEWS_KEY = 'filter.saved_views';
+	const CLUSTER_CONFIG_KEY = 'tools.cluster';
+
+	interface ClusterConfig {
+		uncluster: boolean;
+		uncluster_cap: number;
+	}
 	import type { Feature, LineString, Polygon } from 'geojson';
 	import { WorkflowInstanceDetailModule, MarkerDetailModule, createSelection, type Selection, type Marker } from './modules';
 	import ClusterDetailModule from './modules/cluster-detail/ClusterDetailModule.svelte';
@@ -365,10 +371,15 @@
 	// Tag value visibility: workflowId -> Set of visible tag values (all visible by default)
 	let visibleTagValues = $state<Map<string, Set<string>>>(new Map());
 
-	// Uncluster toggle: render individual markers/instances inside the viewport
-	let uncluster = $state(false);
+	// Uncluster toggle: render individual markers/instances inside the viewport.
+	// Default on — most viewports fit under the cap and users expect to see
+	// individual points without flipping a switch. Persisted per participant
+	// via `participant_tool_configs` (tool_key = "tools.cluster") once loaded.
+	let uncluster = $state(true);
 	let unclusterCap = $state(500);
 	let unclusterStats = $state<{ rendered: number; total: number }>({ rendered: 0, total: 0 });
+	let clusterConfigId = $state<string | null>(null);
+	let clusterConfigLoaded = $state(false);
 
 	// Advanced filter clauses from the Views tab. Empty = no extra filter on
 	// top of the simple quick-filter controls. These are AND-combined.
@@ -639,6 +650,49 @@
 			savedViews = await listToolConfigs<ViewDefinition>(SAVED_VIEWS_KEY, projectId);
 		} catch (err) {
 			console.warn('[saved-views] load failed', err);
+		}
+	}
+
+	// Load the participant's cluster preference (global, not project-scoped).
+	// Missing row = use the in-state defaults (uncluster=true, cap=500).
+	$effect(() => {
+		if (clusterConfigLoaded) return;
+		clusterConfigLoaded = true;
+		(async () => {
+			try {
+				const rows = await listToolConfigs<ClusterConfig>(CLUSTER_CONFIG_KEY, null);
+				const row = rows[0];
+				if (row) {
+					clusterConfigId = row.id;
+					if (typeof row.config?.uncluster === 'boolean') uncluster = row.config.uncluster;
+					if (typeof row.config?.uncluster_cap === 'number') unclusterCap = row.config.uncluster_cap;
+				}
+			} catch (err) {
+				console.warn('[cluster-config] load failed', err);
+			}
+		})();
+	});
+
+	let clusterConfigSaving = false;
+	async function persistClusterConfig(): Promise<void> {
+		if (!clusterConfigLoaded || clusterConfigSaving) return;
+		clusterConfigSaving = true;
+		const config: ClusterConfig = { uncluster, uncluster_cap: unclusterCap };
+		try {
+			if (clusterConfigId) {
+				await updateToolConfig<ClusterConfig>(clusterConfigId, { config });
+			} else {
+				const created = await createToolConfig<ClusterConfig>(CLUSTER_CONFIG_KEY, {
+					name: 'cluster',
+					config,
+					projectId: null
+				});
+				clusterConfigId = created.id;
+			}
+		} catch (err) {
+			console.warn('[cluster-config] save failed', err);
+		} finally {
+			clusterConfigSaving = false;
 		}
 	}
 
@@ -1277,9 +1331,9 @@
 		onWorkflowToggle={handleWorkflowToggle}
 		onTagValueToggle={handleTagValueToggle}
 		{uncluster}
-		onUnclusterToggle={(next) => (uncluster = next)}
+		onUnclusterToggle={(next) => { uncluster = next; void persistClusterConfig(); }}
 		{unclusterCap}
-		onUnclusterCapChange={(next) => (unclusterCap = next)}
+		onUnclusterCapChange={(next) => { unclusterCap = next; void persistClusterConfig(); }}
 		{unclusterStats}
 		advancedClauses={advancedClauses}
 		{builderCtx}

@@ -50,22 +50,18 @@
 	);
 
 	// Sidebar entity data comes from the project layout server load
-	// (src/routes/(admin)/projects/[projectId]/+layout.server.ts) as streamed
-	// promises so pages render immediately while the sidebar fills in.
-	const sidebarWorkflowsPromise = $derived(
-		$page.data.sidebarWorkflows as
-			| Promise<Array<{ id: string; name: string; workflow_type: string; sort_order: number }>>
-			| undefined
+	// (src/routes/(admin)/projects/[projectId]/+layout.server.ts), awaited so it
+	// is rendered into the SSR HTML and works before client hydration.
+	const sidebarWorkflows = $derived(
+		($page.data.sidebarWorkflows as
+			| Array<{ id: string; name: string; workflow_type: string; sort_order: number }>
+			| undefined) ?? []
 	);
-	const sidebarTablesPromise = $derived(
-		$page.data.sidebarTables as
-			| Promise<Array<{ id: string; display_name: string }>>
-			| undefined
+	const sidebarTables = $derived(
+		($page.data.sidebarTables as Array<{ id: string; display_name: string }> | undefined) ?? []
 	);
-	const sidebarMarkerCategoriesPromise = $derived(
-		$page.data.sidebarMarkerCategories as
-			| Promise<Array<{ id: string; name: string }>>
-			| undefined
+	const sidebarMarkerCategories = $derived(
+		($page.data.sidebarMarkerCategories as Array<{ id: string; name: string }> | undefined) ?? []
 	);
 
 	// Track collapsed state for groups
@@ -351,11 +347,8 @@
 							{#if !workflowsCollapsed}
 								<Sidebar.GroupContent>
 									<Sidebar.Menu>
-										{#await sidebarWorkflowsPromise ?? Promise.resolve([])}
-											<div class="px-3 py-2 text-xs text-muted-foreground">...</div>
-										{:then sidebarWorkflows}
-											{@const displayed = workflowOrderOverride ?? sidebarWorkflows}
-											{#each displayed as wf (wf.id)}
+										{@const displayed = workflowOrderOverride ?? sidebarWorkflows}
+										{#each displayed as wf (wf.id)}
 												<Sidebar.MenuItem>
 													<div
 														role="listitem"
@@ -380,12 +373,11 @@
 													</div>
 												</Sidebar.MenuItem>
 											{/each}
-											{#if displayed.length === 0}
-												<div class="px-3 py-2 text-xs text-muted-foreground">
-													{m.navNoWorkflows?.() ?? 'No workflows yet'}
-												</div>
-											{/if}
-										{/await}
+										{#if displayed.length === 0}
+											<div class="px-3 py-2 text-xs text-muted-foreground">
+												{m.navNoWorkflows?.() ?? 'No workflows yet'}
+											</div>
+										{/if}
 									</Sidebar.Menu>
 								</Sidebar.GroupContent>
 							{/if}
@@ -429,10 +421,7 @@
 							{#if !tablesCollapsed}
 								<Sidebar.GroupContent>
 									<Sidebar.Menu>
-										{#await Promise.all([sidebarTablesPromise ?? Promise.resolve([]), sidebarMarkerCategoriesPromise ?? Promise.resolve([])])}
-											<div class="px-3 py-2 text-xs text-muted-foreground">...</div>
-										{:then [sidebarTables, sidebarMarkerCategories]}
-											{#each sidebarTables as tbl}
+										{#each sidebarTables as tbl}
 												<Sidebar.MenuItem>
 													<Sidebar.MenuSubButton
 														href="/projects/{currentProjectId}/custom-tables/{tbl.id}"
@@ -454,12 +443,11 @@
 													</Sidebar.MenuSubButton>
 												</Sidebar.MenuItem>
 											{/each}
-											{#if sidebarTables.length === 0 && sidebarMarkerCategories.length === 0}
-												<div class="px-3 py-2 text-xs text-muted-foreground">
-													{m.navNoTables?.() ?? 'No tables yet'}
-												</div>
-											{/if}
-										{/await}
+										{#if sidebarTables.length === 0 && sidebarMarkerCategories.length === 0}
+											<div class="px-3 py-2 text-xs text-muted-foreground">
+												{m.navNoTables?.() ?? 'No tables yet'}
+											</div>
+										{/if}
 									</Sidebar.Menu>
 								</Sidebar.GroupContent>
 							{/if}

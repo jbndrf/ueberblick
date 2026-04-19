@@ -1,4 +1,4 @@
-import { error, fail } from '@sveltejs/kit';
+import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { superValidate } from 'sveltekit-superforms';
 import * as m from '$lib/paraglide/messages';
@@ -820,6 +820,20 @@ export const actions: Actions = {
 			console.error('Error removing icon:', err);
 			return fail(500, { message: m.settingsServerRemoveIconError?.() ?? 'Failed to remove icon' });
 		}
+	},
+
+	// Delete the project and everything that belongs to it.
+	// Cascade rules handle stages, forms, instances, roles, participants,
+	// custom tables, map layers, offline packages, info pages, etc.
+	deleteProject: async ({ params, locals: { pb } }) => {
+		const { projectId } = params;
+		try {
+			await pb.collection('projects').delete(projectId);
+		} catch (err) {
+			console.error('Error deleting project:', err);
+			return fail(500, { message: m.projectsDeleteError?.() ?? 'Failed to delete project' });
+		}
+		throw redirect(303, '/projects');
 	},
 
 	// Update display name shown in participant app

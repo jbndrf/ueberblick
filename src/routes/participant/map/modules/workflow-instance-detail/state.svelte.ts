@@ -6,6 +6,7 @@
  */
 
 import type { ParticipantGateway } from '$lib/participant-state/gateway.svelte';
+import { onDataChange } from '$lib/participant-state/gateway.svelte';
 import type { FieldValueCache } from '$lib/participant-state/field-value-cache.svelte';
 import type { Snippet } from 'svelte';
 
@@ -247,11 +248,48 @@ export class WorkflowInstanceDetailState {
 	// ==========================================================================
 
 	private fieldValueCache: FieldValueCache | null;
+	private unsubscribeFieldValues: (() => void) | null = null;
+	private refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
 	constructor(instanceId: string, gateway: ParticipantGateway, fieldValueCache?: FieldValueCache) {
 		this.instanceId = instanceId;
 		this.gateway = gateway;
 		this.fieldValueCache = fieldValueCache ?? null;
+
+		// Pick up server-assigned fields (e.g. file_value suffixed by PocketBase)
+		// after sync lands.
+		this.unsubscribeFieldValues = onDataChange((detail) => {
+			if (detail.collection !== 'workflow_instance_field_values') return;
+			if (this.refreshTimer) clearTimeout(this.refreshTimer);
+			this.refreshTimer = setTimeout(() => {
+				this.refreshTimer = null;
+				void this.reloadFieldValues();
+			}, 100);
+		});
+	}
+
+	private async reloadFieldValues(): Promise<void> {
+		try {
+			const fresh = this.fieldValueCache
+				? this.fieldValueCache.getForInstance(this.instanceId)
+				: await this.gateway.collection('workflow_instance_field_values').getFullList({
+					filter: `instance_id = "${this.instanceId}"`
+				});
+			this.fieldValues = fresh as unknown as FieldValue[];
+		} catch (error) {
+			console.error('[DetailState] reloadFieldValues failed:', error);
+		}
+	}
+
+	dispose(): void {
+		if (this.refreshTimer) {
+			clearTimeout(this.refreshTimer);
+			this.refreshTimer = null;
+		}
+		if (this.unsubscribeFieldValues) {
+			this.unsubscribeFieldValues();
+			this.unsubscribeFieldValues = null;
+		}
 	}
 
 	// ==========================================================================

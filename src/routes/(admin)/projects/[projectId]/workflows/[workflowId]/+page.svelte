@@ -608,6 +608,67 @@
 	let duplicating = $state(false);
 	let deleting = $state(false);
 
+	type DeleteCounts = {
+		stages: number;
+		connections: number;
+		forms: number;
+		formFields: number;
+		automations: number;
+		protocolTools: number;
+		instances: number;
+		fieldValues: number;
+	};
+	let deleteCounts = $state<DeleteCounts | null>(null);
+	let deleteCountsLoading = $state(false);
+	let deleteConfirmInput = $state('');
+	let deleteConfirmOk = $derived.by(() => {
+		if (!deleteCounts) return false;
+		if (deleteCounts.instances === 0) return true;
+		return deleteConfirmInput.trim() === String(deleteCounts.instances);
+	});
+
+	async function loadDeleteCounts() {
+		deleteCountsLoading = true;
+		try {
+			const pb = getPocketBase();
+			const workflowId = data.workflow.id;
+			const byWorkflow = `workflow_id = "${workflowId}"`;
+			const opts = { skipTotal: false, requestKey: null } as const;
+			const one = (collection: string, filter: string) =>
+				pb.collection(collection).getList(1, 1, { filter, ...opts }).then((r) => r.totalItems).catch(() => 0);
+
+			const [stages, connections, forms, automations, protocolTools, instances] = await Promise.all([
+				one('workflow_stages', byWorkflow),
+				one('workflow_connections', byWorkflow),
+				one('tools_forms', byWorkflow),
+				one('tools_automation', byWorkflow),
+				one('tools_protocol', byWorkflow),
+				one('workflow_instances', byWorkflow),
+			]);
+
+			const instanceFilter = `instance_id.workflow_id = "${workflowId}"`;
+			const formFieldFilter = `form_id.workflow_id = "${workflowId}"`;
+			const [formFields, fieldValues] = await Promise.all([
+				one('tools_form_fields', formFieldFilter),
+				one('workflow_instance_field_values', instanceFilter),
+			]);
+
+			deleteCounts = { stages, connections, forms, formFields, automations, protocolTools, instances, fieldValues };
+		} finally {
+			deleteCountsLoading = false;
+		}
+	}
+
+	$effect(() => {
+		if (deleteDialogOpen && !deleteCounts && !deleteCountsLoading) {
+			void loadDeleteCounts();
+		}
+		if (!deleteDialogOpen) {
+			deleteCounts = null;
+			deleteConfirmInput = '';
+		}
+	});
+
 	async function handleDuplicate() {
 		if (duplicating) return;
 		duplicating = true;
@@ -959,15 +1020,66 @@
 		<AlertDialog.Header>
 			<AlertDialog.Title>{m.workflowsDeleteTitle?.() ?? 'Delete workflow'}</AlertDialog.Title>
 			<AlertDialog.Description>
-				{m.workflowsDeleteConfirm?.() ?? 'Are you sure you want to delete this workflow? This will also delete all associated stages and actions. This action cannot be undone.'}
+				{m.workflowsDeleteIntro?.({ name: data.workflow.name }) ?? `This permanently deletes “${data.workflow.name}” and everything that belongs to it. This action cannot be undone.`}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
+		<div class="text-sm space-y-3">
+			{#if deleteCountsLoading && !deleteCounts}
+				<div class="text-muted-foreground">{m.workflowsDeleteLoadingCounts?.() ?? 'Loading dependencies…'}</div>
+			{:else if deleteCounts}
+				{@const c = deleteCounts}
+				{@const configRows = [
+					{ n: c.stages, label: m.workflowsDeleteCountStages?.({ n: c.stages }) ?? `${c.stages} stages` },
+					{ n: c.connections, label: m.workflowsDeleteCountConnections?.({ n: c.connections }) ?? `${c.connections} connections` },
+					{ n: c.forms, label: m.workflowsDeleteCountForms?.({ n: c.forms }) ?? `${c.forms} forms` },
+					{ n: c.formFields, label: m.workflowsDeleteCountFormFields?.({ n: c.formFields }) ?? `${c.formFields} form fields` },
+					{ n: c.automations, label: m.workflowsDeleteCountAutomations?.({ n: c.automations }) ?? `${c.automations} automations` },
+					{ n: c.protocolTools, label: m.workflowsDeleteCountProtocolTools?.({ n: c.protocolTools }) ?? `${c.protocolTools} protocol tools` },
+				].filter((r) => r.n > 0)}
+				{@const dataRows = [
+					{ n: c.instances, label: m.workflowsDeleteCountInstances?.({ n: c.instances }) ?? `${c.instances} workflow entries` },
+					{ n: c.fieldValues, label: m.workflowsDeleteCountFieldValues?.({ n: c.fieldValues }) ?? `${c.fieldValues} recorded field values` },
+				].filter((r) => r.n > 0)}
+				{#if configRows.length === 0 && dataRows.length === 0}
+					<div class="text-muted-foreground">{m.workflowsDeleteNoDependencies?.() ?? 'No associated data.'}</div>
+				{:else}
+					<div class="font-medium">{m.workflowsDeleteAlsoDeleted?.() ?? 'Also deleted:'}</div>
+					<ul class="list-disc pl-5 space-y-0.5 text-muted-foreground">
+						{#each configRows as r}
+							<li>{r.label}</li>
+						{/each}
+						{#if dataRows.length > 0}
+							<li class="font-semibold text-foreground">
+								{dataRows.map((r) => r.label).join(' · ')}
+							</li>
+						{/if}
+					</ul>
+				{/if}
+				{#if c.instances > 0}
+					<div class="pt-2 border-t space-y-2">
+						<label for="workflow-delete-confirm" class="block text-sm">
+							{m.deleteConfirmPrompt?.() ?? 'To confirm, type the number of workflow entries (shown above) below:'}
+						</label>
+						<input
+							id="workflow-delete-confirm"
+							type="text"
+							inputmode="numeric"
+							pattern="[0-9]*"
+							autocomplete="off"
+							bind:value={deleteConfirmInput}
+							placeholder={m.deleteConfirmPlaceholder?.() ?? 'Number'}
+							class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+						/>
+					</div>
+				{/if}
+			{/if}
+		</div>
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel disabled={deleting}>{m.commonCancel?.() ?? 'Cancel'}</AlertDialog.Cancel>
 			<AlertDialog.Action
 				class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 				onclick={handleDelete}
-				disabled={deleting}
+				disabled={deleting || !deleteConfirmOk}
 			>
 				{m.commonDelete?.() ?? 'Delete'}
 			</AlertDialog.Action>

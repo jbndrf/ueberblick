@@ -519,6 +519,10 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 				};
 				await db.put('records', synced);
 
+				// Notify listeners so in-memory copies pick up server-assigned
+				// fields (e.g. file_value gets a random suffix on upload).
+				notifyDataChange(collection, id, 'update');
+
 				// If this collection has a parent relationship where server-side
 				// hooks bump parent.updated as a side effect, refresh the parent's
 				// cached _serverUpdated so the next push of that parent doesn't

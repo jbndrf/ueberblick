@@ -22,41 +22,9 @@
 			name: 'Field filters',
 			description: 'Filter by any form field value (number ranges, date ranges, text).'
 		},
-		'filter.meta': {
-			name: 'Meta filters',
-			description: 'Filter by created date, author, or the current map view.'
-		},
-		'filter.saved': {
-			name: 'Saved filters',
-			description: 'Save named filter sets and share them by link.'
-		},
-		'layers.opacity': {
-			name: 'Layer opacity',
-			description: 'Fine-tune visibility per layer with opacity sliders.'
-		},
-		'layers.custom': {
-			name: 'Custom layers',
-			description: 'Upload your own map layers (role permitting).'
-		},
-		'tools.measure': {
-			name: 'Measure',
-			description: 'Measure distance and area directly on the map.'
-		},
-		'tools.draw': {
-			name: 'Draw',
-			description: 'Markup the map with freehand shapes and annotations.'
-		},
-		'tools.search': {
-			name: 'Text search',
-			description: 'Find records by ID or text in form field values.'
-		},
-		'tools.coordinates': {
-			name: 'Coordinates',
-			description: 'Show cursor coordinates and copy the current location.'
-		},
-		'tools.legend': {
-			name: 'Legend',
-			description: 'Color and icon legend for the currently visible workflows.'
+		'tools.cluster': {
+			name: 'Cluster control',
+			description: 'Toggle clustering and adjust the cap for individual markers in view.'
 		}
 	};
 
