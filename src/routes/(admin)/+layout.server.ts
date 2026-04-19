@@ -1,11 +1,13 @@
 import { redirect } from '@sveltejs/kit';
 import type { LayoutServerLoad } from './$types';
+import { isInstanceOwner } from '$lib/server/is-owner';
 
 export const load: LayoutServerLoad = async ({ locals, url }) => {
 	const user = locals.user;
+	const isOwner = isInstanceOwner(user);
 
 	if (url.pathname === '/login') {
-		return { user, currentProject: null };
+		return { user, currentProject: null, isOwner };
 	}
 
 	if (!user) {
@@ -36,5 +38,5 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 		}
 	}
 
-	return { user, currentProject };
+	return { user, currentProject, isOwner };
 };

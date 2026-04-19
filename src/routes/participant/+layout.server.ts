@@ -19,6 +19,7 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 	let collectionNames: string[] = [];
 	let fileFields: Record<string, string[]> = {};
 	let infoPages: Array<{ id: string; title: string; content: string }> = [];
+	let legalPages: Array<{ id: string; slug: string; title: string; content: string }> = [];
 	let projectIcon: string | null = null;
 	let projectName: string | null = null;
 
@@ -47,7 +48,23 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 			}).catch(() => null)
 			: Promise.resolve(null);
 
-		const [collections, pages, project] = await Promise.all([collectionsPromise, infoPagesPromise, projectPromise]);
+		// Legal pages are instance-wide -- no project filter. Reachable from
+		// the participant settings sheet so users have access to the
+		// imprint/privacy/etc. without leaving the app.
+		const legalPagesPromise = adminPb.collection('instance_legal_pages').getFullList({
+			sort: 'sort_order,created',
+			fields: 'id,slug,title,content'
+		}).catch((e) => {
+			console.error('Failed to load legal pages:', e);
+			return [] as Array<{ id: string; slug: string; title: string; content: string }>;
+		});
+
+		const [collections, pages, project, legal] = await Promise.all([
+			collectionsPromise,
+			infoPagesPromise,
+			projectPromise,
+			legalPagesPromise
+		]);
 
 		// Process collections
 		if (collections.length > 0) {
@@ -67,6 +84,14 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 		// Process info pages
 		infoPages = (pages as any[]).map((p) => ({ id: p.id, title: p.title, content: p.content }));
 
+		// Process legal pages
+		legalPages = (legal as any[]).map((p) => ({
+			id: p.id,
+			slug: p.slug,
+			title: p.title,
+			content: p.content ?? ''
+		}));
+
 		// Build project icon URL using relative path (works with Vite proxy and nginx)
 		if (project && (project as any).icon) {
 			projectIcon = `/api/files/projects/${project.id}/${(project as any).icon}`;
@@ -80,6 +105,7 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 		collectionNames,
 		fileFields,
 		infoPages,
+		legalPages,
 		projectIcon,
 		projectName
 	};

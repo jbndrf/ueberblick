@@ -11,10 +11,13 @@
 	import { AlertCircle, MapPin, QrCode, KeyRound, Camera, Upload, Loader2 } from 'lucide-svelte';
 	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
 	import ThemeToggle from '$lib/components/theme-toggle.svelte';
+	import ConsentModal from '$lib/components/consent-modal.svelte';
 	import { onMount, tick } from 'svelte';
 	import { browser } from '$app/environment';
+	import { page } from '$app/stores';
 
 	let { data } = $props();
+	const loginReturnTo = $derived($page.url.pathname + $page.url.search);
 
 	const form = superForm(data.form, {
 		validators: zodClient(participantLoginSchema),
@@ -161,7 +164,7 @@
 
 				<!-- Token Login Tab -->
 				<Tabs.Content value="token" class="mt-4">
-					<form method="POST" use:enhance bind:this={formElement} class="space-y-4">
+					<form method="POST" action="?/login" use:enhance bind:this={formElement} class="space-y-4">
 						<div class="space-y-2">
 							<Label for="token">{m.participantLoginTokenLabel()}</Label>
 							<Input
@@ -294,6 +297,16 @@
 		</Card.Content>
 	</Card.Root>
 </div>
+
+<ConsentModal
+	visible={data.consent.needsConsent}
+	title={data.consent.title}
+	body={data.consent.body}
+	acceptLabel={data.consent.acceptLabel}
+	rejectLabel={data.consent.rejectLabel}
+	footerPages={data.consent.footerPages}
+	returnTo={loginReturnTo}
+/>
 
 <style>
 	:global(body) {

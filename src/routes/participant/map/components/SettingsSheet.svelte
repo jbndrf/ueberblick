@@ -59,6 +59,7 @@
 		collectionNames?: string[];
 		fileFields?: Record<string, string[]>;
 		infoPages?: Array<{ id: string; title: string; content: string }>;
+		legalPages?: Array<{ id: string; slug: string; title: string; content: string }>;
 		onLogout?: () => void;
 	}
 
@@ -69,6 +70,7 @@
 		collectionNames = [],
 		fileFields = {},
 		infoPages = [],
+		legalPages = [],
 		onLogout
 	}: Props = $props();
 
@@ -104,6 +106,10 @@
 	// Info page dialog
 	let infoPageDialogOpen = $state(false);
 	let selectedInfoPage = $state<{ id: string; title: string; content: string } | null>(null);
+
+	// Legal page dialog (instance-wide pages -- imprint/privacy/etc.)
+	let legalPageDialogOpen = $state(false);
+	let selectedLegalPage = $state<{ id: string; slug: string; title: string; content: string } | null>(null);
 
 	// Full local copy mode (controls media caching)
 	let fullLocalCopy = $state(false);
@@ -350,6 +356,23 @@
 							<button
 								class="w-full rounded-lg border bg-muted/50 p-3 text-left transition-colors hover:bg-muted"
 								onclick={() => { selectedInfoPage = page; infoPageDialogOpen = true; }}
+							>
+								<div class="flex items-center gap-2">
+									<CircleHelp class="h-4 w-4 text-muted-foreground" />
+									<span class="text-sm font-medium">{page.title}</span>
+								</div>
+							</button>
+						{/each}
+					{/if}
+
+					{#if legalPages.length > 0}
+						<div class="pt-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+							{m.participantSettingsLegalHeading?.() ?? 'Legal'}
+						</div>
+						{#each legalPages as page (page.id)}
+							<button
+								class="w-full rounded-lg border bg-muted/50 p-3 text-left transition-colors hover:bg-muted"
+								onclick={() => { selectedLegalPage = page; legalPageDialogOpen = true; }}
 							>
 								<div class="flex items-center gap-2">
 									<CircleHelp class="h-4 w-4 text-muted-foreground" />
@@ -645,6 +668,20 @@
 		{#if selectedInfoPage}
 			<div class="info-content min-h-0 flex-1 overflow-y-auto break-words">
 				{@html sanitizeHtml(selectedInfoPage.content)}
+			</div>
+		{/if}
+	</Dialog.Content>
+</Dialog.Root>
+
+<!-- Legal Page Dialog -->
+<Dialog.Root bind:open={legalPageDialogOpen}>
+	<Dialog.Content class="flex max-h-[80vh] flex-col gap-4 overflow-hidden sm:max-w-lg">
+		<Dialog.Header class="shrink-0">
+			<Dialog.Title>{selectedLegalPage?.title ?? ''}</Dialog.Title>
+		</Dialog.Header>
+		{#if selectedLegalPage}
+			<div class="info-content min-h-0 flex-1 overflow-y-auto break-words">
+				{@html sanitizeHtml(selectedLegalPage.content)}
 			</div>
 		{/if}
 	</Dialog.Content>

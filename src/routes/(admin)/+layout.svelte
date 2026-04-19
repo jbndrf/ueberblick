@@ -217,9 +217,17 @@
 		{ href: 'roles', icon: ShieldCheck, label: () => m.navRoles?.() ?? 'Roles' }
 	];
 
-	const globalMenuItems = [
-		{ href: '/rules', icon: Settings, label: () => m.navGlobalRules?.() ?? 'Global Rules' }
-	];
+	const globalMenuItems = $derived(
+		data.isOwner
+			? [
+				{
+					href: '/instance',
+					icon: Settings,
+					label: () => m.navInstanceSettings?.() ?? 'Instance Settings'
+				}
+			]
+			: []
+	);
 
 	async function handleSignOut() {
 		isLoggingOut = true;
@@ -485,7 +493,9 @@
 					{/if}
 
 					<!-- Global Menu Items -->
-					<Sidebar.Separator class="my-4" />
+					{#if globalMenuItems.length > 0}
+						<Sidebar.Separator class="my-4" />
+					{/if}
 					<Sidebar.Menu>
 						{#each globalMenuItems as item}
 							{@const Icon = item.icon}

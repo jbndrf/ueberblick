@@ -1415,6 +1415,7 @@
 		collectionNames={data.collectionNames ?? []}
 		fileFields={data.fileFields ?? {}}
 		infoPages={data.infoPages ?? []}
+		legalPages={data.legalPages ?? []}
 		onLogout={handleLogout}
 	/>
 

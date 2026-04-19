@@ -14,15 +14,43 @@ import * as m from '$lib/paraglide/messages';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async (event) => {
-	const { locals, url } = event;
+	const { locals, url, cookies } = event;
 	// If already logged in as participant, redirect to map
 	if (locals.pb.authStore.isValid && locals.pb.authStore.record?.collectionName === 'participants') {
 		redirect(303, '/participant/map');
 	}
 
+	// Check whether the consent gate is enabled and whether this visitor has
+	// already accepted. We need this BEFORE the token auto-login so that a
+	// QR-code link can't bypass the gate.
+	let consentEnabled = false;
+	let consented = cookies.get('consent') === 'accepted';
+	let settingsRec:
+		| {
+				consent_banner_title?: string;
+				consent_banner_body?: string;
+				consent_accept_label?: string;
+				consent_reject_label?: string;
+		  }
+		| null = null;
+
+	try {
+		const s = await locals.pb.collection('instance_settings').getFirstListItem('', {
+			fields:
+				'require_consent_before_login,consent_banner_title,consent_banner_body,consent_accept_label,consent_reject_label',
+			requestKey: null
+		});
+		consentEnabled = !!s.require_consent_before_login;
+		settingsRec = s as typeof settingsRec;
+	} catch {
+		// No settings row -- gate disabled.
+	}
+
+	const needsConsent = consentEnabled && !consented;
+
 	// Auto-login via ?token= query parameter (e.g. from QR code link)
 	const urlToken = url.searchParams.get('token');
-	if (urlToken) {
+	if (urlToken && !needsConsent) {
 		const ipKey = `participant:${clientIpFromEvent(event)}`;
 		const gate = checkLoginRateLimit(ipKey);
 		if (gate.allowed) {
@@ -56,13 +84,82 @@ export const load: PageServerLoad = async (event) => {
 	}
 
 	const form = await superValidate(zod(participantLoginSchema));
-	return { form };
+
+	// Load the footer-visible legal pages when the gate is on. Used by the
+	// modal for the back-to-page view.
+	let footerPages: Array<{ slug: string; title: string; content: string }> = [];
+	if (consentEnabled) {
+		try {
+			const pages = await locals.pb.collection('instance_legal_pages').getFullList({
+				filter: 'show_in_consent_footer = true',
+				sort: 'sort_order,created',
+				fields: 'slug,title,content',
+				requestKey: null
+			});
+			footerPages = pages.map((p) => ({
+				slug: p.slug as string,
+				title: p.title as string,
+				content: (p.content as string) ?? ''
+			}));
+		} catch {
+			// Non-fatal.
+		}
+	}
+
+	return {
+		form,
+		consent: {
+			enabled: consentEnabled,
+			needsConsent,
+			title: (settingsRec?.consent_banner_title as string) ?? '',
+			body: (settingsRec?.consent_banner_body as string) ?? '',
+			acceptLabel: (settingsRec?.consent_accept_label as string) || 'Accept',
+			rejectLabel: (settingsRec?.consent_reject_label as string) || 'Reject',
+			footerPages
+		}
+	};
 };
 
 export const actions: Actions = {
-	default: async (event) => {
-		const { request, locals } = event;
+	setConsent: async ({ request, cookies, url }) => {
+		const form = await request.formData();
+		const decision = String(form.get('decision') ?? 'accepted');
+		cookies.set('consent', decision === 'rejected' ? 'rejected' : 'accepted', {
+			path: '/',
+			httpOnly: false,
+			sameSite: 'lax',
+			maxAge: 60 * 60 * 24 * 365
+		});
+		// Preserve any ?token=... or ?redirectTo=... on the current URL so the
+		// page load re-runs with consent in place -- the auto-login via token
+		// will then fire normally, and QR/manual submissions get an unblocked
+		// form.
+		const returnTo = String(form.get('returnTo') ?? '') || url.pathname + url.search;
+		redirect(303, returnTo);
+	},
+
+	login: async (event) => {
+		const { request, locals, cookies } = event;
 		const form = await superValidate(request, zod(participantLoginSchema));
+
+		// Hard server-side gate: if consent is required and not yet given,
+		// refuse to process the login no matter what the client does.
+		try {
+			const s = await locals.pb.collection('instance_settings').getFirstListItem('', {
+				fields: 'require_consent_before_login',
+				requestKey: null
+			});
+			if (s.require_consent_before_login && cookies.get('consent') !== 'accepted') {
+				return fail(403, {
+					form,
+					message:
+						m.participantLoginConsentRequired?.() ??
+						'Please accept the cookie consent to continue.'
+				});
+			}
+		} catch {
+			// Settings missing -- treat gate as disabled.
+		}
 
 		if (!form.valid) {
 			return fail(400, { form });
