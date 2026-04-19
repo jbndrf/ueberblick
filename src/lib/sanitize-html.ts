@@ -4,64 +4,99 @@ const ALLOWED_TAGS = new Set([
 	'h1', 'h2', 'h3', 'h4', 'h5', 'h6'
 ]);
 
-const ALLOWED_ATTRS: Record<string, Set<string>> = {
-	a: new Set(['href', 'target', 'rel'])
-};
+const VOID_TAGS = new Set(['br']);
+
+function escapeText(s: string): string {
+	return s
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;');
+}
+
+function escapeAttr(s: string): string {
+	return s
+		.replace(/&/g, '&amp;')
+		.replace(/"/g, '&quot;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;');
+}
+
+function extractHref(attrString: string): string | null {
+	const match = attrString.match(/\bhref\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i);
+	if (!match) return null;
+	const value = match[2] ?? match[3] ?? match[4] ?? '';
+	if (/^\s*javascript:/i.test(value)) return null;
+	return value;
+}
 
 export function sanitizeHtml(html: string): string {
-	const parser = new DOMParser();
-	const doc = parser.parseFromString(html, 'text/html');
+	if (!html) return '';
 
-	function clean(node: Node): Node | null {
-		if (node.nodeType === Node.TEXT_NODE) return node.cloneNode();
+	const out: string[] = [];
+	const stack: string[] = [];
+	const tokenRe = /<!--[\s\S]*?-->|<\/([a-zA-Z][a-zA-Z0-9]*)\s*>|<([a-zA-Z][a-zA-Z0-9]*)((?:\s+[^>]*)?)\s*(\/?)>/g;
 
-		if (node.nodeType !== Node.ELEMENT_NODE) return null;
+	let lastIndex = 0;
+	let match: RegExpExecArray | null;
 
-		const el = node as Element;
-		const tag = el.tagName.toLowerCase();
+	while ((match = tokenRe.exec(html)) !== null) {
+		if (match.index > lastIndex) {
+			out.push(escapeText(html.slice(lastIndex, match.index)));
+		}
+		lastIndex = tokenRe.lastIndex;
 
-		if (!ALLOWED_TAGS.has(tag)) {
-			const fragment = document.createDocumentFragment();
-			for (const child of el.childNodes) {
-				const cleaned = clean(child);
-				if (cleaned) fragment.appendChild(cleaned);
+		if (match[0].startsWith('<!--')) continue;
+
+		const closeTag = match[1];
+		const openTag = match[2];
+
+		if (closeTag) {
+			const tag = closeTag.toLowerCase();
+			if (!ALLOWED_TAGS.has(tag) || VOID_TAGS.has(tag)) continue;
+			const idx = stack.lastIndexOf(tag);
+			if (idx === -1) continue;
+			while (stack.length > idx) {
+				out.push(`</${stack.pop()}>`);
 			}
-			return fragment;
+			continue;
 		}
 
-		const newEl = document.createElement(tag);
-		const allowedAttrs = ALLOWED_ATTRS[tag];
-		if (allowedAttrs) {
-			for (const attr of el.attributes) {
-				if (allowedAttrs.has(attr.name)) {
-					let value = attr.value;
-					if (attr.name === 'href' && /^javascript:/i.test(value.trim())) continue;
-					newEl.setAttribute(attr.name, value);
-				}
-			}
+		if (openTag) {
+			const tag = openTag.toLowerCase();
+			const attrString = match[3] ?? '';
+			const selfClose = match[4] === '/' || VOID_TAGS.has(tag);
+
+			if (!ALLOWED_TAGS.has(tag)) continue;
+
 			if (tag === 'a') {
-				newEl.setAttribute('target', '_blank');
-				newEl.setAttribute('rel', 'noopener noreferrer');
+				const href = extractHref(attrString);
+				const parts = ['<a'];
+				if (href !== null) parts.push(` href="${escapeAttr(href)}"`);
+				parts.push(' target="_blank" rel="noopener noreferrer">');
+				out.push(parts.join(''));
+				stack.push('a');
+				continue;
 			}
-		}
 
-		for (const child of el.childNodes) {
-			const cleaned = clean(child);
-			if (cleaned) newEl.appendChild(cleaned);
-		}
+			if (selfClose) {
+				out.push(`<${tag}>`);
+				continue;
+			}
 
-		return newEl;
+			out.push(`<${tag}>`);
+			stack.push(tag);
+		}
 	}
 
-	const fragment = document.createDocumentFragment();
-	for (const child of doc.body.childNodes) {
-		const cleaned = clean(child);
-		if (cleaned) fragment.appendChild(cleaned);
+	if (lastIndex < html.length) {
+		out.push(escapeText(html.slice(lastIndex)));
 	}
 
-	const div = document.createElement('div');
-	div.appendChild(fragment);
-	return div.innerHTML;
+	while (stack.length > 0) {
+		out.push(`</${stack.pop()}>`);
+	}
+
+	return out.join('');
 }
 
 export function stripHtml(html: string): string {
