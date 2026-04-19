@@ -2,6 +2,7 @@
 	import * as m from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { ArrowLeft } from 'lucide-svelte';
+	import { sanitizeHtml } from '$lib/sanitize-html';
 
 	let { data } = $props();
 </script>
@@ -18,8 +19,7 @@
 		</Button>
 	</div>
 
-	<article class="prose prose-slate dark:prose-invert max-w-none">
-		<h1>{data.page.title}</h1>
-		{@html data.page.content}
+	<article class="info-content break-words">
+		{@html sanitizeHtml(data.page.content)}
 	</article>
 </div>

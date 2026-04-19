@@ -2,6 +2,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { ArrowLeft } from 'lucide-svelte';
 	import * as m from '$lib/paraglide/messages';
+	import { sanitizeHtml } from '$lib/sanitize-html';
 
 	type FooterPage = { slug: string; title: string; content: string };
 
@@ -51,9 +52,8 @@
 					</Button>
 				</div>
 				<div class="overflow-y-auto p-6">
-					<h2 id="consent-heading" class="mb-4 text-xl font-semibold">{activePage.title}</h2>
-					<article class="prose prose-slate dark:prose-invert max-w-none">
-						{@html activePage.content}
+					<article class="info-content break-words">
+						{@html sanitizeHtml(activePage.content)}
 					</article>
 				</div>
 			{:else}
@@ -62,8 +62,8 @@
 						{title || (m.consentModalDefaultTitle?.() ?? 'Cookies & Data Processing')}
 					</h1>
 					{#if body}
-						<div class="prose prose-slate dark:prose-invert max-w-none text-sm">
-							{@html body}
+						<div class="info-content break-words text-sm">
+							{@html sanitizeHtml(body)}
 						</div>
 					{:else}
 						<p class="text-sm text-muted-foreground">
@@ -106,3 +106,4 @@
 		</div>
 	</div>
 {/if}
+

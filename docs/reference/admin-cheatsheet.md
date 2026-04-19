@@ -32,6 +32,8 @@ These rules apply everywhere in Überblick. Internalize them before relying on p
 
 **Visual config JSON.** `workflow_connections.visual_config`, `tools_forms.visual_config`, `tools_edit.visual_config`, and `tools_protocol.visual_config` all hold `{ button_label, button_color, ... }` for the participant stage toolbar. An empty label falls through to the action/tool name, and an empty color falls through to a default palette.
 
+**Instance ownership.** The `/instance` admin page is restricted to the instance owner -- the user whose email matches the `POCKETBASE_ADMIN_EMAIL` env var. All other admins are redirected to `/` by the page load. The underlying `instance_settings` and `instance_legal_pages` collections are publicly readable (the participant login page and `/legal/<slug>` need unauthenticated access) and writable by any authenticated admin at the collection level, but the write UI is only reachable through the owner-gated page. Helper: `src/lib/server/is-owner.ts`.
+
 ## Legend
 
 - `[DONE]` appended to a page heading means every field in that section is documented.
@@ -557,5 +559,32 @@ Collection: `workflow_connections` (visual config for stage buttons)
 - [x] **workflow_connections.visual_config.button_label** (text — duplicate editor, same field as edge panel) — Same JSON field as the edge panels button label, edited here from the stage previews per-button drawer with a live preview of the colored pill. Drives the action button label rendered in the participant workflow detail.
 - [x] **workflow_connections.visual_config.button_color** (color) — Same `visual_config.button_color` hex value, edited via a color picker plus text input with a live preview swatch. Sets the background color of the stage action button shown to participants.
 - [x] **workflow_connections.allowed_roles** (relation multi) — Same connection-level role gate as the edge panel, exposed here so the admin can restrict who sees and can press this specific button without leaving the stage preview. Empty means all roles allowed.
+
+---
+
+## Page: Instance Settings  `/instance`  [DONE]
+
+File: `src/routes/(admin)/instance/+page.svelte`
+Server: `src/routes/(admin)/instance/+page.server.ts`
+Collections: `instance_settings` (single-row), `instance_legal_pages` (one row per page)
+Access: Instance-owner only. The page load redirects non-owner admins to `/`. Owner is the user whose email matches `POCKETBASE_ADMIN_EMAIL` (see `src/lib/server/is-owner.ts`). This is the only admin page that is instance-wide rather than project-scoped.
+
+### Cookie Consent Banner  (writes to `instance_settings`)
+
+- [x] **require_consent_before_login** (bool) — When true, the participant login page renders a blocking consent modal before the token field becomes usable; the login form action also refuses submissions without a consent cookie. When false, participants log in directly. Gating is enforced in `src/routes/participant/login/+page.server.ts`. The single settings row is seeded with `false` on migration.
+- [x] **consent_banner_title** (text, max 255) — Heading shown at the top of the consent modal rendered by `src/lib/components/consent-modal.svelte`. Plain text.
+- [x] **consent_banner_body** (editor / HTML) — Body copy inside the consent modal. Stored as HTML and rendered as-is, so admins can include paragraphs, links to legal pages, and lists. A legal-page footer is appended automatically from `instance_legal_pages` rows with `show_in_consent_footer = true`.
+- [x] **consent_accept_label** (text, max 100) — Label on the button that accepts consent, closes the modal, and reveals the login form. Defaults to `Accept` on the seeded row; on an empty string the modal shows the raw key as a fallback, so keep it populated.
+- [x] **consent_reject_label** (text, max 100) — Label on the button that rejects consent and keeps the login form hidden. Defaults to `Reject` on the seeded row. Rejecting does not persist a cookie, so the modal re-appears on the next visit.
+
+### Legal Pages  (writes to `instance_legal_pages`, one row per page)
+
+Pages are served publicly at `/legal/<slug>` and listed at `/legal`. A subset is also rendered inside the consent modal's footer links. The admin UI supports create (`?/createPage`), per-row update (`?/updatePage`), and delete (`?/deletePage`) form actions.
+
+- [x] **title** (text, required, max 255) — Page heading shown on `/legal/<slug>`, label text used in the `/legal` index, and the link label inside the consent-modal footer. Required on create.
+- [x] **slug** (text, required, max 100, unique) — URL segment; the public page lives at `/legal/<slug>`. Unique across the whole instance (enforced by a unique index). If the admin leaves the slug empty when creating a new page, the create action auto-slugifies the title (lowercased, non-alphanumerics stripped, spaces collapsed to `-`).
+- [x] **content** (editor / HTML, optional) — Page body. Rendered as HTML on the public `/legal/<slug>` page and also inside the consent modal when the participant opens a footer link, so keep content self-contained (don't rely on site chrome).
+- [x] **sort_order** (number, min 0) — Ascending display order used both in the `/legal` index and in the consent-modal footer. Ties fall back to `created` ascending.
+- [x] **show_in_consent_footer** (bool) — When true, this legal page is linked from the footer of the consent modal on the participant login page. When false, the page is still reachable via `/legal/<slug>` but is not surfaced in the consent flow. The create form defaults this to true.
 
 ---
