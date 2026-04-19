@@ -681,9 +681,11 @@
 			if (result.type === 'success') {
 				const newId = result.data?.duplicatedWorkflowId;
 				toast.success(m.workflowsDuplicateSuccess?.({ name: data.workflow.name }) ?? `Workflow duplicated`);
-				await invalidate('sidebar');
 				if (newId) {
 					await goto(`/projects/${$page.params.projectId}/workflows/${newId}`);
+					await invalidateAll();
+				} else {
+					await invalidateAll();
 				}
 			} else {
 				toast.error(result.data?.message || (m.workflowsDuplicateError?.() ?? 'Failed to duplicate workflow'));
@@ -697,8 +699,7 @@
 	}
 
 	async function handleImported(newId: string) {
-		await invalidate('sidebar');
-		await goto(`/projects/${$page.params.projectId}/workflows/${newId}`);
+		await goto(`/projects/${$page.params.projectId}/workflows/${newId}`, { invalidateAll: true });
 	}
 
 	async function handleDelete() {
@@ -713,12 +714,10 @@
 			};
 			if (result.type === 'redirect' && result.location) {
 				toast.success(m.workflowsDeleteSuccess?.() ?? 'Workflow deleted');
-				await invalidate('sidebar');
-				await goto(result.location);
+				await goto(result.location, { invalidateAll: true });
 			} else if (result.type === 'success') {
 				toast.success(m.workflowsDeleteSuccess?.() ?? 'Workflow deleted');
-				await invalidate('sidebar');
-				await goto(`/projects/${$page.params.projectId}/settings`);
+				await goto(`/projects/${$page.params.projectId}/settings`, { invalidateAll: true });
 			} else {
 				toast.error(result.data?.message || (m.workflowsDeleteError?.() ?? 'Failed to delete workflow'));
 			}

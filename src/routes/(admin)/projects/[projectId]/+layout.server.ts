@@ -8,7 +8,7 @@ import type { LayoutServerLoad } from './$types';
  */
 export const load: LayoutServerLoad = async ({ params, depends, locals: { pb } }) => {
 	const { projectId } = params;
-	depends('sidebar');
+	depends('app:sidebar');
 
 	const [sidebarWorkflows, sidebarTables, sidebarMarkerCategories] = await Promise.all([
 		pb

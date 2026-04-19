@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { invalidate, goto } from '$app/navigation';
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import { getPocketBase, onAuthStateChange, signOut } from '$lib/pocketbase';
 	import * as m from '$lib/paraglide/messages';
@@ -32,11 +32,11 @@
 	let isLoggingOut = $state(false);
 
 	// Hide sidebar on login page
-	const isLoginPage = $derived($page.url.pathname === '/login');
+	const isLoginPage = $derived(page.url.pathname === '/login');
 
 	// Derive current project ID from URL
 	const currentProjectId = $derived.by(() => {
-		const match = $page.url.pathname.match(/\/projects\/([^/]+)/);
+		const match = page.url.pathname.match(/\/projects\/([^/]+)/);
 		return match ? match[1] : null;
 	});
 
@@ -46,22 +46,22 @@
 	// Full projects list is only rendered on the /projects landing page and
 	// is loaded by that page's own +page.server.ts.
 	const projectsList = $derived(
-		($page.data.projects as Array<{ id: string; name: string }> | undefined) ?? []
+		(page.data.projects as Array<{ id: string; name: string }> | undefined) ?? []
 	);
 
 	// Sidebar entity data comes from the project layout server load
 	// (src/routes/(admin)/projects/[projectId]/+layout.server.ts), awaited so it
 	// is rendered into the SSR HTML and works before client hydration.
 	const sidebarWorkflows = $derived(
-		($page.data.sidebarWorkflows as
+		(page.data.sidebarWorkflows as
 			| Array<{ id: string; name: string; workflow_type: string; sort_order: number }>
 			| undefined) ?? []
 	);
 	const sidebarTables = $derived(
-		($page.data.sidebarTables as Array<{ id: string; display_name: string }> | undefined) ?? []
+		(page.data.sidebarTables as Array<{ id: string; display_name: string }> | undefined) ?? []
 	);
 	const sidebarMarkerCategories = $derived(
-		($page.data.sidebarMarkerCategories as Array<{ id: string; name: string }> | undefined) ?? []
+		(page.data.sidebarMarkerCategories as Array<{ id: string; name: string }> | undefined) ?? []
 	);
 
 	// Track collapsed state for groups
@@ -141,9 +141,9 @@
 	}
 
 	// Refresh sidebar after a quick-create action. Invalidating the project
-	// layout load re-runs it and refreshes $page.data.
+	// layout load re-runs it and refreshes page.data.
 	async function refreshSidebar() {
-		await invalidate('sidebar');
+		await invalidate('app:sidebar');
 	}
 
 	// Quick-create functions. New workflows default to geometry_type "point" --
@@ -279,7 +279,7 @@
 					<!-- Projects link -->
 					<Sidebar.Menu>
 						<Sidebar.MenuItem>
-							<Sidebar.MenuButton isActive={$page.url.pathname === '/projects'}>
+							<Sidebar.MenuButton isActive={page.url.pathname === '/projects'}>
 								{#snippet child({ props })}
 									<a href="/projects" {...props}>
 										<FolderKanban class="h-4 w-4" />
@@ -303,7 +303,7 @@
 							{#each projectStaticItems as item}
 								{@const Icon = item.icon}
 								<Sidebar.MenuItem>
-									<Sidebar.MenuButton isActive={$page.url.pathname === `/projects/${currentProjectId}/${item.href}`}>
+									<Sidebar.MenuButton isActive={page.url.pathname === `/projects/${currentProjectId}/${item.href}`}>
 										{#snippet child({ props })}
 											<a href="/projects/{currentProjectId}/{item.href}" {...props}>
 												<Icon class="h-4 w-4" />
@@ -369,7 +369,7 @@
 													>
 														<Sidebar.MenuSubButton
 															href="/projects/{currentProjectId}/workflows/{wf.id}"
-															isActive={$page.url.pathname.startsWith(`/projects/${currentProjectId}/workflows/${wf.id}`)}
+															isActive={page.url.pathname.startsWith(`/projects/${currentProjectId}/workflows/${wf.id}`)}
 														>
 															{#if wf.workflow_type === 'incident'}
 																<MapPin class="h-4 w-4" />
@@ -433,7 +433,7 @@
 												<Sidebar.MenuItem>
 													<Sidebar.MenuSubButton
 														href="/projects/{currentProjectId}/custom-tables/{tbl.id}"
-														isActive={$page.url.pathname.startsWith(`/projects/${currentProjectId}/custom-tables/${tbl.id}`)}
+														isActive={page.url.pathname.startsWith(`/projects/${currentProjectId}/custom-tables/${tbl.id}`)}
 													>
 														<Table class="h-4 w-4" />
 														<span>{tbl.display_name}</span>
@@ -444,7 +444,7 @@
 												<Sidebar.MenuItem>
 													<Sidebar.MenuSubButton
 														href="/projects/{currentProjectId}/marker-categories/{mc.id}"
-														isActive={$page.url.pathname.startsWith(`/projects/${currentProjectId}/marker-categories/${mc.id}`)}
+														isActive={page.url.pathname.startsWith(`/projects/${currentProjectId}/marker-categories/${mc.id}`)}
 													>
 														<MapPin class="h-4 w-4" />
 														<span>{mc.name}</span>
@@ -500,7 +500,7 @@
 						{#each globalMenuItems as item}
 							{@const Icon = item.icon}
 							<Sidebar.MenuItem>
-								<Sidebar.MenuButton isActive={$page.url.pathname === item.href}>
+								<Sidebar.MenuButton isActive={page.url.pathname === item.href}>
 									{#snippet child({ props })}
 										<a href={item.href} {...props}>
 											<Icon class="h-4 w-4" />

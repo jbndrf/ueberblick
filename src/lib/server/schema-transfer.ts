@@ -343,18 +343,17 @@ export async function duplicateWorkflow(
 	const crossProject = source.project_id !== targetProjectId;
 
 	const newWorkflowId = generateId();
-	await pb.collection('workflows').create({
-		id: newWorkflowId,
-		project_id: targetProjectId,
-		name: `Copy of ${source.name}`,
-		description: source.description || null,
-		workflow_type: source.workflow_type,
-		marker_color: source.marker_color || null,
-		icon_config: source.icon_config || {},
-		is_active: false,
-		entry_allowed_roles: crossProject ? [] : (source.entry_allowed_roles || []),
-		filter_value_icons: source.filter_value_icons || {},
-	});
+	const wfData: any = stripSystemFields(source);
+	delete wfData.id;
+	wfData.project_id = targetProjectId;
+	wfData.name = `Copy of ${source.name}`;
+	wfData.is_active = false;
+	if (crossProject) {
+		wfData.entry_allowed_roles = [];
+		wfData.visible_to_roles = [];
+	}
+	wfData.id = newWorkflowId;
+	await pb.collection('workflows').create(wfData);
 
 	const idMaps: IdMaps = {
 		workflow: new Map([[sourceWorkflowId, newWorkflowId]]),
