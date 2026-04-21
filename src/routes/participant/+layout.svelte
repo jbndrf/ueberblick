@@ -404,12 +404,7 @@
 				{#if data.projectIcon}
 					<img src={data.projectIcon} alt="" class="h-8 w-8 rounded-lg object-cover" />
 				{:else}
-					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-						<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-							<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path>
-							<circle cx="12" cy="10" r="3"></circle>
-						</svg>
-					</div>
+					<img src="/icons/icon.png" alt="" class="h-8 w-8 rounded-lg object-contain" />
 				{/if}
 				{#if syncStatus.current}
 					<span class="text-sm text-muted-foreground animate-pulse">{(m.participantLayoutSyncingData?.({ done: syncStatus.current.done, total: syncStatus.current.total })) ?? `Syncing data (${syncStatus.current.done}/${syncStatus.current.total})`}</span>

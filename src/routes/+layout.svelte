@@ -14,7 +14,7 @@
 </script>
 
 <svelte:head>
-	<link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+	<link rel="icon" href="/icons/icon.png" type="image/png" />
 </svelte:head>
 
 {@render children?.()}

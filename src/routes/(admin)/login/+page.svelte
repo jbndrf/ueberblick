@@ -8,7 +8,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import * as Card from '$lib/components/ui/card';
-	import { Eye, EyeOff, Lock, AlertCircle } from 'lucide-svelte';
+	import { Eye, EyeOff, AlertCircle } from 'lucide-svelte';
 	import ThemeToggle from '$lib/components/theme-toggle.svelte';
 	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
 
@@ -40,9 +40,7 @@
 
 	<Card.Root class="w-full max-w-md">
 		<Card.Header class="space-y-1 text-center">
-			<div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-				<Lock class="h-6 w-6 text-primary" />
-			</div>
+			<img src="/icons/icon.png" alt="Überblick Sector" class="mx-auto mb-4 h-16 w-16 object-contain" />
 			<Card.Title class="text-2xl font-bold">{m.loginTitle?.() ?? 'Sign In'}</Card.Title>
 			<Card.Description>{m.loginSubtitle?.() ?? 'Enter your credentials to access the admin interface'}</Card.Description>
 		</Card.Header>

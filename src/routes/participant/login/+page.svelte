@@ -8,7 +8,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import * as Card from '$lib/components/ui/card';
 	import * as Tabs from '$lib/components/ui/tabs';
-	import { AlertCircle, MapPin, QrCode, KeyRound, Camera, Upload, Loader2 } from 'lucide-svelte';
+	import { AlertCircle, QrCode, KeyRound, Camera, Upload, Loader2 } from 'lucide-svelte';
 	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
 	import ThemeToggle from '$lib/components/theme-toggle.svelte';
 	import ConsentModal from '$lib/components/consent-modal.svelte';
@@ -140,11 +140,7 @@
 
 	<Card.Root class="w-full max-w-md">
 		<Card.Header class="space-y-1 text-center">
-			<div
-				class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10"
-			>
-				<MapPin class="h-6 w-6 text-primary" />
-			</div>
+			<img src="/icons/icon.png" alt="Überblick" class="mx-auto mb-4 h-16 w-16 object-contain" />
 			<Card.Title class="text-2xl font-bold">{m.participantLoginTitle()}</Card.Title>
 			<Card.Description>{m.participantLoginSubtitle()}</Card.Description>
 		</Card.Header>

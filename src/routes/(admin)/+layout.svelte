@@ -268,9 +268,7 @@
 				<!-- Sidebar Header -->
 				<Sidebar.Header>
 					<div class="flex items-center gap-2 px-2 py-2">
-						<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-							<MapPin class="h-5 w-5" />
-						</div>
+						<img src="/icons/icon.png" alt="" class="h-8 w-8 object-contain" />
 						<span class="font-semibold text-lg">Überblick Sector</span>
 					</div>
 				</Sidebar.Header>
