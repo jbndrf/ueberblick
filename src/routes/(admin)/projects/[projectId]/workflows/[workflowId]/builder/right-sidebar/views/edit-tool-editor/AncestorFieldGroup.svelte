@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ChevronDown, ChevronRight, CheckSquare, Square } from 'lucide-svelte';
+	import { ChevronDown, ChevronRight, CheckSquare, Square } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as m from '$lib/paraglide/messages';
 	import AncestorFieldItem from './AncestorFieldItem.svelte';

@@ -1,6 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { superValidate } from 'sveltekit-superforms';
-import { zod } from 'sveltekit-superforms/adapters';
+import { zod4 } from 'sveltekit-superforms/adapters';
 import { loginSchema } from '$lib/schemas/auth';
 import {
 	checkLoginRateLimit,
@@ -19,7 +19,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		redirect(303, '/admin');
 	}
 
-	const form = await superValidate(zod(loginSchema));
+	const form = await superValidate(zod4(loginSchema));
 	return { form };
 };
 
@@ -27,7 +27,7 @@ export const actions: Actions = {
 	default: async (event) => {
 		const { request, locals, url } = event;
 		console.log('[LOGIN] Form action triggered');
-		const form = await superValidate(request, zod(loginSchema));
+		const form = await superValidate(request, zod4(loginSchema));
 
 		console.log('[LOGIN] Form data:', { email: form.data.email, valid: form.valid });
 

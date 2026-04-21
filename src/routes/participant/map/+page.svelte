@@ -10,8 +10,10 @@
 	import { disconnectRealtime } from '$lib/participant-state';
 	import { FieldValueCache } from '$lib/participant-state/field-value-cache.svelte';
 	import { appLoadingMessage, downloadProgress as syncDownloadProgress, downloadAllCollections } from '$lib/participant-state/sync.svelte';
-	import { Loader2 } from 'lucide-svelte';
+	import { Loader2 } from '@lucide/svelte';
 	import { MapCanvas, BottomControlBar, LayerSheet, FilterSheet, WorkflowSelector, SettingsSheet } from './components';
+	import type { MapLayer, MapMarker, WorkflowInstance as CanvasWorkflowInstance, WorkflowStageInfo } from './components/MapCanvas.svelte';
+	import type { FieldTag } from './components/FilterSheet.svelte';
 	import GeometryDrawTool from '$lib/components/map/geometry-draw-tool.svelte';
 	import InstanceGeometryLayer from '$lib/components/map/instance-geometry-layer.svelte';
 	import { deriveBBox, deriveCentroid, pointGeometry } from '$lib/utils/instance-geometry';
@@ -37,8 +39,8 @@
 		uncluster: boolean;
 		uncluster_cap: number;
 	}
-	import type { Feature, LineString, Polygon } from 'geojson';
-	import { WorkflowInstanceDetailModule, MarkerDetailModule, createSelection, type Selection, type Marker } from './modules';
+	import type { Feature, LineString, MultiLineString, Polygon, MultiPolygon } from 'geojson';
+	import { WorkflowInstanceDetailModule, MarkerDetailModule, createSelection, isMarkerSelection, type Selection, type Marker } from './modules';
 	import ClusterDetailModule from './modules/cluster-detail/ClusterDetailModule.svelte';
 	import type { EnhancedClusterDetail, WorkflowClusterGroup, WorkflowClusterRow, ClusterLeaf } from '$lib/components/map/supercluster-manager';
 	import type { VisualKeyRegistry } from '$lib/components/map/donut-cluster-icon';
@@ -76,6 +78,7 @@
 			collectionNames?: string[];
 			fileFields?: Record<string, string[]>;
 			infoPages?: Array<{ id: string; title: string; content: string }>;
+			legalPages?: Array<{ id: string; slug: string; title: string; content: string }>;
 		};
 	}
 
@@ -188,12 +191,12 @@
 	// guarantees nothing from another project can ever render on the map.
 	const projectScopedFilter = `project_id = "${gateway!.projectId}"`;
 	const projectLive = gateway!.collection('projects').live({ priority: 'critical' });
-	const layersLive = gateway!.collection('map_layers').live({ filter: `is_active = true && ${projectScopedFilter}`, sort: 'display_order', priority: 'critical' });
-	const markersLive = gateway!.collection('markers').live({ filter: projectScopedFilter, expand: 'category_id', priority: 'normal' });
-	const instancesLive = gateway!.collection('workflow_instances').live({ expand: 'workflow_id', priority: 'normal' });
-	const workflowsLive = gateway!.collection('workflows').live({ filter: `is_active = true && ${projectScopedFilter}`, priority: 'normal' });
-	const stagesLive = gateway!.collection('workflow_stages').live({ priority: 'deferred' });
-	const fieldTagsLive = gateway!.collection('tools_field_tags').live({ priority: 'deferred' });
+	const layersLive = gateway!.collection<MapLayer>('map_layers').live({ filter: `is_active = true && ${projectScopedFilter}`, sort: 'display_order', priority: 'critical' });
+	const markersLive = gateway!.collection<MapMarker>('markers').live({ filter: projectScopedFilter, expand: 'category_id', priority: 'normal' });
+	const instancesLive = gateway!.collection<CanvasWorkflowInstance>('workflow_instances').live({ expand: 'workflow_id', priority: 'normal' });
+	const workflowsLive = gateway!.collection<Workflow>('workflows').live({ filter: `is_active = true && ${projectScopedFilter}`, priority: 'normal' });
+	const stagesLive = gateway!.collection<WorkflowStageInfo>('workflow_stages').live({ priority: 'deferred' });
+	const fieldTagsLive = gateway!.collection<FieldTag>('tools_field_tags').live({ priority: 'deferred' });
 	const fieldValueCache = new FieldValueCache();
 	// Proactive full-collection download in +layout.svelte fills workflow_connections
 	// on first login; realtime + delta sync handle updates. The live query here
@@ -898,8 +901,9 @@
 	);
 
 	const currentIndex = $derived.by(() => {
-		if (selection.type !== 'marker') return -1;
-		return selectableMarkers.findIndex((m: any) => m.id === selection.markerId);
+		const sel = selection;
+		if (!isMarkerSelection(sel)) return -1;
+		return selectableMarkers.findIndex((m: any) => m.id === sel.markerId);
 	});
 
 	const canGoNext = $derived(currentIndex >= 0 && currentIndex < selectableMarkers.length - 1);
@@ -1005,7 +1009,7 @@
 		drawingSession = { workflow, mode };
 	}
 
-	function handleDrawConfirm(feature: Feature<LineString | Polygon>) {
+	function handleDrawConfirm(feature: Feature<LineString | MultiLineString | Polygon | MultiPolygon>) {
 		if (!drawingSession) return;
 		const workflow = drawingSession.workflow;
 		drawingSession = null;
@@ -1018,6 +1022,7 @@
 
 	async function handleFormSubmit(formValues: Record<string, unknown>, connectionId: string) {
 		if (!pendingWorkflow) return;
+		if (!gateway) return;
 
 		const { workflow, coordinates, geometry: drawnGeometry } = pendingWorkflow;
 
@@ -1053,7 +1058,7 @@
 				centroid,
 				bbox,
 				files: []
-			});
+			}) as { id: string };
 
 			console.log('Workflow instance created:', instance.id);
 
@@ -1386,15 +1391,16 @@
 
 	<!-- Form Fill for NEW Workflow Creation (uses shared ModuleShell + FormFillTool) -->
 	{#if pendingWorkflow && formFillOpen}
+		{@const pw = pendingWorkflow}
 		<ModuleShell
 			bind:isOpen={formFillOpen}
 			bind:isExpanded={sheetExpanded}
-			title={pendingWorkflow.workflow.name}
+			title={pw.workflow.name}
 			onClose={handleFormClose}
 		>
 			{#snippet content()}
 				<FormFillTool
-					workflowId={pendingWorkflow.workflow.id}
+					workflowId={pw.workflow.id}
 					onSubmit={handleFormSubmit}
 					onCancel={handleFormClose}
 				/>

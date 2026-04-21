@@ -6,7 +6,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { Checkbox } from '$lib/components/ui/checkbox';
-	import { Plus, Pencil, Trash2, GripVertical, ChevronDown, Check } from 'lucide-svelte';
+	import { Plus, Pencil, Trash2, GripVertical, ChevronDown, Check } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { invalidateAll } from '$app/navigation';
 	import * as m from '$lib/paraglide/messages';
@@ -292,7 +292,7 @@
 			<div class="grid gap-2">
 				<Label for="fieldType">{config.labels.fieldType}</Label>
 				<DropdownMenu.Root>
-					<DropdownMenu.Trigger asChild>
+					<DropdownMenu.Trigger>
 						{#snippet child({ props })}
 							<Button
 								{...props}
@@ -388,7 +388,7 @@
 				<div class="grid gap-2">
 					<Label for="edit-fieldType">{config.labels.fieldType}</Label>
 					<DropdownMenu.Root>
-						<DropdownMenu.Trigger asChild>
+						<DropdownMenu.Trigger>
 							{#snippet child({ props })}
 								<Button
 									{...props}

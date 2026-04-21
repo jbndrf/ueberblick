@@ -11,7 +11,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 	import { toast } from 'svelte-sonner';
-	import { Settings } from 'lucide-svelte';
+	import { Settings } from '@lucide/svelte';
 	import type { PageData } from './$types';
 	import { BaseTable, type BaseColumnConfig } from '$lib/components/admin/base-table';
 	import type { CustomTable } from './columns';
@@ -211,7 +211,7 @@
 	<!-- Base Table -->
 	<BaseTable
 		bind:this={tableRef}
-		data={data.customTables}
+		data={data.customTables as unknown as CustomTable[]}
 		{columns}
 		{globalFilterFn}
 		getRowId={(row) => row.id}

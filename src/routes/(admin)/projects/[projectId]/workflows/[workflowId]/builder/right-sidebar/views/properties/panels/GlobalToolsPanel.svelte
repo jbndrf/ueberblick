@@ -5,8 +5,8 @@
 	import * as Tabs from '$lib/components/ui/tabs';
 	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 
-	import { Globe, Zap, Plus, ChevronRight } from 'lucide-svelte';
-	import * as Switch from '$lib/components/ui/switch';
+	import { Globe, Zap, Plus, ChevronRight } from '@lucide/svelte';
+	import { Switch } from '$lib/components/ui/switch';
 
 	import PropertySection from '../shared/PropertySection.svelte';
 	import ConnectedToolItem from '../shared/ConnectedToolItem.svelte';
@@ -243,9 +243,7 @@
 										class="automation-toggle"
 										onclick={(e) => { e.stopPropagation(); onToggleAutomation?.(automation.id, !automation.is_enabled); }}
 									>
-										<Switch.Root checked={automation.is_enabled}>
-											<Switch.Thumb />
-										</Switch.Root>
+										<Switch checked={automation.is_enabled} />
 									</div>
 									<ChevronRight class="h-4 w-4 chevron-icon" />
 								</div>

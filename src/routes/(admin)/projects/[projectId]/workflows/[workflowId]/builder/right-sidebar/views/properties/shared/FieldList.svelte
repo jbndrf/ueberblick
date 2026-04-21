@@ -2,7 +2,7 @@
 	import type { Node } from '@xyflow/svelte';
 
 	import { Button } from '$lib/components/ui/button';
-	import { Plus, FileText, Lock } from 'lucide-svelte';
+	import { Plus, FileText, Lock } from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
 
 	import PropertySection from './PropertySection.svelte';
@@ -39,7 +39,7 @@
 		if (currentStage) {
 			groups.push({
 				stageId: stageId,
-				stageName: currentStage.data.title,
+				stageName: currentStage.data.title as string,
 				isCurrentStage: true,
 				fields: [] // TODO: Get fields for this stage
 			});
@@ -51,7 +51,7 @@
 			if (ancestorNode) {
 				groups.push({
 					stageId: ancestorId,
-					stageName: ancestorNode.data.title,
+					stageName: ancestorNode.data.title as string,
 					isCurrentStage: false,
 					fields: [] // TODO: Get fields for this stage
 				});

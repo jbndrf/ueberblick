@@ -1,6 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { superValidate } from 'sveltekit-superforms';
-import { zod } from 'sveltekit-superforms/adapters';
+import { zod4 } from 'sveltekit-superforms/adapters';
 import { z } from 'zod';
 import type { Actions, PageServerLoad } from './$types';
 import * as m from '$lib/paraglide/messages';
@@ -11,13 +11,13 @@ const projectSchema = z.object({
 });
 
 export const load: PageServerLoad = async () => {
-	const form = await superValidate(zod(projectSchema));
+	const form = await superValidate(zod4(projectSchema));
 	return { form };
 };
 
 export const actions: Actions = {
 	default: async ({ request, locals }) => {
-		const form = await superValidate(request, zod(projectSchema));
+		const form = await superValidate(request, zod4(projectSchema));
 
 		if (!form.valid) {
 			return fail(400, { form });
@@ -45,9 +45,10 @@ export const actions: Actions = {
 		} catch (error) {
 			console.error('Error creating project:', error);
 			console.error('Error details:', JSON.stringify(error, null, 2));
+			const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 			return fail(500, {
 				form,
-				message: error?.message || (m.projectNewServerCreateError?.() ?? 'Failed to create project')
+				message: errorMessage || (m.projectNewServerCreateError?.() ?? 'Failed to create project')
 			});
 		}
 

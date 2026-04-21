@@ -2,7 +2,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Button } from '$lib/components/ui/button';
 	import * as RadioGroup from '$lib/components/ui/radio-group';
-	import { Settings2 } from 'lucide-svelte';
+	import { Settings2 } from '@lucide/svelte';
 
 	import * as m from '$lib/paraglide/messages';
 	import type { EntitySourceType, EntitySelectorOptions } from '$lib/workflow-builder';

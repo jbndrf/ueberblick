@@ -3,7 +3,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Progress } from '$lib/components/ui/progress';
-	import { Package, Download, Loader2, CheckCircle, AlertCircle, Upload } from 'lucide-svelte';
+	import { Package, Download, Loader2, CheckCircle, AlertCircle, Upload } from '@lucide/svelte';
 	import { getPocketBase } from '$lib/pocketbase';
 	import { onMount } from 'svelte';
 	import * as m from '$lib/paraglide/messages';

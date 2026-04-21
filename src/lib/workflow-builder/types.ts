@@ -400,6 +400,53 @@ export interface TrackedItem<T> {
 // Convenience Types
 // =============================================================================
 
+// =============================================================================
+// XYFlow Graph Payload Types
+// =============================================================================
+// These describe the `data` payload attached to XYFlow Node/Edge objects in
+// the workflow builder graph. They mirror the DB-backed WorkflowStage/
+// WorkflowConnection types but carry the runtime fields the graph layer
+// needs (tool instances, selection state, callbacks) alongside the
+// user-configurable fields (roles, visual config).
+
+import type { ToolInstance } from './tools/types';
+
+export type RegionInfo = {
+	id: string;
+	name: string;
+	color: string;
+};
+
+/** Payload on XYFlow stage nodes. */
+export interface StageData {
+	title: string;
+	key: string;
+	stageType: StageType;
+	maxHours?: number | null;
+	visible_to_roles?: string[];
+	regions?: RegionInfo[];
+	tools?: ToolInstance[];
+	selectedToolId?: string;
+	onSelectTool?: (toolId: string) => void;
+	onAddTool?: () => void;
+	[key: string]: unknown;
+}
+
+/** Payload on XYFlow connection/action edges. */
+export interface ConnectionEdgeData {
+	/** True when this edge is the entry connection (workflow start). */
+	isEntry?: boolean;
+	allowed_roles?: string[];
+	visual_config?: VisualConfig;
+	tools?: ToolInstance[];
+	selectedToolId?: string;
+	isSelfLoop?: boolean;
+	isBidirectional?: boolean;
+	onSelectTool?: (toolId: string) => void;
+	onAddTool?: () => void;
+	[key: string]: unknown;
+}
+
 export type TrackedStage = TrackedItem<WorkflowStage>;
 export type TrackedConnection = TrackedItem<WorkflowConnection>;
 export type TrackedForm = TrackedItem<ToolsForm>;

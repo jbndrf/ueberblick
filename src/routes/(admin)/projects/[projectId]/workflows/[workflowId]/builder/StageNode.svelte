@@ -1,32 +1,9 @@
 <script lang="ts">
 	import { Handle, Position, type NodeProps, type Node } from '@xyflow/svelte';
-	import { Play, Square, CircleStop } from 'lucide-svelte';
+	import { Play, Square, CircleStop } from '@lucide/svelte';
 	import { ToolBar } from '$lib/workflow-builder/components';
-	import type { ToolInstance } from '$lib/workflow-builder/tools';
+	import type { StageData } from '$lib/workflow-builder';
 	import * as m from '$lib/paraglide/messages';
-
-	type RegionInfo = {
-		id: string;
-		name: string;
-		color: string;
-	};
-
-	type StageData = {
-		title: string;
-		key: string;
-		stageType: 'start' | 'intermediate' | 'end';
-		maxHours?: number | null;
-		/** Protocol regions this stage belongs to */
-		regions?: RegionInfo[];
-		/** Stage actions attached to this stage */
-		tools?: ToolInstance[];
-		/** Currently selected tool ID */
-		selectedToolId?: string;
-		/** Callback when a tool is selected */
-		onSelectTool?: (toolId: string) => void;
-		/** Callback when add tool button is clicked */
-		onAddTool?: () => void;
-	};
 
 	type StageNodeType = Node<StageData, 'stage'>;
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ArrowLeft, Trash2 } from 'lucide-svelte';
+	import { ArrowLeft, Trash2 } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import * as m from '$lib/paraglide/messages';

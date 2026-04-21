@@ -23,7 +23,7 @@ declare global {
 			user: RecordModel | null;
 		}
 		interface PageData {
-			user: RecordModel | null;
+			user?: RecordModel | null;
 		}
 		// interface PageState {}
 		// interface Platform {}

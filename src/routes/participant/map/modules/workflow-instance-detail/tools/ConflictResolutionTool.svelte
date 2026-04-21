@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
-	import { AlertTriangle, Check, RotateCcw } from 'lucide-svelte';
+	import { AlertTriangle, Check, RotateCcw } from '@lucide/svelte';
 	import type { SyncConflict } from '$lib/participant-state/db';
 	import { getChangedFields } from '../conflict-diff';
 	import * as m from '$lib/paraglide/messages';

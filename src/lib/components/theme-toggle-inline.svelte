@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { themeStore } from '$lib/stores/theme.svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { Sun, Moon } from 'lucide-svelte';
+	import { Sun, Moon } from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
 
 	const currentTheme = $derived(themeStore.current);

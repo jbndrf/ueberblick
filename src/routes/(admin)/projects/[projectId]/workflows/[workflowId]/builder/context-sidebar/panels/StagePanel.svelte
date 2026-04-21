@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Play, Square, CircleStop } from 'lucide-svelte';
+	import { Play, Square, CircleStop } from '@lucide/svelte';
 	import type { SelectionContext } from '../context';
 	import { ToolPicker } from '$lib/workflow-builder/components';
 	import * as m from '$lib/paraglide/messages';

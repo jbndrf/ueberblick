@@ -10,7 +10,7 @@
  * 3. The UI will automatically show it in the right places based on attachableTo
  */
 
-import { FileText, Edit3, Tag, Zap, ClipboardList } from 'lucide-svelte';
+import { FileText, Edit3, Tag, Zap, ClipboardList } from '@lucide/svelte';
 import type { ToolDefinition, AttachmentTarget } from './types';
 
 // =============================================================================

@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { ArrowLeft, Trash2 } from 'lucide-svelte';
-	import { Type } from 'lucide-svelte';
+	import { ArrowLeft, Trash2 } from '@lucide/svelte';
+	import { Type } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
@@ -227,7 +227,7 @@
 		if (textMaxLength !== undefined) validation.maxLength = textMaxLength;
 		if (textPattern) validation.pattern = textPattern;
 
-		onUpdate?.({ validation_rules: Object.keys(validation).length > 0 ? validation : undefined });
+		onUpdate?.({ validation_rules: (Object.keys(validation).length > 0 ? validation : undefined) as Record<string, unknown> | undefined });
 	}
 
 	function handleNumberValidationBlur() {
@@ -236,7 +236,7 @@
 		if (numberMax !== undefined) validation.max = numberMax;
 		if (numberStep !== undefined) validation.step = numberStep;
 
-		onUpdate?.({ validation_rules: Object.keys(validation).length > 0 ? validation : undefined });
+		onUpdate?.({ validation_rules: (Object.keys(validation).length > 0 ? validation : undefined) as Record<string, unknown> | undefined });
 	}
 
 	function handleDateModeChange(value: string | undefined) {
@@ -297,7 +297,7 @@
 		if (minSelections !== undefined) validation.minSelections = minSelections;
 		if (maxSelections !== undefined) validation.maxSelections = maxSelections;
 
-		onUpdate?.({ validation_rules: Object.keys(validation).length > 0 ? validation : undefined });
+		onUpdate?.({ validation_rules: (Object.keys(validation).length > 0 ? validation : undefined) as Record<string, unknown> | undefined });
 	}
 
 	// ==========================================================================

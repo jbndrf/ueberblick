@@ -21,7 +21,7 @@
 		Wifi,
 		WifiOff,
 		CloudUpload
-	} from 'lucide-svelte';
+	} from '@lucide/svelte';
 	import { sanitizeHtml } from '$lib/sanitize-html';
 	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
 	import { getFullLocalCopyMode, setFullLocalCopyMode } from '$lib/participant-state/context.svelte';

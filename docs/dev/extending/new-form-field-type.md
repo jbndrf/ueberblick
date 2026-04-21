@@ -68,7 +68,7 @@ This is the single source of truth for field type metadata. It drives the drag-a
 Add your entry to the `FIELD_TYPES` array in `src/lib/workflow-builder/field-types.ts`:
 
 ```typescript
-import { Star } from 'lucide-svelte'; // pick an appropriate icon
+import { Star } from '@lucide/svelte'; // pick an appropriate icon
 
 // Add to FIELD_TYPES array:
 {

@@ -3,7 +3,7 @@
 	import * as m from '$lib/paraglide/messages';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { Button } from '$lib/components/ui/button';
-	import { Languages, Check } from 'lucide-svelte';
+	import { Languages, Check } from '@lucide/svelte';
 
 	let currentLocale = $state(getLocale());
 

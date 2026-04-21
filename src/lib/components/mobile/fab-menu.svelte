@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Plus, X, MapPin, FileText, AlertCircle } from 'lucide-svelte';
+	import { Plus, X, MapPin, FileText, AlertCircle } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as m from '$lib/paraglide/messages';

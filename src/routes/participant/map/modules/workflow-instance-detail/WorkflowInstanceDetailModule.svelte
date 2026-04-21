@@ -2,7 +2,7 @@
 	import { untrack } from 'svelte';
 	import * as m from '$lib/paraglide/messages';
 	import ModuleShell from '$lib/components/module-shell.svelte';
-	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
+	import { requireParticipantGateway } from '$lib/participant-state/context.svelte';
 	import {
 		createWorkflowInstanceDetailState,
 		type WorkflowInstanceDetailState,
@@ -15,7 +15,7 @@
 	import type { FieldValueCache } from '$lib/participant-state/field-value-cache.svelte';
 	import type { WorkflowInstanceSelection } from '../types';
 	import * as Tabs from '$lib/components/ui/tabs';
-	import { ChevronRight } from 'lucide-svelte';
+	import { ChevronRight } from '@lucide/svelte';
 	import { FormFillTool, EditFieldsTool, ViewFieldsTool, LocationEditTool, ConflictResolutionTool, ProtocolTool } from './tools';
 	import FieldValueImage from './FieldValueImage.svelte';
 	import { getConflictsForInstance, resolveConflict } from '$lib/participant-state/sync.svelte';
@@ -23,7 +23,7 @@
 	import { getChangedFields } from './conflict-diff';
 	import { getPocketBase } from '$lib/pocketbase';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
-	import { AlertTriangle } from 'lucide-svelte';
+	import { AlertTriangle } from '@lucide/svelte';
 	import type { Map as LeafletMap } from 'leaflet';
 
 	// ==========================================================================
@@ -49,7 +49,7 @@
 	// State
 	// ==========================================================================
 
-	const gateway = getParticipantGateway();
+	const gateway = requireParticipantGateway();
 	let detailState = $state<WorkflowInstanceDetailState | null>(null);
 	let isOpen = $state(true);
 	let activeTab = $state<string>('activity');
@@ -82,7 +82,7 @@
 	$effect(() => {
 		const instanceId = selection.instanceId;
 		const _count = selection.openCount; // Force re-run on re-click of same instance
-		if (!gateway || !instanceId) return;
+		if (!instanceId) return;
 
 		const previous = untrack(() => detailState);
 		const newState = createWorkflowInstanceDetailState(instanceId, gateway, fieldValueCache);
@@ -655,6 +655,8 @@
 		}
 
 		// Fetch all unique sources in parallel
+		interface GenericNamedRow { id: string; name?: string; email?: string; title?: string; row_data?: unknown }
+
 		const entries = Array.from(sourceGroups.entries());
 		const results = await Promise.allSettled(
 			entries.map(async ([, { opts }]) => {
@@ -662,31 +664,31 @@
 
 				switch (opts.source_type) {
 					case 'participants': {
-						const records = await gateway.collection('participants').getFullList();
+						const records = await gateway.collection<GenericNamedRow>('participants').getFullList();
 						for (const r of records) entityMap.set(r.id, r.name || r.email || r.id);
 						break;
 					}
 					case 'roles': {
-						const records = await gateway.collection('roles').getFullList();
+						const records = await gateway.collection<GenericNamedRow>('roles').getFullList();
 						for (const r of records) entityMap.set(r.id, r.name || r.id);
 						break;
 					}
 					case 'custom_table': {
 						if (opts.custom_table_id) {
-							const records = await gateway.collection('custom_table_data').getFullList({
+							const records = await gateway.collection<GenericNamedRow>('custom_table_data').getFullList({
 								filter: `table_id = "${opts.custom_table_id}"`
 							});
 							const displayField = opts.display_field || 'name';
 							for (const r of records) {
 								const rowData = typeof r.row_data === 'string' ? JSON.parse(r.row_data) : r.row_data;
-								entityMap.set(r.id, rowData?.[displayField] || r.id);
+								entityMap.set(r.id, String(rowData?.[displayField] ?? r.id));
 							}
 						}
 						break;
 					}
 					case 'marker_category': {
 						if (opts.marker_category_id) {
-							const records = await gateway.collection('markers').getFullList({
+							const records = await gateway.collection<GenericNamedRow>('markers').getFullList({
 								filter: `category_id = "${opts.marker_category_id}"`
 							});
 							for (const r of records) entityMap.set(r.id, r.title || r.id);
@@ -747,7 +749,7 @@
 
 		try {
 			// Build changes array for audit log (before/after values)
-			const changes: Array<{ field_key: string; before: string | null; after: string }> = [];
+			const changes: Array<{ field_key: string; field_name: string; before: string | null; after: string }> = [];
 			for (const [fieldId, newValue] of Object.entries(values)) {
 				if (newValue === null || newValue === undefined || newValue === '') continue;
 
@@ -937,7 +939,7 @@
 		}
 
 		// 3. Create tool_usage record (audit trail)
-		const editChanges: Array<{ field_key: string; before: string | null; after: string }> = [];
+		const editChanges: Array<{ field_key: string; field_name: string; before: string | null; after: string }> = [];
 		for (const [fieldId, newValue] of Object.entries(editValues)) {
 			if (newValue === null || newValue === undefined || newValue === '') continue;
 			const existing = detailState.fieldValues.find(fv => fv.field_key === fieldId);
@@ -1022,7 +1024,7 @@
 			// 1. Create tool_usage record with location change (audit trail).
 			//    Location edit only supports point-type instances; line/polygon
 			//    editing will require its own tool (scope for later).
-			const locationStageId = detailState.instance?.current_stage_id;
+			const locationStageId = detailState.instance?.current_stage_id as string | undefined;
 			await gateway.collection('workflow_instance_tool_usage').create({
 				instance_id: detailState.instanceId,
 				stage_id: locationStageId,
@@ -1032,7 +1034,7 @@
 					action: 'location_edit',
 					stage_name: locationStageId ? (getStageName(locationStageId) || locationStageId) : null,
 					before: detailState.instance?.centroid
-						? { lat: detailState.instance.centroid.lat, lon: detailState.instance.centroid.lon }
+						? { lat: (detailState.instance.centroid as any).lat, lon: (detailState.instance.centroid as any).lon }
 						: null,
 					after: { lat: coordinates.lat, lon: coordinates.lng }
 				}
@@ -1436,14 +1438,15 @@
 					</Tabs.Content>
 
 					<Tabs.Content value="data" class="pt-4">
-						{@const stagesWithData = detailState
-							? detailState.stages.filter((s) => detailState.stageHasData(s.id))
+						{@const ds = detailState}
+						{@const stagesWithData = ds
+							? ds.stages.filter((s) => ds.stageHasData(s.id))
 							: []}
 						<!-- DATA TAB with Stage Sub-tabs -->
 						<div class="space-y-4">
-							{#if detailState && stagesWithData.length > 0}
+							{#if ds && stagesWithData.length > 0}
 								<Tabs.Root
-									value={detailState.activeStageTab}
+									value={ds.activeStageTab}
 									onValueChange={(v) => handleStageTabChange(v as string)}
 								>
 									<Tabs.List class="w-full overflow-x-auto flex-nowrap">
@@ -1456,7 +1459,7 @@
 
 									{#each stagesWithData as stage}
 										<Tabs.Content value={stage.id} class="pt-4">
-											{@const fields = detailState.getFieldsForFormRenderer(stage.id) as import('$lib/components/form-renderer').FormFieldWithValue[]}
+											{@const fields = ds.getFieldsForFormRenderer(stage.id) as import('$lib/components/form-renderer').FormFieldWithValue[]}
 											<ViewFieldsTool {fields} />
 										</Tabs.Content>
 									{/each}

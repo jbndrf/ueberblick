@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { X, Settings2, Search } from 'lucide-svelte';
+	import { X, Settings2, Search } from '@lucide/svelte';
 	import { Label } from '$lib/components/ui/label';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';

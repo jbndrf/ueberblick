@@ -6,7 +6,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
-	import { ChevronDown, ChevronRight, Sparkles, Sliders } from 'lucide-svelte';
+	import { ChevronDown, ChevronRight, Sparkles, Sliders } from '@lucide/svelte';
 	import { isFeatureEnabled } from '$lib/participant-state/enabled-features.svelte';
 	import { createPersistedTab } from '$lib/participant-state/ui-state.svelte';
 	import * as m from '$lib/paraglide/messages';
@@ -59,7 +59,7 @@
 		config: Record<string, unknown>;
 	}
 
-	interface FieldTag {
+	export interface FieldTag {
 		id: string;
 		workflow_id: string;
 		tag_mappings: TagMapping[];
@@ -75,7 +75,7 @@
 	interface WorkflowStageInfo {
 		id: string;
 		workflow_id: string;
-		stage_name: string;
+		stage_name?: string;
 		visual_config?: {
 			icon_config?: IconConfig;
 			[key: string]: unknown;

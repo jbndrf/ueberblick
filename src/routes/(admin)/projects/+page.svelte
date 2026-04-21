@@ -2,7 +2,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-	import { ChevronDown, EllipsisVertical, Download, Upload, Package, FolderArchive } from 'lucide-svelte';
+	import { ChevronDown, EllipsisVertical, Download, Upload, Package, FolderArchive } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { invalidateAll } from '$app/navigation';
 	import * as m from '$lib/paraglide/messages';

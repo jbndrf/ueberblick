@@ -2,7 +2,7 @@
 	import { Switch } from '$lib/components/ui/switch';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
-	import { Bookmark, Pencil, Trash2, Check, X } from 'lucide-svelte';
+	import { Bookmark, Pencil, Trash2, Check, X } from '@lucide/svelte';
 	import type { ToolConfigRecord, ViewDefinition } from '$lib/participant-state/types';
 	import * as m from '$lib/paraglide/messages';
 

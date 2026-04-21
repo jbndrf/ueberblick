@@ -89,7 +89,7 @@ export const fieldValidationSchema = z.object({
  * Smart Dropdown Mapping Schema
  */
 export const smartDropdownMappingSchema = z.object({
-  source_field_id: z.string().uuid(),
+  source_field_id: z.uuid(),
   mappings: z.array(z.object({
     source_value: z.string(),
     target_options: z.array(z.object({

@@ -2,7 +2,7 @@
 	import * as m from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { toast } from 'svelte-sonner';
-	import { QrCode, Loader2 } from 'lucide-svelte';
+	import { QrCode, Loader2 } from '@lucide/svelte';
 	import { generateQrPdf } from '$lib/utils/qr-pdf-export';
 
 	interface Props {

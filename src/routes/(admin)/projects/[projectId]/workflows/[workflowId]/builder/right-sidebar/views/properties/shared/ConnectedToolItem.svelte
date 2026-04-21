@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Trash2 } from 'lucide-svelte';
+	import { Trash2 } from '@lucide/svelte';
 	import { toolRegistry } from '$lib/workflow-builder/tools';
 	import ButtonConfigPopover from './ButtonConfigPopover.svelte';
 	import * as m from '$lib/paraglide/messages';
@@ -54,6 +54,7 @@
 		<span class="tool-name">{name}</span>
 	</button>
 
+	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions (wrapper only stops bubbling; children are real buttons) -->
 	<div class="tool-actions" onclick={(e) => e.stopPropagation()}>
 		<ButtonConfigPopover
 			config={visualConfig}

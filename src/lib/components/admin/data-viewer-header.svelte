@@ -4,7 +4,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
-	import { Pencil, Check, X } from 'lucide-svelte';
+	import { Pencil, Check, X } from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
 
 	type Role = { id: string; name: string };

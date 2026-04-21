@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { fontSizeStore } from '$lib/stores/font-size.svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { ALargeSmall } from 'lucide-svelte';
+	import { ALargeSmall } from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
 
 	const currentSize = $derived(fontSizeStore.current);

@@ -126,10 +126,10 @@ import { cn } from '$lib/utils';
 cn('base-class', condition && 'conditional-class');
 ```
 
-Icons come from `lucide-svelte`:
+Icons come from `@lucide/svelte`:
 
 ```svelte
-import { Map, Users, Settings } from 'lucide-svelte';
+import { Map, Users, Settings } from '@lucide/svelte';
 ```
 
 ## Forms (sveltekit-superforms + Zod)

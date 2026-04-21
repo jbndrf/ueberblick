@@ -23,7 +23,7 @@
 		UserCircle,
 		LogOut,
 		Plus
-	} from 'lucide-svelte';
+	} from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 
 	let { data, children } = $props();
@@ -268,7 +268,7 @@
 				<!-- Sidebar Header -->
 				<Sidebar.Header>
 					<div class="flex items-center gap-2 px-2 py-2">
-						<img src="/icons/icon.png" alt="" class="h-8 w-8 object-contain" />
+						<img src="/icons/logo-light.png" alt="" class="h-8 w-8 object-contain dark:invert" />
 						<span class="font-semibold text-lg">Überblick Sector</span>
 					</div>
 				</Sidebar.Header>
@@ -554,7 +554,7 @@
 
 								<DropdownMenu.Separator />
 
-								<DropdownMenu.Item href="/settings">
+								<DropdownMenu.Item onclick={() => (window.location.href = '/settings')}>
 									<Settings class="mr-2 h-4 w-4" />
 									{m.profileSettings?.() ?? 'Settings'}
 								</DropdownMenu.Item>

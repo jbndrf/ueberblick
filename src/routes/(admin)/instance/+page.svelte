@@ -9,7 +9,7 @@
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import * as Card from '$lib/components/ui/card';
 	import { toast } from 'svelte-sonner';
-	import { ExternalLink, Trash2, Plus } from 'lucide-svelte';
+	import { ExternalLink, Trash2, Plus } from '@lucide/svelte';
 
 	let { data } = $props();
 

@@ -11,7 +11,7 @@
 	import { FormRenderer } from '$lib/components/form-renderer';
 	import { Button } from '$lib/components/ui/button';
 	import * as Tabs from '$lib/components/ui/tabs';
-	import { Save, X, Loader2 } from 'lucide-svelte';
+	import { Save, X, Loader2 } from '@lucide/svelte';
 	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
 	import type { FormFieldWithValue } from '$lib/components/form-renderer';
 	import type { ToolEdit, FormField, FieldValue, EditableFieldsByStage } from '../state.svelte';

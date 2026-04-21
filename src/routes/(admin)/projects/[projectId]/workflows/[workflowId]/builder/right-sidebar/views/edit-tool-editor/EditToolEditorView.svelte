@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { X, Edit3, Trash2, Link, MapPin, ChevronDown } from 'lucide-svelte';
+	import { X, Edit3, Trash2, Link, MapPin, ChevronDown } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';

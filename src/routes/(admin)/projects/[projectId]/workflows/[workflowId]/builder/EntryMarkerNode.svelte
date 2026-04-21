@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Handle, Position, type NodeProps, type Node } from '@xyflow/svelte';
-	import { LogIn } from 'lucide-svelte';
+	import { LogIn } from '@lucide/svelte';
 
 	type EntryMarkerData = {
 		label: string;

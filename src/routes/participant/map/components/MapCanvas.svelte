@@ -25,7 +25,7 @@
 	import { ClusterClient } from '$lib/workers/cluster-client';
 	import type Supercluster from 'supercluster';
 
-	interface MapLayer {
+	export interface MapLayer {
 		id: string;
 		name: string;
 		layer_type: 'base' | 'overlay';
@@ -75,7 +75,7 @@
 		icon_config?: IconConfig;
 	}
 
-	interface MapMarker {
+	export interface MapMarker {
 		id: string;
 		title: string;
 		description?: string;
@@ -94,13 +94,13 @@
 		filter_value_icons?: Record<string, IconConfig>;
 	}
 
-	interface WorkflowInstance {
+	export interface WorkflowInstance {
 		id: string;
 		workflow_id: string;
 		current_stage_id?: string;
 		status: string;
 		geometry?: {
-			type: 'Point' | 'LineString' | 'Polygon';
+			type: 'Point' | 'LineString' | 'Polygon' | 'MultiLineString' | 'MultiPolygon';
 			coordinates: unknown;
 		} | null;
 		centroid?: { lat: number; lon: number } | null;
@@ -110,9 +110,10 @@
 		};
 	}
 
-	interface WorkflowStageInfo {
+	export interface WorkflowStageInfo {
 		id: string;
 		workflow_id: string;
+		stage_name?: string;
 		visual_config?: {
 			icon_config?: IconConfig;
 			[key: string]: unknown;

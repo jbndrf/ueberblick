@@ -4,7 +4,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { toast } from 'svelte-sonner';
-	import { X, Upload, FileCode, Shapes } from 'lucide-svelte';
+	import { X, Upload, FileCode, Shapes } from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
 	import {
 		ICON_TEMPLATES,
@@ -113,7 +113,7 @@
 		}
 	}
 
-	let fileInput: HTMLInputElement;
+	let fileInput = $state<HTMLInputElement>();
 
 	async function handleFileUpload(event: Event) {
 		const input = event.target as HTMLInputElement;
@@ -263,7 +263,7 @@
 							onchange={handleFileUpload}
 							class="hidden"
 						/>
-						<Button variant="outline" size="sm" onclick={() => fileInput.click()}>
+						<Button variant="outline" size="sm" onclick={() => fileInput?.click()}>
 							<Upload class="mr-2 h-4 w-4" />
 							{m.adminMarkerIconDesignerUploadButton()}
 						</Button>

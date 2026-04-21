@@ -1,16 +1,7 @@
 <script lang="ts">
 	import { BaseEdge, EdgeLabel, getBezierPath, type EdgeProps } from '@xyflow/svelte';
 	import { ToolBar } from '$lib/workflow-builder/components';
-	import type { ToolInstance } from '$lib/workflow-builder/tools';
-
-	type ActionEdgeData = {
-		tools?: ToolInstance[];
-		selectedToolId?: string;
-		isSelfLoop?: boolean;
-		isBidirectional?: boolean;
-		onSelectTool?: (toolId: string) => void;
-		onAddTool?: () => void;
-	};
+	import type { ConnectionEdgeData } from '$lib/workflow-builder';
 
 	let {
 		id,
@@ -20,10 +11,12 @@
 		targetY,
 		sourcePosition,
 		targetPosition,
-		data,
+		data: rawData,
 		markerEnd,
 		selected
-	}: EdgeProps<ActionEdgeData> = $props();
+	}: EdgeProps = $props();
+
+	const data = rawData as ConnectionEdgeData | undefined;
 
 	const tools = $derived(data?.tools ?? []);
 	const isSelfLoop = $derived(data?.isSelfLoop ?? false);

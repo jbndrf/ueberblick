@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { X, Plus, ArrowRight, Wrench, MapPin, Globe, FileText } from 'lucide-svelte';
+	import { X, Plus, ArrowRight, Wrench, MapPin, Globe, FileText } from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
 	import * as Tabs from '$lib/components/ui/tabs';
 	import * as Card from '$lib/components/ui/card';
@@ -146,6 +146,7 @@
 		<div class="flex-1 min-w-0 space-y-0.5">
 			<div class="flex items-center gap-2">
 				{#if editingName}
+					<!-- svelte-ignore a11y_autofocus (intentional: rename input opens contextually and should receive focus) -->
 					<input
 						class="text-lg font-semibold bg-transparent border-b border-primary-foreground/40 outline-none w-full placeholder:text-primary-foreground/50"
 						bind:value={nameInputValue}
@@ -424,7 +425,7 @@
 
 						<!-- Visible to Roles -->
 						<div class="space-y-2">
-							<label class="text-sm font-medium">{m.tileSetVisibleToRoles?.() ?? 'Visible to Roles'}</label>
+							<div class="text-sm font-medium">{m.tileSetVisibleToRoles?.() ?? 'Visible to Roles'}</div>
 							<MobileMultiSelect
 								selectedIds={selectedRoleIds}
 								options={roles}

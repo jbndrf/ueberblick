@@ -22,7 +22,7 @@
 		onUpdate: (mappings: SmartDropdownMapping[]) => void;
 	};
 
-	let { open, sourceFieldLabel, tabOptions, mappings, onClose, onUpdate }: Props = $props();
+	let { open = $bindable(false), sourceFieldLabel, tabOptions, mappings, onClose, onUpdate }: Props = $props();
 
 	// Local state for active tab
 	let activeTab = $state<string>('');

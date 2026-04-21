@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import { Badge } from '$lib/components/ui/badge';
-	import { X, ChevronDown, ChevronUp, Calculator, GitCompare, Braces, Hash } from 'lucide-svelte';
+	import { X, ChevronDown, ChevronUp, Calculator, GitCompare, Braces, Hash } from '@lucide/svelte';
 	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 	import * as m from '$lib/paraglide/messages';
 

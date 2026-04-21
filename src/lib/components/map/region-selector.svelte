@@ -4,7 +4,7 @@
 	import type { Feature, Polygon } from 'geojson';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button';
-	import { Square, Pentagon, Trash2, Check, X } from 'lucide-svelte';
+	import { Square, Pentagon, Trash2, Check, X } from '@lucide/svelte';
 	import type { MapLayer } from '$lib/types/map-layer';
 	import {
 		boundsToPolygon,

@@ -10,7 +10,7 @@
 	import { onMount } from 'svelte';
 	import { FormRenderer } from '$lib/components/form-renderer';
 	import { Button } from '$lib/components/ui/button';
-	import { Save, X, Loader2 } from 'lucide-svelte';
+	import { Save, X, Loader2 } from '@lucide/svelte';
 	import { Separator } from '$lib/components/ui/separator';
 	import type { FormFieldWithValue } from '$lib/components/form-renderer';
 	import type { ToolProtocol, FormField, FieldValue } from '../state.svelte';

@@ -2,7 +2,7 @@ import { error, fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { z } from 'zod';
 import { superValidate } from 'sveltekit-superforms';
-import { zod } from 'sveltekit-superforms/adapters';
+import { zod4 } from 'sveltekit-superforms/adapters';
 import * as m from '$lib/paraglide/messages';
 
 const customTableSchema = z.object({
@@ -35,7 +35,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 		]);
 
 		// Create form for adding/editing tables
-		const form = await superValidate(zod(customTableSchema));
+		const form = await superValidate(zod4(customTableSchema));
 
 		return {
 			customTables: customTables || [],
@@ -52,7 +52,7 @@ export const actions: Actions = {
 	create: async ({ request, params, locals: { pb } }) => {
 		const { projectId } = params;
 		const formData = await request.formData();
-		const form = await superValidate(formData, zod(customTableSchema));
+		const form = await superValidate(formData, zod4(customTableSchema));
 
 		if (!form.valid) {
 			return fail(400, { form });
@@ -91,7 +91,7 @@ export const actions: Actions = {
 		const formData = await request.formData();
 		const tableId = formData.get('id') as string;
 
-		const form = await superValidate(formData, zod(customTableSchema));
+		const form = await superValidate(formData, zod4(customTableSchema));
 
 		if (!form.valid) {
 			return fail(400, { form });

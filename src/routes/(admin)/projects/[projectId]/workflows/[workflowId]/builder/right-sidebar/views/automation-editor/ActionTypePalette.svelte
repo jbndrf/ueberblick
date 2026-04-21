@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Shield, Pencil, ArrowRight } from 'lucide-svelte';
+	import { Shield, Pencil, ArrowRight } from '@lucide/svelte';
 	import type { AutomationAction } from '$lib/workflow-builder';
 	import * as m from '$lib/paraglide/messages';
 

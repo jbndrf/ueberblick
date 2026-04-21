@@ -2,7 +2,7 @@ import { error, fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { z } from 'zod';
 import { superValidate } from 'sveltekit-superforms';
-import { zod } from 'sveltekit-superforms/adapters';
+import { zod4 } from 'sveltekit-superforms/adapters';
 import { normalizeRecords } from '$lib/server/pocketbase-helpers';
 import * as m from '$lib/paraglide/messages';
 
@@ -32,7 +32,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 		});
 
 		// Create form for adding/editing categories
-		const form = await superValidate(zod(markerCategorySchema));
+		const form = await superValidate(zod4(markerCategorySchema));
 
 		return {
 			markerCategories: markerCategories || [],
@@ -48,7 +48,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 export const actions: Actions = {
 	create: async ({ request, params, locals: { pb } }) => {
 		const { projectId } = params;
-		const form = await superValidate(request, zod(markerCategorySchema));
+		const form = await superValidate(request, zod4(markerCategorySchema));
 
 		if (!form.valid) {
 			return fail(400, { form });
@@ -78,7 +78,7 @@ export const actions: Actions = {
 		const formData = await request.formData();
 		const categoryId = formData.get('id') as string;
 
-		const form = await superValidate(formData, zod(markerCategorySchema));
+		const form = await superValidate(formData, zod4(markerCategorySchema));
 
 		if (!form.valid) {
 			return fail(400, { form });

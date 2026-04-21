@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Switch } from '$lib/components/ui/switch';
 	import { Badge } from '$lib/components/ui/badge';
-	import { ChevronDown, ChevronRight, Sparkles } from 'lucide-svelte';
+	import { ChevronDown, ChevronRight, Sparkles } from '@lucide/svelte';
 	import {
 		FEATURE_REGISTRY,
 		getEnabledFeatures,

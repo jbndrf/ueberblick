@@ -245,7 +245,7 @@ right-sidebar/views/my-editor/
 **`MyEditorView.svelte`:**
 ```svelte
 <script lang="ts">
-  import { X, Trash2 } from 'lucide-svelte';
+  import { X, Trash2 } from '@lucide/svelte';
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
   import { Label } from '$lib/components/ui/label';

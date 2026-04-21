@@ -61,7 +61,11 @@ export type {
 	ConditionLeaf,
 	ConditionOperator,
 	AutomationAction,
-	ExecutionMode
+	ExecutionMode,
+	// XYFlow graph payloads
+	StageData,
+	ConnectionEdgeData,
+	RegionInfo
 } from './types';
 
 // Save

@@ -7,13 +7,18 @@
 	import * as Tabs from '$lib/components/ui/tabs';
 	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 
-	import { Play, Square, CircleStop, Trash2 } from 'lucide-svelte';
+	import { Play, Square, CircleStop, Trash2 } from '@lucide/svelte';
 
 	import PropertySection from '../shared/PropertySection.svelte';
 	import ConnectedToolItem from '../shared/ConnectedToolItem.svelte';
 
 	import { toolRegistry } from '$lib/workflow-builder/tools';
-	import type { ToolsEdit, VisualConfig } from '$lib/workflow-builder';
+	import type {
+		ToolsEdit,
+		VisualConfig,
+		StageData,
+		ConnectionEdgeData
+	} from '$lib/workflow-builder';
 	import * as m from '$lib/paraglide/messages';
 
 	type Role = {
@@ -23,9 +28,9 @@
 	};
 
 	type Props = {
-		stage: Node;
-		nodes: Node[];
-		edges: Edge[];
+		stage: Node<StageData>;
+		nodes: Node<StageData>[];
+		edges: Edge<ConnectionEdgeData>[];
 		roles: Role[];
 		ancestors: string[];
 		/** Stage-attached edit tools */

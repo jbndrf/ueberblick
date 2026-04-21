@@ -9,7 +9,7 @@ const columnSchema = z.object({
 		.min(1, 'Column name is required')
 		.regex(/^[a-z][a-z0-9_]*$/, 'Column name must start with a letter and contain only lowercase letters, numbers, and underscores'),
 	column_type: z.enum(['text', 'number', 'date', 'boolean'], {
-		required_error: 'Column type is required'
+		error: 'Column type is required'
 	}),
 	is_required: z.boolean().optional(),
 	default_value: z.string().optional().nullable()
@@ -119,7 +119,7 @@ export const actions: Actions = {
 		const validationResult = columnSchema.safeParse(columnData);
 		if (!validationResult.success) {
 			return fail(400, {
-				message: validationResult.error.errors[0]?.message || (m.customTableDetailServer_invalidColumnData?.() ?? 'Invalid column data')
+				message: validationResult.error.issues[0]?.message || (m.customTableDetailServer_invalidColumnData?.() ?? 'Invalid column data')
 			});
 		}
 
@@ -174,7 +174,7 @@ export const actions: Actions = {
 			const validationResult = columnSchema.safeParse(columnData);
 			if (!validationResult.success) {
 				return fail(400, {
-					message: validationResult.error.errors[0]?.message || (m.customTableDetailServer_invalidColumnData?.() ?? 'Invalid column data')
+					message: validationResult.error.issues[0]?.message || (m.customTableDetailServer_invalidColumnData?.() ?? 'Invalid column data')
 				});
 			}
 

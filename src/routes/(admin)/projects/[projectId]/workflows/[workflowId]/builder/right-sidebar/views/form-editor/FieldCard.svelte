@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { GripVertical, Upload, ChevronDown, Pencil, Shield, GitBranch } from 'lucide-svelte';
+	import { GripVertical, Upload, ChevronDown, Pencil, Shield, GitBranch } from '@lucide/svelte';
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
-	import { Type } from 'lucide-svelte';
+	import { Type } from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
 
 	import { fieldTypeIcons, type ToolsFormField } from '$lib/workflow-builder';
@@ -143,7 +143,7 @@
 	onkeydown={(e) => e.key === 'Enter' && onSelect?.()}
 >
 	<!-- Drag handle (visible on hover/select) -->
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events (drag is pointer-only; card selection above handles keyboard) -->
 	<div
 		class="drag-handle"
 		onmousedown={handleHandleMouseDown}

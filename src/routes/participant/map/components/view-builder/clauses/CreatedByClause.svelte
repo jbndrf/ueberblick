@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Button } from '$lib/components/ui/button';
-	import { X } from 'lucide-svelte';
+	import { X } from '@lucide/svelte';
 	import type { FilterClause } from '$lib/participant-state/types';
 	import type { BuilderContext } from '../types';
 	import * as m from '$lib/paraglide/messages';

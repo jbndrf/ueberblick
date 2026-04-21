@@ -6,7 +6,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
-	import { RefreshCw, Upload } from 'lucide-svelte';
+	import { RefreshCw, Upload } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import type { PageData } from './$types';
 	import { BaseTable, type BaseColumnConfig } from '$lib/components/admin/base-table';
@@ -15,6 +15,8 @@
 	} from '$lib/components/admin/custom-field-manager-generic.svelte';
 	import DataViewerHeader from '$lib/components/admin/data-viewer-header.svelte';
 	import { CsvImportDialog, type MappedImportData, type TargetField, type ImportProgressCallback } from '$lib/components/csv-import';
+
+	type Role = { id: string; name: string };
 
 	type CustomTableRow = {
 		id: string;
@@ -183,7 +185,7 @@
 		name={data.customTable.display_name}
 		description={data.customTable.description || ''}
 		visibleToRoles={data.customTable.visible_to_roles || []}
-		roles={data.roles}
+		roles={data.roles as unknown as Role[]}
 		onNameChange={(value) => updateMeta('display_name', value)}
 		onDescriptionChange={(value) => updateMeta('description', value)}
 		onRolesChange={(value) => updateMeta('visible_to_roles', value)}
@@ -203,7 +205,7 @@
 	<!-- Base Table -->
 	<BaseTable
 		bind:this={tableRef}
-		data={data.tableData}
+		data={data.tableData as unknown as CustomTableRow[]}
 		{columns}
 		{globalFilterFn}
 		enableRowSelection={true}
@@ -220,10 +222,14 @@
 			}
 		}}
 		columnManagement={{
-			fields: data.columns.map((col) => ({
+			fields: data.columns.map((col: any) => ({
 				field_name: col.column_name,
-				field_type: col.column_type
-			})),
+				field_type: col.column_type,
+				id: col.id,
+				is_required: col.is_required,
+				default_value: col.default_value,
+				display_order: col.display_order
+			})) as unknown as Array<{ id: string; field_name: string; field_type: 'number' | 'boolean' | 'text' | 'date'; is_required: boolean; default_value: string | null; display_order: number }>,
 			onOpen: () => (columnManagerOpen = true)
 		}}
 		inlineRowCreation={{

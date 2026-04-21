@@ -6,7 +6,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { toast } from 'svelte-sonner';
-	import { UserCog } from 'lucide-svelte';
+	import { UserCog } from '@lucide/svelte';
 	import type { PageData } from './$types';
 	import { BaseTable, type BaseColumnConfig } from '$lib/components/admin/base-table';
 	import QrExportButton from './qr-export-button.svelte';
@@ -43,7 +43,7 @@
 	const toggleStatus = createToggleHandler('toggleStatus', 'is_active');
 
 	// Create role callback for MobileMultiSelect (uses server action)
-	async function createRole(name: string) {
+	async function createRole(name: string): Promise<{ id: string; name: string; description?: string }> {
 		const formData = new FormData();
 		formData.append('name', name);
 
@@ -55,7 +55,7 @@
 		const result = deserialize(await response.text());
 		if (result.type === 'success' && result.data?.entity) {
 			await invalidateAll();
-			return result.data.entity;
+			return result.data.entity as unknown as { id: string; name: string; description?: string };
 		}
 		throw new Error('Failed to create role');
 	}
@@ -291,7 +291,7 @@
 	<!-- Base Table -->
 	<BaseTable
 		bind:this={tableRef}
-		data={data.participants}
+		data={data.participants as unknown as Participant[]}
 		{columns}
 		{globalFilterFn}
 		enableRowSelection={true}
@@ -324,7 +324,7 @@
 			]
 		}}
 		columnManagement={{
-			fields: data.customFields,
+			fields: data.customFields as unknown as Array<{ id: string; field_name: string; field_type: 'number' | 'boolean' | 'text' | 'date'; is_required: boolean; default_value: string | null; display_order: number }>,
 			onOpen: () => (customFieldsDialogOpen = true)
 		}}
 		inlineRowCreation={{
@@ -401,10 +401,10 @@
 				<div class="py-4">
 					<MobileMultiSelect
 						bind:selectedIds={selectedRoleIds}
-						options={data.roles}
-						getOptionId={(r) => r.id}
-						getOptionLabel={(r) => r.name}
-						getOptionDescription={(r) => r.description}
+						options={data.roles as unknown as Array<{ id: string; name: string; description?: string }>}
+						getOptionId={(r: { id: string; name: string; description?: string }) => r.id}
+						getOptionLabel={(r: { id: string; name: string; description?: string }) => r.name}
+						getOptionDescription={(r: { id: string; name: string; description?: string }) => r.description}
 						allowCreate={true}
 						onCreateOption={createRole}
 						placeholder={m.participantsAdminSelectOrSearchRoles?.() ?? 'Select or search roles...'}

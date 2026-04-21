@@ -2,7 +2,7 @@ import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { superValidate } from 'sveltekit-superforms';
 import * as m from '$lib/paraglide/messages';
-import { zod } from 'sveltekit-superforms/adapters';
+import { zod4 } from 'sveltekit-superforms/adapters';
 import { mapLayerSchema, projectMapDefaultsSchema } from '$lib/schemas/map-settings';
 import type { MapLayer } from '$lib/types/map-layer';
 import { PRESET_SOURCES, type TileSourceConfig, type WmsSourceConfig } from '$lib/types/map-layer';
@@ -92,8 +92,8 @@ export const load: PageServerLoad = async ({ locals: { pb }, params }) => {
 		});
 
 		// Initialize forms
-		const layerForm = await superValidate(zod(mapLayerSchema));
-		const defaultsForm = await superValidate(mapDefaults, zod(projectMapDefaultsSchema));
+		const layerForm = await superValidate(zod4(mapLayerSchema));
+		const defaultsForm = await superValidate(mapDefaults, zod4(projectMapDefaultsSchema));
 
 		return {
 			project,
@@ -122,7 +122,7 @@ export const actions: Actions = {
 	// Save project map defaults (fallback when no base layer)
 	saveDefaults: async ({ request, locals: { pb }, params }) => {
 		const { projectId } = params;
-		const form = await superValidate(request, zod(projectMapDefaultsSchema));
+		const form = await superValidate(request, zod4(projectMapDefaultsSchema));
 
 		if (!form.valid) {
 			return fail(400, { form });
@@ -151,7 +151,7 @@ export const actions: Actions = {
 	// Create new map layer with source fields directly
 	createLayer: async ({ request, locals: { pb }, params }) => {
 		const { projectId } = params;
-		const form = await superValidate(request, zod(mapLayerSchema));
+		const form = await superValidate(request, zod4(mapLayerSchema));
 
 		if (!form.valid) {
 			return fail(400, { form });
@@ -349,7 +349,7 @@ export const actions: Actions = {
 			return fail(400, { message: m.settingsServerLayerIdRequired?.() ?? 'Layer ID is required' });
 		}
 
-		const form = await superValidate(formData, zod(mapLayerSchema));
+		const form = await superValidate(formData, zod4(mapLayerSchema));
 
 		if (!form.valid) {
 			return fail(400, { form });
@@ -635,7 +635,7 @@ export const actions: Actions = {
 			console.log(`[createPackage] Package created: ${result.tileCount} tiles, ${result.fileSizeBytes} bytes`);
 
 			// Upload the ZIP file to PocketBase
-			const zipBlob = new Blob([result.zipBuffer], { type: 'application/zip' });
+			const zipBlob = new Blob([new Uint8Array(result.zipBuffer)], { type: 'application/zip' });
 			const zipFile = new File([zipBlob], `${pkg.id}.zip`, { type: 'application/zip' });
 
 			const updateFormData = new FormData();

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { FileWarning } from 'lucide-svelte';
+	import { FileWarning } from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
 	import AncestorFieldGroup from './AncestorFieldGroup.svelte';
 	import type { ToolsForm, ToolsFormField, WorkflowStage } from '$lib/workflow-builder';

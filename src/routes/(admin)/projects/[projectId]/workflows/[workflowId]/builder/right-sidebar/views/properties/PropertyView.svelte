@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Node, Edge } from '@xyflow/svelte';
+	import type { StageData } from '$lib/workflow-builder';
 	import type { SelectionContext } from '../../../context-sidebar/context';
 
 	import StagePropertyPanel from './panels/StagePropertyPanel.svelte';
@@ -98,7 +99,7 @@
 	{#if context.type === 'stage'}
 		<StagePropertyPanel
 			stage={context.stage}
-			{nodes}
+			nodes={nodes as unknown as Node<StageData>[]}
 			{edges}
 			{roles}
 			{stageEditTools}
@@ -115,7 +116,7 @@
 	{:else if context.type === 'action'}
 		<EdgePropertyPanel
 			edge={context.action}
-			{nodes}
+			nodes={nodes as unknown as Node<StageData>[]}
 			{roles}
 			{connectionForms}
 			{connectionEditTools}

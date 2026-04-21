@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { GripVertical } from 'lucide-svelte';
+	import { GripVertical } from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
 	import type { AutomationStep } from '$lib/workflow-builder';
 

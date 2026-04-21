@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { superForm } from 'sveltekit-superforms';
-	import { zodClient } from 'sveltekit-superforms/adapters';
+	import { zod4Client } from 'sveltekit-superforms/adapters';
 	import { loginSchema } from '$lib/schemas/auth';
 	import * as m from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
@@ -8,14 +8,14 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import * as Card from '$lib/components/ui/card';
-	import { Eye, EyeOff, AlertCircle } from 'lucide-svelte';
+	import { Eye, EyeOff, AlertCircle } from '@lucide/svelte';
 	import ThemeToggle from '$lib/components/theme-toggle.svelte';
 	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
 
 	let { data } = $props();
 
 	const form = superForm(data.form, {
-		validators: zodClient(loginSchema)
+		validators: zod4Client(loginSchema)
 	});
 
 	const { form: formData, enhance, errors, message, delayed } = form;
@@ -40,7 +40,7 @@
 
 	<Card.Root class="w-full max-w-md">
 		<Card.Header class="space-y-1 text-center">
-			<img src="/icons/icon.png" alt="Überblick Sector" class="mx-auto mb-4 h-16 w-16 object-contain" />
+			<img src="/icons/logo-light.png" alt="Überblick Sector" class="mx-auto mb-4 h-16 w-16 object-contain dark:invert" />
 			<Card.Title class="text-2xl font-bold">{m.loginTitle?.() ?? 'Sign In'}</Card.Title>
 			<Card.Description>{m.loginSubtitle?.() ?? 'Enter your credentials to access the admin interface'}</Card.Description>
 		</Card.Header>

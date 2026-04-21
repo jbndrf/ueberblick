@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Tag, X, Trash2 } from 'lucide-svelte';
+	import { Tag, X, Trash2 } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Separator } from '$lib/components/ui/separator';
 	import { getAllTagTypes, type TagTypeDefinition } from '$lib/workflow-builder/tools/tag-types';

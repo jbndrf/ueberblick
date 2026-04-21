@@ -1,7 +1,7 @@
 <script lang="ts">
 	import * as m from '$lib/paraglide/messages';
 	import { Checkbox } from '$lib/components/ui/checkbox';
-	import { Type } from 'lucide-svelte';
+	import { Type } from '@lucide/svelte';
 	import { fieldTypeIcons, type ToolsFormField } from '$lib/workflow-builder';
 
 	type Props = {
@@ -25,7 +25,13 @@
 	const Icon = $derived(fieldTypeIcons[field.field_type] || Type);
 </script>
 
-<button type="button" class="field-item" onclick={onToggle}>
+<div
+	class="field-item"
+	role="button"
+	tabindex="0"
+	onclick={onToggle}
+	onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle?.(); } }}
+>
 	<Checkbox checked={isSelected} />
 	<div class="field-info">
 		<span class="field-label">
@@ -49,7 +55,7 @@
 	<div class="field-type-icon">
 		<Icon class="h-3 w-3" />
 	</div>
-</button>
+</div>
 
 <style>
 	.field-item {

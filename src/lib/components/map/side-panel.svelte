@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
-	import { X } from 'lucide-svelte';
+	import { X } from '@lucide/svelte';
 	import { fly } from 'svelte/transition';
 
 	interface Props {

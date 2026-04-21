@@ -2,7 +2,7 @@ import { error, fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { z } from 'zod';
 import { superValidate } from 'sveltekit-superforms';
-import { zod } from 'sveltekit-superforms/adapters';
+import { zod4 } from 'sveltekit-superforms/adapters';
 import { createUpdateFieldAction, createDeleteAction } from '$lib/server/crud-actions';
 import type PocketBase from 'pocketbase';
 import * as m from '$lib/paraglide/messages';
@@ -317,7 +317,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 		});
 
 		// Create form for adding/editing roles
-		const form = await superValidate(zod(roleSchema));
+		const form = await superValidate(zod4(roleSchema));
 
 		// Load permissions data in parallel
 		const permissions = await loadPermissionsData(pb, projectId);
@@ -337,7 +337,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 export const actions: Actions = {
 	create: async ({ request, params, locals: { pb } }) => {
 		const { projectId } = params;
-		const form = await superValidate(request, zod(roleSchema));
+		const form = await superValidate(request, zod4(roleSchema));
 
 		if (!form.valid) {
 			return fail(400, { form });
@@ -364,7 +364,7 @@ export const actions: Actions = {
 		const formData = await request.formData();
 		const roleId = formData.get('id') as string;
 
-		const form = await superValidate(formData, zod(roleSchema));
+		const form = await superValidate(formData, zod4(roleSchema));
 
 		if (!form.valid) {
 			return fail(400, { form });

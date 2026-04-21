@@ -10,7 +10,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Label } from '$lib/components/ui/label';
-	import { FileText, Plus, Pencil, Trash2, Upload, X, Image, AlertTriangle } from 'lucide-svelte';
+	import { FileText, Plus, Pencil, Trash2, Upload, X, Image, AlertTriangle } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { getPocketBase } from '$lib/pocketbase';
 	import { stripHtml } from '$lib/sanitize-html';

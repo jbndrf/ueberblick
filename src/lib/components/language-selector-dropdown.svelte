@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { setLocale, getLocale } from '$lib/paraglide/runtime';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-	import { Languages, Check } from 'lucide-svelte';
+	import { Languages, Check } from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
 
 	let currentLocale = $state(getLocale());

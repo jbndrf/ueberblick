@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { superForm } from 'sveltekit-superforms';
-	import { zodClient } from 'sveltekit-superforms/adapters';
+	import { zod4Client } from 'sveltekit-superforms/adapters';
 	import { participantLoginSchema } from '$lib/schemas/auth';
 	import * as m from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
@@ -8,7 +8,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import * as Card from '$lib/components/ui/card';
 	import * as Tabs from '$lib/components/ui/tabs';
-	import { AlertCircle, QrCode, KeyRound, Camera, Upload, Loader2 } from 'lucide-svelte';
+	import { AlertCircle, QrCode, KeyRound, Camera, Upload, Loader2 } from '@lucide/svelte';
 	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
 	import ThemeToggle from '$lib/components/theme-toggle.svelte';
 	import ConsentModal from '$lib/components/consent-modal.svelte';
@@ -20,7 +20,7 @@
 	const loginReturnTo = $derived($page.url.pathname + $page.url.search);
 
 	const form = superForm(data.form, {
-		validators: zodClient(participantLoginSchema),
+		validators: zod4Client(participantLoginSchema),
 		onResult: ({ result }) => {
 			// Explicitly handle redirect responses
 			if (result.type === 'redirect') {
@@ -140,7 +140,7 @@
 
 	<Card.Root class="w-full max-w-md">
 		<Card.Header class="space-y-1 text-center">
-			<img src="/icons/icon.png" alt="Überblick" class="mx-auto mb-4 h-16 w-16 object-contain" />
+			<img src="/icons/logo-light.png" alt="Überblick" class="mx-auto mb-4 h-16 w-16 object-contain dark:invert" />
 			<Card.Title class="text-2xl font-bold">{m.participantLoginTitle()}</Card.Title>
 			<Card.Description>{m.participantLoginSubtitle()}</Card.Description>
 		</Card.Header>

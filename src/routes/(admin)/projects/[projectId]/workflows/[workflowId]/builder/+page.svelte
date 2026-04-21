@@ -20,7 +20,7 @@
 		Save,
 		CircleHelp,
 		Loader2
-	} from 'lucide-svelte';
+	} from '@lucide/svelte';
 
 	import type { PageData } from './$types';
 	import StageNode from './StageNode.svelte';
@@ -112,7 +112,7 @@
 			if (result.type === 'success') {
 				builderState.markAsSaved();
 			} else {
-				saveError = (result.data as any)?.message || (m.workflowBuilderFailedToSave?.() ?? 'Failed to save');
+				saveError = ((result as any).data as any)?.message || (m.workflowBuilderFailedToSave?.() ?? 'Failed to save');
 			}
 		} catch (err) {
 			saveError = err instanceof Error ? err.message : (m.workflowBuilderFailedToSave?.() ?? 'Failed to save');
@@ -122,7 +122,7 @@
 	}
 
 	// Create role callback for MobileMultiSelect components in property panels
-	async function createRole(name: string) {
+	async function createRole(name: string): Promise<{ id: string; name: string; description?: string }> {
 		const formData = new FormData();
 		formData.append('name', name);
 
@@ -134,7 +134,7 @@
 		const result = deserialize(await response.text());
 		if (result.type === 'success' && result.data?.entity) {
 			await invalidateAll();
-			return result.data.entity;
+			return result.data.entity as { id: string; name: string; description?: string };
 		}
 		throw new Error(m.workflowBuilderFailedToCreateRole?.() ?? 'Failed to create role');
 	}
@@ -1111,8 +1111,8 @@
 		selectionContext = createContext.action(edge);
 	}
 
-	function handleSelectStage(node: Node<StageData>) {
-		selectionContext = createContext.stage(node);
+	function handleSelectStage(node: Node) {
+		selectionContext = createContext.stage(node as Node<StageData>);
 	}
 
 	// Form editor handlers

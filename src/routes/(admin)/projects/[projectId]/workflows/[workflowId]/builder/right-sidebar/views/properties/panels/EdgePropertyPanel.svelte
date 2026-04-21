@@ -9,12 +9,19 @@
 	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 	import * as m from '$lib/paraglide/messages';
 
-	import { ArrowRight, LogIn, RotateCcw, Trash2 } from 'lucide-svelte';
+	import { ArrowRight, LogIn, RotateCcw, Trash2 } from '@lucide/svelte';
 
 	import PropertySection from '../shared/PropertySection.svelte';
 
 	import { toolRegistry } from '$lib/workflow-builder/tools';
-	import type { ToolsForm, ToolsEdit, ToolsProtocol, VisualConfig } from '$lib/workflow-builder';
+	import type {
+		ToolsForm,
+		ToolsEdit,
+		ToolsProtocol,
+		VisualConfig,
+		ConnectionEdgeData,
+		StageData
+	} from '$lib/workflow-builder';
 
 	type Role = {
 		id: string;
@@ -23,8 +30,8 @@
 	};
 
 	type Props = {
-		edge: Edge;
-		nodes: Node[];
+		edge: Edge<ConnectionEdgeData>;
+		nodes: Node<StageData>[];
 		roles: Role[];
 		/** Connection-attached forms */
 		connectionForms?: ToolsForm[];
@@ -77,12 +84,12 @@
 
 	// Local state for editing
 	let actionName = $state(typeof edge.label === 'string' ? edge.label : 'Action');
-	let selectedRoleIds = $state<string[]>(edge.data.allowed_roles || []);
-	let buttonLabel = $state(edge.data.visual_config?.button_label || '');
-	let buttonColor = $state(edge.data.visual_config?.button_color || '#3b82f6');
-	let requiresConfirmation = $state(edge.data.visual_config?.requires_confirmation || false);
+	let selectedRoleIds = $state<string[]>(edge.data?.allowed_roles || []);
+	let buttonLabel = $state(edge.data?.visual_config?.button_label || '');
+	let buttonColor = $state(edge.data?.visual_config?.button_color || '#3b82f6');
+	let requiresConfirmation = $state(edge.data?.visual_config?.requires_confirmation || false);
 	let confirmationMessage = $state(
-		edge.data.visual_config?.confirmation_message || (m.propertiesEdgePropertyConfirmationDefault?.() ?? 'Are you sure you want to proceed?')
+		edge.data?.visual_config?.confirmation_message || (m.propertiesEdgePropertyConfirmationDefault?.() ?? 'Are you sure you want to proceed?')
 	);
 	let activeTab = $state('permissions');
 
@@ -94,12 +101,12 @@
 		if (edge.id !== currentEdgeId) {
 			currentEdgeId = edge.id;
 			actionName = typeof edge.label === 'string' ? edge.label : 'Action';
-			selectedRoleIds = edge.data.allowed_roles || [];
-			buttonLabel = edge.data.visual_config?.button_label || '';
-			buttonColor = edge.data.visual_config?.button_color || '#3b82f6';
-			requiresConfirmation = edge.data.visual_config?.requires_confirmation || false;
+			selectedRoleIds = edge.data?.allowed_roles || [];
+			buttonLabel = edge.data?.visual_config?.button_label || '';
+			buttonColor = edge.data?.visual_config?.button_color || '#3b82f6';
+			requiresConfirmation = edge.data?.visual_config?.requires_confirmation || false;
 			confirmationMessage =
-				edge.data.visual_config?.confirmation_message || (m.propertiesEdgePropertyConfirmationDefault?.() ?? 'Are you sure you want to proceed?');
+				edge.data?.visual_config?.confirmation_message || (m.propertiesEdgePropertyConfirmationDefault?.() ?? 'Are you sure you want to proceed?');
 		}
 	});
 

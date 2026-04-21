@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { FileText, Camera, ImagePlus, X, ChevronLeft, ChevronRight } from 'lucide-svelte';
+	import { FileText, Camera, ImagePlus, X, ChevronLeft, ChevronRight } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as m from '$lib/paraglide/messages';

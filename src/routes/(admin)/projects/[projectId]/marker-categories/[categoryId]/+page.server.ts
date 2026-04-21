@@ -13,7 +13,7 @@ const fieldSchema = z.object({
 			m.markerCategoryDetailServer_fieldNameValidation?.() ?? 'Field name must start with a letter and contain only lowercase letters, numbers, and underscores'
 		),
 	field_type: z.enum(['text', 'number', 'date', 'boolean'], {
-		required_error: m.markerCategoryDetailServer_fieldTypeRequired?.() ?? 'Field type is required'
+		error: m.markerCategoryDetailServer_fieldTypeRequired?.() ?? 'Field type is required'
 	}),
 	is_required: z.boolean().optional(),
 	default_value: z.string().optional().nullable()
@@ -132,7 +132,7 @@ export const actions: Actions = {
 		const validationResult = fieldSchema.safeParse(fieldData);
 		if (!validationResult.success) {
 			return fail(400, {
-				message: validationResult.error.errors[0]?.message || (m.markerCategoryDetailServer_invalidFieldData?.() ?? 'Invalid field data')
+				message: validationResult.error.issues[0]?.message || (m.markerCategoryDetailServer_invalidFieldData?.() ?? 'Invalid field data')
 			});
 		}
 
@@ -183,7 +183,7 @@ export const actions: Actions = {
 		const validationResult = fieldSchema.safeParse(fieldData);
 		if (!validationResult.success) {
 			return fail(400, {
-				message: validationResult.error.errors[0]?.message || (m.markerCategoryDetailServer_invalidFieldData?.() ?? 'Invalid field data')
+				message: validationResult.error.issues[0]?.message || (m.markerCategoryDetailServer_invalidFieldData?.() ?? 'Invalid field data')
 			});
 		}
 

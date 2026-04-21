@@ -11,7 +11,7 @@
 		Calendar,
 		ArrowRight,
 		PlayCircle
-	} from 'lucide-svelte';
+	} from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
 	import type { WorkflowInstance as GatewayInstance } from '$lib/participant-state/types';
 

@@ -9,7 +9,7 @@
 		Square,
 		CircleStop,
 		FileText
-	} from 'lucide-svelte';
+	} from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
 
 	type FormGroup = { formName: string; allowedRoles: string[]; fields: FormFieldWithValue[] };

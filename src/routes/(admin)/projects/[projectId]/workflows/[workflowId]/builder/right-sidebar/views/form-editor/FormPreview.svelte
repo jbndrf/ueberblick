@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { flip } from 'svelte/animate';
 	import { tick } from 'svelte';
-	import { Plus, X, Pencil, Check, AlignLeft, AlignRight, Maximize2 } from 'lucide-svelte';
+	import { Plus, X, Pencil, Check, AlignLeft, AlignRight, Maximize2 } from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -517,11 +517,14 @@
 		<div class="page-tabs">
 			<div class="tabs-container">
 				{#each pages as page (page)}
-					<button
+					<div
 						class="page-tab"
 						class:active={currentPage === page}
+						role="tab"
+						tabindex="0"
+						aria-selected={currentPage === page}
 						onclick={() => (currentPage = page)}
-						type="button"
+						onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); currentPage = page; } }}
 					>
 						{#if editingPageTitle === page}
 							<Input
@@ -555,7 +558,7 @@
 								{/if}
 							{/if}
 						{/if}
-					</button>
+					</div>
 				{/each}
 			</div>
 			<Button variant="ghost" size="sm" onclick={handleAddPage} class="add-page-btn">

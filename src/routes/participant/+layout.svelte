@@ -4,7 +4,7 @@
 	import { browser, dev } from '$app/environment';
 	import * as m from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
-	import { UserCircle, Layers, Filter, Navigation, Settings, Plus } from 'lucide-svelte';
+	import { UserCircle, Layers, Filter, Navigation, Settings, Plus } from '@lucide/svelte';
 	import { mapNavCallbacks } from './map/nav-store.svelte';
 	import {
 		createParticipantGateway,
@@ -404,7 +404,7 @@
 				{#if data.projectIcon}
 					<img src={data.projectIcon} alt="" class="h-8 w-8 rounded-lg object-cover" />
 				{:else}
-					<img src="/icons/icon.png" alt="" class="h-8 w-8 rounded-lg object-contain" />
+					<img src="/icons/logo-light.png" alt="" class="h-8 w-8 rounded-lg object-contain dark:invert" />
 				{/if}
 				{#if syncStatus.current}
 					<span class="text-sm text-muted-foreground animate-pulse">{(m.participantLayoutSyncingData?.({ done: syncStatus.current.done, total: syncStatus.current.total })) ?? `Syncing data (${syncStatus.current.done}/${syncStatus.current.total})`}</span>

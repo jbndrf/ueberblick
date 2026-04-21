@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { X, Edit3, Type } from 'lucide-svelte';
+	import { X, Edit3, Type } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { fieldTypeIcons, type ToolsFormField, type WorkflowStage } from '$lib/workflow-builder';
 	import * as m from '$lib/paraglide/messages';

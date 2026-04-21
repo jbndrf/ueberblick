@@ -26,7 +26,7 @@ export interface ToolDefinition {
 	displayName: string;
 	/** Short description for UI tooltip/help */
 	description: string;
-	/** Icon component from lucide-svelte */
+	/** Icon component from @lucide/svelte */
 	icon: Component<{ class?: string }>;
 	/** Where this tool can be attached */
 	attachableTo: AttachmentTarget[];

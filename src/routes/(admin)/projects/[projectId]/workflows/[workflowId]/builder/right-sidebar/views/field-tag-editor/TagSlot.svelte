@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import { Label } from '$lib/components/ui/label';
-	import { X } from 'lucide-svelte';
+	import { X } from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
 	import type { TagTypeDefinition } from '$lib/workflow-builder/tools/tag-types';
 	import type { FilterableConfig } from '$lib/workflow-builder/tools/tag-types';

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ArrowLeft, ArrowRight, FileText, Pencil, MapPin, Globe, Trash2, LogIn } from 'lucide-svelte';
+	import { ArrowLeft, ArrowRight, FileText, Pencil, MapPin, Globe, Trash2, LogIn } from '@lucide/svelte';
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
 	import { Separator } from '$lib/components/ui/separator';
@@ -96,7 +96,7 @@
 
 				<!-- Live preview -->
 				<div class="space-y-1.5">
-					<label class="text-xs text-muted-foreground">{m.stagePreviewButtonConfigPreview?.() ?? 'Preview'}</label>
+					<div class="text-xs text-muted-foreground">{m.stagePreviewButtonConfigPreview?.() ?? 'Preview'}</div>
 					<div class="flex justify-center py-2">
 						<div
 							class="inline-flex flex-col items-center justify-center

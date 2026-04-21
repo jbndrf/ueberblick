@@ -5,7 +5,7 @@
  * Used by FieldTypesPalette, FieldCard, and FieldConfigPanel.
  */
 
-import type { ComponentType } from 'svelte';
+import type { Component } from 'svelte';
 import {
 	Type,
 	AlignLeft,
@@ -17,14 +17,15 @@ import {
 	List,
 	Sparkles,
 	Table
-} from 'lucide-svelte';
+} from '@lucide/svelte';
+import type { IconProps } from '@lucide/svelte';
 import type { FieldType } from './types';
 
 export interface FieldTypeDefinition {
 	type: FieldType;
 	label: string;
 	description: string;
-	icon: ComponentType;
+	icon: Component<IconProps>;
 }
 
 export const FIELD_TYPES: FieldTypeDefinition[] = [
@@ -91,9 +92,9 @@ export const FIELD_TYPES: FieldTypeDefinition[] = [
 ];
 
 // Derived lookup maps for convenience
-export const fieldTypeIcons: Record<FieldType, ComponentType> = Object.fromEntries(
+export const fieldTypeIcons: Record<FieldType, Component<IconProps>> = Object.fromEntries(
 	FIELD_TYPES.map((f) => [f.type, f.icon])
-) as Record<FieldType, ComponentType>;
+) as Record<FieldType, Component<IconProps>>;
 
 export const fieldTypeLabels: Record<FieldType, string> = Object.fromEntries(
 	FIELD_TYPES.map((f) => [f.type, f.label])

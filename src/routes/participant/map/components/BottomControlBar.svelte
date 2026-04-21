@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Layers, Filter, Navigation, Settings, Plus } from 'lucide-svelte';
+	import { Layers, Filter, Navigation, Settings, Plus } from '@lucide/svelte';
 	import type { Map as LeafletMap } from 'leaflet';
 	import * as m from '$lib/paraglide/messages';
 	import WorkflowSelector from './WorkflowSelector.svelte';

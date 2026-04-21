@@ -1,6 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { superValidate } from 'sveltekit-superforms';
-import { zod } from 'sveltekit-superforms/adapters';
+import { zod4 } from 'sveltekit-superforms/adapters';
 import { participantLoginSchema } from '$lib/schemas/auth';
 import { getAdminPb } from '$lib/server/admin-auth';
 import {
@@ -25,14 +25,13 @@ export const load: PageServerLoad = async (event) => {
 	// QR-code link can't bypass the gate.
 	let consentEnabled = false;
 	let consented = cookies.get('consent') === 'accepted';
-	let settingsRec:
-		| {
-				consent_banner_title?: string;
-				consent_banner_body?: string;
-				consent_accept_label?: string;
-				consent_reject_label?: string;
-		  }
-		| null = null;
+	type SettingsRec = {
+		consent_banner_title?: string;
+		consent_banner_body?: string;
+		consent_accept_label?: string;
+		consent_reject_label?: string;
+	};
+	let settingsRec: SettingsRec | null = null;
 
 	try {
 		const s = await locals.pb.collection('instance_settings').getFirstListItem('', {
@@ -41,7 +40,7 @@ export const load: PageServerLoad = async (event) => {
 			requestKey: null
 		});
 		consentEnabled = !!s.require_consent_before_login;
-		settingsRec = s as typeof settingsRec;
+		settingsRec = s as unknown as SettingsRec;
 	} catch {
 		// No settings row -- gate disabled.
 	}
@@ -83,7 +82,7 @@ export const load: PageServerLoad = async (event) => {
 		// action below surfaces the rate-limit message to the user.
 	}
 
-	const form = await superValidate(zod(participantLoginSchema));
+	const form = await superValidate(zod4(participantLoginSchema));
 
 	// Load the footer-visible legal pages when the gate is on. Used by the
 	// modal for the back-to-page view.
@@ -140,7 +139,7 @@ export const actions: Actions = {
 
 	login: async (event) => {
 		const { request, locals, cookies } = event;
-		const form = await superValidate(request, zod(participantLoginSchema));
+		const form = await superValidate(request, zod4(participantLoginSchema));
 
 		// Hard server-side gate: if consent is required and not yet given,
 		// refuse to process the login no matter what the client does.

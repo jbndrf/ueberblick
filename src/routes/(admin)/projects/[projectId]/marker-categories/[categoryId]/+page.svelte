@@ -6,7 +6,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
-	import { RefreshCw, Upload, Palette } from 'lucide-svelte';
+	import { RefreshCw, Upload, Palette } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import type { PageData } from './$types';
 	import { BaseTable, type BaseColumnConfig } from '$lib/components/admin/base-table';
@@ -16,6 +16,8 @@
 	import DataViewerHeader from '$lib/components/admin/data-viewer-header.svelte';
 	import MarkerIconDesigner from '$lib/components/admin/marker-icon-designer.svelte';
 	import { CsvImportDialog, type MappedImportData, type TargetField, type SpecialColumn, type ImportProgressCallback } from '$lib/components/csv-import';
+
+	type Role = { id: string; name: string };
 
 	type MarkerRow = {
 		id: string;
@@ -150,13 +152,13 @@
 		];
 
 		// Add custom property columns from category fields
-		const propertyColumns = data.fields.map((field) => {
+		const propertyColumns = data.fields.map((field: any) => {
 			const fieldType = field.field_type as 'text' | 'number' | 'date' | 'boolean';
 
 			return {
 				id: field.field_name,
 				header: field.field_name,
-				accessorFn: (row) => row.properties?.[field.field_name] ?? null,
+				accessorFn: (row: any) => row.properties?.[field.field_name] ?? null,
 				fieldType,
 				capabilities: {
 					editable: true,
@@ -290,7 +292,7 @@
 		name={data.category.name}
 		description={data.category.description || ''}
 		visibleToRoles={data.category.visible_to_roles || []}
-		roles={data.roles}
+		roles={data.roles as unknown as Role[]}
 		onNameChange={(value) => updateMeta('name', value)}
 		onDescriptionChange={(value) => updateMeta('description', value)}
 		onRolesChange={(value) => updateMeta('visible_to_roles', value)}
@@ -314,7 +316,7 @@
 	<!-- Base Table -->
 	<BaseTable
 		bind:this={tableRef}
-		data={data.markers}
+		data={data.markers as unknown as MarkerRow[]}
 		{columns}
 		{globalFilterFn}
 		enableRowSelection={true}
@@ -331,10 +333,14 @@
 			}
 		}}
 		columnManagement={{
-			fields: data.fields.map((field) => ({
+			fields: data.fields.map((field: any) => ({
 				field_name: field.field_name,
-				field_type: field.field_type
-			})),
+				field_type: field.field_type,
+				id: field.id,
+				is_required: field.is_required,
+				default_value: field.default_value,
+				display_order: field.display_order
+			})) as unknown as Array<{ id: string; field_name: string; field_type: 'number' | 'boolean' | 'text' | 'date'; is_required: boolean; default_value: string | null; display_order: number }>,
 			onOpen: () => (fieldManagerOpen = true)
 		}}
 		inlineRowCreation={{

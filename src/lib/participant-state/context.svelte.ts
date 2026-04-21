@@ -41,6 +41,19 @@ export function getParticipantGateway(): ParticipantGateway | null {
 }
 
 /**
+ * Get the gateway from context, throwing if missing.
+ * Use in components that are only rendered after gateway initialization
+ * (e.g. WorkflowInstanceDetailModule). Avoids repeated null checks.
+ */
+export function requireParticipantGateway(): ParticipantGateway {
+	const gateway = getContext<ParticipantGateway | null>(GATEWAY_KEY) ?? null;
+	if (!gateway) {
+		throw new Error('Participant gateway is not available in this context. Ensure the component is mounted under a ParticipantLayout.');
+	}
+	return gateway;
+}
+
+/**
  * Set the gateway in context.
  * Called from the layout after initialization.
  */

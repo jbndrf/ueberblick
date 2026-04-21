@@ -2,7 +2,7 @@
 	import { themeStore } from '$lib/stores/theme.svelte';
 	import * as m from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
-	import { Sun, Moon } from 'lucide-svelte';
+	import { Sun, Moon } from '@lucide/svelte';
 
 	function toggleTheme() {
 		themeStore.toggle();

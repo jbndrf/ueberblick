@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import { X } from 'lucide-svelte';
+	import { X } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import type { Snippet } from 'svelte';
 

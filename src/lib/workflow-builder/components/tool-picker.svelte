@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { toolRegistry, type AttachmentTarget } from '../tools';
-	import { ChevronDown } from 'lucide-svelte';
+	import { ChevronDown } from '@lucide/svelte';
 
 	type Props = {
 		/** Where tools will be attached: 'stage' or 'connection' */

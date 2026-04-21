@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Play, Square, CircleStop, GripVertical } from 'lucide-svelte';
+	import { Play, Square, CircleStop, GripVertical } from '@lucide/svelte';
 	import ToolSection from '../shared/ToolSection.svelte';
 	import * as m from '$lib/paraglide/messages';
 

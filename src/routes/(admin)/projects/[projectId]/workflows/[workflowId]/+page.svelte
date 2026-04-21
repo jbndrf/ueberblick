@@ -20,7 +20,7 @@
 		Check,
 		Spline,
 		Hexagon
-	} from 'lucide-svelte';
+	} from '@lucide/svelte';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
@@ -41,6 +41,8 @@
 		type FieldValueRecord,
 		type InstanceRow
 	} from '$lib/admin/workflow-rows';
+
+	type Role = { id: string; name: string };
 
 	type FieldDef = {
 		id: string;
@@ -476,7 +478,7 @@
 					filter: `workflow_id = "${$page.params.workflowId}"`,
 					sort: 'stage_order'
 				}),
-				pb.collection('workflows').getOne($page.params.workflowId),
+				pb.collection('workflows').getOne($page.params.workflowId ?? ''),
 				pb.collection('tools_field_tags').getFullList({
 					filter: `workflow_id = "${$page.params.workflowId}"`
 				})
@@ -779,7 +781,7 @@
 		name={data.workflow.name}
 		description={data.workflow.description || ''}
 		visibleToRoles={data.workflow.visible_to_roles || []}
-		roles={data.roles}
+		roles={data.roles as unknown as Role[]}
 		onNameChange={(value) => updateMeta('name', value)}
 		onDescriptionChange={(value) => updateMeta('description', value)}
 		onRolesChange={(value) => updateMeta('visible_to_roles', value)}
@@ -970,9 +972,14 @@
 
 <!-- Workflow Icon Designer Modal -->
 {#if iconDesignerOpen}
-	<div class="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm" onclick={() => {
-		iconDesignerOpen = false;
-	}}></div>
+	<button
+		type="button"
+		class="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm"
+		aria-label="Close"
+		onclick={() => {
+			iconDesignerOpen = false;
+		}}
+	></button>
 	<div class="fixed left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%]">
 		<WorkflowIconDesigner
 			workflowName={data.workflow.name}

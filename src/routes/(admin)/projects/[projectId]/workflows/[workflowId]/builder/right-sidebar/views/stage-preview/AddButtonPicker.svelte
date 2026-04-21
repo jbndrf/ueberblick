@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ArrowLeft, ArrowRight, Wrench, Plus } from 'lucide-svelte';
+	import { ArrowLeft, ArrowRight, Wrench, Plus } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as m from '$lib/paraglide/messages';
 	import type { WorkflowStage } from '$lib/workflow-builder';

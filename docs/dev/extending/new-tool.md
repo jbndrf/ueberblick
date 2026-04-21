@@ -165,7 +165,7 @@ export { myTool } from './registry';
 Update `src/lib/workflow-builder/tools/registry.ts`. Follow the pattern of the existing tools:
 
 ```typescript
-import { MyIcon } from 'lucide-svelte';
+import { MyIcon } from '@lucide/svelte';
 
 const myTool: ToolDefinition = {
   toolType: 'my_tool',
@@ -376,7 +376,7 @@ Create `builder/right-sidebar/views/my-tool-editor/MyToolEditorView.svelte`:
 
 ```svelte
 <script lang="ts">
-  import { X } from 'lucide-svelte';
+  import { X } from '@lucide/svelte';
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
   import { Label } from '$lib/components/ui/label';

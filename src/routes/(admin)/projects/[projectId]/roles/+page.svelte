@@ -11,7 +11,7 @@
 	import {
 		Users, Eye, EyeOff, FilePlus, FileMinus, Pencil, PencilOff,
 		Lock, ChevronRight, Wrench, TriangleAlert, ShieldCheck
-	} from 'lucide-svelte';
+	} from '@lucide/svelte';
 	import type { PageData } from './$types';
 	import { BaseTable, type BaseColumnConfig } from '$lib/components/admin/base-table';
 	import { page } from '$app/stores';
@@ -95,7 +95,7 @@
 	}
 
 	// --- Roles tab logic ---
-	async function createParticipant(name: string) {
+	async function createParticipant(name: string): Promise<{ id: string; name: string }> {
 		const formData = new FormData();
 		formData.append('name', name);
 
@@ -107,7 +107,7 @@
 		const result = deserialize(await response.text());
 		if (result.type === 'success' && result.data?.entity) {
 			await invalidateAll();
-			return result.data.entity;
+			return result.data.entity as unknown as { id: string; name: string };
 		}
 		throw new Error('Failed to create participant');
 	}
@@ -286,7 +286,7 @@
 		<Tabs.Content value="roles">
 			<BaseTable
 				bind:this={tableRef}
-				data={enhancedRoles}
+				data={enhancedRoles as unknown as Role[]}
 				{columns}
 				{globalFilterFn}
 				getRowId={(row) => row.id}
@@ -594,9 +594,9 @@
 				<div class="py-4">
 					<MobileMultiSelect
 						bind:selectedIds={selectedParticipantIds}
-						options={data.participants}
-						getOptionId={(p) => p.id}
-						getOptionLabel={(p) => p.name}
+						options={data.participants as unknown as Array<{ id: string; name: string }>}
+						getOptionId={(p: { id: string; name: string }) => p.id}
+						getOptionLabel={(p: { id: string; name: string }) => p.name}
 						allowCreate={true}
 						onCreateOption={createParticipant}
 						placeholder={m.rolesSelectOrSearchParticipants?.() ?? 'Select or search participants...'}

@@ -10,7 +10,7 @@
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Label } from '$lib/components/ui/label';
 	import { toast } from 'svelte-sonner';
-	import { Settings, Palette, Users } from 'lucide-svelte';
+	import { Settings, Palette, Users } from '@lucide/svelte';
 	import type { PageData } from './$types';
 	import { BaseTable, type BaseColumnConfig } from '$lib/components/admin/base-table';
 	import type { MarkerCategory } from './columns';
@@ -31,7 +31,7 @@
 	let selectedRoleIds = $state<string[]>([]);
 
 	// Create role callback for MobileMultiSelect (uses server action)
-	async function createRole(name: string) {
+	async function createRole(name: string): Promise<{ id: string; name: string; description?: string }> {
 		const formData = new FormData();
 		formData.append('name', name);
 
@@ -43,7 +43,7 @@
 		const result = deserialize(await response.text());
 		if (result.type === 'success' && result.data?.entity) {
 			await invalidateAll();
-			return result.data.entity;
+			return result.data.entity as unknown as { id: string; name: string; description?: string };
 		}
 		throw new Error('Failed to create role');
 	}
@@ -259,7 +259,7 @@
 	<!-- Base Table -->
 	<BaseTable
 		bind:this={tableRef}
-		data={data.markerCategories}
+		data={data.markerCategories as unknown as MarkerCategory[]}
 		{columns}
 		{globalFilterFn}
 		getRowId={(row) => row.id}
@@ -500,10 +500,10 @@
 				<div class="py-4">
 					<MobileMultiSelect
 						bind:selectedIds={selectedRoleIds}
-						options={data.roles}
-						getOptionId={(r) => r.id}
-						getOptionLabel={(r) => r.name}
-						getOptionDescription={(r) => r.description}
+						options={data.roles as unknown as Array<{ id: string; name: string; description?: string }>}
+						getOptionId={(r: { id: string; name: string; description?: string }) => r.id}
+						getOptionLabel={(r: { id: string; name: string; description?: string }) => r.name}
+						getOptionDescription={(r: { id: string; name: string; description?: string }) => r.description}
 						allowCreate={true}
 						onCreateOption={createRole}
 						placeholder={m.markerCategoriesRolesPlaceholder?.() ?? 'Select or search roles...'}

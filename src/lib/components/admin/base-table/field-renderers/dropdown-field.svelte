@@ -1,7 +1,7 @@
 <script lang="ts">
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { Button } from '$lib/components/ui/button';
-	import { ChevronDown } from 'lucide-svelte';
+	import { ChevronDown } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import * as m from '$lib/paraglide/messages';
 	import type { Snippet } from 'svelte';
@@ -64,7 +64,7 @@
 
 {#if editMode && !readonly && onUpdate}
 	<DropdownMenu.Root>
-		<DropdownMenu.Trigger asChild>
+		<DropdownMenu.Trigger>
 			{#snippet child({ props })}
 				{#if renderTrigger}
 					{@render renderTrigger({ value, label: displayLabel })}

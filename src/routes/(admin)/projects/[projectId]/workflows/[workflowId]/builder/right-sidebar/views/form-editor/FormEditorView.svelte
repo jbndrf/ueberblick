@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { X, ChevronLeft, ChevronRight, Settings2 } from 'lucide-svelte';
+	import { X, ChevronLeft, ChevronRight, Settings2 } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
@@ -348,7 +348,7 @@
 					</button>
 					<FieldTypesPalette
 						expanded={paletteExpanded}
-						onFieldDrag={handleFieldDrop}
+						onFieldDrag={(fieldType) => handleFieldDrop(fieldType, 0, 0, 'left')}
 					/>
 				{/if}
 			</div>

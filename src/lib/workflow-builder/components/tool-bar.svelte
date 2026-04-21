@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Plus } from 'lucide-svelte';
+	import { Plus } from '@lucide/svelte';
 	import type { ToolInstance } from '../tools';
 	import ToolIcon from './tool-icon.svelte';
 

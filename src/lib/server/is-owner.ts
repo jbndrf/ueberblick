@@ -1,7 +1,8 @@
 import { env } from '$env/dynamic/private';
 
-export function isInstanceOwner(user: { email?: string } | null | undefined): boolean {
+export function isInstanceOwner(user: Record<string, unknown> | null | undefined): boolean {
 	const ownerEmail = env.POCKETBASE_ADMIN_EMAIL;
-	if (!user?.email || !ownerEmail) return false;
-	return user.email.toLowerCase() === ownerEmail.toLowerCase();
+	const email = user && typeof user === 'object' ? (user.email as string | undefined) : undefined;
+	if (!email || !ownerEmail) return false;
+	return email.toLowerCase() === ownerEmail.toLowerCase();
 }

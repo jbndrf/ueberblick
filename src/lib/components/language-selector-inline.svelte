@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { setLocale, getLocale } from '$lib/paraglide/runtime';
 	import { Button } from '$lib/components/ui/button';
-	import { Languages } from 'lucide-svelte';
+	import { Languages } from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
 
 	let currentLocale = $state(getLocale());

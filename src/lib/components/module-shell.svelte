@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, type Snippet } from 'svelte';
 	import type { Action as SvelteAction } from 'svelte/action';
-	import { X } from 'lucide-svelte';
+	import { X } from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
 
 	// ==========================================================================

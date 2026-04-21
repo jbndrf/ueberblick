@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ArrowRight } from 'lucide-svelte';
+	import { ArrowRight } from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
 	import type { SelectionContext } from '../context';
 	import { ToolPicker } from '$lib/workflow-builder/components';

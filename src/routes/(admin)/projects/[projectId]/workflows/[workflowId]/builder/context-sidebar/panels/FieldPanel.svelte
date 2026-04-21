@@ -10,7 +10,7 @@
 		Copy,
 		Trash2,
 		Pencil
-	} from 'lucide-svelte';
+	} from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
 	import ToolSection from '../shared/ToolSection.svelte';
 	import ToolButton from '../shared/ToolButton.svelte';

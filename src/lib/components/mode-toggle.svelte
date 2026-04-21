@@ -2,7 +2,7 @@
 	import { themeStore } from '$lib/stores/theme.svelte';
 	import * as m from '$lib/paraglide/messages';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-	import { Sun, Moon, Check } from 'lucide-svelte';
+	import { Sun, Moon, Check } from '@lucide/svelte';
 
 	const currentTheme = $derived(themeStore.current);
 </script>

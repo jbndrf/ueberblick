@@ -10,7 +10,11 @@ import type {
   WorkflowExportData,
   DeletionResults,
   ActiveInstanceCheck,
-  ValidationResult
+  ValidationResult,
+  Stage,
+  Action,
+  FormField,
+  Workflow
 } from '$lib/types/workflow';
 
 export class WorkflowDatabaseAdapter {
@@ -24,18 +28,18 @@ export class WorkflowDatabaseAdapter {
       // Load workflow
       const workflow = await this.pb.collection('workflows').getOne(workflowId, {
         expand: 'project_id'
-      });
+      }) as unknown as Workflow;
 
       // Parse JSON fields (handle both JSON strings and already-parsed objects)
       workflow.icon_config = this.parseJsonField(workflow.icon_config, {});
 
       // Load stages (may be empty for new workflows)
-      let stages = [];
+      let stages: Stage[] = [];
       try {
         stages = await this.pb.collection('workflow_stages').getFullList({
           filter: `workflow_id = "${workflowId}"`,
           sort: 'stage_order'
-        });
+        }) as unknown as Stage[];
 
         // Parse JSON for each stage
         stages.forEach(stage => {
@@ -47,11 +51,11 @@ export class WorkflowDatabaseAdapter {
       }
 
       // Load actions (may be empty for new workflows)
-      let actions = [];
+      let actions: Action[] = [];
       try {
         actions = await this.pb.collection('workflow_actions').getFullList({
           filter: `workflow_id = "${workflowId}"`
-        });
+        }) as unknown as Action[];
 
         // Parse JSON for each action
         actions.forEach(action => {
@@ -63,18 +67,17 @@ export class WorkflowDatabaseAdapter {
         console.log('No actions found for workflow (this is normal for new workflows)');
       }
 
-      // Load forms for each stage/action
+      // Load forms for each stage
       const formIds = new Set<string>();
       stages.forEach(s => s.form_id && formIds.add(s.form_id));
-      actions.forEach(a => a.form_id && formIds.add(a.form_id));
 
-      const formFields: any[] = [];
+      const formFields: FormField[] = [];
       for (const formId of formIds) {
         try {
           const fields = await this.pb.collection('form_fields').getFullList({
             filter: `form_id = "${formId}"`,
             sort: 'field_order'
-          });
+          }) as unknown as FormField[];
 
           // Parse JSON for each field
           fields.forEach(field => {

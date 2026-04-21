@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
-	import type { ComponentType } from 'svelte';
+	import type { Component } from 'svelte';
+	import type { IconProps } from '@lucide/svelte';
 
 	interface Props {
-		icon: ComponentType;
+		icon: Component<IconProps>;
 		label?: string;
 		onclick?: () => void;
 		position?: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';

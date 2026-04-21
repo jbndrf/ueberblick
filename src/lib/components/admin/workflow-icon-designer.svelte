@@ -3,7 +3,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Separator } from '$lib/components/ui/separator';
 	import { toast } from 'svelte-sonner';
-	import { X, Pencil, Trash2, Play, Square, CircleStop, ArrowLeft, Image } from 'lucide-svelte';
+	import { X, Pencil, Trash2, Play, Square, CircleStop, ArrowLeft, Image } from '@lucide/svelte';
 	import MarkerIconDesigner from './marker-icon-designer.svelte';
 	import * as m from '$lib/paraglide/messages';
 
@@ -206,7 +206,7 @@
 		<div class="flex-1 overflow-auto">
 			<MarkerIconDesigner
 				initialConfig={editingInitialConfig}
-				onSave={handleDesignerSave}
+				onSave={(config) => handleDesignerSave(config as IconConfig)}
 				onCancel={handleDesignerCancel}
 			/>
 		</div>

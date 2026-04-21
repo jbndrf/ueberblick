@@ -3,8 +3,9 @@ import { randomBytes } from 'crypto';
 import type { Actions, PageServerLoad } from './$types';
 import { z } from 'zod';
 import { superValidate } from 'sveltekit-superforms';
-import { zod } from 'sveltekit-superforms/adapters';
+import { zod4 } from 'sveltekit-superforms/adapters';
 import * as m from '$lib/paraglide/messages';
+import type { RecordModel } from 'pocketbase';
 import {
 	createUpdateFieldAction,
 	createDeleteAction,
@@ -45,7 +46,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 		});
 
 		// Fetch custom field definitions for this project
-		let customFields = [];
+		let customFields: RecordModel[] = [];
 		try {
 			customFields = await pb.collection('participant_custom_fields').getFullList({
 				filter: `project_id = "${projectId}"`,
@@ -59,8 +60,8 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 		const participantsWithRoles = participants.map((participant) => {
 			const roleIds = participant.role_id || [];
 			const participantRoles = roleIds
-				.map((roleId: string) => roles?.find((r) => r.id === roleId))
-				.filter((role): role is NonNullable<typeof role> => role !== undefined);
+				.map((roleId: string) => roles?.find((r: RecordModel) => r.id === roleId))
+				.filter((role: RecordModel | undefined): role is RecordModel => role !== undefined);
 
 			return {
 				...participant,
@@ -68,7 +69,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 			};
 		});
 
-		const form = await superValidate(zod(participantSchema));
+		const form = await superValidate(zod4(participantSchema));
 
 		return {
 			participants: participantsWithRoles,
@@ -91,7 +92,7 @@ export const actions: Actions = {
 		if (roleIdsRaw) {
 			try { roleIds = JSON.parse(roleIdsRaw as string); } catch { /* ignore */ }
 		}
-		const form = await superValidate(request, zod(participantSchema));
+		const form = await superValidate(request, zod4(participantSchema));
 
 		if (!form.valid) {
 			return fail(400, { form });
@@ -157,7 +158,7 @@ export const actions: Actions = {
 		const participantId = formData.get('id') as string;
 		const roleIdsJson = formData.get('roleIds') as string;
 
-		const form = await superValidate(formData, zod(participantSchema));
+		const form = await superValidate(formData, zod4(participantSchema));
 
 		if (!form.valid) {
 			return fail(400, { form });

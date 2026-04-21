@@ -32,7 +32,7 @@ export const mapLayerSchema = z.object({
 	display_order: z.number().int().min(0).default(0),
 	visible_to_roles: z.array(z.string()).default([]),
 	is_active: z.boolean().default(true),
-	config: mapLayerConfigSchema.default({})
+	config: mapLayerConfigSchema.default({ opacity: 1 })
 });
 
 /**

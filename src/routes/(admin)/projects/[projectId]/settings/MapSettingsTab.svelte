@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { superForm } from 'sveltekit-superforms';
-	import { zodClient } from 'sveltekit-superforms/adapters';
+	import { zod4Client } from 'sveltekit-superforms/adapters';
 	import { mapLayerSchema, projectMapDefaultsSchema } from '$lib/schemas/map-settings';
 	import * as m from '$lib/paraglide/messages';
 	import { toast } from 'svelte-sonner';
@@ -14,7 +14,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Switch } from '$lib/components/ui/switch';
 	import { Badge } from '$lib/components/ui/badge';
-	import { Map, Plus, Layers, Star, Settings, Package, Loader2, MapPin, Pencil, Upload } from 'lucide-svelte';
+	import { Map, Plus, Layers, Star, Settings, Package, Loader2, MapPin, Pencil, Upload } from '@lucide/svelte';
 	import { RegionSelector } from '$lib/components/map';
 	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 	import { formatArea, formatTileCount, estimateTileCount, calculatePolygonAreaKm2 } from '$lib/utils/geo-utils';
@@ -302,7 +302,7 @@
 		form: defaultsForm,
 		enhance: defaultsEnhance
 	} = superForm(data.defaultsForm, {
-		validators: zodClient(projectMapDefaultsSchema),
+		validators: zod4Client(projectMapDefaultsSchema),
 		dataType: 'json',
 		onSubmit: () => {
 			isSavingDefaults = true;

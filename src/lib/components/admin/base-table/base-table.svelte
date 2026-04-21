@@ -9,7 +9,7 @@
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Button } from '$lib/components/ui/button';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-	import { MoreHorizontal, Pencil, Trash2, Plus, Check, X } from 'lucide-svelte';
+	import { MoreHorizontal, Pencil, Trash2, Plus, Check, X } from '@lucide/svelte';
 	import DataTableToolbar from '$lib/components/admin/data-table-toolbar.svelte';
 	import DataTableColumnHeader from '$lib/components/admin/data-table-column-header.svelte';
 	import {
@@ -107,7 +107,7 @@
 					? () => renderSnippet(col.headerRenderer!, { column: col })
 					: ({ column: tableColumn }) =>
 							renderComponent(DataTableColumnHeader, {
-								column: tableColumn,
+								column: tableColumn as any,
 								title: col.header
 							}),
 				cell: (info) => {
@@ -151,7 +151,7 @@
 
 						case 'array':
 							return renderComponent(ArrayField, {
-								value,
+								value: value as any[],
 								rowId,
 								editMode,
 								onUpdate: col.onUpdate ? (v: any[]) => col.onUpdate!(rowId, v) : undefined,

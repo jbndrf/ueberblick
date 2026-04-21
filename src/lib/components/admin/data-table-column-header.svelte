@@ -4,7 +4,7 @@
 	import * as Popover from '$lib/components/ui/popover';
 	import * as Command from '$lib/components/ui/command';
 	import { Checkbox } from '$lib/components/ui/checkbox';
-	import { ArrowUpDown, ArrowUp, ArrowDown, ListFilter } from 'lucide-svelte';
+	import { ArrowUpDown, ArrowUp, ArrowDown, ListFilter } from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
 
 	type Props = {

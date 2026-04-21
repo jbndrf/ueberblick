@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
-	import { LogOut, CheckCircle } from 'lucide-svelte';
+	import { LogOut, CheckCircle } from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
 
 	let { data } = $props();
@@ -26,7 +26,7 @@
 		<Card.Content class="space-y-4">
 			<div class="rounded-lg bg-muted p-4 text-center">
 				<p class="text-sm text-muted-foreground">{m.adminDashboardLoggedInAs?.() ?? 'Logged in as'}</p>
-				<p class="mt-1 font-medium">{data.user?.email}</p>
+				<p class="mt-1 font-medium">{(data as any).user?.email}</p>
 			</div>
 
 			<form method="POST" action="/logout" class="w-full">

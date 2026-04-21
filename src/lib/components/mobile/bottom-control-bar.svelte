@@ -1,8 +1,9 @@
 <script lang="ts">
-	import type { ComponentType } from 'svelte';
+	import type { Component } from 'svelte';
+	import type { IconProps } from '@lucide/svelte';
 
 	interface ControlButton {
-		icon: ComponentType;
+		icon: Component<IconProps>;
 		label: string;
 		onclick: () => void;
 	}

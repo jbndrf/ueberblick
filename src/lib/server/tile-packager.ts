@@ -314,12 +314,12 @@ export async function createTilePackage(options: PackageOptions): Promise<Packag
 				for (const result of results) {
 					processedCount++;
 					if (result.success && 'path' in result) {
-						files[result.path] = result.data;
+						files[result.path!] = result.data!;
 						downloadedCount++;
 						zoomSuccesses++;
 					} else {
 						zoomFailures++;
-						if ('coord' in result) {
+						if ('coord' in result && result.coord) {
 							errors.push({
 								layerId: layer.id,
 								z: result.coord.z,

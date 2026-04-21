@@ -9,7 +9,7 @@
 	import { onMount } from 'svelte';
 	import { FormRenderer } from '$lib/components/form-renderer';
 	import { Button } from '$lib/components/ui/button';
-	import { ChevronLeft, ChevronRight, Send, Loader2 } from 'lucide-svelte';
+	import { ChevronLeft, ChevronRight, Send, Loader2 } from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
 	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
 	import {

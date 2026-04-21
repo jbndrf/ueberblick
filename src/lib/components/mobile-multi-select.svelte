@@ -1,6 +1,6 @@
 <script lang="ts" generics="T extends Record<string, any>">
 	import { onMount, tick } from 'svelte';
-	import { X, ChevronDown, Search, Plus } from 'lucide-svelte';
+	import { X, ChevronDown, Search, Plus } from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';

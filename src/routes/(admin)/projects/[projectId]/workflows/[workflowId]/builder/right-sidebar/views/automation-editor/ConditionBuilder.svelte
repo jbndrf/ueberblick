@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
-	import { Plus, Trash2 } from 'lucide-svelte';
+	import { Plus, Trash2 } from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
 
 	import type { ConditionGroup, ConditionLeaf, ConditionOperator } from '$lib/workflow-builder';

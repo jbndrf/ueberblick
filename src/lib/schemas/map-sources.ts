@@ -40,8 +40,8 @@ export const wmsSourceConfigSchema = z.object({
  */
 export const geojsonSourceConfigSchema = z.object({
 	attribution: z.string().max(500).optional(),
-	style: z.record(z.unknown()).optional(),
-	data: z.union([z.string(), z.record(z.unknown())]).optional() // URL or inline GeoJSON
+	style: z.record(z.string(), z.unknown()).optional(),
+	data: z.union([z.string(), z.record(z.string(), z.unknown())]).optional() // URL or inline GeoJSON
 });
 
 /**
@@ -92,7 +92,7 @@ export const addPresetSourceSchema = z.object({
 export const updateSourceSchema = z.object({
 	name: z.string().min(1, 'Name is required').max(255),
 	url: z.string().max(2000).optional(),
-	config: z.record(z.unknown()).optional()
+	config: z.record(z.string(), z.unknown()).optional()
 });
 
 export type CreateTileSourceSchema = typeof createTileSourceSchema;
