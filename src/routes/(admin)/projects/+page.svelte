@@ -6,6 +6,11 @@
 	import { toast } from 'svelte-sonner';
 	import { invalidateAll } from '$app/navigation';
 	import * as m from '$lib/paraglide/messages';
+	import * as Dialog from '$lib/components/ui/dialog';
+	import { Progress } from '$lib/components/ui/progress';
+	import { Input } from '$lib/components/ui/input';
+	import { Label } from '$lib/components/ui/label';
+	import { chunkedUpload } from '$lib/upload/chunked-uploader';
 
 	let { data } = $props();
 	let fileInput: HTMLInputElement;
@@ -109,23 +114,94 @@
 		}
 	}
 
-	async function handleImportArchive(file: File) {
-		if (importingArchive) return;
+	let archiveDialogOpen = $state(false);
+	let archiveFile = $state<File | null>(null);
+	let archiveName = $state('');
+	let archivePhase = $state<'idle' | 'uploading' | 'processing' | 'done' | 'failed'>('idle');
+	let archivePercent = $state(0);
+	let archiveLabel = $state('');
+	let archiveError = $state('');
+
+	function resetArchiveDialog() {
+		archiveFile = null;
+		archiveName = '';
+		archivePhase = 'idle';
+		archivePercent = 0;
+		archiveLabel = '';
+		archiveError = '';
+		importingArchive = false;
+	}
+
+	async function pollImportStatus(importId: string): Promise<'done' | 'failed'> {
+		while (true) {
+			await new Promise((r) => setTimeout(r, 1000));
+			let res: Response;
+			try {
+				res = await fetch(`/api/project-imports/upload/${importId}/status`);
+			} catch {
+				continue;
+			}
+			if (!res.ok) continue;
+			const s = (await res.json()) as {
+				status: string;
+				progress: number;
+				label?: string;
+				error?: string;
+			};
+			archivePercent = s.progress;
+			archiveLabel = s.label ?? '';
+			if (s.status === 'completed') {
+				archivePhase = 'done';
+				return 'done';
+			}
+			if (s.status === 'failed') {
+				archivePhase = 'failed';
+				archiveError = s.error ?? 'Import failed';
+				return 'failed';
+			}
+		}
+	}
+
+	async function handleImportArchive() {
+		if (!archiveFile || importingArchive) return;
 		importingArchive = true;
+		archivePhase = 'uploading';
+		archivePercent = 0;
+		archiveError = '';
 		try {
-			const formData = new FormData();
-			formData.append('file', file);
-			const response = await fetch('?/importArchive', { method: 'POST', body: formData });
-			const result = await response.json();
-			if (result.type === 'success') {
+			const { id: importId } = await chunkedUpload({
+				file: archiveFile,
+				initUrl: '/api/project-imports/upload/init',
+				initBody: {
+					name: archiveName.trim() || undefined,
+					filename: archiveFile.name
+				},
+				idField: 'importId',
+				chunkUrl: (id, i) => `/api/project-imports/upload/${id}/chunk/${i}`,
+				chunksUrl: (id) => `/api/project-imports/upload/${id}/chunks`,
+				finalizeUrl: (id) => `/api/project-imports/upload/${id}/finalize`,
+				onProgress: (p) => {
+					archivePercent = p.percent;
+					archiveLabel = `${(((p.loaded ?? 0) / 1024 / 1024) | 0)} / ${(((p.total ?? 0) / 1024 / 1024) | 0)} MB`;
+				}
+			});
+
+			archivePhase = 'processing';
+			archivePercent = 0;
+			archiveLabel = 'Queued';
+			const outcome = await pollImportStatus(importId);
+
+			if (outcome === 'done') {
 				await invalidateAll();
 				toast.success(m.projectsImportArchiveSuccess?.() ?? 'Project archive imported');
 			} else {
-				toast.error(result.data?.message || (m.projectsImportArchiveError?.() ?? 'Failed to import project archive'));
+				toast.error(archiveError || (m.projectsImportArchiveError?.() ?? 'Failed to import project archive'));
 			}
 		} catch (err) {
 			console.error('Error importing archive:', err);
-			toast.error(m.projectsImportArchiveError?.() ?? 'Failed to import project archive');
+			archivePhase = 'failed';
+			archiveError = err instanceof Error ? err.message : 'Upload failed';
+			toast.error(archiveError);
 		} finally {
 			importingArchive = false;
 		}
@@ -135,7 +211,8 @@
 		const input = event.target as HTMLInputElement;
 		const file = input.files?.[0];
 		if (file) {
-			handleImportArchive(file);
+			archiveFile = file;
+			archiveDialogOpen = true;
 			input.value = '';
 		}
 	}
@@ -155,6 +232,66 @@
 	class="hidden"
 	onchange={onArchiveFileSelected}
 />
+
+<Dialog.Root
+	bind:open={archiveDialogOpen}
+	onOpenChange={(o) => {
+		if (!o && archivePhase !== 'uploading' && archivePhase !== 'processing') resetArchiveDialog();
+	}}
+>
+	<Dialog.Content>
+		<Dialog.Header>
+			<Dialog.Title>{m.projectsImportArchive?.() ?? 'Import full project (ZIP)'}</Dialog.Title>
+		</Dialog.Header>
+		<div class="space-y-4">
+			{#if archiveFile}
+				<div class="text-sm text-muted-foreground">
+					{archiveFile.name} — {((archiveFile.size / 1024 / 1024) | 0)} MB
+				</div>
+			{/if}
+			{#if archivePhase === 'idle'}
+				<div class="space-y-2">
+					<Label for="archive-name">Name override (optional)</Label>
+					<Input
+						id="archive-name"
+						bind:value={archiveName}
+						placeholder="Leave empty to use archive's project name"
+					/>
+				</div>
+			{:else}
+				<div class="space-y-2">
+					<div class="text-sm font-medium capitalize">{archivePhase}</div>
+					<Progress value={archivePercent} max={100} />
+					<div class="text-xs text-muted-foreground">
+						{archivePercent}%{archiveLabel ? ` — ${archiveLabel}` : ''}
+					</div>
+					{#if archiveError}
+						<div class="text-sm text-destructive">{archiveError}</div>
+					{/if}
+				</div>
+			{/if}
+		</div>
+		<Dialog.Footer>
+			{#if archivePhase === 'idle'}
+				<Button variant="outline" onclick={() => (archiveDialogOpen = false)}>
+					{m.commonCancel?.() ?? 'Cancel'}
+				</Button>
+				<Button onclick={handleImportArchive} disabled={!archiveFile || importingArchive}>
+					{m.projectsImportArchive?.() ?? 'Import'}
+				</Button>
+			{:else if archivePhase === 'done' || archivePhase === 'failed'}
+				<Button
+					onclick={() => {
+						archiveDialogOpen = false;
+						resetArchiveDialog();
+					}}
+				>
+					{m.commonClose?.() ?? 'Close'}
+				</Button>
+			{/if}
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
 
 <div class="container mx-auto p-6">
 	<div class="mb-6 flex items-center justify-between">

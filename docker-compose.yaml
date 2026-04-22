@@ -40,8 +40,8 @@ services:
     volumes:
       - ./data/pb_data:/pb/pb_data
     # Self-hosters: Uncomment to expose PocketBase directly on the host (for LAN admin UI access)
-    # ports:
-    #   - "8090:8090"
+    ports:
+      - "8090:8090"
     networks:
       - app-network
     restart: unless-stopped
@@ -75,6 +75,10 @@ services:
       - EXPOSE_PB_ADMIN=${EXPOSE_PB_ADMIN:-false}
       # Optional: Set to 'true' when behind HTTPS (production)
       - SECURE_COOKIES=${SECURE_COOKIES:-false}
+      # Tell adapter-node to trust nginx's X-Forwarded-Proto header so the
+      # request URL scheme matches the browser's Origin (prevents SvelteKit
+      # CSRF "Cross-site POST form submissions are forbidden" errors).
+      - PROTOCOL_HEADER=x-forwarded-proto
     volumes:
       - ./data/nginx_cache:/var/cache/nginx
       - ./data/app_data:/app/data

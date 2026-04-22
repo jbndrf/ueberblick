@@ -15,6 +15,9 @@ import {
 	generateId,
 	type ProjectSchemaExport
 } from './schema-transfer';
+import { createBatcher } from './pb-batch';
+
+export type ImportProgress = (pct: number, label?: string) => void | Promise<void>;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -365,20 +368,17 @@ export async function exportProjectArchive(
 			.collection('workflow_instances')
 			.getFullList({ filter: `workflow_id = "${wfRecord.id}"`, sort: 'created' });
 
-		const valuesByInstance = new Map<string, Map<string, any>>();
+		const valuesByInstance = new Map<string, Map<string, any[]>>();
 		if (instances.length > 0) {
-			const instanceIds = instances.map((i: any) => i.id);
-			const chunks: string[][] = [];
-			for (let i = 0; i < instanceIds.length; i += 50) chunks.push(instanceIds.slice(i, i + 50));
-			for (const chunk of chunks) {
-				const filter = chunk.map((id) => `instance_id = "${id}"`).join(' || ');
-				const vals = await pb
-					.collection('workflow_instance_field_values')
-					.getFullList({ filter });
-				for (const v of vals) {
-					if (!valuesByInstance.has(v.instance_id)) valuesByInstance.set(v.instance_id, new Map());
-					valuesByInstance.get(v.instance_id)!.set(v.field_key, v);
-				}
+			const vals = await pb.collection('workflow_instance_field_values').getFullList({
+				filter: `instance_id.workflow_id = "${wfRecord.id}"`,
+				requestKey: null
+			});
+			for (const v of vals) {
+				if (!valuesByInstance.has(v.instance_id)) valuesByInstance.set(v.instance_id, new Map());
+				const perField = valuesByInstance.get(v.instance_id)!;
+				if (!perField.has(v.field_key)) perField.set(v.field_key, []);
+				perField.get(v.field_key)!.push(v);
 			}
 		}
 
@@ -437,13 +437,15 @@ export async function exportProjectArchive(
 
 			// Field columns
 			for (const col of fieldCols) {
-				const v = valueMap.get(col.field_id!);
-				if (!v) {
+				const arr = valueMap.get(col.field_id!) ?? [];
+				if (arr.length === 0) {
 					row.push('');
 					continue;
 				}
 				if (col.value_type === 'file_ref') {
-					if (v.file_value) {
+					const paths: string[] = [];
+					for (const v of arr) {
+						if (!v.file_value) continue;
 						const fname = v.file_value;
 						const path = `files/instances/${inst.id}/${col.field_id}/${fname}`;
 						const bytes = await fetchPbFile(
@@ -452,13 +454,14 @@ export async function exportProjectArchive(
 							v.id,
 							fname
 						);
-						if (bytes) zipFiles[path] = bytes;
-						row.push(path);
-					} else {
-						row.push('');
+						if (bytes) {
+							zipFiles[path] = bytes;
+							paths.push(path);
+						}
 					}
+					row.push(paths.join(';'));
 				} else {
-					row.push(v.value ?? '');
+					row.push(arr[0].value ?? '');
 				}
 			}
 
@@ -702,8 +705,14 @@ export async function importProjectArchive(
 	pb: PocketBase,
 	zipBuffer: Uint8Array,
 	ownerId: string,
-	nameOverride?: string
+	nameOverride?: string,
+	onProgress?: ImportProgress
 ): Promise<ImportResult> {
+	const progress = async (pct: number, label?: string) => {
+		if (onProgress) await onProgress(Math.max(0, Math.min(100, Math.round(pct))), label);
+	};
+
+	await progress(2, 'Reading archive');
 	const zip = unzipSync(zipBuffer);
 
 	const manifest = readJsonEntry<ArchiveManifest>(zip, 'manifest.json');
@@ -712,7 +721,9 @@ export async function importProjectArchive(
 	const schema = readJsonEntry<ProjectSchemaExport>(zip, 'schema.json');
 
 	// 1. Create project + config via existing schema importer.
+	await progress(5, 'Importing schema');
 	const newProjectId = await importProjectSchema(pb, schema, ownerId, nameOverride);
+	await progress(15, 'Schema imported');
 
 	// Build ID maps from old → new by fetching everything we just created and matching by name+order.
 	// Simpler approach: re-derive by querying new project + comparing structure to schema/mapping.
@@ -726,11 +737,12 @@ export async function importProjectArchive(
 		if (csv) {
 			const { headers, rows } = parseCsv(strFromU8(csv));
 			const idx = (n: string) => headers.indexOf(n);
-			let count = 0;
 			const existing = await pb
 				.collection('participants')
 				.getFullList({ fields: 'email' });
 			const usedEmails = new Set(existing.map((p: any) => p.email).filter(Boolean));
+			const batcher = createBatcher(pb);
+			let count = 0;
 			for (const row of rows) {
 				const oldId = row[idx('id')];
 				const newId = generateId();
@@ -745,27 +757,23 @@ export async function importProjectArchive(
 				}
 				usedEmails.add(email);
 
-				const password = Array.from(
-					{ length: 32 },
-					() => 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]
-				).join('');
-
 				const roles = (row[idx('role_ids')] || '')
 					.split(';')
 					.filter(Boolean)
 					.map((r) => idMaps.roles.get(r) || r);
 
+				const token = row[idx('token')] || generateId() + generateId();
 				const data: any = {
 					id: newId,
 					project_id: newProjectId,
 					name: row[idx('name')] || 'Imported participant',
 					phone: row[idx('phone')] || '',
-					token: generateId() + generateId(), // 30 chars, fresh
+					token,
 					is_active: row[idx('is_active')] === 'true',
 					email,
 					emailVisibility: false,
-					password,
-					passwordConfirm: password,
+					password: token,
+					passwordConfirm: token,
 					role_id: roles
 				};
 				const expires = row[idx('expires_at')];
@@ -779,18 +787,18 @@ export async function importProjectArchive(
 					}
 				}
 
-				try {
-					await pb.collection('participants').create(data);
-					count++;
-				} catch (err) {
-					console.error(`Failed to import participant ${oldId}:`, err);
-				}
+				await batcher.add('participants', data);
+				count++;
 			}
+			await batcher.flush();
 			counts['participants'] = count;
+			await progress(25, `Imported ${count} participants`);
 		}
 	}
 
 	// 2. Workflow instances + field_values per workflow CSV
+	const workflowCount = mapping.workflows.length || 1;
+	let workflowIdx = 0;
 	for (const wfMap of mapping.workflows) {
 		const newWorkflowId = idMaps.workflows.get(wfMap.original_id);
 		if (!newWorkflowId) continue;
@@ -800,6 +808,7 @@ export async function importProjectArchive(
 		const colByName = new Map(wfMap.columns.map((c) => [c.name, c]));
 		const headerCols = headers.map((h) => colByName.get(h));
 
+		const batcher = createBatcher(pb);
 		let instanceCount = 0;
 		let valueCount = 0;
 		for (const row of rows) {
@@ -844,7 +853,7 @@ export async function importProjectArchive(
 				if (file) formData.append('files', file);
 			}
 
-			await pb.collection('workflow_instances').create(formData);
+			await batcher.add('workflow_instances', formData);
 			instanceCount++;
 
 			// Field values
@@ -859,28 +868,42 @@ export async function importProjectArchive(
 					? idMaps.stages.get(col.stage_id) || col.stage_id
 					: newStageId;
 
-				const valueId = generateId();
-				const fd = new FormData();
-				fd.append('id', valueId);
-				fd.append('instance_id', newInstanceId);
-				fd.append('field_key', newFieldId);
-				fd.append('stage_id', newValStageId);
-
 				if (col.value_type === 'file_ref') {
-					const fname = cell.split('/').pop() || 'file';
-					const file = fileFromZip(zip, cell, fname);
-					if (file) fd.append('file_value', file);
-					fd.append('value', '');
+					const refs = cell.split(';').filter(Boolean);
+					for (const ref of refs) {
+						const fname = ref.split('/').pop() || 'file';
+						const file = fileFromZip(zip, ref, fname);
+						if (!file) continue;
+						const fd = new FormData();
+						fd.append('id', generateId());
+						fd.append('instance_id', newInstanceId);
+						fd.append('field_key', newFieldId);
+						fd.append('stage_id', newValStageId);
+						fd.append('value', '');
+						fd.append('file_value', file);
+						await batcher.add('workflow_instance_field_values', fd);
+						valueCount++;
+					}
 				} else {
+					const fd = new FormData();
+					fd.append('id', generateId());
+					fd.append('instance_id', newInstanceId);
+					fd.append('field_key', newFieldId);
+					fd.append('stage_id', newValStageId);
 					fd.append('value', cell);
+					await batcher.add('workflow_instance_field_values', fd);
+					valueCount++;
 				}
-
-				await pb.collection('workflow_instance_field_values').create(fd);
-				valueCount++;
 			}
 		}
+		await batcher.flush();
 		counts[`workflow_instances:${wfMap.name}`] = instanceCount;
 		counts[`field_values:${wfMap.name}`] = valueCount;
+		workflowIdx++;
+		await progress(
+			25 + (workflowIdx / workflowCount) * 40,
+			`Imported ${instanceCount} instances (${wfMap.name})`
+		);
 	}
 
 	// 3. Protocol entries
@@ -889,6 +912,7 @@ export async function importProjectArchive(
 		if (csv) {
 			const { headers, rows } = parseCsv(strFromU8(csv));
 			const idx = (n: string) => headers.indexOf(n);
+			const batcher = createBatcher(pb);
 			let count = 0;
 			for (const row of rows) {
 				const oldId = row[idx('id')];
@@ -924,10 +948,12 @@ export async function importProjectArchive(
 					const f = fileFromZip(zip, ref, fname);
 					if (f) fd.append('files', f);
 				}
-				await pb.collection('workflow_protocol_entries').create(fd);
+				await batcher.add('workflow_protocol_entries', fd);
 				count++;
 			}
+			await batcher.flush();
 			counts['protocol_entries'] = count;
+			await progress(75, `Imported ${count} protocol entries`);
 		}
 	}
 
@@ -937,6 +963,7 @@ export async function importProjectArchive(
 		if (csv) {
 			const { headers, rows } = parseCsv(strFromU8(csv));
 			const idx = (n: string) => headers.indexOf(n);
+			const batcher = createBatcher(pb);
 			let count = 0;
 			for (const row of rows) {
 				const oldInstId = row[idx('instance_id')];
@@ -956,10 +983,12 @@ export async function importProjectArchive(
 				}
 				const md = row[idx('metadata_json')];
 				if (md) data.metadata = JSON.parse(md);
-				await pb.collection('workflow_instance_tool_usage').create(data);
+				await batcher.add('workflow_instance_tool_usage', data);
 				count++;
 			}
+			await batcher.flush();
 			counts['tool_usage'] = count;
+			await progress(82, `Imported ${count} tool usages`);
 		}
 	}
 
@@ -969,6 +998,7 @@ export async function importProjectArchive(
 		if (csv) {
 			const { headers, rows } = parseCsv(strFromU8(csv));
 			const idx = (n: string) => headers.indexOf(n);
+			const batcher = createBatcher(pb);
 			let count = 0;
 			for (const row of rows) {
 				const oldCat = row[idx('category_id')];
@@ -992,10 +1022,12 @@ export async function importProjectArchive(
 					const newCb = idMaps.participants.get(oldCreatedBy);
 					if (newCb) data.created_by = newCb;
 				}
-				await pb.collection('markers').create(data);
+				await batcher.add('markers', data);
 				count++;
 			}
+			await batcher.flush();
 			counts['markers'] = count;
+			await progress(90, `Imported ${count} markers`);
 		}
 	}
 
@@ -1007,6 +1039,7 @@ export async function importProjectArchive(
 		if (!newTableId) continue;
 		const { headers, rows } = parseCsv(strFromU8(csv));
 		const dataCols = headers.filter((h) => h !== 'id');
+		const batcher = createBatcher(pb);
 		let count = 0;
 		for (const row of rows) {
 			const rowData: Record<string, any> = {};
@@ -1020,16 +1053,18 @@ export async function importProjectArchive(
 					rowData[colName] = cell;
 				}
 			}
-			await pb.collection('custom_table_data').create({
+			await batcher.add('custom_table_data', {
 				id: generateId(),
 				table_id: newTableId,
 				row_data: rowData
 			});
 			count++;
 		}
+		await batcher.flush();
 		counts[`custom_table:${tableMap.name}`] = count;
 	}
 
+	await progress(100, 'Import complete');
 	return { projectId: newProjectId, counts };
 }
 

@@ -80,6 +80,9 @@ git_login.md
 # Data directory (Docker volumes, local data)
 /data
 
+# Chunked upload staging dir (host dev; docker uses /app/data/uploads)
+/.uploads
+
 # Python venv (mkdocs)
 .venv/
 
