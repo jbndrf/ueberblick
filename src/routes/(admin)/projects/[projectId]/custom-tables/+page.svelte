@@ -201,7 +201,7 @@
 	}
 </script>
 
-<div class="flex flex-col gap-6 min-w-0 w-full">
+<div class="flex h-full min-h-0 flex-col gap-6 min-w-0 w-full">
 	<!-- Header -->
 	<div>
 		<h1 class="text-3xl font-bold tracking-tight">{m.customTablesTitle()}</h1>

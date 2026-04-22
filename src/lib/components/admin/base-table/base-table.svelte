@@ -27,6 +27,22 @@
 
 	type Props = BaseTableConfig<TData>;
 
+	const SELECT_COL_WIDTH = 48;
+	const ACTIONS_COL_WIDTH = 64;
+	const DEFAULT_MIN_WIDTH: Record<string, number> = {
+		text: 200,
+		number: 120,
+		date: 140,
+		boolean: 100,
+		array: 220,
+		dropdown: 180,
+		custom: 200
+	};
+
+	function columnMinWidth(col: BaseColumnConfig<TData>): number {
+		return col.minWidth ?? DEFAULT_MIN_WIDTH[col.fieldType ?? 'text'] ?? 200;
+	}
+
 	let {
 		data,
 		columns,
@@ -198,7 +214,8 @@
 				meta: {
 					fieldType: col.fieldType,
 					capabilities: col.capabilities,
-					config: col
+					config: col,
+					minWidth: columnMinWidth(col)
 				}
 			};
 
@@ -218,6 +235,22 @@
 
 		return cols;
 	});
+
+	function colWidth(columnId: string | undefined): number {
+		if (columnId === 'select') return SELECT_COL_WIDTH;
+		if (columnId === 'actions') return ACTIONS_COL_WIDTH;
+		const def = tableColumns.find((c) => c.id === columnId);
+		return def?.meta?.minWidth ?? 200;
+	}
+
+	function colStyle(columnId: string | undefined): string {
+		const w = colWidth(columnId);
+		return `min-width: ${w}px; width: ${w}px;`;
+	}
+
+	const totalMinWidth = $derived(
+		tableColumns.reduce((sum, c) => sum + colWidth(c.id), 0)
+	);
 
 	// Create TanStack table instance
 	const table = createSvelteTable({
@@ -580,7 +613,7 @@
 	/>
 {/snippet}
 
-<div class="flex flex-col gap-4 min-w-0 w-full">
+<div class="flex h-full min-h-0 flex-1 flex-col gap-4 min-w-0 w-full">
 	{#if showToolbar}
 		<DataTableToolbar
 			searchValue={globalFilter}
@@ -593,15 +626,20 @@
 		/>
 	{/if}
 
-	<div class="rounded-lg border border-border bg-card overflow-hidden w-full">
-		<div bind:this={scrollContainerRef} class="overflow-x-auto overflow-y-auto h-[calc(100vh-16rem)] custom-scrollbar">
-			<Table.Root class="w-max min-w-full">
+	<div class="flex flex-1 min-h-0 rounded-lg border border-border bg-card overflow-hidden w-full">
+		<div bind:this={scrollContainerRef} class="flex-1 min-h-0 min-w-0 w-full overflow-auto custom-scrollbar">
+			<table
+				data-slot="table"
+				class="caption-bottom text-sm"
+				style="table-layout: fixed; width: max(100%, {totalMinWidth}px)"
+			>
 				<Table.Header class="sticky top-0 z-20">
 					{#each table.getHeaderGroups() as headerGroup}
 						<Table.Row class="group hover:bg-muted/50">
 							{#each headerGroup.headers as header, index}
 								<Table.Head
 									class="{header.column.id === 'select' ? 'pl-6 pr-2' : header.column.id === 'actions' ? 'pl-2 pr-6' : 'px-6'} py-3 text-sm font-medium text-muted-foreground whitespace-nowrap bg-muted/50 {header.column.id === 'select' ? 'sticky left-0 z-30 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] before:absolute before:inset-0 before:bg-card before:-z-10 after:absolute after:inset-0 after:bg-muted/50 after:-z-[9]' : ''} {header.column.id === 'actions' ? 'sticky right-0 z-30 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)] before:absolute before:inset-0 before:bg-card before:-z-10 after:absolute after:inset-0 after:bg-muted/50 after:-z-[9]' : ''}"
+									style={colStyle(header.column.id)}
 								>
 									{#if !header.isPlaceholder}
 										{#if columnManagement && index === headerGroup.headers.length - 1}
@@ -657,7 +695,8 @@
 								<Table.Row class="group {row.getIsSelected() ? 'bg-muted/50' : ''}" style="height: {ROW_HEIGHT}px">
 									{#each row.getVisibleCells() as cell}
 										<Table.Cell
-											class="{cell.column.id === 'select' ? 'pl-6 pr-2' : cell.column.id === 'actions' ? 'pl-2 pr-6' : 'px-6'} py-4 {cell.column.id === 'select' ? 'whitespace-nowrap sticky left-0 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] bg-card group-hover:!bg-muted/50' : 'max-w-[300px]'} {cell.column.id === 'actions' ? 'sticky right-0 z-10 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)] bg-card group-hover:!bg-muted/50' : ''} {(cell.column.id === 'select' || cell.column.id === 'actions') && row.getIsSelected() ? '!bg-muted/50' : ''}"
+											class="{cell.column.id === 'select' ? 'pl-6 pr-2' : cell.column.id === 'actions' ? 'pl-2 pr-6' : 'px-6'} py-4 {cell.column.id === 'select' ? 'whitespace-nowrap sticky left-0 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] bg-card group-hover:!bg-muted/50' : 'overflow-hidden'} {cell.column.id === 'actions' ? 'sticky right-0 z-10 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)] bg-card group-hover:!bg-muted/50' : ''} {(cell.column.id === 'select' || cell.column.id === 'actions') && row.getIsSelected() ? '!bg-muted/50' : ''}"
+											style={colStyle(cell.column.id)}
 										>
 											<FlexRender
 												content={cell.column.columnDef.cell}
@@ -684,7 +723,8 @@
 									inlineRowCreation.excludeFields?.includes(column.id || '') || false}
 								{@const isMissingRequired = isRequired && hasNewRowInput && (!newRowData[column.id || ''] || newRowData[column.id || ''] === '')}
 								<Table.Cell
-									class="{column.id === 'select' ? 'pl-6 pr-2' : column.id === 'actions' ? 'pl-2 pr-6' : 'px-6'} py-4 {column.id === 'select' ? 'whitespace-nowrap sticky left-0 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]' : 'max-w-[300px]'} {column.id === 'actions' ? 'sticky right-0 z-10 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)]' : ''} {isMissingRequired ? 'ring-1 ring-inset ring-destructive' : ''} {hasNewRowInput ? 'bg-accent/10' : 'bg-muted/20'}"
+									class="{column.id === 'select' ? 'pl-6 pr-2' : column.id === 'actions' ? 'pl-2 pr-6' : 'px-6'} py-4 {column.id === 'select' ? 'whitespace-nowrap sticky left-0 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]' : 'overflow-hidden'} {column.id === 'actions' ? 'sticky right-0 z-10 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)]' : ''} {isMissingRequired ? 'ring-1 ring-inset ring-destructive' : ''} {hasNewRowInput ? 'bg-accent/10' : 'bg-muted/20'}"
+									style={colStyle(column.id)}
 								>
 									{#if column.id === 'select'}
 										<Plus class="h-4 w-4 text-muted-foreground" />
@@ -714,7 +754,7 @@
 						</Table.Row>
 					{/if}
 				</Table.Body>
-			</Table.Root>
+			</table>
 		</div>
 
 	</div>

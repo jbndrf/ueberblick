@@ -179,7 +179,7 @@
 	}
 </script>
 
-<div class="flex flex-col gap-4 min-w-0 w-full">
+<div class="flex h-full min-h-0 flex-col gap-4 min-w-0 w-full">
 	<!-- Entity Header -->
 	<DataViewerHeader
 		name={data.customTable.display_name}

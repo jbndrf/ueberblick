@@ -26,6 +26,7 @@ export interface BaseColumnConfig<TData = any> {
 	accessorFn?: (row: TData) => any;
 	fieldType?: FieldType;
 	capabilities?: ColumnCapabilities;
+	minWidth?: number;
 	// For custom rendering
 	cellRenderer?: Snippet<[{ value: any; row: TData; isEditing?: boolean }]>;
 	headerRenderer?: Snippet<[{ column: any }]>;
@@ -134,5 +135,6 @@ export type InternalColumnDef<TData = any> = ColumnDef<TData> & {
 		fieldType?: FieldType;
 		capabilities?: ColumnCapabilities;
 		config?: BaseColumnConfig<TData>;
+		minWidth?: number;
 	};
 };
