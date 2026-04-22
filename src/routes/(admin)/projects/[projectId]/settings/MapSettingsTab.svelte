@@ -21,6 +21,7 @@
 	import type { Feature, Polygon } from 'geojson';
 	import { BaseTable, type BaseColumnConfig } from '$lib/components/admin/base-table';
 	import { PRESET_SOURCES, type MapLayer, type MapLayerConfig } from '$lib/types/map-layer';
+	import { chunkedUpload } from '$lib/upload/chunked-uploader';
 
 	// Type for offline packages
 	type OfflinePackage = {
@@ -55,7 +56,6 @@
 	let isSavingDefaults = $state(false);
 
 	// Upload state
-	const CHUNK_SIZE = 10 * 1024 * 1024;
 	type UploadProgress =
 		| { phase: 'uploading'; loaded: number; total: number; percent: number }
 		| { phase: 'processing'; status: string; percent: number };
@@ -510,108 +510,33 @@
 		}
 	}
 
-	// Handle file upload (chunked)
-	async function putChunk(layerId: string, index: number, buf: ArrayBuffer): Promise<void> {
-		let lastErr: unknown = null;
-		for (let attempt = 0; attempt < 3; attempt++) {
-			try {
-				const res = await fetch(`/api/map-layers/upload/${layerId}/chunk/${index}`, {
-					method: 'PUT',
-					headers: { 'Content-Type': 'application/octet-stream' },
-					body: buf
-				});
-				if (res.ok) return;
-				lastErr = new Error(`HTTP ${res.status}`);
-			} catch (e) {
-				lastErr = e;
-			}
-			await new Promise((r) => setTimeout(r, 1000));
-		}
-		throw lastErr ?? new Error('Chunk upload failed');
-	}
-
 	async function handleUpload() {
 		if (!uploadFile || !uploadName.trim()) return;
 		isUploading = true;
-		const file = uploadFile;
 		try {
-			const totalSize = file.size;
-			const totalChunks = Math.max(1, Math.ceil(totalSize / CHUNK_SIZE));
-			uploadProgress = { phase: 'uploading', loaded: 0, total: totalSize, percent: 0 };
-
-			const initRes = await fetch('/api/map-layers/upload/init', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
+			const { id: layerId } = await chunkedUpload({
+				file: uploadFile,
+				initUrl: '/api/map-layers/upload/init',
+				initBody: {
 					name: uploadName,
 					tile_format: uploadTileFormat,
 					project_id: data.project.id,
-					layer_type: 'overlay',
-					total_size: totalSize,
-					total_chunks: totalChunks
-				})
+					layer_type: 'overlay'
+				},
+				idField: 'layerId',
+				chunkUrl: (id, i) => `/api/map-layers/upload/${id}/chunk/${i}`,
+				chunksUrl: (id) => `/api/map-layers/upload/${id}/chunks`,
+				finalizeUrl: (id) => `/api/map-layers/upload/${id}/finalize`,
+				onProgress: (p) => {
+					uploadProgress = {
+						phase: 'uploading',
+						loaded: p.loaded ?? 0,
+						total: p.total ?? 0,
+						percent: p.percent
+					};
+				}
 			});
-			if (!initRes.ok) {
-				throw new Error('Upload init failed');
-			}
-			const initJson = (await initRes.json()) as { layerId: string; chunk_size: number };
-			const { layerId } = initJson;
-			const chunkSize = initJson.chunk_size || CHUNK_SIZE;
 			uploadLayerId = layerId;
-
-			const statusRes = await fetch(`/api/map-layers/upload/${layerId}/chunks`);
-			const chunksInfo = (await statusRes.json()) as { received: number[] };
-			const received = new Set<number>(chunksInfo.received ?? []);
-
-			const chunkLen = (i: number) => Math.min(chunkSize, totalSize - i * chunkSize);
-			let loaded = 0;
-			for (const i of received) loaded += chunkLen(i);
-			uploadProgress = {
-				phase: 'uploading',
-				loaded,
-				total: totalSize,
-				percent: totalSize ? Math.round((loaded / totalSize) * 100) : 0
-			};
-
-			for (let i = 0; i < totalChunks; i++) {
-				if (received.has(i)) continue;
-				const start = i * chunkSize;
-				const end = Math.min(start + chunkSize, totalSize);
-				const buf = await file.slice(start, end).arrayBuffer();
-				await putChunk(layerId, i, buf);
-				loaded += chunkLen(i);
-				uploadProgress = {
-					phase: 'uploading',
-					loaded,
-					total: totalSize,
-					percent: totalSize ? Math.round((loaded / totalSize) * 100) : 0
-				};
-			}
-
-			let finalized = false;
-			for (let pass = 0; pass < 3; pass++) {
-				const finRes = await fetch(`/api/map-layers/upload/${layerId}/finalize`, {
-					method: 'POST'
-				});
-				const finJson = (await finRes.json()) as { ok?: boolean; missing?: number[] };
-				if (finRes.ok && finJson.ok) {
-					finalized = true;
-					break;
-				}
-				if (Array.isArray(finJson.missing) && finJson.missing.length > 0 && pass < 2) {
-					for (const idx of finJson.missing) {
-						const start = idx * chunkSize;
-						const end = Math.min(start + chunkSize, totalSize);
-						const buf = await file.slice(start, end).arrayBuffer();
-						await putChunk(layerId, idx, buf);
-					}
-					continue;
-				}
-				break;
-			}
-			if (!finalized) {
-				throw new Error('Finalize failed');
-			}
 
 			toast.success(m.mapSettingsUploadCompleteProcessing?.() ?? 'Upload complete, processing tiles...');
 			uploadProgress = { phase: 'processing', status: 'pending', percent: 0 };
