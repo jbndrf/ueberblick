@@ -291,7 +291,7 @@
 		let currentStageId = detailState.instance?.current_stage_id as string;
 
 		for (const entry of detailState.toolUsageHistory) {
-			if (entry.metadata.action === 'stage_transition') {
+			if (entry.metadata?.action === 'stage_transition') {
 				// Flush accumulated entries as a section for the stage we were in
 				sections.push({
 					stageId: currentStageId,
@@ -300,7 +300,7 @@
 					entries: currentEntries
 				});
 				// Move backwards to the from-stage
-				currentStageId = entry.metadata.from_stage_id || currentStageId;
+				currentStageId = (entry.metadata.from_stage_id as string | undefined) ?? currentStageId;
 				currentEntries = [];
 			} else {
 				currentEntries.push(entry);
@@ -321,6 +321,7 @@
 	});
 
 	function getEntryLabel(metadata: ToolUsageRecord['metadata']): string {
+		if (!metadata?.action) return (m.participantWorkflowInstanceDetailEntryAction?.() ?? 'Action');
 		switch (metadata.action) {
 			case 'instance_created':
 				return (m.participantWorkflowInstanceDetailEntryCreated?.() ?? 'Created');
@@ -1285,7 +1286,7 @@
 								{#each activitySections as section, sectionIndex}
 									<!-- Stage header -->
 									{#if section.transitionEntry}
-										{@const transBy = section.transitionEntry.metadata.action === 'admin_edit' ? 'Admin' : (section.transitionEntry.expand?.executed_by?.name || section.transitionEntry.expand?.executed_by?.email || '')}
+										{@const transBy = section.transitionEntry.metadata?.action === 'admin_edit' ? 'Admin' : (section.transitionEntry.expand?.executed_by?.name || section.transitionEntry.expand?.executed_by?.email || '')}
 										<button
 											class="w-full flex items-center gap-3 rounded-lg bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 px-3 py-2 text-left transition-colors hover:bg-blue-100 dark:hover:bg-blue-900/50"
 											class:mt-2={sectionIndex > 0}
@@ -1316,11 +1317,11 @@
 									{#if section.entries.length > 0}
 										<div class="border-l-2 border-border ml-3 pl-3 space-y-0.5">
 											{#each section.entries as entry, entryIndex (entry.id)}
-												{@const metadata = entry.metadata}
+												{@const metadata = (entry.metadata ?? {}) as NonNullable<ToolUsageRecord['metadata']>}
 												{@const prevEntry = entryIndex > 0 ? section.entries[entryIndex - 1] : null}
 												{@const executedBy = metadata.action === 'admin_edit' ? 'Admin' : (entry.expand?.executed_by?.name || entry.expand?.executed_by?.email || 'Unknown')}
-												{@const showActor = !prevEntry || (prevEntry.expand?.executed_by?.name || prevEntry.expand?.executed_by?.email) !== (entry.expand?.executed_by?.name || entry.expand?.executed_by?.email) || prevEntry.metadata.action === 'admin_edit' !== (metadata.action === 'admin_edit')}
-												{@const hasExpandableContent = (metadata.action === 'instance_created' || metadata.action === 'form_fill') && metadata.created_fields && metadata.created_fields.length > 2}
+												{@const showActor = !prevEntry || (prevEntry.expand?.executed_by?.name || prevEntry.expand?.executed_by?.email) !== (entry.expand?.executed_by?.name || entry.expand?.executed_by?.email) || (prevEntry.metadata?.action === 'admin_edit') !== (metadata.action === 'admin_edit')}
+												{@const hasExpandableContent = (metadata.action === 'instance_created' || metadata.action === 'form_fill') && Array.isArray(metadata.created_fields) && metadata.created_fields.length > 2}
 												{@const label = getEntryLabel(metadata)}
 
 												<details class="group" data-testid="activity-entry">

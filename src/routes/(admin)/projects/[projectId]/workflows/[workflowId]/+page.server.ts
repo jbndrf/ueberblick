@@ -5,8 +5,8 @@ import {
 	ADMIN_INSTANCE_PAGE_SIZE,
 	buildRowsFromInstances,
 	buildStageNameMap,
-	fetchCreatorNameMap,
-	fetchFieldValuesForInstances
+	fetchFieldValuesForWorkflow,
+	fetchParticipantNameMapForProject
 } from '$lib/admin/workflow-rows';
 import { duplicateWorkflow } from '$lib/server/schema-transfer';
 
@@ -174,14 +174,8 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 		const stageNameById = buildStageNameMap(stages as any);
 		const [, fieldValues, creatorNameById] = await Promise.all([
 			entityResolutionPromise,
-			fetchFieldValuesForInstances(
-				pb,
-				instances.map((i) => i.id)
-			),
-			fetchCreatorNameMap(
-				pb,
-				instances.map((i) => i.created_by)
-			)
+			fetchFieldValuesForWorkflow(pb, workflowId),
+			fetchParticipantNameMapForProject(pb, projectId)
 		]);
 		const initialRows = buildRowsFromInstances(instances, fieldValues, {
 			stageNameById,

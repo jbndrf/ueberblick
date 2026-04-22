@@ -36,8 +36,8 @@
 	import {
 		buildRowsFromInstances,
 		buildStageNameMap,
-		fetchCreatorNameMap,
-		fetchFieldValuesForInstances,
+		fetchFieldValuesForWorkflow,
+		fetchParticipantNameMapForProject,
 		type FieldValueRecord,
 		type InstanceRow
 	} from '$lib/admin/workflow-rows';
@@ -65,11 +65,25 @@
 	let loadingMore = $state(false);
 	let loadVersion = 0;
 
-	async function loadRemainingRows(version: number, workflowId: string, perPage: number) {
+	async function loadRemainingRows(
+		version: number,
+		workflowId: string,
+		projectId: string,
+		perPage: number
+	) {
 		loadingMore = true;
 		try {
 			const pb = getPocketBase();
 			const stageNameById = buildStageNameMap(data.stages as any);
+
+			// Field values + participant names are the same for every instance page,
+			// so fetch once (single relational query each) and reuse across pages.
+			const [fvs, creatorNameById] = await Promise.all([
+				fetchFieldValuesForWorkflow(pb, workflowId),
+				fetchParticipantNameMapForProject(pb, projectId)
+			]);
+			if (version !== loadVersion) return;
+
 			let currentPage = 2;
 			while (true) {
 				if (version !== loadVersion) return;
@@ -81,18 +95,6 @@
 				});
 				if (version !== loadVersion) return;
 				if (result.items.length === 0) break;
-
-				const [fvs, creatorNameById] = await Promise.all([
-					fetchFieldValuesForInstances(
-						pb,
-						result.items.map((i: any) => i.id)
-					),
-					fetchCreatorNameMap(
-						pb,
-						result.items.map((i: any) => i.created_by)
-					)
-				]);
-				if (version !== loadVersion) return;
 
 				const newRows = buildRowsFromInstances(result.items, fvs, {
 					stageNameById,
@@ -124,13 +126,14 @@
 		const initial = data.initialRows;
 		const total = data.totalInstances;
 		const perPage = data.instancePageSize;
+		const projectId = $page.params.projectId ?? '';
 
 		const myVersion = ++loadVersion;
 		rows = [...initial];
 		totalRows = total;
 
 		if (rows.length < total) {
-			loadRemainingRows(myVersion, workflowId, perPage);
+			loadRemainingRows(myVersion, workflowId, projectId, perPage);
 		}
 	});
 
@@ -776,7 +779,7 @@
 	</Badge>
 {/snippet}
 
-<div class="flex flex-col gap-4 min-w-0 w-full">
+<div class="flex h-full min-h-0 flex-col gap-4 min-w-0 w-full">
 	<DataViewerHeader
 		name={data.workflow.name}
 		description={data.workflow.description || ''}

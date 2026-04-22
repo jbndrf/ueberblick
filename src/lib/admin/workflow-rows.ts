@@ -27,62 +27,37 @@ export type RowBuildOptions = {
 };
 
 /**
- * Fetches field values for a set of instance IDs.
- * Chunks the OR-filter into batches so the PocketBase filter parser stays
- * within its expression limits, but batches run in parallel to minimise
- * wall-clock latency. Relies on the `idx_wifv_instance_id` index for each
- * per-id seek.
+ * Fetches all field values for a workflow in a single query. The relational
+ * filter `instance_id.workflow_id = "X"` lets PocketBase evaluate the access
+ * rule once against an indexed FK-joined candidate set instead of parsing and
+ * re-evaluating an OR chain of per-id clauses.
  */
-const FIELD_VALUES_CHUNK_SIZE = 100;
-
-export async function fetchFieldValuesForInstances(
+export async function fetchFieldValuesForWorkflow(
 	pb: PocketBase,
-	instanceIds: string[]
+	workflowId: string
 ): Promise<any[]> {
-	if (instanceIds.length === 0) return [];
-	const chunks: string[][] = [];
-	for (let i = 0; i < instanceIds.length; i += FIELD_VALUES_CHUNK_SIZE) {
-		chunks.push(instanceIds.slice(i, i + FIELD_VALUES_CHUNK_SIZE));
-	}
-	const results = await Promise.all(
-		chunks.map((chunk) => {
-			const filter = chunk.map((id) => `instance_id = "${id}"`).join(' || ');
-			return pb.collection('workflow_instance_field_values').getFullList({
-				filter,
-				fields: 'id,instance_id,field_key,value,file_value,stage_id',
-				requestKey: null
-			});
-		})
-	);
-	return results.flat();
+	return pb.collection('workflow_instance_field_values').getFullList({
+		filter: `instance_id.workflow_id = "${workflowId}"`,
+		fields: 'id,instance_id,field_key,value,file_value,stage_id',
+		requestKey: null
+	});
 }
 
 /**
- * Fetches display names for the participants that created a set of instances.
- * Returns a Map keyed by participant id. Missing or duplicate ids are handled.
+ * Fetches display names for all participants in a project. Returns a Map
+ * keyed by participant id with `name || email || id` as the label.
  */
-export async function fetchCreatorNameMap(
+export async function fetchParticipantNameMapForProject(
 	pb: PocketBase,
-	creatorIds: Iterable<string>
+	projectId: string
 ): Promise<Map<string, string>> {
-	const uniqueIds = Array.from(new Set(Array.from(creatorIds).filter(Boolean)));
+	const participants = await pb.collection('participants').getFullList({
+		filter: `project_id = "${projectId}"`,
+		fields: 'id,name,email',
+		requestKey: null
+	});
 	const map = new Map<string, string>();
-	if (uniqueIds.length === 0) return map;
-	const chunks: string[][] = [];
-	for (let i = 0; i < uniqueIds.length; i += FIELD_VALUES_CHUNK_SIZE) {
-		chunks.push(uniqueIds.slice(i, i + FIELD_VALUES_CHUNK_SIZE));
-	}
-	const results = await Promise.all(
-		chunks.map((chunk) => {
-			const filter = chunk.map((id) => `id = "${id}"`).join(' || ');
-			return pb.collection('participants').getFullList({
-				filter,
-				fields: 'id,name,email',
-				requestKey: null
-			});
-		})
-	);
-	for (const p of results.flat() as any[]) {
+	for (const p of participants as any[]) {
 		map.set(p.id, p.name || p.email || p.id);
 	}
 	return map;

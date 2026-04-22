@@ -237,7 +237,10 @@ export interface RowGroup {
  */
 export function hasLayoutMetadata(fields: FormField[]): boolean {
 	return fields.some(
-		(f) => f.row_index !== undefined && f.row_index !== null && f.row_index !== 0
+		(f) =>
+			(f.page !== undefined && f.page !== null && f.page > 1) ||
+			(f.column_position !== undefined && f.column_position !== 'full') ||
+			(f.row_index !== undefined && f.row_index !== null && f.row_index !== 0)
 	);
 }
 
