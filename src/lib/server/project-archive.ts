@@ -7,7 +7,7 @@
  * workflow_protocol_entries, workflow_instance_tool_usage, markers,
  * custom_table_data, and participants.
  */
-import { zipSync, unzipSync, strToU8, strFromU8, type Zippable } from 'fflate';
+import { zipSync, strToU8, type Zippable } from 'fflate';
 import type PocketBase from 'pocketbase';
 import {
 	exportProjectSchema,
@@ -16,6 +16,17 @@ import {
 	type ProjectSchemaExport
 } from './schema-transfer';
 import { createBatcher } from './pb-batch';
+import { getUnzipper } from './unzipper';
+
+// Safety caps for imported archives
+const MAX_IMPORT_TOTAL_UNCOMPRESSED = 5 * 1024 * 1024 * 1024; // 5 GB
+const MAX_IMPORT_PER_ENTRY_SIZE = 50 * 1024 * 1024; // 50 MB
+const MAX_IMPORT_COMPRESSION_RATIO = 1000;
+
+type ZipDirectory = Awaited<
+	ReturnType<Awaited<ReturnType<typeof getUnzipper>>['Open']['file']>
+>;
+type ZipEntry = ZipDirectory['files'][number];
 
 export type ImportProgress = (pct: number, label?: string) => void | Promise<void>;
 
@@ -685,25 +696,44 @@ export async function exportProjectArchive(
 // IMPORT
 // ---------------------------------------------------------------------------
 
-function readJsonEntry<T>(zip: Record<string, Uint8Array>, path: string): T {
-	const entry = zip[path];
-	if (!entry) throw new Error(`Missing archive entry: ${path}`);
-	return JSON.parse(strFromU8(entry));
+type ZipIndex = Map<string, ZipEntry>;
+
+function buildZipIndex(directory: ZipDirectory): ZipIndex {
+	const idx: ZipIndex = new Map();
+	for (const f of directory.files) {
+		if (f.type === 'File') idx.set(f.path, f);
+	}
+	return idx;
 }
 
-function fileFromZip(
-	zip: Record<string, Uint8Array>,
+async function readEntryText(index: ZipIndex, path: string): Promise<string | null> {
+	const entry = index.get(path);
+	if (!entry) return null;
+	const buf = await entry.buffer();
+	return buf.toString('utf8');
+}
+
+async function readEntryJson<T>(index: ZipIndex, path: string): Promise<T> {
+	const text = await readEntryText(index, path);
+	if (text === null) throw new Error(`Missing archive entry: ${path}`);
+	return JSON.parse(text);
+}
+
+async function readEntryAsFile(
+	index: ZipIndex,
 	path: string,
 	filename: string
-): File | null {
-	const bytes = zip[path];
-	if (!bytes) return null;
+): Promise<File | null> {
+	const entry = index.get(path);
+	if (!entry) return null;
+	const buf = await entry.buffer();
+	const bytes = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
 	return new File([bytes as BlobPart], filename);
 }
 
 export async function importProjectArchive(
 	pb: PocketBase,
-	zipBuffer: Uint8Array,
+	zipPath: string,
 	ownerId: string,
 	nameOverride?: string,
 	onProgress?: ImportProgress
@@ -713,12 +743,41 @@ export async function importProjectArchive(
 	};
 
 	await progress(2, 'Reading archive');
-	const zip = unzipSync(zipBuffer);
+	const uz = await getUnzipper();
+	const directory = await uz.Open.file(zipPath);
 
-	const manifest = readJsonEntry<ArchiveManifest>(zip, 'manifest.json');
+	// Size-cap validation from central directory metadata (before any decompression).
+	let totalUncompressed = 0;
+	for (const f of directory.files) {
+		if (f.type !== 'File') continue;
+		const size = f.uncompressedSize || 0;
+		if (size > MAX_IMPORT_PER_ENTRY_SIZE) {
+			throw new Error(
+				`Archive entry ${f.path} size ${size} exceeds per-entry limit ${MAX_IMPORT_PER_ENTRY_SIZE}`
+			);
+		}
+		if (f.compressedSize && size) {
+			const ratio = size / f.compressedSize;
+			if (ratio > MAX_IMPORT_COMPRESSION_RATIO) {
+				throw new Error(
+					`Archive entry ${f.path} compression ratio ${ratio.toFixed(0)}:1 exceeds limit ${MAX_IMPORT_COMPRESSION_RATIO}:1`
+				);
+			}
+		}
+		totalUncompressed += size;
+	}
+	if (totalUncompressed > MAX_IMPORT_TOTAL_UNCOMPRESSED) {
+		throw new Error(
+			`Archive total uncompressed size ${totalUncompressed} exceeds limit ${MAX_IMPORT_TOTAL_UNCOMPRESSED}`
+		);
+	}
+
+	const zip = buildZipIndex(directory);
+
+	const manifest = await readEntryJson<ArchiveManifest>(zip, 'manifest.json');
 	if (manifest.version !== 1) throw new Error(`Unsupported archive version: ${manifest.version}`);
-	const mapping = readJsonEntry<ArchiveMapping>(zip, 'mapping.json');
-	const schema = readJsonEntry<ProjectSchemaExport>(zip, 'schema.json');
+	const mapping = await readEntryJson<ArchiveMapping>(zip, 'mapping.json');
+	const schema = await readEntryJson<ProjectSchemaExport>(zip, 'schema.json');
 
 	// 1. Create project + config via existing schema importer.
 	await progress(5, 'Importing schema');
@@ -733,9 +792,9 @@ export async function importProjectArchive(
 
 	// 1b. Participants (must run before instances/protocols so created_by/recorded_by can remap)
 	{
-		const csv = zip['participants.csv'];
-		if (csv) {
-			const { headers, rows } = parseCsv(strFromU8(csv));
+		const csvText = await readEntryText(zip, 'participants.csv');
+		if (csvText) {
+			const { headers, rows } = parseCsv(csvText);
 			const idx = (n: string) => headers.indexOf(n);
 			const existing = await pb
 				.collection('participants')
@@ -802,9 +861,9 @@ export async function importProjectArchive(
 	for (const wfMap of mapping.workflows) {
 		const newWorkflowId = idMaps.workflows.get(wfMap.original_id);
 		if (!newWorkflowId) continue;
-		const csv = zip[wfMap.csv_path];
-		if (!csv) continue;
-		const { headers, rows } = parseCsv(strFromU8(csv));
+		const csvText = await readEntryText(zip, wfMap.csv_path);
+		if (!csvText) continue;
+		const { headers, rows } = parseCsv(csvText);
 		const colByName = new Map(wfMap.columns.map((c) => [c.name, c]));
 		const headerCols = headers.map((h) => colByName.get(h));
 
@@ -846,11 +905,15 @@ export async function importProjectArchive(
 			const bbox = get('bbox_json');
 			if (bbox) formData.append('bbox', bbox);
 
+			let instanceHadFiles = false;
 			const fileRefs = (get('files') || '').split(';').filter(Boolean);
 			for (const ref of fileRefs) {
 				const fname = ref.split('/').pop() || 'file';
-				const file = fileFromZip(zip, ref, fname);
-				if (file) formData.append('files', file);
+				const file = await readEntryAsFile(zip, ref, fname);
+				if (file) {
+					formData.append('files', file);
+					instanceHadFiles = true;
+				}
 			}
 
 			await batcher.add('workflow_instances', formData);
@@ -872,7 +935,7 @@ export async function importProjectArchive(
 					const refs = cell.split(';').filter(Boolean);
 					for (const ref of refs) {
 						const fname = ref.split('/').pop() || 'file';
-						const file = fileFromZip(zip, ref, fname);
+						const file = await readEntryAsFile(zip, ref, fname);
 						if (!file) continue;
 						const fd = new FormData();
 						fd.append('id', generateId());
@@ -883,6 +946,7 @@ export async function importProjectArchive(
 						fd.append('file_value', file);
 						await batcher.add('workflow_instance_field_values', fd);
 						valueCount++;
+						instanceHadFiles = true;
 					}
 				} else {
 					const fd = new FormData();
@@ -895,6 +959,10 @@ export async function importProjectArchive(
 					valueCount++;
 				}
 			}
+
+			// Cap in-flight memory: flush immediately if this instance attached any
+			// files so their decompressed bytes can be GC'd before the next row.
+			if (instanceHadFiles) await batcher.flush();
 		}
 		await batcher.flush();
 		counts[`workflow_instances:${wfMap.name}`] = instanceCount;
@@ -908,9 +976,9 @@ export async function importProjectArchive(
 
 	// 3. Protocol entries
 	{
-		const csv = zip['protocol_entries.csv'];
-		if (csv) {
-			const { headers, rows } = parseCsv(strFromU8(csv));
+		const csvText = await readEntryText(zip, 'protocol_entries.csv');
+		if (csvText) {
+			const { headers, rows } = parseCsv(csvText);
 			const idx = (n: string) => headers.indexOf(n);
 			const batcher = createBatcher(pb);
 			let count = 0;
@@ -943,13 +1011,18 @@ export async function importProjectArchive(
 				const fv = row[idx('field_values_json')];
 				if (fv) fd.append('field_values', fv);
 				const files = (row[idx('files')] || '').split(';').filter(Boolean);
+				let entryHadFiles = false;
 				for (const ref of files) {
 					const fname = ref.split('/').pop() || 'file';
-					const f = fileFromZip(zip, ref, fname);
-					if (f) fd.append('files', f);
+					const f = await readEntryAsFile(zip, ref, fname);
+					if (f) {
+						fd.append('files', f);
+						entryHadFiles = true;
+					}
 				}
 				await batcher.add('workflow_protocol_entries', fd);
 				count++;
+				if (entryHadFiles) await batcher.flush();
 			}
 			await batcher.flush();
 			counts['protocol_entries'] = count;
@@ -959,9 +1032,9 @@ export async function importProjectArchive(
 
 	// 4. Tool usage
 	{
-		const csv = zip['tool_usage.csv'];
-		if (csv) {
-			const { headers, rows } = parseCsv(strFromU8(csv));
+		const csvText = await readEntryText(zip, 'tool_usage.csv');
+		if (csvText) {
+			const { headers, rows } = parseCsv(csvText);
 			const idx = (n: string) => headers.indexOf(n);
 			const batcher = createBatcher(pb);
 			let count = 0;
@@ -994,9 +1067,9 @@ export async function importProjectArchive(
 
 	// 5. Markers
 	{
-		const csv = zip['markers.csv'];
-		if (csv) {
-			const { headers, rows } = parseCsv(strFromU8(csv));
+		const csvText = await readEntryText(zip, 'markers.csv');
+		if (csvText) {
+			const { headers, rows } = parseCsv(csvText);
 			const idx = (n: string) => headers.indexOf(n);
 			const batcher = createBatcher(pb);
 			let count = 0;
@@ -1033,11 +1106,11 @@ export async function importProjectArchive(
 
 	// 6. Custom table data
 	for (const tableMap of mapping.custom_tables) {
-		const csv = zip[tableMap.csv_path];
-		if (!csv) continue;
+		const csvText = await readEntryText(zip, tableMap.csv_path);
+		if (!csvText) continue;
 		const newTableId = idMaps.customTables.get(tableMap.original_id);
 		if (!newTableId) continue;
-		const { headers, rows } = parseCsv(strFromU8(csv));
+		const { headers, rows } = parseCsv(csvText);
 		const dataCols = headers.filter((h) => h !== 'id');
 		const batcher = createBatcher(pb);
 		let count = 0;

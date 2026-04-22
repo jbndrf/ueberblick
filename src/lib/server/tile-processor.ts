@@ -7,6 +7,7 @@ import { mkdir, rm, readdir, stat, rename } from 'fs/promises';
 import path from 'path';
 import type PocketBase from 'pocketbase';
 import type { UploadedSourceConfig } from '$lib/types/map-layer';
+import { getUnzipper } from './unzipper';
 
 const MAX_ENTRY_COUNT = 50_000;
 const MAX_TOTAL_UNCOMPRESSED = 500 * 1024 * 1024;
@@ -39,16 +40,6 @@ function extensionMatchesFormat(ext: string, format: TileFormat): boolean {
 	if (format === 'jpeg') return e === 'jpg' || e === 'jpeg';
 	if (format === 'webp') return e === 'webp';
 	return false;
-}
-
-// Use dynamic import for unzipper to handle ESM/CJS
-let unzipper: typeof import('unzipper') | null = null;
-
-async function getUnzipper() {
-	if (!unzipper) {
-		unzipper = await import('unzipper');
-	}
-	return unzipper;
 }
 
 interface TileBounds {

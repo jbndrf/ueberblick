@@ -1,4 +1,3 @@
-import { readFile } from 'fs/promises';
 import type PocketBase from 'pocketbase';
 import { getZipPath, removeZip, removeSidecar, writeStatus } from './chunked-upload';
 import { importProjectArchive } from './project-archive';
@@ -13,11 +12,10 @@ export async function processProjectImport(
 		await writeStatus(importId, { status: 'processing', progress: 0, label: 'Reading archive' });
 
 		const zipPath = getZipPath(importId);
-		const buf = await readFile(zipPath);
 
 		const result = await importProjectArchive(
 			pb,
-			new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength),
+			zipPath,
 			ownerId,
 			nameOverride,
 			async (pct, label) => {
