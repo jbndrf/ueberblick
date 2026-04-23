@@ -127,8 +127,10 @@ onRecordAfterUpdateSuccess((e) => {
 
 // Set last_activity_at when an instance is created
 onRecordAfterCreateSuccess((e) => {
-  e.record.set("last_activity_at", new Date().toISOString());
-  $app.unsafeWithoutHooks().save(e.record);
+  var now = new Date().toISOString();
+  $app.db().newQuery(
+    'UPDATE workflow_instances SET last_activity_at = {:now}, updated = {:now} WHERE id = {:id}'
+  ).bind({ now: now, id: e.record.id }).execute();
   e.next();
 }, "workflow_instances");
 

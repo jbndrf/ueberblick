@@ -67,14 +67,16 @@ function parseJsonField(value) {
 
 /**
  * Bump last_activity_at on a workflow instance.
- * Uses unsafeWithoutHooks to avoid re-triggering hooks.
+ * Targeted SQL UPDATE -- never read the full row and save it back, or a
+ * concurrent PATCH on the same row (e.g. a stage transition) can be
+ * overwritten by the stale snapshot.
  */
 function bumpLastActivity(instanceId) {
   try {
-    const instance = $app.findRecordById("workflow_instances", instanceId);
-    instance.set("last_activity_at", new Date().toISOString());
-    $app.unsafeWithoutHooks().save(instance);
-    bumpUpdatedTimestamp("workflow_instances", instanceId);
+    var now = new Date().toISOString();
+    $app.db().newQuery(
+      'UPDATE workflow_instances SET last_activity_at = {:now}, updated = {:now} WHERE id = {:id}'
+    ).bind({ now: now, id: instanceId }).execute();
   } catch (err) {
     console.error("[Automation] Failed to bump last_activity_at for instance", instanceId, err);
   }
@@ -693,10 +695,12 @@ function executeActions(actions, instanceId) {
   for (const action of actions) {
     try {
       if (action.type === "set_instance_status") {
-        const instance = $app.findRecordById("workflow_instances", instanceId);
-        instance.set("status", action.params.status);
-        noHooksApp.save(instance);
-        bumpUpdatedTimestamp("workflow_instances", instanceId);
+        // Targeted UPDATE so we can't clobber a concurrent PATCH to
+        // current_stage_id or any other field on the instance.
+        var nowStatusTs = new Date().toISOString();
+        $app.db().newQuery(
+          'UPDATE workflow_instances SET status = {:status}, updated = {:now} WHERE id = {:id}'
+        ).bind({ status: action.params.status, now: nowStatusTs, id: instanceId }).execute();
         results.push({ type: action.type, params: action.params, success: true });
 
       } else if (action.type === "set_field_value") {
@@ -764,12 +768,16 @@ function executeActions(actions, instanceId) {
         results.push({ type: action.type, params: paramsWithResolved, success: true });
 
       } else if (action.type === "set_stage") {
+        // Read-only lookup for the audit trail, then apply the transition
+        // via a targeted UPDATE. A read-full/save-full would race with any
+        // concurrent PATCH on the same instance and clobber fields the
+        // caller never intended to touch.
         const instance = $app.findRecordById("workflow_instances", instanceId);
         const oldStageId = instance.get("current_stage_id");
-        instance.set("current_stage_id", action.params.stage_id);
-        instance.set("last_activity_at", new Date().toISOString());
-        noHooksApp.save(instance);
-        bumpUpdatedTimestamp("workflow_instances", instanceId);
+        var nowTs = new Date().toISOString();
+        $app.db().newQuery(
+          'UPDATE workflow_instances SET current_stage_id = {:stage}, last_activity_at = {:now}, updated = {:now} WHERE id = {:id}'
+        ).bind({ stage: action.params.stage_id, now: nowTs, id: instanceId }).execute();
         var paramsWithStage = JSON.parse(JSON.stringify(action.params));
         paramsWithStage.from_stage_id = oldStageId;
         results.push({ type: action.type, params: paramsWithStage, success: true });

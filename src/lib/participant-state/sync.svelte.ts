@@ -506,18 +506,70 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 					await deleteLocalFilesForRecord(id);
 				}
 
-				// Update local record with server response (gets server-assigned timestamps)
-				const synced: CachedRecord = {
-					...serverResult,
-					id: serverResult.id as string,
-					_key: record._key,
-					_collection: collection,
-					_status: 'unchanged',
-					_serverUpdated: serverResult.updated as string,
-					_error: undefined,
-					_retryCount: undefined
-				};
-				await db.put('records', synced);
+				// Update local record with server response, preserving any
+				// local edits that landed during the in-flight network call.
+				// Atomic read-merge-write so a concurrent gateway.update()
+				// cannot interleave between the read and the put.
+				const tx = db.transaction('records', 'readwrite');
+				const currentLocal = await tx.store.get(record._key);
+
+				const touchedDuringFlight: Record<string, unknown> = {};
+				if (currentLocal) {
+					const preFlight = record as unknown as Record<string, unknown>;
+					const postFlight = currentLocal as unknown as Record<string, unknown>;
+					for (const k of Object.keys(postFlight)) {
+						if (k.startsWith('_')) continue;
+						if (k === 'id' || k === 'created' || k === 'updated') continue;
+						if (!deepEqual(postFlight[k], preFlight[k])) {
+							touchedDuringFlight[k] = postFlight[k];
+						}
+					}
+				}
+
+				let synced: CachedRecord;
+				if (Object.keys(touchedDuringFlight).length === 0) {
+					synced = {
+						...serverResult,
+						id: serverResult.id as string,
+						_key: record._key,
+						_collection: collection,
+						_status: 'unchanged',
+						_serverUpdated: serverResult.updated as string,
+						_error: undefined,
+						_retryCount: undefined
+					};
+				} else {
+					// Seed baseline so the next push narrows the PATCH to the
+					// fields the participant touched mid-flight. For UPDATE we
+					// inherit what gateway.update accumulated; for CREATE (no
+					// prior baseline) we fall back to serverResult values as
+					// the "server state at first touch" for those keys.
+					const baseInherited =
+						currentLocal?._baseline && typeof currentLocal._baseline === 'object'
+							? { ...(currentLocal._baseline as Record<string, unknown>) }
+							: {};
+					for (const k of Object.keys(touchedDuringFlight)) {
+						if (!(k in baseInherited)) {
+							baseInherited[k] = (serverResult as Record<string, unknown>)[k];
+						}
+					}
+
+					synced = {
+						...serverResult,
+						...touchedDuringFlight,
+						id: serverResult.id as string,
+						_key: record._key,
+						_collection: collection,
+						_status: 'modified',
+						_serverUpdated: serverResult.updated as string,
+						_baseline: baseInherited,
+						_syncingAt: undefined,
+						_error: undefined,
+						_retryCount: undefined
+					};
+				}
+				await tx.store.put(synced);
+				await tx.done;
 
 				// Notify listeners so in-memory copies pick up server-assigned
 				// fields (e.g. file_value gets a random suffix on upload).
