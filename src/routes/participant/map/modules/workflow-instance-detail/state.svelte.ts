@@ -356,7 +356,6 @@ export class WorkflowInstanceDetailState {
 			// tables are populated in IDB before the user opens a detail view, so
 			// local unfiltered reads are cheap -- no per-workflow filter round-trip
 			// to PocketBase needed.
-			const formIds = new Set(this.forms.map(f => f.id));
 			const connectionIds = new Set(this.connections.map(c => c.id));
 			const stageIds = new Set(this.stages.map(s => s.id));
 
@@ -375,7 +374,6 @@ export class WorkflowInstanceDetailState {
 			console.log(`[DetailLoad] Phase 2 total: ${(tP2 - p2Start).toFixed(1)}ms — ${p2Labels.map((l, i) => `${l}: ${p2Timings[i]?.toFixed(1)}ms`).join(', ')}`);
 
 			this.formFields = (formFieldsResult as unknown as FormField[])
-				.filter(f => formIds.has(f.form_id))
 				.map(f => ({
 					...f,
 					field_options: this.parseFieldOptions(f.field_options)
