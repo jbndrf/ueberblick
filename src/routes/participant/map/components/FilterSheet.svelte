@@ -85,6 +85,7 @@
 	interface WorkflowDef {
 		id: string;
 		name: string;
+		workflow_type?: 'incident' | 'survey';
 		filter_value_icons?: Record<string, IconConfig>;
 	}
 
@@ -171,6 +172,10 @@
 		onManageTabs
 	}: Props = $props();
 
+	const workflowTypeById = $derived(
+		new Map(workflows.map((w) => [w.id, w.workflow_type ?? 'incident']))
+	);
+
 	// Power tabs — hidden by default, shown when the matching feature flag is on.
 	// The "Views" tab is currently gated by `filter.field_filters` (the same
 	// opt-in slot the previous Fields placeholder used). It combines quick
@@ -255,11 +260,15 @@
 		}
 
 		const orderIndex = new Map(workflows.map((w, i) => [w.id, i]));
-		return Array.from(grouped.values()).sort((a, b) => {
-			const ai = orderIndex.get(a.workflowId) ?? Number.MAX_SAFE_INTEGER;
-			const bi = orderIndex.get(b.workflowId) ?? Number.MAX_SAFE_INTEGER;
-			return ai - bi;
-		});
+		// Only list map-backed (incident) workflows -- surveys have no centroid
+		// and are accessed via the Recent sheet, not toggled on the map.
+		return Array.from(grouped.values())
+			.filter((g) => workflowTypeById.get(g.workflowId) !== 'survey')
+			.sort((a, b) => {
+				const ai = orderIndex.get(a.workflowId) ?? Number.MAX_SAFE_INTEGER;
+				const bi = orderIndex.get(b.workflowId) ?? Number.MAX_SAFE_INTEGER;
+				return ai - bi;
+			});
 	});
 
 	/**

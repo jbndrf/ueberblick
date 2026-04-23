@@ -97,6 +97,19 @@ export async function processTileUpload(
 			);
 		}
 
+		// Every File entry must carry size metadata in the central directory.
+		// Without it, the aggregate and per-tile caps below become meaningless
+		// (0 > LIMIT is always false) and a crafted or streaming-written zip
+		// could decompress unbounded into memory.
+		for (const f of directory.files) {
+			if (f.type !== 'File') continue;
+			if (!f.uncompressedSize || !f.compressedSize) {
+				throw new Error(
+					`Zip entry ${f.path} lacks size metadata in its central directory. Re-export the tileset with a tool that writes complete zip metadata.`
+				);
+			}
+		}
+
 		const totalUncompressed = directory.files.reduce(
 			(sum, f) => sum + (f.uncompressedSize || 0),
 			0
@@ -111,6 +124,7 @@ export async function processTileUpload(
 		let processedFiles = 0;
 		let validTileCount = 0;
 		let magicMismatchCount = 0;
+		let lastProgress = 0;
 
 		for (const file of directory.files) {
 			if (file.type === 'File') {
@@ -157,7 +171,7 @@ export async function processTileUpload(
 				}
 
 				validTileCount++;
-				const content = await file.buffer();
+				let content: Buffer | null = await file.buffer();
 
 				// Magic-byte validation
 				const detected = detectTileFormat(content);
@@ -171,11 +185,17 @@ export async function processTileUpload(
 				await mkdir(tileDir, { recursive: true });
 				const tilePath = path.join(tileDir, yWithExt);
 				await writeFile(tilePath, content);
+				// Release the decompressed buffer before the next iteration
+				// awaits, so GC can reclaim it instead of stacking buffers.
+				content = null;
 			}
 
 			processedFiles++;
 			const progress = Math.round((processedFiles / totalFiles) * 80);
-			await pb.collection('map_layers').update(layerId, { progress });
+			if (progress !== lastProgress) {
+				lastProgress = progress;
+				await pb.collection('map_layers').update(layerId, { progress });
+			}
 		}
 
 		if (validTileCount > 0 && magicMismatchCount / validTileCount > MAX_MAGIC_MISMATCH_RATIO) {

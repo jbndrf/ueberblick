@@ -25,6 +25,13 @@
 		isOpen?: boolean;
 		onOpenChange?: (open: boolean) => void;
 		isSelectingCoordinates?: boolean;
+		/** Layout anchor. 'center' = centered above the FAB (default). 'left' =
+		 *  anchored to the left half so the right half can host another sheet. */
+		position?: 'center' | 'left';
+		/** Called when the user dismisses via backdrop tap (not when a workflow is
+		 *  picked). Used by parents that host a sibling sheet so they can collapse
+		 *  both together on explicit dismissal. */
+		onBackdropClose?: () => void;
 	}
 
 	let {
@@ -34,7 +41,9 @@
 		onDrawGeometry,
 		isOpen = $bindable(false),
 		onOpenChange,
-		isSelectingCoordinates = $bindable(false)
+		isSelectingCoordinates = $bindable(false),
+		position = 'center',
+		onBackdropClose
 	}: Props = $props();
 
 	// State
@@ -247,13 +256,19 @@
 	{#if isOpen && workflows.length > 0}
 		<!-- Backdrop -->
 		<button
-			onclick={closeMenu}
+			onclick={() => { closeMenu(); onBackdropClose?.(); }}
 			class="fixed inset-0 z-[1050]"
 			aria-label={m.mapCloseMenu?.() ?? 'Close menu'}
 		></button>
 
-		<!-- Popover - Mobile: bottom, Desktop: top below header -->
-		<div class="fixed z-[1100] flex flex-col items-center gap-2.5 bottom-20 left-1/2 -translate-x-1/2 md:bottom-auto md:top-16 md:left-1/2 md:-translate-x-1/2">
+		<!-- Popover - Mobile: bottom, Desktop: top below header.
+		     position='left' anchors to the left half so a sidebar can share the screen. -->
+		<div
+			class={[
+				'fixed z-[1100] flex flex-col items-center gap-2.5 bottom-20 md:bottom-auto md:top-16',
+				position === 'center' ? 'left-1/2 -translate-x-1/2' : 'left-4 md:left-16'
+			]}
+		>
 			{#each workflows as workflow, i}
 				<button
 					onclick={() => selectWorkflow(workflow)}

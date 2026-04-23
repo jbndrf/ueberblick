@@ -11,7 +11,7 @@
 	import { FieldValueCache } from '$lib/participant-state/field-value-cache.svelte';
 	import { appLoadingMessage, downloadProgress as syncDownloadProgress, downloadAllCollections } from '$lib/participant-state/sync.svelte';
 	import { Loader2 } from '@lucide/svelte';
-	import { MapCanvas, BottomControlBar, LayerSheet, FilterSheet, WorkflowSelector, SettingsSheet } from './components';
+	import { MapCanvas, BottomControlBar, LayerSheet, FilterSheet, WorkflowSelector, SettingsSheet, RecentSheet } from './components';
 	import type { MapLayer, MapMarker, WorkflowInstance as CanvasWorkflowInstance, WorkflowStageInfo } from './components/MapCanvas.svelte';
 	import type { FieldTag } from './components/FilterSheet.svelte';
 	import GeometryDrawTool from '$lib/components/map/geometry-draw-tool.svelte';
@@ -105,6 +105,19 @@
 	let workflowSelectorOpen = $state(false);
 	let isSelectingCoordinates = $state(false);
 	let settingsSheetOpen = $state(false);
+	// Mobile FAB state -- tri-state cycle lives in BottomControlBar, kept here
+	// so the map-click handler and FilterSheet survey-tap can collapse / open it.
+	let mobileSelectorOpen = $state(false);
+	let recentSheetOpen = $state(false);
+	let recentWorkflowFilter = $state<string | null>(null);
+
+	// Clear per-workflow filter once the sheet is closed so the next open shows
+	// all recent items unless the user explicitly enters again via FilterSheet.
+	$effect(() => {
+		if (!recentSheetOpen && recentWorkflowFilter !== null) {
+			recentWorkflowFilter = null;
+		}
+	});
 
 	// Set up navigation callbacks for header (desktop) navigation
 	onMount(() => {
@@ -202,6 +215,15 @@
 	// on first login; realtime + delta sync handle updates. The live query here
 	// is purely to keep an up-to-date reactive mirror in IDB for any consumers.
 	const connectionsLive = gateway!.collection('workflow_connections').live({ priority: 'deferred' });
+	// tools_forms bridges form_id -> workflow_id; tools_form_fields are the
+	// field definitions. Both are already pulled by downloadAllCollections on
+	// first login, but we need a reactive mirror here for the RecentSheet's
+	// instance-label derivation (which picks a "primary" field per instance).
+	const formsLive = gateway!.collection<{ id: string; workflow_id: string }>('tools_forms').live({ priority: 'deferred' });
+	const formFieldsLive = gateway!.collection<{ id: string; form_id: string; field_label?: string; field_type?: string; field_order?: number; page?: number; row_index?: number; column_position?: 'left' | 'full' | 'right' }>('tools_form_fields').live({ priority: 'deferred' });
+	// Tool usage powers the Recent sheet's last-activity label ("Erstellt",
+	// "2 Felder aktualisiert", etc.) so it matches the detail module's Activity tab.
+	const toolUsageLive = gateway!.collection<{ id: string; instance_id: string; executed_at: string; created: string; metadata: Record<string, unknown> }>('workflow_instance_tool_usage').live({ priority: 'deferred' });
 
 	// Show progress in layout header while data streams in.
 	// Map is interactive the whole time -- this is informational only.
@@ -239,6 +261,80 @@
 	const workflowStages = $derived(stagesLive.records);
 	const fieldTags = $derived(fieldTagsLive.records);
 	const fieldValues = $derived(fieldValueCache.records);
+
+	// Resolve tools_form_fields to their workflow via tools_forms. Used by the
+	// RecentSheet to pick a "primary" field per instance (e.g. the Datum field
+	// on an Arbeitszeit entry) so cards are distinguishable.
+	const formFieldsByWorkflow = $derived.by(() => {
+		const workflowByFormId = new Map<string, string>();
+		for (const form of formsLive.records as any[]) {
+			if (form?.id && form?.workflow_id) workflowByFormId.set(form.id, form.workflow_id);
+		}
+		const result = new Map<string, Array<{ id: string; field_label?: string; field_type?: string; field_order?: number; page?: number; row_index?: number; column_position?: 'left' | 'full' | 'right' }>>();
+		for (const ff of formFieldsLive.records as any[]) {
+			const wfId = workflowByFormId.get(ff.form_id);
+			if (!wfId) continue;
+			let arr = result.get(wfId);
+			if (!arr) {
+				arr = [];
+				result.set(wfId, arr);
+			}
+			arr.push({
+				id: ff.id,
+				field_label: ff.field_label,
+				field_type: ff.field_type,
+				field_order: ff.field_order,
+				page: ff.page,
+				row_index: ff.row_index,
+				column_position: ff.column_position
+			});
+		}
+		return result;
+	});
+
+	// Icon resolution matching MapCanvas.createWorkflowInstanceIcon fallback
+	// chain (filter value icon -> stage icon -> workflow icon). Keeps the
+	// Recent sheet visually consistent with the map.
+	const iconByInstance = $derived.by(() => {
+		const workflowById = new Map((workflows as any[]).map((w) => [w.id, w]));
+		const stageById = new Map((workflowStages as any[]).map((s) => [s.id, s]));
+		const map = new Map<string, any>();
+		for (const inst of workflowInstances as any[]) {
+			const wf = workflowById.get(inst.workflow_id);
+			if (!wf) continue;
+			let icon: any = undefined;
+			const filterValue = filterableValues.get(inst.id);
+			if (filterValue && wf.filter_value_icons?.[filterValue]?.svgContent) {
+				icon = wf.filter_value_icons[filterValue];
+			}
+			if (!icon && inst.current_stage_id) {
+				const stage = stageById.get(inst.current_stage_id);
+				if (stage?.visual_config?.icon_config?.svgContent) {
+					icon = stage.visual_config.icon_config;
+				}
+			}
+			if (!icon && wf.icon_config?.svgContent) {
+				icon = wf.icon_config;
+			}
+			if (icon) map.set(inst.id, icon);
+		}
+		return map;
+	});
+
+	// Most recent tool_usage per instance, so the Recent sheet can display the
+	// same activity label as the detail module's Activity tab.
+	const latestToolUsageByInstance = $derived.by(() => {
+		const map = new Map<string, { metadata: Record<string, unknown>; at: string }>();
+		for (const tu of toolUsageLive.records as any[]) {
+			if (!tu?.instance_id) continue;
+			const at = tu.executed_at || tu.created;
+			const existing = map.get(tu.instance_id);
+			if (!existing || new Date(at).getTime() > new Date(existing.at).getTime()) {
+				map.set(tu.instance_id, { metadata: tu.metadata || {}, at });
+			}
+		}
+		return map;
+	});
 
 	// Map settings: base layer config takes priority, then project defaults
 	const mapSettings = $derived.by(() => {
@@ -361,6 +457,9 @@
 		fieldTagsLive.destroy();
 		fieldValueCache.destroy();
 		connectionsLive.destroy();
+		formsLive.destroy();
+		formFieldsLive.destroy();
+		toolUsageLive.destroy();
 	});
 
 	// Layer state
@@ -1158,7 +1257,54 @@
 		if (clusterDetailOpen) {
 			handleClusterDetailClose();
 		}
+		if (mobileSelectorOpen || recentSheetOpen) {
+			mobileSelectorOpen = false;
+			recentSheetOpen = false;
+		}
 	}
+
+	function flyToWithOffset(
+		leaflet: LeafletMap,
+		target: { lat: number; lng: number },
+		zoom: number,
+		offsetPx: { right?: number; bottom?: number }
+	) {
+		// To show `target` in the centre of the visible region (viewport minus
+		// the right sheet and the bottom sheet), we shift the map centre SE by
+		// half the hidden chrome -- the marker then lands in the top-left
+		// quadrant of the viewport.
+		const markerPx = leaflet.project([target.lat, target.lng], zoom);
+		markerPx.x += (offsetPx.right ?? 0) / 2;
+		markerPx.y += (offsetPx.bottom ?? 0) / 2;
+		const centerLL = leaflet.unproject(markerPx, zoom);
+		leaflet.flyTo(centerLL, zoom, { animate: true, duration: 0.5 });
+	}
+
+	function handleRecentInstanceTap(
+		instance: { id: string; workflow_id: string; centroid?: { lat: number; lon: number } | null },
+		workflow: { id: string; workflow_type: 'incident' | 'survey' }
+	) {
+		// Keep the RecentSheet open so the user can pick another entry; just
+		// collapse the FAB popover if it was still on screen.
+		mobileSelectorOpen = false;
+		if (workflow.workflow_type === 'incident' && instance.centroid && map) {
+			const zoom = Math.max(map.getZoom(), 17);
+			const isDesktop = window.innerWidth >= 768;
+			const rightPx = recentSheetOpen ? (isDesktop ? 256 : 224) : 0;
+			// On mobile the detail sheet peeks from the bottom (35vh); on desktop
+			// it's a right-edge overlay that doesn't eat vertical map space.
+			const bottomPx = isDesktop ? 0 : Math.round(window.innerHeight * 0.35);
+			flyToWithOffset(
+				map,
+				{ lat: instance.centroid.lat, lng: instance.centroid.lon },
+				zoom,
+				{ right: rightPx, bottom: bottomPx }
+			);
+		}
+		selection = createSelection.workflowInstance(instance.id);
+		sheetExpanded = false;
+	}
+
 
 	function centerOnLocation() {
 		if ('geolocation' in navigator && map) {
@@ -1267,6 +1413,22 @@
 		onWorkflowSelect={handleWorkflowSelect}
 		onDrawGeometry={handleDrawGeometry}
 		{isEditingLocation}
+		bind:workflowSelectorOpen={mobileSelectorOpen}
+		bind:recentOpen={recentSheetOpen}
+	/>
+
+	<!-- Recent Instances sheet (right side, opened by 2nd FAB click) -->
+	<RecentSheet
+		bind:open={recentSheetOpen}
+		instances={workflowInstances as any}
+		workflows={workflows as any}
+		fieldValues={fieldValues as any}
+		{formFieldsByWorkflow}
+		{latestToolUsageByInstance}
+		{iconByInstance}
+		stages={workflowStages as any}
+		workflowFilter={recentWorkflowFilter}
+		onInstanceTap={handleRecentInstanceTap}
 	/>
 
 	<!-- Desktop Workflow Selector (mobile handled by BottomControlBar) -->

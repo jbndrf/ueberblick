@@ -22,6 +22,7 @@
 	import type { SyncConflict } from '$lib/participant-state/db';
 	import { getChangedFields } from './conflict-diff';
 	import { getPocketBase } from '$lib/pocketbase';
+	import { instanceLabel } from '$lib/utils/instance-label';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import { AlertTriangle } from '@lucide/svelte';
 	import type { Map as LeafletMap } from 'leaflet';
@@ -191,7 +192,25 @@
 		if (activeToolFlow) {
 			return `Step ${activeToolFlow.currentToolIndex + 1} of ${activeToolFlow.toolQueue.length}`;
 		}
-		return undefined;
+		if (!detailState?.instance) return undefined;
+		const inst = detailState.instance as any;
+		const instanceFVs = (detailState.fieldValues ?? []).filter((fv) => fv.instance_id === inst.id);
+		const formFields = (detailState.formFields ?? []).map((f) => ({
+			id: f.id,
+			field_type: f.field_type,
+			field_order: f.field_order,
+			page: f.page,
+			row_index: f.row_index,
+			column_position: f.column_position
+		}));
+		const label = instanceLabel({
+			instance: { id: inst.id, updated: inst.updated, created: inst.created, current_stage_id: inst.current_stage_id },
+			fieldValues: instanceFVs.map((fv) => ({ field_key: fv.field_key, value: fv.value })),
+			formFields,
+			locale: 'de'
+		});
+		if (label.primary && label.timeAgo) return `${label.primary} · ${label.timeAgo}`;
+		return label.primary || label.timeAgo || undefined;
 	});
 
 	// Build action buttons from available connections and stage edit tools

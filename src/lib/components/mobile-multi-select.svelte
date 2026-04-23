@@ -565,7 +565,7 @@
 	<!-- MOBILE: Full-screen Modal (portaled to body for full-screen blur) -->
 	{#if isOpen && isMobile}
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="fixed inset-0 z-[100]" onkeydown={handleKeydown} use:portal={!disablePortal}>
+		<div class="fixed inset-0 z-[1300]" onkeydown={handleKeydown} use:portal={!disablePortal}>
 				<!-- Backdrop with blur -->
 				<!-- svelte-ignore a11y_click_events_have_key_events -->
 				<div

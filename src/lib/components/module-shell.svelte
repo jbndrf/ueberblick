@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, type Snippet } from 'svelte';
+	import { Portal } from 'bits-ui';
 	import type { Action as SvelteAction } from 'svelte/action';
 	import { X } from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
@@ -385,7 +386,7 @@
 
 	const containerClasses = $derived(
 		[
-			'fixed z-[1000] bg-background shadow-xl flex flex-col',
+			'fixed z-[1200] bg-background shadow-xl flex flex-col pointer-events-auto',
 			!isMobile && 'top-14 right-0 h-[calc(100vh-56px)] w-[450px] border-l border-border transition-transform duration-300 ease-out',
 			isMobile && 'bottom-0 left-0 right-0 w-full rounded-t-xl border-t border-border transition-[height,transform] duration-300 ease-out overflow-visible',
 			!isMobile && !isOpen && 'translate-x-full',
@@ -420,7 +421,11 @@
 	onmouseup={isMobile && isDragging ? handleDragEnd : undefined}
 />
 
-<!-- Main Container -->
+<!-- Portaled to <body> so its z-index competes with other body-portaled
+     overlays (shadcn sheets) rather than being trapped inside a page-subtree
+     stacking context. bits-ui Portal uses Svelte's mount() under the hood,
+     keeping event delegation and bindings intact. -->
+<Portal to="body">
 <div
 	bind:this={container}
 	class={containerClasses}
@@ -538,3 +543,4 @@
 		</div>
 	{/if}
 </div>
+</Portal>

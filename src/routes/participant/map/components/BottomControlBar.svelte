@@ -24,6 +24,10 @@
 		onDrawGeometry?: (workflow: Workflow, mode: 'line' | 'polygon') => void;
 		/** Whether location editing is active (hides nav bar) */
 		isEditingLocation?: boolean;
+		/** Bindable: popover open state (FAB click cycles it). */
+		workflowSelectorOpen?: boolean;
+		/** Bindable: recent sheet open state (2nd FAB click opens it alongside). */
+		recentOpen?: boolean;
 	}
 
 	let {
@@ -35,27 +39,48 @@
 		map = null,
 		onWorkflowSelect,
 		onDrawGeometry,
-		isEditingLocation = false
+		isEditingLocation = false,
+		workflowSelectorOpen = $bindable(false),
+		recentOpen = $bindable(false)
 	}: Props = $props();
 
-	let workflowSelectorOpen = $state(false);
 	let isSelectingCoordinates = $state(false);
 
+	// FAB cycles: 0 closed -> 1 popover (center) -> 2 popover (left) + recent sheet -> 0.
+	const fabRotation = $derived(recentOpen ? 90 : workflowSelectorOpen ? 45 : 0);
+
 	function handleCenterClick() {
-		workflowSelectorOpen = !workflowSelectorOpen;
+		if (!workflowSelectorOpen && !recentOpen) {
+			workflowSelectorOpen = true;
+		} else if (workflowSelectorOpen && !recentOpen) {
+			recentOpen = true;
+		} else {
+			workflowSelectorOpen = false;
+			recentOpen = false;
+		}
 	}
 
 	function handleWorkflowSelect(workflow: Workflow, coordinates?: { lat: number; lng: number }) {
+		recentOpen = false;
 		onWorkflowSelect?.(workflow, coordinates);
+	}
+
+	function handleDrawGeometry(workflow: Workflow, mode: 'line' | 'polygon') {
+		recentOpen = false;
+		onDrawGeometry?.(workflow, mode);
+	}
+
+	function handleBackdropClose() {
+		// Explicit dismissal via backdrop -- collapse the sibling recent sheet too.
+		recentOpen = false;
 	}
 </script>
 
 <!-- Bottom bar with raised center button (mobile only) -->
 {#if !isSelectingCoordinates && !isEditingLocation}
 	<div
-		class="fixed bottom-0 left-0 right-0 z-[1000] flex md:hidden items-end justify-around border-t bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:bg-background/80"
+		class="fixed bottom-0 left-0 right-0 z-[1060] flex md:hidden items-end justify-around border-t bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:bg-background/80"
 	>
-		<!-- Left buttons -->
 		<button
 			onclick={onLayersClick}
 			class="flex h-16 w-14 flex-col items-center justify-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
@@ -74,19 +99,17 @@
 			<span class="text-[0.625rem]">{m.mapFilters?.() ?? 'Filters'}</span>
 		</button>
 
-		<!-- Center raised button - square that rotates -->
 		<div class="relative flex items-center justify-center">
 			<button
 				onclick={handleCenterClick}
 				class="center-button -mt-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-lg active:scale-95"
-				class:is-open={workflowSelectorOpen}
+				style:transform="rotate({fabRotation}deg)"
 				aria-label={workflowSelectorOpen ? (m.mapCloseMenu?.() ?? 'Close menu') : (m.participantBottomControlBarNewWorkflow?.() ?? 'New workflow')}
 			>
 				<Plus class="h-6 w-6" />
 			</button>
 		</div>
 
-		<!-- Right buttons -->
 		<button
 			onclick={onLocationClick ?? (() => {})}
 			class="flex h-16 w-14 flex-col items-center justify-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
@@ -107,14 +130,15 @@
 	</div>
 {/if}
 
-<!-- Workflow Selector (popover + coordinate selection) -->
 <WorkflowSelector
 	{workflows}
 	{map}
 	bind:isOpen={workflowSelectorOpen}
 	onWorkflowSelect={handleWorkflowSelect}
-	{onDrawGeometry}
+	onDrawGeometry={handleDrawGeometry}
 	bind:isSelectingCoordinates
+	position={recentOpen ? 'left' : 'center'}
+	onBackdropClose={handleBackdropClose}
 />
 
 <style>
@@ -123,14 +147,6 @@
 	}
 
 	.center-button:hover {
-		transform: scale(1.05);
-	}
-
-	.center-button.is-open {
-		transform: rotate(45deg);
-	}
-
-	.center-button.is-open:hover {
-		transform: rotate(45deg) scale(1.05);
+		filter: brightness(1.05);
 	}
 </style>

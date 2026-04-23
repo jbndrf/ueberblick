@@ -4,3 +4,4 @@ export { default as LayerSheet } from './LayerSheet.svelte';
 export { default as FilterSheet } from './FilterSheet.svelte';
 export { default as WorkflowSelector } from './WorkflowSelector.svelte';
 export { default as SettingsSheet } from './SettingsSheet.svelte';
+export { default as RecentSheet } from './RecentSheet.svelte';
