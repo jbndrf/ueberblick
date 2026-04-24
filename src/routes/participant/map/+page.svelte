@@ -24,6 +24,7 @@
 		ViewDefinition
 	} from '$lib/participant-state/types';
 	import { buildPredicate } from '$lib/filter-engine/predicate';
+	import { isFeatureEnabled } from '$lib/participant-state/enabled-features.svelte';
 	import {
 		createToolConfig,
 		deleteToolConfig,
@@ -33,6 +34,7 @@
 	import type { BuilderContext } from './components/view-builder/types';
 
 	const SAVED_VIEWS_KEY = 'filter.saved_views';
+	const ACTIVE_VIEW_KEY = 'filter.active_view';
 	const CLUSTER_CONFIG_KEY = 'tools.cluster';
 
 	interface ClusterConfig {
@@ -483,16 +485,23 @@
 	let clusterConfigId = $state<string | null>(null);
 	let clusterConfigLoaded = $state(false);
 
-	// Advanced filter clauses from the Views tab. Empty = no extra filter on
-	// top of the simple quick-filter controls. These are AND-combined.
+	// Advanced filter clauses live here while a view is active. When no view
+	// is active, this is empty and the Simple filter (visibleWorkflowIds /
+	// visibleCategoryIds / visibleTagValues) governs `filteredInstances`.
+	// When a view is active these are AND-combined and REPLACE the Simple
+	// filter entirely (MapCanvas bypasses the simple toggles).
 	let advancedClauses = $state<FilterClauseType[]>([]);
 
 	// Saved views (participant_tool_configs, tool_key = filter.saved_views),
 	// loaded lazily once the project id is known.
 	let savedViews = $state<ToolConfigRecord<ViewDefinition>[]>([]);
 	let savedViewsLoaded = false;
-	/** id of the view whose switch is currently on; null = none active. */
+	/** id of the view whose switch is currently on; null = Default (Simple). */
 	let activeSavedViewId = $state<string | null>(null);
+	/** id of the participant_tool_configs row that persists activeSavedViewId. */
+	let activeViewConfigId = $state<string | null>(null);
+	let activeViewLoaded = false;
+	let activeViewSaving = false;
 
 	// ==========================================================================
 	// Initialization Effects (run once when data first arrives)
@@ -691,9 +700,22 @@
 		return map;
 	});
 
-	/** Context passed to the FilterBuilder so each clause can render its picker. */
+	/**
+	 * Context passed to the FilterBuilder so each clause can render its picker.
+	 *
+	 * Field discovery walks `tools_forms` + `tools_form_fields` and intersects
+	 * with `workflows` (which is already role-scoped to the participant), so
+	 * only fields the participant can see become filterable. The `filterable`
+	 * tag system is intentionally not consulted — all non-file fields are
+	 * offered, per product decision. Field type drives the value editor the
+	 * builder renders (multi-select for select-family, contains for text,
+	 * range editors for number/date).
+	 */
 	const builderCtx = $derived.by<BuilderContext>(() => {
 		const wfList = (workflows as any[]).map((w) => ({ id: w.id, name: w.name }));
+		const workflowNameById = new Map(wfList.map((w) => [w.id, w.name]));
+		const accessibleWorkflowIds = new Set(wfList.map((w) => w.id));
+
 		const stagesByWorkflow = new Map<string, { id: string; workflow_id: string; name: string }[]>();
 		for (const s of workflowStages as any[]) {
 			let arr = stagesByWorkflow.get(s.workflow_id);
@@ -704,25 +726,55 @@
 			arr.push({ id: s.id, workflow_id: s.workflow_id, name: s.stage_name ?? s.id });
 		}
 
+		const workflowByFormId = new Map<string, string>();
+		for (const f of formsLive.records as any[]) {
+			if (f?.id && f?.workflow_id) workflowByFormId.set(f.id, f.workflow_id);
+		}
+
 		const filterableFields: BuilderContext['filterableFields'] = [];
-		for (const ft of fieldTags as any[]) {
-			const mappings = (ft.tag_mappings || []) as Array<{ tagType: string; fieldId: string | null }>;
-			for (const mapping of mappings) {
-				if (mapping.tagType !== 'filterable' || !mapping.fieldId) continue;
-				const uniq = new Set<string>();
-				for (const fv of fieldValues as any[]) {
-					if (fv.field_key === mapping.fieldId && fv.value) {
-						for (const v of splitMultiValue(String(fv.value))) uniq.add(v);
+		for (const ff of formFieldsLive.records as any[]) {
+			const type = ff.field_type as string | undefined;
+			if (!type || type === 'file') continue;
+
+			const workflowId = workflowByFormId.get(ff.form_id);
+			if (!workflowId || !accessibleWorkflowIds.has(workflowId)) continue;
+
+			const options: { id: string; label: string }[] = [];
+			const opts = ff.field_options as any | null | undefined;
+			if (type === 'dropdown' || type === 'multiple_choice') {
+				for (const o of (opts?.options ?? []) as Array<{ label: string }>) {
+					if (o?.label) options.push({ id: o.label, label: o.label });
+				}
+			} else if (type === 'smart_dropdown') {
+				const seen = new Set<string>();
+				for (const m of (opts?.mappings ?? []) as Array<{ options?: Array<{ label: string }> }>) {
+					for (const o of m?.options ?? []) {
+						if (o?.label && !seen.has(o.label)) {
+							seen.add(o.label);
+							options.push({ id: o.label, label: o.label });
+						}
 					}
 				}
-				filterableFields.push({
-					workflow_id: ft.workflow_id,
-					field_key: mapping.fieldId,
-					field_label: mapping.fieldId,
-					values: [...uniq].sort((a, b) => a.localeCompare(b))
-				});
 			}
+			// custom_table_selector options are dynamic (rows from another
+			// collection); leave `options` empty and let the builder fall
+			// back to a contains editor so the field is still filterable.
+
+			filterableFields.push({
+				workflow_id: workflowId,
+				workflow_name: workflowNameById.get(workflowId) ?? workflowId,
+				field_key: ff.id,
+				field_label: ff.field_label ?? ff.id,
+				field_type: type as BuilderContext['filterableFields'][number]['field_type'],
+				options
+			});
 		}
+
+		filterableFields.sort((a, b) => {
+			const byWf = a.workflow_name.localeCompare(b.workflow_name);
+			if (byWf !== 0) return byWf;
+			return a.field_label.localeCompare(b.field_label);
+		});
 
 		const creators = new Map<string, string>();
 		for (const inst of workflowInstances as any[]) {
@@ -750,6 +802,9 @@
 	async function refreshSavedViews(projectId: string): Promise<void> {
 		try {
 			savedViews = await listToolConfigs<ViewDefinition>(SAVED_VIEWS_KEY, projectId);
+			// After saved views are in hand, resolve which one (if any) should
+			// be active and hydrate the live filter state from it.
+			if (!activeViewLoaded) await loadActiveView(projectId);
 		} catch (err) {
 			console.warn('[saved-views] load failed', err);
 		}
@@ -801,27 +856,23 @@
 	function snapshotCurrentView(): ViewDefinition {
 		return {
 			version: 1,
-			workflow_ids: [...visibleWorkflowIds],
-			category_ids: [...visibleCategoryIds],
-			clauses: [...advancedClauses],
-			uncluster,
-			uncluster_cap: unclusterCap
+			workflow_ids: [],
+			category_ids: [],
+			clauses: [...advancedClauses]
 		};
 	}
 
 	function applySavedView(view: ToolConfigRecord<ViewDefinition>): void {
 		const def = view.config;
-		if (def?.workflow_ids) visibleWorkflowIds = [...def.workflow_ids];
-		if (def?.category_ids) visibleCategoryIds = [...def.category_ids];
 		advancedClauses = [...(def?.clauses ?? [])];
-		if (typeof def?.uncluster === 'boolean') uncluster = def.uncluster;
-		if (typeof def?.uncluster_cap === 'number') unclusterCap = def.uncluster_cap;
 		activeSavedViewId = view.id;
+		void persistActiveView();
 	}
 
 	function clearActiveView(): void {
 		advancedClauses = [];
 		activeSavedViewId = null;
+		void persistActiveView();
 	}
 
 	function handleSavedViewToggle(
@@ -830,6 +881,57 @@
 	): void {
 		if (on) applySavedView(view);
 		else if (activeSavedViewId === view.id) clearActiveView();
+	}
+
+	// Persist the active view pointer so it survives reloads. One row per
+	// participant+project under `filter.active_view`; config = { view_id }.
+	async function persistActiveView(): Promise<void> {
+		if (!activeViewLoaded || activeViewSaving) return;
+		const pid = (project as any)?.id;
+		if (!pid) return;
+		activeViewSaving = true;
+		const config = { view_id: activeSavedViewId };
+		try {
+			if (activeViewConfigId) {
+				await updateToolConfig<typeof config>(activeViewConfigId, { config });
+			} else {
+				const created = await createToolConfig<typeof config>(ACTIVE_VIEW_KEY, {
+					name: 'active_view',
+					config,
+					projectId: pid
+				});
+				activeViewConfigId = created.id;
+			}
+		} catch (err) {
+			console.warn('[active-view] persist failed', err);
+		} finally {
+			activeViewSaving = false;
+		}
+	}
+
+	async function loadActiveView(projectId: string): Promise<void> {
+		try {
+			const rows = await listToolConfigs<{ view_id: string | null }>(
+				ACTIVE_VIEW_KEY,
+				projectId
+			);
+			const row = rows[0];
+			if (row) {
+				activeViewConfigId = row.id;
+				const wantedId = row.config?.view_id ?? null;
+				if (wantedId) {
+					const match = savedViews.find((v) => v.id === wantedId);
+					if (match) {
+						advancedClauses = [...(match.config?.clauses ?? [])];
+						activeSavedViewId = match.id;
+					}
+				}
+			}
+		} catch (err) {
+			console.warn('[active-view] load failed', err);
+		} finally {
+			activeViewLoaded = true;
+		}
 	}
 
 	async function handleSaveCurrentView(name: string): Promise<void> {
@@ -842,8 +944,27 @@
 				projectId: pid
 			});
 			savedViews = [...savedViews, created];
+			// Newly-saved view becomes the active one -- matches the "create and
+			// apply" flow of the new editor.
+			activeSavedViewId = created.id;
+			void persistActiveView();
 		} catch (err) {
 			console.warn('[saved-views] save failed', err);
+		}
+	}
+
+	/** Persist edits made to an already-active view back to its saved row. */
+	async function handleUpdateActiveView(): Promise<void> {
+		if (!activeSavedViewId) return;
+		const view = savedViews.find((v) => v.id === activeSavedViewId);
+		if (!view) return;
+		try {
+			const updated = await updateToolConfig<ViewDefinition>(activeSavedViewId, {
+				config: snapshotCurrentView()
+			});
+			savedViews = savedViews.map((v) => (v.id === activeSavedViewId ? updated : v));
+		} catch (err) {
+			console.warn('[saved-views] update failed', err);
 		}
 	}
 
@@ -865,11 +986,59 @@
 		}
 	}
 
-	/** Instances drawn on the map, after the advanced-filter clauses are applied. */
+	/**
+	 * True while a saved view is selected and the Views feature is enabled.
+	 * Drives the "view masters the app" behavior: MapCanvas bypasses the
+	 * Simple-tab toggles so the view's filter set shows without further
+	 * narrowing.
+	 */
+	const isViewMastered = $derived(
+		isFeatureEnabled('filter.field_filters') && activeSavedViewId !== null
+	);
+
+	/**
+	 * Workflow/category visibility passed to MapCanvas. Under a view we
+	 * return every known id so the Simple toggles become no-ops; the view's
+	 * predicate is the only narrowing left.
+	 */
+	const effectiveVisibleWorkflowIds = $derived.by(() => {
+		if (!isViewMastered) return visibleWorkflowIds;
+		const allIds = new Set<string>();
+		for (const inst of workflowInstances as any[]) {
+			if (inst.workflow_id) allIds.add(inst.workflow_id);
+		}
+		return [...allIds];
+	});
+	const effectiveVisibleCategoryIds = $derived.by(() => {
+		if (!isViewMastered) return visibleCategoryIds;
+		const allIds = new Set<string>();
+		for (const mk of markers as any[]) {
+			if (mk.category_id) allIds.add(mk.category_id);
+		}
+		return [...allIds];
+	});
+	const effectiveVisibleTagValues = $derived(
+		isViewMastered ? new Map<string, Set<string>>() : visibleTagValues
+	);
+
+	/**
+	 * Instances to render. When a view is active, its clauses + free-text
+	 * filter the whole set. When no view is active, fall through to the
+	 * Simple filter (workflow + tag-value visibility is handled downstream
+	 * in MapCanvas, so this just returns all instances).
+	 */
 	const filteredInstances = $derived.by(() => {
+		// When the Views feature is off, ignore any stashed clauses so hidden
+		// UI can never silently filter the map.
+		if (!isFeatureEnabled('filter.field_filters')) return workflowInstances;
 		if (advancedClauses.length === 0) return workflowInstances;
 		const predicate = buildPredicate(
-			{ version: 1, workflow_ids: [], category_ids: [], clauses: advancedClauses },
+			{
+				version: 1,
+				workflow_ids: [],
+				category_ids: [],
+				clauses: advancedClauses
+			},
 			{ now: new Date(), fieldValuesByInstance }
 		);
 		return (workflowInstances as any[]).filter((inst) => predicate(inst as any));
@@ -1373,12 +1542,12 @@
 		{activeOverlayIds}
 		{mapSettings}
 		{markers}
-		{visibleCategoryIds}
+		visibleCategoryIds={effectiveVisibleCategoryIds}
 		workflowInstances={filteredInstances}
 		{workflowStages}
-		{visibleWorkflowIds}
+		visibleWorkflowIds={effectiveVisibleWorkflowIds}
 		{filterableValues}
-		{visibleTagValues}
+		visibleTagValues={effectiveVisibleTagValues}
 		{workflows}
 		{visualKeyRegistry}
 		{uncluster}
@@ -1467,7 +1636,7 @@
 			{map}
 			instances={filteredInstances}
 			{workflows}
-			{visibleWorkflowIds}
+			visibleWorkflowIds={effectiveVisibleWorkflowIds}
 			selectedInstanceId={selection.type === 'workflowInstance' ? selection.instanceId : null}
 			interactive={!isCreatingInstance}
 			onInstanceClick={(id) => (selection = createSelection.workflowInstance(id))}
@@ -1504,13 +1673,17 @@
 		{unclusterStats}
 		advancedClauses={advancedClauses}
 		{builderCtx}
-		onAdvancedClausesChange={(next) => { advancedClauses = next; activeSavedViewId = null; }}
+		onAdvancedClausesChange={(next) => {
+			advancedClauses = next;
+			if (activeSavedViewId) void handleUpdateActiveView();
+		}}
 		{savedViews}
 		{activeSavedViewId}
 		onSavedViewToggle={handleSavedViewToggle}
 		onSavedViewSave={handleSaveCurrentView}
 		onSavedViewRename={handleRenameView}
 		onSavedViewDelete={handleDeleteView}
+		onClearActiveView={clearActiveView}
 		onManageTabs={() => { filterSheetOpen = false; settingsSheetOpen = true; }}
 	/>
 

@@ -6,10 +6,11 @@
  * No Svelte dependencies — unit-testable in isolation.
  *
  * Semantics:
- *   - AND across clauses / across top-level scope filters.
+ *   - AND across clauses / across top-level scope filters / across free_text.
  *   - OR within a single `in` clause's `values`.
- *   - Empty `values` on an `in` clause is a no-op (clause skipped), so a
- *     half-built view still shows data.
+ *   - Empty `values` on an `in` clause, empty `text` on a `contains` clause,
+ *     and `min=null && max=null` / `from=null && to=null` on range clauses
+ *     are no-ops (skipped), so a half-built view still shows data.
  */
 
 import type {
@@ -32,6 +33,8 @@ export function buildPredicate(
 	def: ViewDefinition,
 	ctx: PredicateContext
 ): (instance: WorkflowInstance) => boolean {
+	const freeText = (def.free_text ?? '').trim().toLowerCase();
+
 	return (instance) => {
 		if (
 			def.workflow_ids.length > 0 &&
@@ -48,6 +51,15 @@ export function buildPredicate(
 		for (const clause of def.clauses) {
 			if (!matchesClause(instance, clause, ctx)) return false;
 		}
+
+		if (freeText.length > 0) {
+			const values = ctx.fieldValuesByInstance.get(instance.id) ?? [];
+			const hit = values.some((v) =>
+				(v.value ?? '').toLowerCase().includes(freeText)
+			);
+			if (!hit) return false;
+		}
+
 		return true;
 	};
 }
@@ -64,12 +76,52 @@ function matchesClause(
 			return clause.values.includes(instance.current_stage_id);
 
 		case 'field_value': {
-			if (clause.values.length === 0) return true;
 			if (instance.workflow_id !== clause.workflow_id) return true;
 			const values = ctx.fieldValuesByInstance.get(instance.id) ?? [];
 			const matching = values.filter((v) => v.field_key === clause.field_key);
-			if (matching.length === 0) return false;
-			return matching.some((v) => fieldValueMatches(v.value, clause.values));
+
+			if (clause.op === 'in') {
+				if (clause.values.length === 0) return true;
+				if (matching.length === 0) return false;
+				return matching.some((v) => fieldValueInList(v.value, clause.values));
+			}
+
+			if (clause.op === 'contains') {
+				const needle = clause.text.trim().toLowerCase();
+				if (needle.length === 0) return true;
+				if (matching.length === 0) return false;
+				return matching.some((v) =>
+					(v.value ?? '').toLowerCase().includes(needle)
+				);
+			}
+
+			if (clause.op === 'number_range') {
+				if (clause.min === null && clause.max === null) return true;
+				if (matching.length === 0) return false;
+				return matching.some((v) => {
+					const n = Number(v.value);
+					if (!Number.isFinite(n)) return false;
+					if (clause.min !== null && n < clause.min) return false;
+					if (clause.max !== null && n > clause.max) return false;
+					return true;
+				});
+			}
+
+			if (clause.op === 'date_range') {
+				if (!clause.from && !clause.to) return true;
+				if (matching.length === 0) return false;
+				const fromTs = clause.from ? Date.parse(clause.from) : null;
+				const toTs = clause.to ? Date.parse(clause.to) : null;
+				return matching.some((v) => {
+					const ts = Date.parse(v.value ?? '');
+					if (Number.isNaN(ts)) return false;
+					if (fromTs !== null && !Number.isNaN(fromTs) && ts < fromTs) return false;
+					if (toTs !== null && !Number.isNaN(toTs) && ts > toTs) return false;
+					return true;
+				});
+			}
+
+			return true;
 		}
 
 		case 'created':
@@ -105,7 +157,7 @@ function matchesClause(
  * value fields store a plain string. A clause's `values` matches if any of
  * the stored picks is in the list.
  */
-function fieldValueMatches(stored: string, wanted: string[]): boolean {
+function fieldValueInList(stored: string, wanted: string[]): boolean {
 	if (!stored) return false;
 	if (stored.startsWith('[')) {
 		try {

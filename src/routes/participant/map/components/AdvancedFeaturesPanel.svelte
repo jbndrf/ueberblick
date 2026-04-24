@@ -19,8 +19,8 @@
 	// moved to paraglide messages in a follow-up.
 	const COPY: Record<FeatureKey, { name: string; description: string }> = {
 		'filter.field_filters': {
-			name: 'Field filters',
-			description: 'Filter by any form field value (number ranges, date ranges, text).'
+			name: 'Views',
+			description: 'Master filter views that replace the default filter sheet app-wide — pick fields, ranges, free-text search.'
 		},
 		'tools.cluster': {
 			name: 'Cluster control',

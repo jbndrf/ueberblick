@@ -573,6 +573,10 @@ export interface ToolConfigRecord<T = unknown> {
  *
  * `stage` and `field_value` are scoped to a specific workflow because stage
  * ids and field_keys only make sense in that workflow's context.
+ *
+ * `field_value` supports multiple ops so a single clause type covers every
+ * form-field flavour: `in` for dropdown/multiple-choice, `contains` for
+ * text, `number_range` for numeric fields, and `date_range` for date fields.
  */
 export type FilterClause =
 	| { field: 'stage'; workflow_id: string; op: 'in'; values: string[] }
@@ -582,6 +586,29 @@ export type FilterClause =
 			field_key: string;
 			op: 'in';
 			values: string[];
+	  }
+	| {
+			field: 'field_value';
+			workflow_id: string;
+			field_key: string;
+			op: 'contains';
+			text: string;
+	  }
+	| {
+			field: 'field_value';
+			workflow_id: string;
+			field_key: string;
+			op: 'number_range';
+			min: number | null;
+			max: number | null;
+	  }
+	| {
+			field: 'field_value';
+			workflow_id: string;
+			field_key: string;
+			op: 'date_range';
+			from: string | null;
+			to: string | null;
 	  }
 	| {
 			field: 'created' | 'updated';
@@ -608,6 +635,12 @@ export interface ViewDefinition {
 	/** Empty = all categories visible */
 	category_ids: string[];
 	clauses: FilterClause[];
+	/**
+	 * Free-text "contains anywhere" search. Matches if any field value on
+	 * the instance contains this substring (case-insensitive). Empty/absent
+	 * = no global filter.
+	 */
+	free_text?: string;
 	uncluster?: boolean;
 	uncluster_cap?: number;
 }
