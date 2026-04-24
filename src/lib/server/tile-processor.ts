@@ -4,43 +4,10 @@
  */
 
 import { mkdir, rm, readdir, stat, rename } from 'fs/promises';
+import { spawn } from 'node:child_process';
 import path from 'path';
 import type PocketBase from 'pocketbase';
 import type { UploadedSourceConfig } from '$lib/types/map-layer';
-import { getUnzipper } from './unzipper';
-
-const MAX_ENTRY_COUNT = 50_000;
-const MAX_TOTAL_UNCOMPRESSED = 500 * 1024 * 1024;
-const MAX_PER_TILE_SIZE = 2 * 1024 * 1024;
-const MAX_COMPRESSION_RATIO = 1000;
-const MAX_MAGIC_MISMATCH_RATIO = 0.05;
-
-type TileFormat = 'png' | 'jpeg' | 'webp';
-
-function detectTileFormat(buf: Buffer): TileFormat | null {
-	if (buf.length >= 8 &&
-		buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47 &&
-		buf[4] === 0x0d && buf[5] === 0x0a && buf[6] === 0x1a && buf[7] === 0x0a) {
-		return 'png';
-	}
-	if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) {
-		return 'jpeg';
-	}
-	if (buf.length >= 12 &&
-		buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
-		buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) {
-		return 'webp';
-	}
-	return null;
-}
-
-function extensionMatchesFormat(ext: string, format: TileFormat): boolean {
-	const e = ext.toLowerCase();
-	if (format === 'png') return e === 'png';
-	if (format === 'jpeg') return e === 'jpg' || e === 'jpeg';
-	if (format === 'webp') return e === 'webp';
-	return false;
-}
 
 interface TileBounds {
 	minLat: number;
@@ -86,123 +53,17 @@ export async function processTileUpload(
 		// Create tiles directory
 		await mkdir(tilesDir, { recursive: true });
 
-		// Extract ZIP file
-		const uz = await getUnzipper();
-		const directory = await uz.Open.file(zipPath);
-		const { writeFile } = await import('fs/promises');
+		// Extraction is delegated to bsdtar (libarchive). Running it in a
+		// separate process keeps the Node heap flat regardless of archive
+		// size -- the tile zip can be many GB and peak RSS here stays tiny.
+		await extractWithBsdtar(zipPath, tilesDir, async (progress) => {
+			await pb.collection('map_layers').update(layerId, { progress });
+		});
 
-		if (directory.files.length > MAX_ENTRY_COUNT) {
-			throw new Error(
-				`Zip entry count ${directory.files.length} exceeds limit ${MAX_ENTRY_COUNT}`
-			);
-		}
-
-		// Every File entry must carry size metadata in the central directory.
-		// Without it, the aggregate and per-tile caps below become meaningless
-		// (0 > LIMIT is always false) and a crafted or streaming-written zip
-		// could decompress unbounded into memory.
-		for (const f of directory.files) {
-			if (f.type !== 'File') continue;
-			if (!f.uncompressedSize || !f.compressedSize) {
-				throw new Error(
-					`Zip entry ${f.path} lacks size metadata in its central directory. Re-export the tileset with a tool that writes complete zip metadata.`
-				);
-			}
-		}
-
-		const totalUncompressed = directory.files.reduce(
-			(sum, f) => sum + (f.uncompressedSize || 0),
-			0
-		);
-		if (totalUncompressed > MAX_TOTAL_UNCOMPRESSED) {
-			throw new Error(
-				`Total decompressed size ${totalUncompressed} exceeds limit ${MAX_TOTAL_UNCOMPRESSED}`
-			);
-		}
-
-		const totalFiles = directory.files.length;
-		let processedFiles = 0;
-		let validTileCount = 0;
-		let magicMismatchCount = 0;
-		let lastProgress = 0;
-
-		for (const file of directory.files) {
-			if (file.type === 'File') {
-				// Parse tile path: z/x/y.ext or {tilesetId}/z/x/y.ext
-				const parts = file.path.split('/').filter(Boolean);
-				let z: string, x: string, yWithExt: string;
-
-				if (parts.length === 3) {
-					[z, x, yWithExt] = parts;
-				} else if (parts.length === 4) {
-					[, z, x, yWithExt] = parts;
-				} else {
-					processedFiles++;
-					continue;
-				}
-
-				if (!/^\d+$/.test(z) || !/^\d+$/.test(x)) {
-					processedFiles++;
-					continue;
-				}
-
-				const extMatch = yWithExt.match(/^(\d+)\.(png|jpg|jpeg|webp)$/i);
-				if (!extMatch) {
-					processedFiles++;
-					continue;
-				}
-				const [, y, ext] = extMatch;
-
-				// Per-tile size cap (check central directory metadata before decompressing)
-				if ((file.uncompressedSize || 0) > MAX_PER_TILE_SIZE) {
-					throw new Error(
-						`Tile ${file.path} size ${file.uncompressedSize} exceeds per-tile limit ${MAX_PER_TILE_SIZE}`
-					);
-				}
-
-				// Compression ratio check (zip bomb defense)
-				if (file.compressedSize && file.uncompressedSize) {
-					const ratio = file.uncompressedSize / file.compressedSize;
-					if (ratio > MAX_COMPRESSION_RATIO) {
-						throw new Error(
-							`Tile ${file.path} compression ratio ${ratio.toFixed(0)}:1 exceeds limit ${MAX_COMPRESSION_RATIO}:1`
-						);
-					}
-				}
-
-				validTileCount++;
-				let content: Buffer | null = await file.buffer();
-
-				// Magic-byte validation
-				const detected = detectTileFormat(content);
-				if (!detected || !extensionMatchesFormat(ext, detected)) {
-					magicMismatchCount++;
-					processedFiles++;
-					continue;
-				}
-
-				const tileDir = path.join(tilesDir, z, x);
-				await mkdir(tileDir, { recursive: true });
-				const tilePath = path.join(tileDir, yWithExt);
-				await writeFile(tilePath, content);
-				// Release the decompressed buffer before the next iteration
-				// awaits, so GC can reclaim it instead of stacking buffers.
-				content = null;
-			}
-
-			processedFiles++;
-			const progress = Math.round((processedFiles / totalFiles) * 80);
-			if (progress !== lastProgress) {
-				lastProgress = progress;
-				await pb.collection('map_layers').update(layerId, { progress });
-			}
-		}
-
-		if (validTileCount > 0 && magicMismatchCount / validTileCount > MAX_MAGIC_MISMATCH_RATIO) {
-			throw new Error(
-				`Too many tiles failed magic-byte validation: ${magicMismatchCount}/${validTileCount}`
-			);
-		}
+		// Some exports wrap everything in {tilesetId}/z/x/y.ext. Normalize
+		// to z/x/y.ext at the tiles-dir root so the tile-serving route
+		// doesn't need to know about the wrapper.
+		await maybeFlattenSingleRootDir(tilesDir);
 
 		// Calculate tile statistics
 		await pb.collection('map_layers').update(layerId, { progress: 85 });
@@ -343,4 +204,81 @@ async function calculateTileStats(tilesDir: string): Promise<TileStats> {
 		maxZoom: maxZoom === -Infinity ? 0 : maxZoom,
 		bounds
 	};
+}
+
+/**
+ * Extract a zip to destDir using bsdtar (libarchive). Streams entirely
+ * out-of-process, so peak Node memory is independent of archive size.
+ * Progress is approximated from bsdtar's -v stderr line count via an
+ * asymptotic curve that tops out just below 80 (so the caller can jump
+ * to 85/100 after stats finalize).
+ */
+async function extractWithBsdtar(
+	zipPath: string,
+	destDir: string,
+	onProgress: (percent: number) => Promise<void>
+): Promise<void> {
+	return new Promise((resolve, reject) => {
+		const proc = spawn('bsdtar', ['-xvf', zipPath, '-C', destDir], {
+			stdio: ['ignore', 'ignore', 'pipe']
+		});
+
+		let stderrTail = '';
+		let entriesSeen = 0;
+		let lastProgress = 0;
+		let lastUpdateAt = 0;
+
+		proc.stderr.on('data', (chunk: Buffer) => {
+			const text = chunk.toString('utf8');
+			// Keep only the last ~4 KB for error diagnosis.
+			stderrTail = (stderrTail + text).slice(-4096);
+
+			const newlines = (text.match(/\n/g) || []).length;
+			if (newlines === 0) return;
+			entriesSeen += newlines;
+
+			if (entriesSeen - lastUpdateAt < 500) return;
+			lastUpdateAt = entriesSeen;
+
+			const K = 2000;
+			const progress = Math.min(79, Math.round(80 * (entriesSeen / (entriesSeen + K))));
+			if (progress !== lastProgress) {
+				lastProgress = progress;
+				onProgress(progress).catch(() => {});
+			}
+		});
+
+		proc.on('error', reject);
+		proc.on('close', (code) => {
+			if (code === 0) {
+				resolve();
+			} else {
+				const tail = stderrTail.split('\n').slice(-10).join('\n').trim();
+				reject(new Error(`bsdtar exited with code ${code}: ${tail || 'no stderr'}`));
+			}
+		});
+	});
+}
+
+/**
+ * If tilesDir contains exactly one subdirectory and that subdirectory
+ * holds numeric z-level children, move its contents up one level so the
+ * tree is always {tilesDir}/z/x/y.ext regardless of how the archive was
+ * packed.
+ */
+async function maybeFlattenSingleRootDir(tilesDir: string): Promise<void> {
+	const entries = await readdir(tilesDir, { withFileTypes: true });
+	const dirs = entries.filter((e) => e.isDirectory());
+	if (entries.length !== 1 || dirs.length !== 1) return;
+
+	const wrapper = path.join(tilesDir, dirs[0].name);
+	const inner = await readdir(wrapper, { withFileTypes: true });
+	if (inner.length === 0) return;
+	const allNumericDirs = inner.every((e) => e.isDirectory() && /^\d+$/.test(e.name));
+	if (!allNumericDirs) return;
+
+	for (const child of inner) {
+		await rename(path.join(wrapper, child.name), path.join(tilesDir, child.name));
+	}
+	await rm(wrapper, { recursive: true, force: true });
 }

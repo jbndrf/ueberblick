@@ -18,8 +18,6 @@ interface InitBody {
 	total_chunks: number;
 }
 
-const MAX_UPLOAD_ZIP_SIZE = 500 * 1024 * 1024;
-
 export const POST: RequestHandler = async ({ request, locals: { pb, user } }) => {
 	if (!user) {
 		throw error(401, 'Authentication required');
@@ -39,10 +37,6 @@ export const POST: RequestHandler = async ({ request, locals: { pb, user } }) =>
 		total_chunks <= 0
 	) {
 		throw error(400, 'Missing or invalid fields: name, tile_format, project_id, total_size, total_chunks');
-	}
-
-	if (total_size > MAX_UPLOAD_ZIP_SIZE) {
-		throw error(413, `Upload size ${total_size} exceeds limit ${MAX_UPLOAD_ZIP_SIZE}`);
 	}
 
 	await pb.collection('projects').getOne(project_id);

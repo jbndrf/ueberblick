@@ -20,6 +20,7 @@ import { generateId, cleanRecord, deepEqual } from './utils';
 // =============================================================================
 
 const PUSH_DEBOUNCE_MS = 5_000; // 5 seconds after local write
+const MAX_PUSH_RETRIES = 5; // after this many failures a record stops auto-retrying
 
 let syncInProgress = false;
 let catchUpCount = 0;
@@ -262,6 +263,22 @@ async function detectServerDeletions(collection: string): Promise<number> {
 // =============================================================================
 
 /**
+ * Check whether there are any pending records still eligible for auto-push
+ * (not over the retry cap). Used to kick a follow-up push after a catch-up
+ * or manual sync releases the syncInProgress lock, because the push debounce
+ * silently drops pushes that fire while the lock is held.
+ */
+async function hasEligiblePending(): Promise<boolean> {
+	const db = await getDB();
+	const all = await db.getAll('records');
+	return all.some(
+		(r) =>
+			['new', 'modified', 'deleted'].includes(r._status) &&
+			(r._retryCount ?? 0) < MAX_PUSH_RETRIES
+	);
+}
+
+/**
  * Push all pending changes from IndexedDB to PocketBase.
  * Includes conflict detection: if server has changed since our last pull,
  * server wins and the conflict is stored for participant review.
@@ -278,6 +295,7 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 	const pending = allRecords
 		.filter((r) => ['new', 'modified', 'deleted'].includes(r._status))
 		.filter((r) => !r._syncingAt || (now - r._syncingAt) > SYNC_LOCK_TTL)
+		.filter((r) => (r._retryCount ?? 0) < MAX_PUSH_RETRIES)
 		.sort((a, b) => getSyncPriority(a._collection) - getSyncPriority(b._collection));
 
 	if (pending.length === 0) {
@@ -923,6 +941,14 @@ export async function runCatchUpSync(gateway: ParticipantGateway): Promise<void>
 		syncInProgress = false;
 		syncStatus.current = null;
 	}
+
+	// The 5 s push debounce silently drops pushes that fire while
+	// syncInProgress is held. Edits made during this catch-up would otherwise
+	// sit in the queue until the next reconnect/focus event. The retry-cap
+	// filter in uploadChanges prevents a loop on permanently-failing records.
+	if (navigator.onLine && (await hasEligiblePending())) {
+		uploadChanges(gateway).catch((e) => console.error('Post-catchup push failed:', e));
+	}
 }
 
 // =============================================================================
@@ -944,6 +970,21 @@ export async function triggerSync(gateway: ParticipantGateway): Promise<boolean>
 	syncInProgress = true;
 
 	try {
+		// Manual sync: give previously-failed records another chance by
+		// clearing their retry count. This is the user's explicit escape
+		// hatch for records stuck over MAX_PUSH_RETRIES (e.g. transient
+		// server-side hook bugs that have since been fixed).
+		const resetDb = await getDB();
+		const resetAll = await resetDb.getAll('records');
+		for (const r of resetAll) {
+			if (
+				(r._retryCount ?? 0) >= MAX_PUSH_RETRIES &&
+				['new', 'modified', 'deleted'].includes(r._status)
+			) {
+				await resetDb.put('records', { ...r, _retryCount: 0 });
+			}
+		}
+
 		// 1. Push local changes to server
 		await uploadChanges(gateway);
 
@@ -985,6 +1026,12 @@ export async function triggerSync(gateway: ParticipantGateway): Promise<boolean>
 		console.error('Full resync failed:', error);
 	} finally {
 		syncInProgress = false;
+	}
+
+	// Same rationale as runCatchUpSync: pick up any edits that were queued
+	// while the lock was held during the pull phase.
+	if (navigator.onLine && (await hasEligiblePending())) {
+		uploadChanges(gateway).catch((e) => console.error('Post-triggerSync push failed:', e));
 	}
 
 	return true;
