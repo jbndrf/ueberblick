@@ -22,7 +22,7 @@
 <Dialog.Portal {...portalProps}>
 	<Dialog.Overlay />
 	<!-- Flexbox centering wrapper - avoids transform which breaks fixed positioning inside -->
-	<div class="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+	<div class="fixed inset-0 z-[1400] flex items-center justify-center p-4 pointer-events-none">
 		<DialogPrimitive.Content
 			bind:ref
 			data-slot="dialog-content"

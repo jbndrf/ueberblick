@@ -35,6 +35,7 @@
 			attribution?: string;
 			minZoom?: number;
 			maxZoom?: number;
+			opacity?: number;
 			detected_min_zoom?: number;
 			detected_max_zoom?: number;
 			// WMS-specific
@@ -322,7 +323,8 @@
 		const maxNativeZoom = config?.detected_max_zoom ?? config?.maxZoom ?? undefined;
 		const maxZoom = getGlobalMaxZoom();
 
-		const opts = { attribution, minZoom, maxZoom, ...(maxNativeZoom !== undefined && { maxNativeZoom }) };
+		const opacity = config?.opacity ?? 1;
+		const opts = { attribution, minZoom, maxZoom, opacity, ...(maxNativeZoom !== undefined && { maxNativeZoom }) };
 
 		// WMS layers use L.tileLayer.wms()
 		if (layer.source_type === 'wms') {

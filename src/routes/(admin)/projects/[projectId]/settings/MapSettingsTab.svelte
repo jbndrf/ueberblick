@@ -352,12 +352,10 @@
 		{
 			id: 'opacity',
 			header: m.mapSettingsColumnOpacity?.() ?? 'Opacity',
-			accessorFn: (row) => {
-				const opacity = (row.config as MapLayerConfig)?.opacity;
-				return opacity !== undefined ? `${Math.round(opacity * 100)}%` : '100%';
-			},
-			fieldType: 'text',
-			capabilities: { sortable: false }
+			accessorFn: (row) => (row.config as MapLayerConfig)?.opacity ?? 1,
+			fieldType: 'custom',
+			capabilities: { sortable: false },
+			cellRenderer: opacityCell
 		},
 		{
 			id: 'visible_to_roles',
@@ -641,11 +639,61 @@
 		}
 	}
 
+	async function handleOpacityChange(layerId: string, opacity: number) {
+		try {
+			const formData = new FormData();
+			formData.append('layerId', layerId);
+			formData.append('opacity', String(opacity));
+
+			const response = await fetch('?/updateLayerOpacity', {
+				method: 'POST',
+				body: formData
+			});
+
+			const result = await response.json();
+			if (result.type === 'success') {
+				await invalidateAll();
+			} else {
+				toast.error(result.data?.message || (m.mapSettingsUpdateFailed?.() ?? 'Update failed'));
+			}
+		} catch {
+			toast.error(m.mapSettingsUpdateFailed?.() ?? 'Update failed');
+		}
+	}
+
 	// Already-added preset IDs
 	const addedPresetUrls = $derived(
 		new Set(data.mapLayers.map((l: MapLayer) => l.url).filter(Boolean))
 	);
 </script>
+
+{#snippet opacityCell({ value, row, isEditing }: { value: number; row: MapLayer; isEditing?: boolean })}
+	{@const pct = Math.round((value ?? 1) * 100)}
+	{#if isEditing}
+		<div class="flex items-center gap-2">
+			<input
+				type="range"
+				min="0"
+				max="100"
+				step="1"
+				value={pct}
+				class="h-2 w-24 accent-primary cursor-pointer"
+				oninput={(e) => {
+					const el = e.currentTarget as HTMLInputElement;
+					const label = el.nextElementSibling as HTMLSpanElement | null;
+					if (label) label.textContent = `${el.value}%`;
+				}}
+				onchange={(e) => {
+					const next = Number((e.currentTarget as HTMLInputElement).value) / 100;
+					handleOpacityChange(row.id, next);
+				}}
+			/>
+			<span class="text-xs text-muted-foreground tabular-nums w-10">{pct}%</span>
+		</div>
+	{:else}
+		<span class="text-sm">{pct}%</span>
+	{/if}
+{/snippet}
 
 <div class="flex flex-col gap-6 min-w-0 w-full">
 	<!-- Map Defaults Summary -->

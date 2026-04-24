@@ -464,6 +464,31 @@ export const actions: Actions = {
 		}
 	},
 
+	updateLayerOpacity: async ({ request, locals: { pb } }) => {
+		const formData = await request.formData();
+		const layerId = formData.get('layerId') as string;
+		const opacityRaw = formData.get('opacity');
+
+		if (!layerId) {
+			return fail(400, { message: m.settingsServerLayerIdRequired?.() ?? 'Layer ID is required' });
+		}
+
+		const opacity = Number(opacityRaw);
+		if (!Number.isFinite(opacity) || opacity < 0 || opacity > 1) {
+			return fail(400, { message: 'Opacity must be between 0 and 1' });
+		}
+
+		try {
+			const layer = await pb.collection('map_layers').getOne<MapLayer>(layerId);
+			const newConfig = { ...(layer.config || {}), opacity };
+			await pb.collection('map_layers').update(layerId, { config: newConfig });
+			return { success: true };
+		} catch (err) {
+			console.error('Error updating layer opacity:', err);
+			return fail(500, { message: 'Failed to update layer opacity' });
+		}
+	},
+
 	// Update base layer view defaults
 	updateBaseLayerDefaults: async ({ request, locals: { pb } }) => {
 		const formData = await request.formData();
