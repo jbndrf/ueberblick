@@ -13,6 +13,39 @@ const CONTENT_TYPES: Record<string, string> = {
 	webp: 'image/webp'
 };
 
+// Short-lived cache of (user, layer) -> access decision + format. The PB
+// viewRule on map_layers enforces role-based visibility; calling getOne()
+// per tile is the bottleneck during map panning. 60s TTL means a revoked
+// role is honored within a minute, which is acceptable for tile access.
+interface PermEntry {
+	expiresAt: number;
+	format: string;
+	status: string;
+	sourceType: string;
+}
+const permCache = new Map<string, PermEntry>();
+const PERM_TTL_MS = 60_000;
+const PERM_CACHE_MAX = 10_000;
+
+function getCachedPerm(userId: string, layerId: string): PermEntry | null {
+	const entry = permCache.get(`${userId}:${layerId}`);
+	if (!entry) return null;
+	if (entry.expiresAt <= Date.now()) {
+		permCache.delete(`${userId}:${layerId}`);
+		return null;
+	}
+	return entry;
+}
+
+function setCachedPerm(userId: string, layerId: string, entry: Omit<PermEntry, 'expiresAt'>): void {
+	if (permCache.size >= PERM_CACHE_MAX) {
+		// Cheap eviction: drop oldest insertion order entry.
+		const firstKey = permCache.keys().next().value;
+		if (firstKey) permCache.delete(firstKey);
+	}
+	permCache.set(`${userId}:${layerId}`, { ...entry, expiresAt: Date.now() + PERM_TTL_MS });
+}
+
 export const GET: RequestHandler = async ({ params, locals }) => {
 	const { tilesetId, z, x, y } = params;
 
@@ -38,21 +71,37 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 	}
 
 	try {
-		// Fetch layer record to verify access and get format
-		const layer = await locals.pb.collection('map_layers').getOne<MapLayer>(tilesetId);
+		// Resolve the layer's access + format either from our short-lived
+		// per-user cache or by hitting PB (which enforces the viewRule). A
+		// getOne() failure = access denied or not found, handled below.
+		let format: string;
+		let status: string;
+		let sourceType: string;
+		const cached = getCachedPerm(locals.user.id, tilesetId);
+		if (cached) {
+			format = cached.format;
+			status = cached.status;
+			sourceType = cached.sourceType;
+		} else {
+			const layer = await locals.pb.collection('map_layers').getOne<MapLayer>(tilesetId);
+			const layerConfig = layer.config as { tile_format?: string } | null;
+			format = layerConfig?.tile_format || 'png';
+			status = layer.status;
+			sourceType = layer.source_type;
+			setCachedPerm(locals.user.id, tilesetId, { format, status, sourceType });
+		}
 
 		// Verify layer is completed (for uploaded layers)
-		if (layer.source_type === 'uploaded' && layer.status !== 'completed') {
+		if (sourceType === 'uploaded' && status !== 'completed') {
 			throw error(404, 'Layer not available');
 		}
 
-		// Get tile format (use extension from URL if provided, otherwise from layer config)
-		const layerConfig = layer.config as { tile_format?: string } | null;
-		let format = layerConfig?.tile_format || 'png';
+		// URL extension overrides cached format if the client requested a
+		// specific encoding.
 		if (yParts.length > 1) {
 			const ext = yParts[1].toLowerCase();
 			if (CONTENT_TYPES[ext]) {
-				format = ext === 'jpeg' ? 'jpg' : (ext as 'png' | 'jpg' | 'webp');
+				format = ext === 'jpeg' ? 'jpg' : ext;
 			}
 		}
 
