@@ -18,7 +18,7 @@
 	<Tabs.Root bind:value={currentTab}>
 		<Tabs.List>
 			<Tabs.Trigger value="map">{m.settingsTabMap?.() ?? 'Map'}</Tabs.Trigger>
-			<Tabs.Trigger value="advanced">Erweitert</Tabs.Trigger>
+			<Tabs.Trigger value="advanced">{m.settingsTabAdvanced?.() ?? 'Advanced'}</Tabs.Trigger>
 			<Tabs.Trigger value="general">{m.settingsTabGeneral?.() ?? 'General'}</Tabs.Trigger>
 		</Tabs.List>
 

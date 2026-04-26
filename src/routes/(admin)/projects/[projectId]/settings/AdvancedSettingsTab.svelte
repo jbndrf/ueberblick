@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import { toast } from 'svelte-sonner';
+	import * as m from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
 	import { Input } from '$lib/components/ui/input';
@@ -278,11 +279,11 @@
 			fd.append('payload', JSON.stringify(payload));
 			const res = await fetch('?/saveStartupDefaults', { method: 'POST', body: fd });
 			if (!res.ok) throw new Error(await res.text());
-			toast.success('Startstellungen gespeichert');
+			toast.success(m.settingsAdvancedStartupSaved?.() ?? 'Startup defaults saved');
 			await invalidateAll();
 		} catch (e) {
 			console.error(e);
-			toast.error('Speichern fehlgeschlagen');
+			toast.error(m.settingsAdvancedSaveFailed?.() ?? 'Save failed');
 		} finally {
 			savingStartup = false;
 		}
@@ -314,7 +315,7 @@
 	async function commitPreset() {
 		const trimmed = draftName.trim();
 		if (!trimmed) {
-			toast.error('Name fehlt');
+			toast.error(m.settingsAdvancedNameMissing?.() ?? 'Name missing');
 			return;
 		}
 		const view: ViewDefinition = {
@@ -344,7 +345,7 @@
 	}
 
 	async function deletePreset(id: string) {
-		if (!confirm('Preset löschen?')) return;
+		if (!confirm(m.settingsAdvancedDeletePresetConfirm?.() ?? 'Delete preset?')) return;
 		await persistPresets(presets.filter((p) => p.id !== id));
 	}
 
@@ -356,11 +357,11 @@
 			const res = await fetch('?/saveAdminPresets', { method: 'POST', body: fd });
 			if (!res.ok) throw new Error(await res.text());
 			presets = next;
-			toast.success('Presets gespeichert');
+			toast.success(m.settingsAdvancedPresetsSaved?.() ?? 'Presets saved');
 			await invalidateAll();
 		} catch (e) {
 			console.error(e);
-			toast.error('Speichern fehlgeschlagen');
+			toast.error(m.settingsAdvancedSaveFailed?.() ?? 'Save failed');
 		} finally {
 			savingPresets = false;
 		}
@@ -371,17 +372,16 @@
 	<!-- Startup defaults -->
 	<Card.Root>
 		<Card.Header>
-			<Card.Title>Startstellungen</Card.Title>
+			<Card.Title>{m.settingsAdvancedStartupTitle?.() ?? 'Startup defaults'}</Card.Title>
 			<Card.Description>
-				Zustand beim ersten Öffnen des Projekts: welche Ebenen und Workflows sichtbar sind und
-				welche erweiterten Funktionen standardmäßig aktiv sind. Gilt nur beim ersten Besuch -- spätere
-				Änderungen durch Nutzerinnen und Nutzer bleiben erhalten.
+				{m.settingsAdvancedStartupDescription?.() ??
+					'State the first time the project is opened: which layers and workflows are visible and which advanced features are on by default. Only applies on the first visit — later changes by users are preserved.'}
 			</Card.Description>
 		</Card.Header>
 		<Card.Content class="flex flex-col gap-6">
 			<!-- Base layer -->
 			<section class="flex flex-col gap-2">
-				<Label>Basisebene</Label>
+				<Label>{m.settingsAdvancedBaseLayer?.() ?? 'Base layer'}</Label>
 				<div class="flex flex-col gap-1">
 					<label class="flex items-center gap-2 text-sm">
 						<input
@@ -390,7 +390,9 @@
 							checked={!startup.base_layer_id}
 							onchange={() => (startup.base_layer_id = undefined)}
 						/>
-						<span class="text-muted-foreground">(erste aktive Basisebene)</span>
+						<span class="text-muted-foreground"
+							>{m.settingsAdvancedFirstActiveBaseLayer?.() ?? '(first active base layer)'}</span
+						>
 					</label>
 					{#each baseLayers as l (l.id)}
 						<label class="flex items-center gap-2 text-sm">
@@ -408,9 +410,11 @@
 
 			<!-- Overlays -->
 			<section class="flex flex-col gap-2">
-				<Label>Overlay-Ebenen (beim Start an)</Label>
+				<Label>{m.settingsAdvancedOverlaysOnAtStart?.() ?? 'Overlay layers (on at start)'}</Label>
 				{#if overlayLayers.length === 0}
-					<p class="text-sm text-muted-foreground">Keine Overlay-Ebenen vorhanden.</p>
+					<p class="text-sm text-muted-foreground">
+						{m.settingsAdvancedNoOverlays?.() ?? 'No overlay layers available.'}
+					</p>
 				{:else}
 					<div class="flex flex-col gap-1">
 						{#each overlayLayers as l (l.id)}
@@ -430,14 +434,16 @@
 			<!-- Workflows -->
 			<section class="flex flex-col gap-2">
 				<div class="flex items-center justify-between">
-					<Label>Sichtbare Workflows</Label>
+					<Label>{m.settingsAdvancedVisibleWorkflows?.() ?? 'Visible workflows'}</Label>
 					<label class="flex items-center gap-2 text-sm">
 						<Switch bind:checked={allWorkflowsVisible} />
-						Alle
+						{m.settingsAdvancedAll?.() ?? 'All'}
 					</label>
 				</div>
 				{#if workflows.length === 0}
-					<p class="text-sm text-muted-foreground">Keine Workflows.</p>
+					<p class="text-sm text-muted-foreground">
+						{m.settingsAdvancedNoWorkflows?.() ?? 'No workflows.'}
+					</p>
 				{:else}
 					<div class="flex flex-col gap-1">
 						{#each workflows as w (w.id)}
@@ -472,8 +478,8 @@
 									<div class="flex flex-col gap-1 border-t px-2 py-2 pl-10">
 										<p class="text-xs text-muted-foreground">
 											{tagInfo.mode === 'stage'
-												? 'Phasen, die beim Start sichtbar sind'
-												: 'Werte, die beim Start sichtbar sind'}
+												? (m.settingsAdvancedStagesVisibleAtStart?.() ?? 'Stages visible at start')
+												: (m.settingsAdvancedValuesVisibleAtStart?.() ?? 'Values visible at start')}
 										</p>
 										{#each tagInfo.options as opt (opt.value)}
 											<label class="flex items-center gap-2 text-xs">
@@ -495,7 +501,7 @@
 
 			<!-- Enabled features -->
 			<section class="flex flex-col gap-2">
-				<Label>Erweiterte Funktionen (beim Start an)</Label>
+				<Label>{m.settingsAdvancedFeaturesOnAtStart?.() ?? 'Advanced features (on at start)'}</Label>
 				<div class="flex flex-col gap-1">
 					{#each FEATURE_REGISTRY as f (f.key)}
 						<label class="flex items-center gap-2 text-sm" class:opacity-60={!f.available}>
@@ -513,7 +519,9 @@
 
 			<div>
 				<Button onclick={saveStartup} disabled={savingStartup}>
-					{savingStartup ? 'Speichern...' : 'Startstellungen speichern'}
+					{savingStartup
+						? (m.settingsAdvancedSavingEllipsis?.() ?? 'Saving…')
+						: (m.settingsAdvancedSaveStartupDefaults?.() ?? 'Save startup defaults')}
 				</Button>
 			</div>
 		</Card.Content>
@@ -524,19 +532,22 @@
 		<Card.Header>
 			<div class="flex items-center justify-between gap-2">
 				<div>
-					<Card.Title>Filter-Presets</Card.Title>
+					<Card.Title>{m.settingsAdvancedPresetsTitle?.() ?? 'Filter presets'}</Card.Title>
 					<Card.Description>
-						Vorgefertigte Filteransichten, die Teilnehmende mit einem Klick in ihre eigenen
-						Ansichten laden können. Nach dem Laden ist das Preset eine normale Nutzer-Ansicht --
-						Änderungen am Admin-Preset wirken sich nicht auf bereits geladene Kopien aus.
+						{m.settingsAdvancedPresetsDescription?.() ??
+							'Pre-built filter views that participants can load into their own views with a single click. Once loaded, the preset becomes a regular user view — changes to the admin preset do not affect copies that have already been loaded.'}
 					</Card.Description>
 				</div>
-				<Button size="sm" onclick={openNewPreset}><Plus class="size-4" /> Neu</Button>
+				<Button size="sm" onclick={openNewPreset}>
+					<Plus class="size-4" /> {m.settingsAdvancedNew?.() ?? 'New'}
+				</Button>
 			</div>
 		</Card.Header>
 		<Card.Content>
 			{#if presets.length === 0}
-				<p class="text-sm text-muted-foreground">Noch keine Presets.</p>
+				<p class="text-sm text-muted-foreground">
+					{m.settingsAdvancedNoPresets?.() ?? 'No presets yet.'}
+				</p>
 			{:else}
 				<ul class="flex flex-col divide-y">
 					{#each presets as p (p.id)}
@@ -544,7 +555,9 @@
 							<div class="flex flex-col">
 								<span class="font-medium">{p.name}</span>
 								<span class="text-xs text-muted-foreground">
-									{(p.config as any)?.clauses?.length ?? 0} Bedingung(en)
+									{m.settingsAdvancedClauseCount?.({
+										count: (p.config as any)?.clauses?.length ?? 0
+									}) ?? `${(p.config as any)?.clauses?.length ?? 0} condition(s)`}
 								</span>
 							</div>
 							<div class="flex gap-1">
@@ -566,16 +579,24 @@
 <Dialog.Root bind:open={presetDialogOpen}>
 	<Dialog.Content class="max-w-2xl">
 		<Dialog.Header>
-			<Dialog.Title>{editingPresetId ? 'Preset bearbeiten' : 'Neues Preset'}</Dialog.Title>
+			<Dialog.Title>
+				{editingPresetId
+					? (m.settingsAdvancedEditPreset?.() ?? 'Edit preset')
+					: (m.settingsAdvancedNewPreset?.() ?? 'New preset')}
+			</Dialog.Title>
 		</Dialog.Header>
 		<div class="flex flex-col gap-4">
 			<div class="flex flex-col gap-1">
-				<Label for="preset-name">Name</Label>
-				<Input id="preset-name" bind:value={draftName} placeholder="z.B. Neue Meldungen (7 Tage)" />
+				<Label for="preset-name">{m.settingsAdvancedName?.() ?? 'Name'}</Label>
+				<Input
+					id="preset-name"
+					bind:value={draftName}
+					placeholder={m.settingsAdvancedNamePlaceholder?.() ?? 'e.g. New reports (7 days)'}
+				/>
 			</div>
 			<Separator />
 			<div class="flex flex-col gap-2">
-				<Label>Filterbedingungen</Label>
+				<Label>{m.settingsAdvancedFilterConditions?.() ?? 'Filter conditions'}</Label>
 				<FilterBuilder
 					clauses={draftClauses}
 					ctx={builderCtx}
@@ -584,9 +605,13 @@
 			</div>
 		</div>
 		<Dialog.Footer>
-			<Button variant="outline" onclick={() => (presetDialogOpen = false)}>Abbrechen</Button>
+			<Button variant="outline" onclick={() => (presetDialogOpen = false)}>
+				{m.settingsAdvancedCancel?.() ?? 'Cancel'}
+			</Button>
 			<Button onclick={commitPreset} disabled={savingPresets}>
-				{savingPresets ? 'Speichern...' : 'Speichern'}
+				{savingPresets
+					? (m.settingsAdvancedSavingEllipsis?.() ?? 'Saving…')
+					: (m.settingsAdvancedSave?.() ?? 'Save')}
 			</Button>
 		</Dialog.Footer>
 	</Dialog.Content>

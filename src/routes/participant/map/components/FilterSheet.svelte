@@ -583,7 +583,7 @@
 				<Separator class="my-2" />
 				<div class="flex flex-col gap-1">
 					<div class="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-						Vom Projekt
+						{m.participantFilterSheetAdminPresetsHeader?.() ?? 'From the project'}
 					</div>
 					{#each adminPresets as preset (preset.id)}
 						<div class="flex items-center gap-2 rounded-md border border-dashed p-2">
@@ -595,7 +595,7 @@
 								class="h-7 shrink-0"
 								onclick={() => onAdminPresetLoad?.({ name: preset.name, config: preset.config })}
 							>
-								Laden
+								{m.participantFilterSheetAdminPresetsLoad?.() ?? 'Load'}
 							</Button>
 						</div>
 					{/each}
