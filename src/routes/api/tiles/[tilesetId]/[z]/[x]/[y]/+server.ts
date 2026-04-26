@@ -66,7 +66,7 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 	}
 
 	// Validate zoom level
-	if (zNum < 0 || zNum > 22) {
+	if (zNum < 0 || zNum > 24) {
 		throw error(400, 'Invalid zoom level');
 	}
 

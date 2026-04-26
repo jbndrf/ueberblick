@@ -5,7 +5,8 @@ import { exportProjectArchive } from '$lib/server/project-archive';
 export const POST: RequestHandler = async ({ request, locals: { pb, user } }) => {
 	if (!user || user.collectionName !== 'users') throw error(401, 'Unauthorized');
 
-	const { projectId, includeParticipants, includeParticipantTokens } = await request.json();
+	const { projectId, includeParticipants, includeParticipantTokens, csvOnly } =
+		await request.json();
 	if (!projectId) throw error(400, 'Project ID is required');
 
 	const project = await pb.collection('projects').getOne(projectId);
@@ -14,7 +15,8 @@ export const POST: RequestHandler = async ({ request, locals: { pb, user } }) =>
 	try {
 		const { filename, bytes } = await exportProjectArchive(pb, projectId, {
 			includeParticipants,
-			includeParticipantTokens
+			includeParticipantTokens,
+			csvOnly
 		});
 		return new Response(bytes as BodyInit, {
 			headers: {

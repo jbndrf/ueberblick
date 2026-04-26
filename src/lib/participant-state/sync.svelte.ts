@@ -22,8 +22,78 @@ import { generateId, cleanRecord, deepEqual } from './utils';
 const PUSH_DEBOUNCE_MS = 5_000; // 5 seconds after local write
 const MAX_PUSH_RETRIES = 5; // after this many failures a record stops auto-retrying
 
-let syncInProgress = false;
+// Per-request network timeouts. Wedged sockets on mobile (radio handoff, NAT
+// rebind) leave fetch() waiting forever; without these the entire sync engine
+// can stall indefinitely. The catch path treats a timeout as a normal
+// transient failure (bumps _retryCount, retries on the next run).
+const PUSH_REQUEST_TIMEOUT_MS = 15_000;
+const PULL_REQUEST_TIMEOUT_MS = 60_000; // pulls can return large pages
+
+// Single-flight worker state. `currentRun` is the architectural lock --
+// chaining onto its promise (instead of a stale boolean) makes it impossible
+// for a hung await to permanently wedge the engine. The AbortController is
+// the watchdog's escape hatch for genuinely stuck runs that slipped past the
+// per-request timeouts.
+interface SyncRun {
+	promise: Promise<void>;
+	abort: AbortController;
+	startedAt: number;
+}
+let currentRun: SyncRun | null = null;
 let catchUpCount = 0;
+
+/**
+ * Wait for the current run (if any) to finish, then start a new one.
+ * The provided fn receives an AbortSignal that fires when either the
+ * watchdog aborts the run or the caller (future) wants to cancel.
+ */
+async function withRun(fn: (signal: AbortSignal) => Promise<void>): Promise<void> {
+	if (currentRun) {
+		try { await currentRun.promise; } catch { /* prior run failed, that's its problem */ }
+	}
+	const abort = new AbortController();
+	const run: SyncRun = {
+		abort,
+		startedAt: Date.now(),
+		promise: Promise.resolve()
+	};
+	run.promise = (async () => {
+		try {
+			await fn(abort.signal);
+		} finally {
+			if (currentRun === run) currentRun = null;
+		}
+	})();
+	currentRun = run;
+	await run.promise;
+}
+
+function isRunning(): boolean {
+	return currentRun !== null;
+}
+
+/**
+ * Build a RequestOptions.signal that combines a per-request timeout with
+ * the run-level abort signal. Either source aborts the fetch.
+ */
+function reqSignal(runSignal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
+	const timeout = AbortSignal.timeout(timeoutMs);
+	if (!runSignal) return timeout;
+	return AbortSignal.any([timeout, runSignal]);
+}
+
+/**
+ * Watchdog hook: if the current run has been alive longer than maxAgeMs,
+ * abort it. Called from a setInterval wired up in the participant layout.
+ * Returns true if it actually aborted something.
+ */
+export function abortStalledRun(maxAgeMs: number): boolean {
+	if (!currentRun) return false;
+	if (Date.now() - currentRun.startedAt < maxAgeMs) return false;
+	console.warn(`[sync] watchdog aborting stalled run (age ${Date.now() - currentRun.startedAt}ms)`);
+	currentRun.abort.abort(new DOMException('sync run watchdog timeout', 'AbortError'));
+	return true;
+}
 
 // Collections to sync (set via setSyncCollections)
 let syncCollections: string[] = [];
@@ -150,7 +220,7 @@ async function batchedParallel<T, R>(
  * Pull changes from server for a single collection since last sync.
  * Only fetches records with `updated > lastSyncTimestamp`.
  */
-async function pullChanges(collection: string): Promise<number> {
+async function pullChanges(collection: string, runSignal?: AbortSignal): Promise<number> {
 	const pb = getPocketBase();
 	const db = await getDB();
 
@@ -166,7 +236,8 @@ async function pullChanges(collection: string): Promise<number> {
 	try {
 		const records = await pb.collection(collection).getFullList({
 			filter,
-			sort: 'updated'
+			sort: 'updated',
+			signal: reqSignal(runSignal, PULL_REQUEST_TIMEOUT_MS)
 		});
 
 		let updatedCount = 0;
@@ -230,14 +301,15 @@ async function pullChanges(collection: string): Promise<number> {
 /**
  * Detect records deleted on server by comparing local IDs with server IDs.
  */
-async function detectServerDeletions(collection: string): Promise<number> {
+async function detectServerDeletions(collection: string, runSignal?: AbortSignal): Promise<number> {
 	const pb = getPocketBase();
 	const db = await getDB();
 
 	try {
 		// Get all server record IDs
 		const serverRecords = await pb.collection(collection).getFullList({
-			fields: 'id'
+			fields: 'id',
+			signal: reqSignal(runSignal, PULL_REQUEST_TIMEOUT_MS)
 		});
 		const serverIds = new Set(serverRecords.map((r) => r.id));
 
@@ -265,8 +337,8 @@ async function detectServerDeletions(collection: string): Promise<number> {
 /**
  * Check whether there are any pending records still eligible for auto-push
  * (not over the retry cap). Used to kick a follow-up push after a catch-up
- * or manual sync releases the syncInProgress lock, because the push debounce
- * silently drops pushes that fire while the lock is held.
+ * or manual sync run finishes, since edits made during the run aren't visible
+ * to the snapshot taken at the start of uploadChanges.
  */
 async function hasEligiblePending(): Promise<boolean> {
 	const db = await getDB();
@@ -283,18 +355,20 @@ async function hasEligiblePending(): Promise<boolean> {
  * Includes conflict detection: if server has changed since our last pull,
  * server wins and the conflict is stored for participant review.
  */
-export async function uploadChanges(gateway: ParticipantGateway): Promise<void> {
+export async function uploadChanges(
+	gateway: ParticipantGateway,
+	runSignal?: AbortSignal
+): Promise<void> {
 	const pb = getPocketBase();
 	const db = await getDB();
 
-	// Get all pending records (new, modified, deleted)
-	// Filter out records currently being synced (in-flight lock < 60s old)
-	const SYNC_LOCK_TTL = 60_000;
-	const now = Date.now();
+	// Get all pending records (new, modified, deleted).
+	// No per-record in-flight lock is needed: the worker is single-flight via
+	// `currentRun`, and the server's idempotent-create hook absorbs any
+	// duplicate POST that slips through on retry.
 	const allRecords = await db.getAll('records');
 	const pending = allRecords
 		.filter((r) => ['new', 'modified', 'deleted'].includes(r._status))
-		.filter((r) => !r._syncingAt || (now - r._syncingAt) > SYNC_LOCK_TTL)
 		.filter((r) => (r._retryCount ?? 0) < MAX_PUSH_RETRIES)
 		.sort((a, b) => getSyncPriority(a._collection) - getSyncPriority(b._collection));
 
@@ -321,7 +395,9 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 				let serverFetchWas404 = false;
 
 				try {
-					serverRecord = await pb.collection(collection).getOne(id);
+					serverRecord = await pb.collection(collection).getOne(id, {
+						signal: reqSignal(runSignal, PUSH_REQUEST_TIMEOUT_MS)
+					});
 				} catch (e) {
 					serverFetchFailed = true;
 					const msg = e instanceof Error ? e.message : '';
@@ -337,7 +413,6 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 					const resolved: CachedRecord = {
 						...record,
 						_status: 'unchanged',
-						_syncingAt: undefined,
 						_error: undefined,
 						_retryCount: undefined
 					};
@@ -441,8 +516,7 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 							_status: 'unchanged',
 							_serverUpdated: serverRecord.updated as string,
 							_error: undefined,
-							_retryCount: undefined,
-							_syncingAt: undefined
+							_retryCount: undefined
 						};
 						await db.put('records', reconciled);
 						console.log(`Reconciled echo ${collection}/${id}`);
@@ -483,10 +557,6 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 			}
 
 			if (record._status === 'new' || record._status === 'modified') {
-				// Mark record as in-flight to prevent duplicate submissions
-				record._syncingAt = Date.now();
-				await db.put('records', record);
-
 				// Check for associated file blobs that need to be uploaded
 				const localFiles = (await getFilesForRecord(id)).filter((f) => f.source === 'local');
 
@@ -510,12 +580,13 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 					syncData = formData;
 				}
 
+				const opts = { signal: reqSignal(runSignal, PUSH_REQUEST_TIMEOUT_MS) };
 				let serverResult: Record<string, unknown>;
 				if (record._status === 'new') {
-					serverResult = await pb.collection(collection).create(syncData);
+					serverResult = await pb.collection(collection).create(syncData, opts);
 					console.log(`Created ${collection}/${id}`);
 				} else {
-					serverResult = await pb.collection(collection).update(id, syncData);
+					serverResult = await pb.collection(collection).update(id, syncData, opts);
 					console.log(`Updated ${collection}/${id}`);
 				}
 
@@ -558,18 +629,20 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 					};
 				} else {
 					// Seed baseline so the next push narrows the PATCH to the
-					// fields the participant touched mid-flight. For UPDATE we
-					// inherit what gateway.update accumulated; for CREATE (no
-					// prior baseline) we fall back to serverResult values as
-					// the "server state at first touch" for those keys.
+					// fields the participant touched mid-flight. The
+					// just-completed push moved the server past whatever
+					// pre-edit value was captured the first time each field
+					// was touched, so the *next* push must compare against
+					// serverResult, not against the stale pre-flight baseline.
+					// Always overwrite touched keys with serverResult; preserve
+					// untouched-but-previously-baseline keys for any other
+					// in-flight edits not yet picked up.
 					const baseInherited =
 						currentLocal?._baseline && typeof currentLocal._baseline === 'object'
 							? { ...(currentLocal._baseline as Record<string, unknown>) }
 							: {};
 					for (const k of Object.keys(touchedDuringFlight)) {
-						if (!(k in baseInherited)) {
-							baseInherited[k] = (serverResult as Record<string, unknown>)[k];
-						}
+						baseInherited[k] = (serverResult as Record<string, unknown>)[k];
 					}
 
 					synced = {
@@ -581,7 +654,6 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 						_status: 'modified',
 						_serverUpdated: serverResult.updated as string,
 						_baseline: baseInherited,
-						_syncingAt: undefined,
 						_error: undefined,
 						_retryCount: undefined
 					};
@@ -600,12 +672,14 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 				// admin or automation edit on the parent is not silently laundered.
 				const rule = getSyncRule(collection);
 				if (rule.parentRef) {
-					await refreshParentServerUpdated(record, rule, pb, db);
+					await refreshParentServerUpdated(record, rule, pb, db, runSignal);
 				}
 			} else if (record._status === 'deleted') {
 				// Delete from PocketBase
 				try {
-					await pb.collection(collection).delete(id);
+					await pb.collection(collection).delete(id, {
+						signal: reqSignal(runSignal, PUSH_REQUEST_TIMEOUT_MS)
+					});
 					console.log(`Deleted ${collection}/${id}`);
 				} catch (e) {
 					// If 404, already deleted - that's fine
@@ -627,9 +701,21 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 			// so pull the per-field detail out explicitly.
 			const pbErr = error as {
 				status?: number;
+				isAbort?: boolean;
 				response?: { message?: string; data?: Record<string, { message?: string }> };
 				message?: string;
+				name?: string;
 			};
+
+			// Distinguish run-level abort (watchdog or caller cancelled) from
+			// per-request timeout. A run-level abort isn't the record's fault --
+			// don't bump _retryCount, just stop and let the next run retry.
+			const watchdogAbort = !!runSignal?.aborted;
+			if (watchdogAbort) {
+				console.warn(`Sync run aborted mid-flight for ${record._collection}/${record.id}; will retry`);
+				break;
+			}
+
 			const fieldErrors = pbErr?.response?.data ?? {};
 			const fieldSummary = Object.entries(fieldErrors)
 				.map(([k, v]) => `${k}: ${v?.message ?? 'invalid'}`)
@@ -637,16 +723,15 @@ export async function uploadChanges(gateway: ParticipantGateway): Promise<void> 
 			const topMessage = pbErr?.response?.message || pbErr?.message || 'Unknown error';
 			const errorMessage = fieldSummary ? `${topMessage} [${fieldSummary}]` : topMessage;
 
+			const isTimeout = pbErr?.isAbort || pbErr?.name === 'TimeoutError';
 			console.error(
 				`Failed to sync ${record._collection}/${record.id} ` +
-					`(status=${pbErr?.status ?? 0}): ${errorMessage}`
+					`(status=${pbErr?.status ?? 0}${isTimeout ? ', timeout' : ''}): ${errorMessage}`
 			);
 
-			// Mark as error, clear sync lock so it can be retried
 			const failedRecord: CachedRecord = {
 				...record,
 				_status: record._status, // Keep original status
-				_syncingAt: undefined,
 				_error: errorMessage,
 				_retryCount: (record._retryCount || 0) + 1
 			};
@@ -685,7 +770,8 @@ async function refreshParentServerUpdated(
 	childRecord: CachedRecord,
 	rule: SyncRule,
 	pb: ReturnType<typeof getPocketBase>,
-	db: Awaited<ReturnType<typeof getDB>>
+	db: Awaited<ReturnType<typeof getDB>>,
+	runSignal?: AbortSignal
 ): Promise<void> {
 	if (!rule.parentRef) return;
 
@@ -698,7 +784,9 @@ async function refreshParentServerUpdated(
 
 	let serverParent: Record<string, unknown>;
 	try {
-		serverParent = await pb.collection(rule.parentRef.collection).getOne(parentId);
+		serverParent = await pb.collection(rule.parentRef.collection).getOne(parentId, {
+			signal: reqSignal(runSignal, PUSH_REQUEST_TIMEOUT_MS)
+		});
 	} catch {
 		// Parent not on server yet (still pending) or inaccessible -- nothing
 		// to refresh against. Leave _serverUpdated alone.
@@ -841,14 +929,39 @@ export async function resolveConflict(conflictId: string): Promise<void> {
  */
 export function startPushListener(gateway: ParticipantGateway): () => void {
 	let pushDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+	// Set when a local write arrives while a flush is already in progress.
+	// After the current flush finishes we schedule a short follow-up flush so
+	// the writes that landed during the loop don't sit in IDB until the next
+	// focus/reconnect (the snapshot taken at the start of uploadChanges does
+	// not see them).
+	let pendingAfterFlush = false;
+	const FOLLOWUP_DELAY_MS = 250;
+
+	async function runFlush(): Promise<void> {
+		if (!navigator.onLine || isRunning()) return;
+		pendingAfterFlush = false;
+		try {
+			await withRun((signal) => uploadChanges(gateway, signal));
+		} catch (e) {
+			console.error('Push flush failed:', e);
+		}
+		if (
+			navigator.onLine &&
+			!isRunning() &&
+			(pendingAfterFlush || (await hasEligiblePending()))
+		) {
+			if (pushDebounceTimer) clearTimeout(pushDebounceTimer);
+			pushDebounceTimer = setTimeout(runFlush, FOLLOWUP_DELAY_MS);
+		}
+	}
 
 	const unsubDataChange = onDataChange(() => {
+		if (isRunning()) {
+			pendingAfterFlush = true;
+			return;
+		}
 		if (pushDebounceTimer) clearTimeout(pushDebounceTimer);
-		pushDebounceTimer = setTimeout(() => {
-			if (navigator.onLine && !syncInProgress) {
-				uploadChanges(gateway);
-			}
-		}, PUSH_DEBOUNCE_MS);
+		pushDebounceTimer = setTimeout(runFlush, PUSH_DEBOUNCE_MS);
 	});
 
 	return () => {
@@ -869,85 +982,94 @@ export function startPushListener(gateway: ParticipantGateway): () => void {
  * Called on PB_CONNECT reconnect and on tab regaining focus.
  */
 export async function runCatchUpSync(gateway: ParticipantGateway): Promise<void> {
-	if (syncInProgress || !navigator.onLine) return;
+	if (!navigator.onLine) return;
+	// Coalesce: if a run is already in progress, treat that as "catch-up
+	// already happening" and don't queue another. (Unlike triggerSync, which
+	// is user-initiated and should always do something.)
+	if (isRunning()) return;
 
-	syncInProgress = true;
 	catchUpCount++;
 
 	try {
-		const total = syncCollections.length;
+		await withRun(async (signal) => {
+			const total = syncCollections.length;
 
-		// 1. Push local changes to server
-		syncStatus.current = { done: 0, total };
-		await uploadChanges(gateway);
+			// 1. Push local changes to server
+			syncStatus.current = { done: 0, total };
+			await uploadChanges(gateway, signal);
 
-		// 2. Pull remote changes in batches of 5, updating progress after each batch
-		let totalPulled = 0;
-		const changedCollections: string[] = [];
-		const concurrency = 5;
+			// 2. Pull remote changes in batches of 5, updating progress after each batch
+			let totalPulled = 0;
+			const changedCollections: string[] = [];
+			const concurrency = 5;
 
-		for (let i = 0; i < total; i += concurrency) {
-			const batch = syncCollections.slice(i, i + concurrency);
-			const batchResults = await Promise.allSettled(batch.map(pullChanges));
+			for (let i = 0; i < total; i += concurrency) {
+				const batch = syncCollections.slice(i, i + concurrency);
+				const batchResults = await Promise.allSettled(batch.map((c) => pullChanges(c, signal)));
 
-			for (let j = 0; j < batch.length; j++) {
-				const result = batchResults[j];
-				if (result.status === 'fulfilled' && result.value > 0) {
-					changedCollections.push(batch[j]);
-					totalPulled += result.value;
+				for (let j = 0; j < batch.length; j++) {
+					const result = batchResults[j];
+					if (result.status === 'fulfilled' && result.value > 0) {
+						changedCollections.push(batch[j]);
+						totalPulled += result.value;
+					}
 				}
+
+				syncStatus.current = { done: Math.min(i + concurrency, total), total };
 			}
 
-			syncStatus.current = { done: Math.min(i + concurrency, total), total };
-		}
-
-		if (totalPulled > 0) {
-			console.log(`Catch-up pulled ${totalPulled} changed records`);
-			for (const collection of changedCollections) {
-				notifyDataChange(collection);
-			}
-		}
-
-		// 3. Detect server deletions -- only for changed collections,
-		//    or all collections every Nth catch-up as a full integrity check
-		const fullDeletionCheck = catchUpCount % DELETION_CHECK_INTERVAL === 0;
-		const collectionsToCheckDeletions = fullDeletionCheck
-			? syncCollections
-			: changedCollections;
-
-		if (collectionsToCheckDeletions.length > 0) {
-			const deleteResults = await batchedParallel(collectionsToCheckDeletions, detectServerDeletions, 5);
-
-			let totalDeleted = 0;
-			const deletedCollections: string[] = [];
-			for (let i = 0; i < collectionsToCheckDeletions.length; i++) {
-				const result = deleteResults[i];
-				if (result.status === 'fulfilled' && result.value > 0) {
-					deletedCollections.push(collectionsToCheckDeletions[i]);
-					totalDeleted += result.value;
-				}
-			}
-
-			if (totalDeleted > 0) {
-				console.log(`Catch-up detected ${totalDeleted} server-side deletions`);
-				for (const collection of deletedCollections) {
+			if (totalPulled > 0) {
+				console.log(`Catch-up pulled ${totalPulled} changed records`);
+				for (const collection of changedCollections) {
 					notifyDataChange(collection);
 				}
 			}
-		}
+
+			// 3. Detect server deletions -- only for changed collections,
+			//    or all collections every Nth catch-up as a full integrity check
+			const fullDeletionCheck = catchUpCount % DELETION_CHECK_INTERVAL === 0;
+			const collectionsToCheckDeletions = fullDeletionCheck
+				? syncCollections
+				: changedCollections;
+
+			if (collectionsToCheckDeletions.length > 0) {
+				const deleteResults = await batchedParallel(
+					collectionsToCheckDeletions,
+					(c) => detectServerDeletions(c, signal),
+					5
+				);
+
+				let totalDeleted = 0;
+				const deletedCollections: string[] = [];
+				for (let i = 0; i < collectionsToCheckDeletions.length; i++) {
+					const result = deleteResults[i];
+					if (result.status === 'fulfilled' && result.value > 0) {
+						deletedCollections.push(collectionsToCheckDeletions[i]);
+						totalDeleted += result.value;
+					}
+				}
+
+				if (totalDeleted > 0) {
+					console.log(`Catch-up detected ${totalDeleted} server-side deletions`);
+					for (const collection of deletedCollections) {
+						notifyDataChange(collection);
+					}
+				}
+			}
+		});
 	} catch (error) {
 		console.error('Catch-up sync failed:', error);
 	} finally {
-		syncInProgress = false;
 		syncStatus.current = null;
 	}
 
-	// The 5 s push debounce silently drops pushes that fire while
-	// syncInProgress is held. Edits made during this catch-up would otherwise
-	// sit in the queue until the next reconnect/focus event. The retry-cap
-	// filter in uploadChanges prevents a loop on permanently-failing records.
-	if (navigator.onLine && (await hasEligiblePending())) {
-		uploadChanges(gateway).catch((e) => console.error('Post-catchup push failed:', e));
+	// Edits made during this catch-up are not visible to the snapshot taken
+	// at the start of uploadChanges; pick them up immediately. Wrapped in
+	// withRun so the watchdog still owns this work.
+	if (navigator.onLine && !isRunning() && (await hasEligiblePending())) {
+		withRun((s) => uploadChanges(gateway, s)).catch((e) =>
+			console.error('Post-catchup push failed:', e)
+		);
 	}
 }
 
@@ -966,72 +1088,73 @@ export async function triggerSync(gateway: ParticipantGateway): Promise<boolean>
 		return false;
 	}
 
-	if (syncInProgress) return false;
-	syncInProgress = true;
-
+	// Unlike runCatchUpSync, the user explicitly asked for this -- always
+	// queue it. withRun() awaits any in-flight run before starting fresh, so
+	// "Sync Now" can never be silently dropped.
 	try {
-		// Manual sync: give previously-failed records another chance by
-		// clearing their retry count. This is the user's explicit escape
-		// hatch for records stuck over MAX_PUSH_RETRIES (e.g. transient
-		// server-side hook bugs that have since been fixed).
-		const resetDb = await getDB();
-		const resetAll = await resetDb.getAll('records');
-		for (const r of resetAll) {
-			if (
-				(r._retryCount ?? 0) >= MAX_PUSH_RETRIES &&
-				['new', 'modified', 'deleted'].includes(r._status)
-			) {
-				await resetDb.put('records', { ...r, _retryCount: 0 });
+		await withRun(async (signal) => {
+			// Manual sync: give previously-failed records another chance by
+			// clearing their retry count. This is the user's explicit escape
+			// hatch for records stuck over MAX_PUSH_RETRIES (e.g. transient
+			// server-side hook bugs that have since been fixed).
+			const resetDb = await getDB();
+			const resetAll = await resetDb.getAll('records');
+			for (const r of resetAll) {
+				if (
+					(r._retryCount ?? 0) >= MAX_PUSH_RETRIES &&
+					['new', 'modified', 'deleted'].includes(r._status)
+				) {
+					await resetDb.put('records', { ...r, _retryCount: 0 });
+				}
 			}
-		}
 
-		// 1. Push local changes to server
-		await uploadChanges(gateway);
+			// 1. Push local changes to server
+			await uploadChanges(gateway, signal);
 
-		// 2. Clear sync timestamps so pullChanges fetches everything
-		const db = await getDB();
-		const allMeta = await db.getAll('sync_metadata');
-		for (const meta of allMeta) {
-			await db.delete('sync_metadata', meta.collection);
-		}
-
-		// 3. Pull all records in parallel (full pull since timestamps are cleared)
-		const pullResults = await batchedParallel(syncCollections, pullChanges, 5);
-		let totalPulled = 0;
-		for (let i = 0; i < syncCollections.length; i++) {
-			const result = pullResults[i];
-			if (result.status === 'fulfilled' && result.value > 0) {
-				totalPulled += result.value;
-				notifyDataChange(syncCollections[i]);
+			// 2. Clear sync timestamps so pullChanges fetches everything
+			const db = await getDB();
+			const allMeta = await db.getAll('sync_metadata');
+			for (const meta of allMeta) {
+				await db.delete('sync_metadata', meta.collection);
 			}
-		}
-		if (totalPulled > 0) {
-			console.log(`Full resync pulled ${totalPulled} records`);
-		}
 
-		// 4. Always detect deletions in parallel (removes records no longer accessible)
-		const deleteResults = await batchedParallel(syncCollections, detectServerDeletions, 5);
-		let totalDeleted = 0;
-		for (let i = 0; i < syncCollections.length; i++) {
-			const result = deleteResults[i];
-			if (result.status === 'fulfilled' && result.value > 0) {
-				totalDeleted += result.value;
-				notifyDataChange(syncCollections[i]);
+			// 3. Pull all records in parallel (full pull since timestamps are cleared)
+			const pullResults = await batchedParallel(syncCollections, (c) => pullChanges(c, signal), 5);
+			let totalPulled = 0;
+			for (let i = 0; i < syncCollections.length; i++) {
+				const result = pullResults[i];
+				if (result.status === 'fulfilled' && result.value > 0) {
+					totalPulled += result.value;
+					notifyDataChange(syncCollections[i]);
+				}
 			}
-		}
-		if (totalDeleted > 0) {
-			console.log(`Full resync removed ${totalDeleted} records no longer on server`);
-		}
+			if (totalPulled > 0) {
+				console.log(`Full resync pulled ${totalPulled} records`);
+			}
+
+			// 4. Always detect deletions in parallel (removes records no longer accessible)
+			const deleteResults = await batchedParallel(syncCollections, (c) => detectServerDeletions(c, signal), 5);
+			let totalDeleted = 0;
+			for (let i = 0; i < syncCollections.length; i++) {
+				const result = deleteResults[i];
+				if (result.status === 'fulfilled' && result.value > 0) {
+					totalDeleted += result.value;
+					notifyDataChange(syncCollections[i]);
+				}
+			}
+			if (totalDeleted > 0) {
+				console.log(`Full resync removed ${totalDeleted} records no longer on server`);
+			}
+		});
 	} catch (error) {
 		console.error('Full resync failed:', error);
-	} finally {
-		syncInProgress = false;
 	}
 
-	// Same rationale as runCatchUpSync: pick up any edits that were queued
-	// while the lock was held during the pull phase.
-	if (navigator.onLine && (await hasEligiblePending())) {
-		uploadChanges(gateway).catch((e) => console.error('Post-triggerSync push failed:', e));
+	// Pick up any edits that were queued while we were in the pull phase.
+	if (navigator.onLine && !isRunning() && (await hasEligiblePending())) {
+		withRun((s) => uploadChanges(gateway, s)).catch((e) =>
+			console.error('Post-triggerSync push failed:', e)
+		);
 	}
 
 	return true;
@@ -1111,7 +1234,8 @@ export async function downloadAllCollections(
 
 				do {
 					const result = await pb.collection(name).getList(page, DOWNLOAD_PAGE_SIZE, {
-						sort: 'updated'
+						sort: 'updated',
+						signal: reqSignal(undefined, PULL_REQUEST_TIMEOUT_MS)
 					});
 					totalPages = result.totalPages;
 
@@ -1208,7 +1332,9 @@ export async function downloadAll(
 
 	for (const name of collectionNames) {
 		try {
-			const records = await pb.collection(name).getFullList();
+			const records = await pb.collection(name).getFullList({
+				signal: reqSignal(undefined, PULL_REQUEST_TIMEOUT_MS)
+			});
 
 			let latestTimestamp = '';
 

@@ -96,7 +96,6 @@ export interface CachedRecord {
 	// for the push -- an unrelated field drift on the same row no longer
 	// demotes the push to a conflict.
 	_baseline?: Record<string, unknown>;
-	_syncingAt?: number; // timestamp when push started (prevents duplicate submissions)
 	_error?: string;
 	_retryCount?: number;
 	id: string;

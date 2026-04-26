@@ -99,6 +99,7 @@ export type ArchiveManifest = {
 export type ExportOptions = {
 	includeParticipants?: boolean;
 	includeParticipantTokens?: boolean;
+	csvOnly?: boolean;
 };
 
 export type ImportResult = {
@@ -405,6 +406,7 @@ export async function exportProjectArchive(
 			for (const fname of instanceFiles) {
 				const path = `files/instances/${inst.id}/_instance/${fname}`;
 				instanceFilePaths.push(path);
+				if (options.csvOnly) continue;
 				const bytes = await fetchPbFile(pb, 'workflow_instances', inst.id, fname);
 				if (bytes) zipFiles[path] = bytes;
 			}
@@ -459,6 +461,10 @@ export async function exportProjectArchive(
 						if (!v.file_value) continue;
 						const fname = v.file_value;
 						const path = `files/instances/${inst.id}/${col.field_id}/${fname}`;
+						if (options.csvOnly) {
+							paths.push(path);
+							continue;
+						}
 						const bytes = await fetchPbFile(
 							pb,
 							'workflow_instance_field_values',
@@ -518,6 +524,7 @@ export async function exportProjectArchive(
 			for (const fname of (e.files || []) as string[]) {
 				const path = `files/protocols/${e.id}/${fname}`;
 				filePaths.push(path);
+				if (options.csvOnly) continue;
 				const bytes = await fetchPbFile(pb, 'workflow_protocol_entries', e.id, fname);
 				if (bytes) zipFiles[path] = bytes;
 			}
@@ -674,21 +681,24 @@ export async function exportProjectArchive(
 	}
 
 	// ---------- schema.json + mapping.json + manifest.json ----------
-	zipFiles['schema.json'] = strToU8(JSON.stringify(schema, null, 2));
-	zipFiles['mapping.json'] = strToU8(JSON.stringify(mapping, null, 2));
+	if (!options.csvOnly) {
+		zipFiles['schema.json'] = strToU8(JSON.stringify(schema, null, 2));
+		zipFiles['mapping.json'] = strToU8(JSON.stringify(mapping, null, 2));
 
-	const manifest: ArchiveManifest = {
-		version: 1,
-		exported_at: mapping.exported_at,
-		app: { name: 'Überblick', product: 'ueberblick' },
-		source_project: { id: project.id, name: project.name },
-		counts,
-		files_dir: 'files/'
-	};
-	zipFiles['manifest.json'] = strToU8(JSON.stringify(manifest, null, 2));
+		const manifest: ArchiveManifest = {
+			version: 1,
+			exported_at: mapping.exported_at,
+			app: { name: 'Überblick', product: 'ueberblick' },
+			source_project: { id: project.id, name: project.name },
+			counts,
+			files_dir: 'files/'
+		};
+		zipFiles['manifest.json'] = strToU8(JSON.stringify(manifest, null, 2));
+	}
 
 	const bytes = zipSync(zipFiles, { level: 6 });
-	const filename = `${slugify(project.name, 'project')}-${new Date().toISOString().slice(0, 10)}.zip`;
+	const suffix = options.csvOnly ? '-data' : '';
+	const filename = `${slugify(project.name, 'project')}-${new Date().toISOString().slice(0, 10)}${suffix}.zip`;
 	return { filename, bytes };
 }
 

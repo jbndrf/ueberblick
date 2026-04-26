@@ -302,39 +302,55 @@
 	const activitySections = $derived.by((): ActivitySection[] => {
 		if (!detailState || detailState.toolUsageHistory.length === 0) return [];
 
-		const sections: ActivitySection[] = [];
-		// Walk newest-first. Accumulate entries until we hit a stage_transition.
-		// That transition marks the boundary -- everything collected belongs to
-		// the stage that transition moved INTO (to_stage_id).
-		let currentEntries: ToolUsageRecord[] = [];
-		let currentStageId = detailState.instance?.current_stage_id as string;
+		// Group by each entry's true stage. For stage_transition the destination
+		// is metadata.to_stage_id (the entry itself was logged with the FROM
+		// stage as its stage_id); for everything else the entry's own stage_id
+		// is already correct. The previous newest-first walk attributed
+		// form_fills to the wrong stage because executeToolFlowTransition()
+		// records form_fill BEFORE stage_transition, putting the transition
+		// later in -executed_at order than the form_fill that triggered it.
+		const buckets = new Map<string, ToolUsageRecord[]>();
+		const transitionByStage = new Map<string, ToolUsageRecord>();
 
 		for (const entry of detailState.toolUsageHistory) {
+			let stageKey: string;
 			if (entry.metadata?.action === 'stage_transition') {
-				// Flush accumulated entries as a section for the stage we were in
-				sections.push({
-					stageId: currentStageId,
-					stageName: getStageName(currentStageId) || currentStageId,
-					transitionEntry: entry,
-					entries: currentEntries
-				});
-				// Move backwards to the from-stage
-				currentStageId = (entry.metadata.from_stage_id as string | undefined) ?? currentStageId;
-				currentEntries = [];
+				stageKey = (entry.metadata.to_stage_id as string | undefined) ?? (entry.stage_id as string);
+				transitionByStage.set(stageKey, entry);
 			} else {
-				currentEntries.push(entry);
+				stageKey = entry.stage_id as string;
 			}
+			if (!stageKey) continue;
+			if (!buckets.has(stageKey)) buckets.set(stageKey, []);
+			buckets.get(stageKey)!.push(entry);
 		}
 
-		// Remaining entries belong to the initial stage (before any transitions)
-		if (currentEntries.length > 0) {
+		const sections: ActivitySection[] = [];
+		for (const [stageId, entries] of buckets) {
+			const transition = transitionByStage.get(stageId) ?? null;
+			// The transition row is rendered as the section header -- pull it
+			// out of the inner entries list to avoid double-rendering.
+			const innerEntries = transition
+				? entries.filter((e) => e.id !== transition.id)
+				: entries;
 			sections.push({
-				stageId: currentStageId,
-				stageName: getStageName(currentStageId) || currentStageId,
-				transitionEntry: null,
-				entries: currentEntries
+				stageId,
+				stageName: getStageName(stageId) || stageId,
+				transitionEntry: transition,
+				entries: innerEntries
 			});
 		}
+
+		// Newest section first by transition time. Sections without a
+		// transition (the initial stage) sort to the bottom.
+		sections.sort((a, b) => {
+			const ta = a.transitionEntry?.executed_at;
+			const tb = b.transitionEntry?.executed_at;
+			if (ta && tb) return tb.localeCompare(ta);
+			if (ta) return -1;
+			if (tb) return 1;
+			return 0;
+		});
 
 		return sections;
 	});

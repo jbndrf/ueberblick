@@ -14,7 +14,6 @@ export function cleanRecord(record: CachedRecord): Record<string, unknown> {
 		_status,
 		_serverUpdated,
 		_baseline,
-		_syncingAt,
 		_error,
 		_retryCount,
 		...clean

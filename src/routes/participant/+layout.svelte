@@ -22,7 +22,7 @@
 		pruneStaleParticipantDbs,
 		cleanupLegacyDatabase,
 	} from '$lib/participant-state/context.svelte';
-	import { setSyncCollections, startPushListener, runCatchUpSync, syncStatus, appLoadingMessage } from '$lib/participant-state/sync.svelte';
+	import { setSyncCollections, startPushListener, runCatchUpSync, abortStalledRun, syncStatus, appLoadingMessage } from '$lib/participant-state/sync.svelte';
 	import { setupRealtime } from '$lib/participant-state/realtime.svelte';
 	import { initEnabledFeatures } from '$lib/participant-state/enabled-features.svelte';
 
@@ -102,6 +102,7 @@
 	let cleanupPushListener: (() => void) | null = null;
 	let cleanupRealtime: (() => void) | null = null;
 	let cleanupVisibility: (() => void) | null = null;
+	let cleanupWatchdog: (() => void) | null = null;
 
 	// Active participant/role/project identifiers. Each participant gets their
 	// own IndexedDB ("participant-state__${id}"), so cross-participant data
@@ -133,9 +134,11 @@
 		cleanupPushListener?.();
 		cleanupRealtime?.();
 		cleanupVisibility?.();
+		cleanupWatchdog?.();
 		cleanupPushListener = null;
 		cleanupRealtime = null;
 		cleanupVisibility = null;
+		cleanupWatchdog = null;
 		gateway = null;
 		gatewayInitialized = false;
 	}
@@ -387,6 +390,19 @@
 			cleanupVisibility = () => {
 				document.removeEventListener('visibilitychange', handleVisibility);
 			};
+
+			// Watchdog: belt-and-braces against a sync run that wedged past
+			// its per-request timeout (e.g. someone forgot to thread the abort
+			// signal). Only ticks while the tab is visible -- a backgrounded
+			// tab has its own throttling story and can't make user-visible
+			// progress anyway.
+			const WATCHDOG_INTERVAL_MS = 30_000;
+			const RUN_STALL_TIMEOUT_MS = 45_000;
+			const watchdogTimer = setInterval(() => {
+				if (document.visibilityState !== 'visible') return;
+				abortStalledRun(RUN_STALL_TIMEOUT_MS);
+			}, WATCHDOG_INTERVAL_MS);
+			cleanupWatchdog = () => clearInterval(watchdogTimer);
 		} catch (error) {
 			console.error('Failed to initialize gateway:', error);
 		}

@@ -2,7 +2,15 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-	import { ChevronDown, EllipsisVertical, Download, Upload, Package, FolderArchive } from '@lucide/svelte';
+	import {
+		ChevronDown,
+		EllipsisVertical,
+		Download,
+		Upload,
+		Package,
+		FolderArchive,
+		FileSpreadsheet
+	} from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { invalidateAll } from '$app/navigation';
 	import * as m from '$lib/paraglide/messages';
@@ -18,6 +26,7 @@
 	let exporting = $state(false);
 	let importing = $state(false);
 	let exportingArchive = $state(false);
+	let exportingCsv = $state(false);
 	let importingArchive = $state(false);
 
 	async function handleExport(projectId: string, projectName: string) {
@@ -111,6 +120,37 @@
 			toast.error(m.projectsExportArchiveError?.() ?? 'Failed to export project archive');
 		} finally {
 			exportingArchive = false;
+		}
+	}
+
+	async function handleExportCsvOnly(projectId: string, projectName: string) {
+		if (exportingCsv) return;
+		exportingCsv = true;
+		try {
+			const response = await fetch('/projects/export-archive', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ projectId, csvOnly: true })
+			});
+			if (!response.ok) throw new Error(`Export failed: ${response.statusText}`);
+			const blob = await response.blob();
+			const cd = response.headers.get('Content-Disposition') || '';
+			const match = cd.match(/filename="([^"]+)"/);
+			const filename = match
+				? match[1]
+				: `${projectName.toLowerCase().replace(/\s+/g, '-')}-data.zip`;
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = filename;
+			a.click();
+			URL.revokeObjectURL(url);
+			toast.success(m.projectsExportDataCsvSuccess?.() ?? 'CSV data exported');
+		} catch (err) {
+			console.error('Error exporting CSV data:', err);
+			toast.error(m.projectsExportDataCsvError?.() ?? 'Failed to export CSV data');
+		} finally {
+			exportingCsv = false;
 		}
 	}
 
@@ -364,6 +404,13 @@
 								>
 									<Package class="mr-2 size-4" />
 									{m.projectsExportArchive?.() ?? 'Export full project (ZIP)'}
+								</DropdownMenu.Item>
+								<DropdownMenu.Item
+									onclick={() => handleExportCsvOnly(project.id, project.name)}
+									disabled={exportingCsv}
+								>
+									<FileSpreadsheet class="mr-2 size-4" />
+									{m.projectsExportDataCsv?.() ?? 'Export data (CSV)'}
 								</DropdownMenu.Item>
 							</DropdownMenu.Content>
 						</DropdownMenu.Root>
