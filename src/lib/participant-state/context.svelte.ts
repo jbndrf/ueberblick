@@ -384,8 +384,21 @@ export async function resetAllParticipantState(): Promise<void> {
 		try { await clearAllData(); } catch { /* nothing to clear */ }
 	}
 
-	// 3. Clear localStorage participant hints + the full-local-copy pref.
+	// 3. Wipe per-browser participant preferences. Sweep by prefix so any
+	// future preference key is cleared automatically as long as it follows
+	// the `ueberblick_` / `ueberblick:` naming convention. The IDB layer is
+	// already participant-scoped; this brings localStorage to parity so a
+	// fresh login behaves like a true first visit (admin startup defaults
+	// re-apply, feature toggles reload from server, sheet tabs reset).
 	if (typeof window !== 'undefined') {
+		for (let i = localStorage.length - 1; i >= 0; i--) {
+			const k = localStorage.key(i);
+			if (!k) continue;
+			if (k.startsWith('ueberblick_') || k.startsWith('ueberblick:')) {
+				localStorage.removeItem(k);
+			}
+		}
+		// Legacy non-prefixed key (predates the convention).
 		localStorage.removeItem(FULL_LOCAL_COPY_KEY);
 	}
 	clearLastActiveHints();

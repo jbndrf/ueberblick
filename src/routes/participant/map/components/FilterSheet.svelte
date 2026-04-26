@@ -147,6 +147,13 @@
 		onSavedViewRename?: (id: string, name: string) => void | Promise<void>;
 		onSavedViewDelete?: (id: string) => void | Promise<void>;
 		onClearActiveView?: () => void;
+		/**
+		 * Admin-curated filter presets surfaced for the participant to load.
+		 * Loading one copies its config into a new user-owned saved view --
+		 * the admin entry itself remains read-only in the UI.
+		 */
+		adminPresets?: { id: string; name: string; config: ViewDefinition }[];
+		onAdminPresetLoad?: (preset: { name: string; config: ViewDefinition }) => void | Promise<void>;
 		/** Called when the user taps the "Manage tabs" button in the header. */
 		onManageTabs?: () => void;
 	}
@@ -180,6 +187,8 @@
 		onSavedViewRename,
 		onSavedViewDelete,
 		onClearActiveView,
+		adminPresets = [],
+		onAdminPresetLoad,
 		onManageTabs
 	}: Props = $props();
 
@@ -568,6 +577,29 @@
 					<Plus class="mr-2 h-4 w-4" />
 					{m.participantFilterSheetNewView?.() ?? 'New view'}
 				</Button>
+			{/if}
+
+			{#if adminPresets.length > 0}
+				<Separator class="my-2" />
+				<div class="flex flex-col gap-1">
+					<div class="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+						Vom Projekt
+					</div>
+					{#each adminPresets as preset (preset.id)}
+						<div class="flex items-center gap-2 rounded-md border border-dashed p-2">
+							<Bookmark class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+							<span class="min-w-0 flex-1 truncate text-sm">{preset.name}</span>
+							<Button
+								size="sm"
+								variant="outline"
+								class="h-7 shrink-0"
+								onclick={() => onAdminPresetLoad?.({ name: preset.name, config: preset.config })}
+							>
+								Laden
+							</Button>
+						</div>
+					{/each}
+				</div>
 			{/if}
 		</div>
 

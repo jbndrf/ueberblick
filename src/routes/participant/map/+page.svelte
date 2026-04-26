@@ -24,7 +24,7 @@
 		ViewDefinition
 	} from '$lib/participant-state/types';
 	import { buildPredicate } from '$lib/filter-engine/predicate';
-	import { isFeatureEnabled } from '$lib/participant-state/enabled-features.svelte';
+	import { isFeatureEnabled, toggleFeature, type FeatureKey } from '$lib/participant-state/enabled-features.svelte';
 	import {
 		createToolConfig,
 		deleteToolConfig,
@@ -507,7 +507,159 @@
 	// Initialization Effects (run once when data first arrives)
 	// ==========================================================================
 
-	// Initialize default base layer selection
+	/**
+	 * Admin-curated presets surfaced in the FilterSheet so participants can
+	 * load them into their own saved views. Sourced from
+	 * `project.settings.admin_presets` (see admin Advanced tab). Kept as a
+	 * derived list -- mutations are one-way (admin -> participant read).
+	 */
+	interface AdminPresetLite {
+		id: string;
+		name: string;
+		tool_key: 'filter.saved_views';
+		sort_order: number;
+		config: ViewDefinition;
+	}
+	const adminPresets = $derived.by<AdminPresetLite[]>(() => {
+		const raw = ((project as any)?.settings?.admin_presets ?? []) as unknown[];
+		if (!Array.isArray(raw)) return [];
+		return raw
+			.filter(
+				(p): p is AdminPresetLite =>
+					!!p &&
+					typeof (p as any).id === 'string' &&
+					(p as any).tool_key === 'filter.saved_views' &&
+					!!(p as any).config
+			)
+			.slice()
+			.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+	});
+
+	/**
+	 * First-visit gate: when a participant opens a project for the first time
+	 * we apply the admin's `startup_defaults` once, then record the project id
+	 * in localStorage so subsequent visits honor the participant's own toggles.
+	 */
+	const STARTUP_STORAGE_KEY = 'ueberblick_applied_startup_defaults';
+	let startupDefaultsApplied = $state(false);
+	/** Tracks whether the non-layer slice (workflows / features / tag values)
+	 *  has been applied yet. Layer slice waits for layer hydration; this flag
+	 *  prevents the non-layer slice from running twice when the effect re-fires
+	 *  as layers arrive. */
+	let startupNonLayerApplied = $state(false);
+	/** Suppress the auto-init / auto-add tag-value effects for this session
+	 *  once admin defaults have been applied, so admin's "off" choices stick
+	 *  instead of being immediately re-added by the auto-add effect. */
+	let tagValuesLockedByStartup = $state(false);
+	/** True when startup_defaults explicitly set visibleWorkflowIds on this
+	 *  pageview; suppresses the auto-add-all-workflows effect so the admin's
+	 *  narrower list actually sticks for the rest of the session. */
+	let workflowVisibilityLockedByStartup = $state(false);
+
+	function readAppliedStartupProjects(): Set<string> {
+		if (typeof window === 'undefined') return new Set();
+		try {
+			const raw = localStorage.getItem(STARTUP_STORAGE_KEY);
+			if (!raw) return new Set();
+			const parsed = JSON.parse(raw);
+			return new Set(Array.isArray(parsed) ? (parsed as string[]) : []);
+		} catch {
+			return new Set();
+		}
+	}
+	function markStartupApplied(projectId: string): void {
+		if (typeof window === 'undefined') return;
+		const next = readAppliedStartupProjects();
+		next.add(projectId);
+		localStorage.setItem(STARTUP_STORAGE_KEY, JSON.stringify([...next]));
+	}
+
+	$effect(() => {
+		const pid = (project as any)?.id;
+		if (!pid || startupDefaultsApplied) return;
+
+		const defaults = (project as any)?.settings?.startup_defaults as
+			| {
+					base_layer_id?: string;
+					overlay_layer_ids?: string[];
+					workflow_ids_visible?: string[] | 'all';
+					enabled_features?: string[];
+					visible_tag_values?: Record<string, string[]>;
+			  }
+			| undefined;
+
+		const applied = readAppliedStartupProjects();
+		if (applied.has(pid)) {
+			startupDefaultsApplied = true;
+			return;
+		}
+
+		const hasLayerDefaults = !!(
+			defaults &&
+			(defaults.base_layer_id || (defaults.overlay_layer_ids?.length ?? 0) > 0)
+		);
+		const layersReady = mapLayers.length > 0;
+
+		// Non-layer slice: apply at most once. Workflows / features / tag values
+		// don't depend on layer hydration so they run on the first effect tick
+		// even when the project has no map_layers configured.
+		if (defaults && !startupNonLayerApplied) {
+			if (Array.isArray(defaults.workflow_ids_visible)) {
+				visibleWorkflowIds = [...defaults.workflow_ids_visible];
+				workflowVisibilityLockedByStartup = true;
+			}
+			if (Array.isArray(defaults.enabled_features)) {
+				for (const key of defaults.enabled_features) {
+					if (!isFeatureEnabled(key as FeatureKey)) {
+						void toggleFeature(key as FeatureKey, true);
+					}
+				}
+			}
+			// Per-workflow filterable-tag value defaults. Each entry is the
+			// explicit list of values that should be ON; missing workflows fall
+			// back to the existing "all on" auto-init. Locking suppresses the
+			// auto-add effect that would otherwise immediately re-include any
+			// values the admin turned off.
+			if (
+				defaults.visible_tag_values &&
+				typeof defaults.visible_tag_values === 'object' &&
+				Object.keys(defaults.visible_tag_values).length > 0
+			) {
+				const next = new Map<string, Set<string>>();
+				for (const [wfId, vals] of Object.entries(defaults.visible_tag_values)) {
+					if (Array.isArray(vals)) next.set(wfId, new Set(vals));
+				}
+				visibleTagValues = next;
+				tagValuesLockedByStartup = true;
+			}
+			startupNonLayerApplied = true;
+		}
+
+		// Layer slice: applies when layers have hydrated. The id-validation
+		// below would silently drop everything if mapLayers were empty.
+		if (defaults && layersReady) {
+			if (defaults.base_layer_id && mapLayers.some((l: any) => l.id === defaults.base_layer_id)) {
+				activeBaseLayerId = defaults.base_layer_id;
+			}
+			if (Array.isArray(defaults.overlay_layer_ids) && defaults.overlay_layer_ids.length > 0) {
+				const valid = defaults.overlay_layer_ids.filter((id) =>
+					mapLayers.some((l: any) => l.id === id && l.layer_type === 'overlay')
+				);
+				if (valid.length) activeOverlayIds = valid;
+			}
+		}
+
+		// Persist the "applied" marker only when there's nothing left to wait
+		// for: either the project has no layer defaults, or layers are ready.
+		// Otherwise the effect will re-fire when layers hydrate and finish the
+		// layer slice -- the non-layer slice is already idempotently locked.
+		if (!hasLayerDefaults || layersReady) {
+			markStartupApplied(pid);
+			startupDefaultsApplied = true;
+		}
+	});
+
+	// Initialize default base layer selection (fallback if startup_defaults did not set one)
 	$effect(() => {
 		if (mapLayers.length && !untrack(() => activeBaseLayerId)) {
 			const firstBase = mapLayers.find((l: any) => l.layer_type === 'base');
@@ -527,9 +679,11 @@
 		}
 	});
 
-	// Keep all workflows with instances visible by default
+	// Keep all workflows with instances visible by default (unless the
+	// admin's startup_defaults explicitly narrowed the set for this session)
 	$effect(() => {
 		if (workflowInstances.length === 0) return;
+		if (untrack(() => workflowVisibilityLockedByStartup)) return;
 		const currentIds = untrack(() => visibleWorkflowIds);
 		const currentSet = new Set(currentIds);
 		const allWorkflowIds = [...new Set(workflowInstances.map((i: any) => i.workflow_id).filter(Boolean))];
@@ -556,6 +710,7 @@
 
 	// Initialize tag value visibility - all values visible by default
 	$effect(() => {
+		if (untrack(() => tagValuesLockedByStartup)) return;
 		if (fieldTags.length > 0 && untrack(() => visibleTagValues.size) === 0) {
 			const newMap = new Map<string, Set<string>>();
 			for (const ft of fieldTags) {
@@ -585,6 +740,11 @@
 	// Auto-add new filter values AND workflows as visible
 	$effect(() => {
 		if (fieldTags.length === 0 || workflowInstances.length === 0) return;
+		// When admin defaults are locking tag-value visibility for this session,
+		// don't auto-add tag values -- otherwise admin's "off" choices would be
+		// re-included the moment matching field values appear in the data. The
+		// workflow-id auto-add below still runs (workflows aren't locked here).
+		if (untrack(() => tagValuesLockedByStartup)) return;
 		const currentTagValues = untrack(() => visibleTagValues);
 		const currentWorkflowIds = untrack(() => visibleWorkflowIds);
 
@@ -974,6 +1134,31 @@
 			savedViews = savedViews.map((v) => (v.id === id ? updated : v));
 		} catch (err) {
 			console.warn('[saved-views] rename failed', err);
+		}
+	}
+
+	/**
+	 * Copy an admin-curated preset into the participant's own saved views.
+	 * From this point on the copy is a normal user-owned row -- edits,
+	 * renames and deletes go through the standard handlers. Admin-side
+	 * changes to the preset never bleed back into copies that were already
+	 * loaded. Activating it right away matches the UX of saving a new view.
+	 */
+	async function handleLoadAdminPreset(preset: { name: string; config: ViewDefinition }): Promise<void> {
+		const pid = (project as any)?.id;
+		if (!pid) return;
+		try {
+			const created = await createToolConfig<ViewDefinition>(SAVED_VIEWS_KEY, {
+				name: preset.name,
+				config: JSON.parse(JSON.stringify(preset.config)) as ViewDefinition,
+				projectId: pid
+			});
+			savedViews = [...savedViews, created];
+			applySavedView(created);
+			activeSavedViewId = created.id;
+			void persistActiveView();
+		} catch (err) {
+			console.warn('[admin-presets] load failed', err);
 		}
 	}
 
@@ -1684,6 +1869,8 @@
 		onSavedViewRename={handleRenameView}
 		onSavedViewDelete={handleDeleteView}
 		onClearActiveView={clearActiveView}
+		adminPresets={adminPresets}
+		onAdminPresetLoad={handleLoadAdminPreset}
 		onManageTabs={() => { filterSheetOpen = false; settingsSheetOpen = true; }}
 	/>
 

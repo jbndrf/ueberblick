@@ -50,6 +50,43 @@ export const projectMapDefaultsSchema = z.object({
 		.default({ lat: 51.1657, lng: 10.4515 })
 });
 
+/**
+ * Project startup defaults: the initial state a new participant sees the first
+ * time they open this project's map. Persisted inside `projects.settings`
+ * alongside `map_defaults` and `display_name`.
+ *
+ * Application is gated client-side by a `localStorage` marker keyed by
+ * project id, so subsequent visits never re-apply these values -- the
+ * participant's own toggles win from that point on.
+ */
+export const projectStartupDefaultsSchema = z.object({
+	base_layer_id: z.string().optional(),
+	overlay_layer_ids: z.array(z.string()).default([]),
+	workflow_ids_visible: z.union([z.array(z.string()), z.literal('all')]).default('all'),
+	enabled_features: z.array(z.string()).default([]),
+	// Per-workflow default visibility for filterable-tag values (stage ids or
+	// field option values). Map: workflowId -> array of values that should be
+	// ON at first visit. Workflows not present here fall back to "all on".
+	visible_tag_values: z.record(z.string(), z.array(z.string())).default({})
+});
+
+/**
+ * A single admin-curated preset. Participants load one via the "Preset laden"
+ * action, which copies the `config` into a new user-owned
+ * `participant_tool_configs` row -- edits, renames and deletes then follow the
+ * normal saved-view flow.
+ */
+export const adminPresetSchema = z.object({
+	id: z.string().min(1),
+	tool_key: z.literal('filter.saved_views'),
+	name: z.string().min(1).max(200),
+	sort_order: z.number().int().default(0),
+	config: z.record(z.string(), z.unknown())
+});
+
+export type ProjectStartupDefaults = z.infer<typeof projectStartupDefaultsSchema>;
+export type AdminPreset = z.infer<typeof adminPresetSchema>;
+
 export type MapLayerConfigSchema = typeof mapLayerConfigSchema;
 export type MapLayerSchema = typeof mapLayerSchema;
 export type ProjectMapDefaultsSchema = typeof projectMapDefaultsSchema;

@@ -3,7 +3,15 @@ import type { Actions, PageServerLoad } from './$types';
 import { superValidate } from 'sveltekit-superforms';
 import * as m from '$lib/paraglide/messages';
 import { zod4 } from 'sveltekit-superforms/adapters';
-import { mapLayerSchema, projectMapDefaultsSchema } from '$lib/schemas/map-settings';
+import {
+	mapLayerSchema,
+	projectMapDefaultsSchema,
+	projectStartupDefaultsSchema,
+	adminPresetSchema,
+	type ProjectStartupDefaults,
+	type AdminPreset
+} from '$lib/schemas/map-settings';
+import { z } from 'zod';
 import type { MapLayer } from '$lib/types/map-layer';
 import { PRESET_SOURCES, type TileSourceConfig, type WmsSourceConfig } from '$lib/types/map-layer';
 import { isValidPolygon } from '$lib/utils/geo-utils';
@@ -53,9 +61,23 @@ export const load: PageServerLoad = async ({ locals: { pb }, params }) => {
 		});
 
 		// Get map defaults and display name from project settings
-		const projectSettings = project.settings as { map_defaults?: ProjectMapDefaults; display_name?: string } | null;
+		const projectSettings = project.settings as {
+			map_defaults?: ProjectMapDefaults;
+			display_name?: string;
+			startup_defaults?: ProjectStartupDefaults;
+			admin_presets?: AdminPreset[];
+		} | null;
 		const mapDefaults = projectSettings?.map_defaults || DEFAULT_MAP_SETTINGS;
 		const displayName = projectSettings?.display_name || '';
+		const startupDefaults: ProjectStartupDefaults = projectSettings?.startup_defaults ?? {
+			overlay_layer_ids: [],
+			workflow_ids_visible: 'all',
+			enabled_features: [],
+			visible_tag_values: {}
+		};
+		const adminPresets: AdminPreset[] = Array.isArray(projectSettings?.admin_presets)
+			? (projectSettings!.admin_presets as AdminPreset[])
+			: [];
 
 		// Find base layer for view defaults
 		const baseLayer = mapLayers.find((l) => l.layer_type === 'base');
@@ -91,6 +113,31 @@ export const load: PageServerLoad = async ({ locals: { pb }, params }) => {
 			sort: 'sort_order,created'
 		});
 
+		// Data needed to build a filter preset editor on the Advanced tab.
+		// Mirrors the participant map's `builderCtx` (+page.svelte ~line 714) so
+		// the admin sees the same filterable fields the participant will.
+		const [workflows, workflowStages, toolsForms, toolsFormFields, toolsFieldTags] = await Promise.all([
+			pb.collection('workflows').getFullList({
+				filter: `project_id = "${projectId}" && is_active = true`,
+				fields: 'id, name',
+				sort: 'name'
+			}),
+			pb.collection('workflow_stages').getFullList({
+				fields: 'id, workflow_id, stage_name'
+			}),
+			pb.collection('tools_forms').getFullList({
+				fields: 'id, workflow_id'
+			}),
+			pb.collection('tools_form_fields').getFullList({
+				fields: 'id, form_id, field_label, field_type, field_options'
+			}),
+			// Filterable-tag mappings per workflow. Used to render the per-value
+			// default-visibility toggles inside the "Sichtbare Workflows" section.
+			pb.collection('tools_field_tags').getFullList({
+				fields: 'id, workflow_id, tag_mappings'
+			})
+		]);
+
 		// Initialize forms
 		const layerForm = await superValidate(zod4(mapLayerSchema));
 		const defaultsForm = await superValidate(mapDefaults, zod4(projectMapDefaultsSchema));
@@ -106,7 +153,14 @@ export const load: PageServerLoad = async ({ locals: { pb }, params }) => {
 			offlinePackages,
 			infoPages,
 			layerForm,
-			defaultsForm
+			defaultsForm,
+			startupDefaults,
+			adminPresets,
+			workflows,
+			workflowStages,
+			toolsForms,
+			toolsFormFields,
+			toolsFieldTags
 		};
 	} catch (err) {
 		console.error('Error loading project settings:', err);
@@ -882,6 +936,71 @@ export const actions: Actions = {
 		} catch (err) {
 			console.error('Error saving display name:', err);
 			return fail(500, { message: m.settingsServerSaveDisplayNameError?.() ?? 'Failed to save display name' });
+		}
+	},
+
+	// =====================================================================
+	// Advanced: project startup defaults + admin-curated filter presets
+	// (both live in projects.settings JSON -- see plan docs)
+	// =====================================================================
+
+	saveStartupDefaults: async ({ request, locals: { pb }, params }) => {
+		const { projectId } = params;
+		const formData = await request.formData();
+		const payload = formData.get('payload') as string;
+
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(payload ?? 'null');
+		} catch {
+			return fail(400, { message: 'Invalid startup defaults payload' });
+		}
+
+		const result = projectStartupDefaultsSchema.safeParse(parsed);
+		if (!result.success) {
+			return fail(400, { message: 'Startup defaults failed validation' });
+		}
+
+		try {
+			const project = await pb.collection('projects').getOne(projectId);
+			const currentSettings = (project.settings as Record<string, unknown>) || {};
+			await pb.collection('projects').update(projectId, {
+				settings: { ...currentSettings, startup_defaults: result.data }
+			});
+			return { success: true };
+		} catch (err) {
+			console.error('Error saving startup defaults:', err);
+			return fail(500, { message: 'Failed to save startup defaults' });
+		}
+	},
+
+	saveAdminPresets: async ({ request, locals: { pb }, params }) => {
+		const { projectId } = params;
+		const formData = await request.formData();
+		const payload = formData.get('payload') as string;
+
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(payload ?? 'null');
+		} catch {
+			return fail(400, { message: 'Invalid presets payload' });
+		}
+
+		const result = z.array(adminPresetSchema).safeParse(parsed);
+		if (!result.success) {
+			return fail(400, { message: 'Presets failed validation' });
+		}
+
+		try {
+			const project = await pb.collection('projects').getOne(projectId);
+			const currentSettings = (project.settings as Record<string, unknown>) || {};
+			await pb.collection('projects').update(projectId, {
+				settings: { ...currentSettings, admin_presets: result.data }
+			});
+			return { success: true };
+		} catch (err) {
+			console.error('Error saving admin presets:', err);
+			return fail(500, { message: 'Failed to save admin presets' });
 		}
 	}
 };

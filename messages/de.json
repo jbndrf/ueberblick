@@ -751,7 +751,7 @@
 	"participantFilterSheetViewsHeader": "Ansicht",
 	"participantFilterSheetDefaultView": "Standard",
 	"participantFilterSheetNewView": "Neue Ansicht",
-	"participantFilterSheetViewOverrideTitle": "„{name}" ist aktiv",
+	"participantFilterSheetViewOverrideTitle": "„{name}“ ist aktiv",
 	"participantFilterSheetViewOverrideDescription": "Diese Ansicht ersetzt die Schalter unten — sie haben keine Wirkung, solange sie aktiv ist.",
 	"participantFilterSheetDeactivateView": "Ansicht ausschalten",
 	"participantSavedViewsTitle": "Gespeicherte Ansichten",

@@ -3,6 +3,7 @@
 	import * as Tabs from '$lib/components/ui/tabs';
 	import MapSettingsTab from './MapSettingsTab.svelte';
 	import GeneralSettingsTab from './GeneralSettingsTab.svelte';
+	import AdvancedSettingsTab from './AdvancedSettingsTab.svelte';
 
 	let { data } = $props();
 
@@ -17,11 +18,16 @@
 	<Tabs.Root bind:value={currentTab}>
 		<Tabs.List>
 			<Tabs.Trigger value="map">{m.settingsTabMap?.() ?? 'Map'}</Tabs.Trigger>
+			<Tabs.Trigger value="advanced">Erweitert</Tabs.Trigger>
 			<Tabs.Trigger value="general">{m.settingsTabGeneral?.() ?? 'General'}</Tabs.Trigger>
 		</Tabs.List>
 
 		<Tabs.Content value="map">
 			<MapSettingsTab {data} />
+		</Tabs.Content>
+
+		<Tabs.Content value="advanced">
+			<AdvancedSettingsTab {data} />
 		</Tabs.Content>
 
 		<Tabs.Content value="general">
