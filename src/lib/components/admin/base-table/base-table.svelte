@@ -162,7 +162,8 @@
 								value,
 								editMode,
 								onUpdate: col.onUpdate ? (v: string) => col.onUpdate!(rowId, v) : undefined,
-								readonly: capabilities.readonly
+								readonly: capabilities.readonly,
+								mode: col.dateConfig?.mode ?? 'date'
 							});
 
 						case 'array':
@@ -563,7 +564,7 @@
 	/>
 {/snippet}
 
-{#snippet newRowDateField(columnId: string, isRequired: boolean)}
+{#snippet newRowDateField(columnId: string, isRequired: boolean, mode: 'date' | 'datetime' | 'time')}
 	<DateField
 		value={newRowData[columnId] ?? null}
 		editMode={true}
@@ -571,6 +572,7 @@
 			updateNewRowField(columnId, value);
 		}}
 		readonly={false}
+		{mode}
 	/>
 {/snippet}
 
@@ -740,7 +742,7 @@
 										{:else if fieldType === 'number'}
 											{@render newRowNumberField(column.id || '', isRequired)}
 										{:else if fieldType === 'date'}
-											{@render newRowDateField(column.id || '', isRequired)}
+											{@render newRowDateField(column.id || '', isRequired, col?.dateConfig?.mode ?? 'date')}
 										{:else if fieldType === 'boolean'}
 											{@render newRowBooleanField(column.id || '')}
 										{:else if fieldType === 'dropdown'}

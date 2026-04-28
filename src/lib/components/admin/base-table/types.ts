@@ -46,6 +46,10 @@ export interface BaseColumnConfig<TData = any> {
 	booleanConfig?: {
 		onToggle: (rowId: string, value: boolean) => Promise<void>;
 	};
+	// For date fields
+	dateConfig?: {
+		mode?: 'date' | 'datetime' | 'time';
+	};
 	// For dropdown fields
 	dropdownConfig?: {
 		options: Array<{

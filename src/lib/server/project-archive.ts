@@ -9,6 +9,7 @@
  */
 import { zipSync, strToU8, type Zippable } from 'fflate';
 import type PocketBase from 'pocketbase';
+import { fetchParticipantNameMapForProject } from '$lib/admin/workflow-rows';
 import {
 	exportProjectSchema,
 	importProjectSchema,
@@ -262,6 +263,9 @@ export async function exportProjectArchive(
 ): Promise<{ filename: string; bytes: Uint8Array }> {
 	const project = await pb.collection('projects').getOne(projectId);
 	const schema = await exportProjectSchema(pb, projectId);
+	const participantNameById = await fetchParticipantNameMapForProject(pb, projectId);
+	const nameOf = (id: string | undefined | null) =>
+		id ? (participantNameById.get(id) ?? '') : '';
 
 	const zipFiles: Zippable = {};
 	const counts: Record<string, number> = {};
@@ -330,6 +334,12 @@ export async function exportProjectArchive(
 				system_field: 'current_stage_id'
 			},
 			{ name: 'created_by', kind: 'system', value_type: 'id', system_field: 'created_by' },
+			{
+				name: 'created_by_name',
+				kind: 'system',
+				value_type: 'text',
+				system_field: 'created_by_name'
+			},
 			{ name: 'created', kind: 'system', value_type: 'datetime', system_field: 'created' },
 			{
 				name: 'last_activity_at',
@@ -425,6 +435,9 @@ export async function exportProjectArchive(
 					case 'created_by':
 						row.push(inst.created_by ?? '');
 						break;
+					case 'created_by_name':
+						row.push(nameOf(inst.created_by));
+						break;
 					case 'created':
 						row.push(inst.created);
 						break;
@@ -512,6 +525,7 @@ export async function exportProjectArchive(
 			'stage_id',
 			'tool_id',
 			'recorded_by',
+			'recorded_by_name',
 			'recorded_at',
 			'snapshot_hash',
 			'snapshot_json',
@@ -534,6 +548,7 @@ export async function exportProjectArchive(
 				e.stage_id,
 				e.tool_id ?? '',
 				e.recorded_by ?? '',
+				nameOf(e.recorded_by),
 				e.recorded_at,
 				e.snapshot_hash ?? '',
 				e.snapshot ? JSON.stringify(e.snapshot) : '',
@@ -558,6 +573,7 @@ export async function exportProjectArchive(
 			'instance_id',
 			'stage_id',
 			'executed_by',
+			'executed_by_name',
 			'executed_at',
 			'metadata_json'
 		];
@@ -566,6 +582,7 @@ export async function exportProjectArchive(
 			u.instance_id,
 			u.stage_id ?? '',
 			u.executed_by ?? '',
+			nameOf(u.executed_by),
 			u.executed_at,
 			u.metadata ? JSON.stringify(u.metadata) : ''
 		]);

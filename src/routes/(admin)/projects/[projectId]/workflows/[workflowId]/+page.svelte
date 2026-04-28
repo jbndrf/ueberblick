@@ -333,6 +333,11 @@
 			}
 
 			// Standard editable fields (text, number, date, email, long_text)
+			const mappedType = mapFieldType(fd.type);
+			const dateMode: 'date' | 'datetime' | 'time' =
+				fd.fieldOptions?.date_mode === 'time' || fd.fieldOptions?.date_mode === 'datetime'
+					? fd.fieldOptions.date_mode
+					: 'date';
 			return {
 				id: fd.id,
 				header: fd.label,
@@ -342,8 +347,9 @@
 					if (Array.isArray(val)) return val.join(', ');
 					return String(val);
 				},
-				fieldType: mapFieldType(fd.type),
+				fieldType: mappedType,
 				capabilities: { sortable: true, filterable: true, editable: true },
+				...(mappedType === 'date' ? { dateConfig: { mode: dateMode } } : {}),
 				onUpdate: async (rowId: string, value: string) => {
 					const row = rows.find((r: InstanceRow) => r.id === rowId);
 					if (!row) return;
@@ -363,6 +369,7 @@
 				header: m.workflowDetailColCreated?.() ?? 'Created',
 				accessorKey: 'created',
 				fieldType: 'date',
+				dateConfig: { mode: 'datetime' },
 				capabilities: { sortable: true, filterable: false, readonly: true }
 			}
 		];
