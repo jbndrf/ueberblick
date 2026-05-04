@@ -10,7 +10,9 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Label } from '$lib/components/ui/label';
-	import { FileText, Plus, Pencil, Trash2, Upload, X, Image, AlertTriangle } from '@lucide/svelte';
+	import { FileText, Plus, Pencil, Trash2, Upload, X, Image, AlertTriangle, MessageSquare } from '@lucide/svelte';
+	import { Switch } from '$lib/components/ui/switch';
+	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 	import { toast } from 'svelte-sonner';
 	import { getPocketBase } from '$lib/pocketbase';
 	import { stripHtml } from '$lib/sanitize-html';
@@ -112,6 +114,33 @@
 	// Display name state
 	let displayName = $state(data.displayName ?? '');
 	let isSavingDisplayName = $state(false);
+
+	// --- Project chat settings ---
+	let chatEnabled = $state<boolean>(!!(data.project as { chat_enabled?: boolean }).chat_enabled);
+	let chatVisibleToRoleIds = $state<string[]>(
+		Array.isArray((data.project as { chat_visible_to_roles?: string[] }).chat_visible_to_roles)
+			? [...((data.project as { chat_visible_to_roles?: string[] }).chat_visible_to_roles ?? [])]
+			: []
+	);
+	let savingChat = $state(false);
+
+	async function saveChatSettings() {
+		savingChat = true;
+		try {
+			const fd = new FormData();
+			fd.append('chat_enabled', String(chatEnabled));
+			fd.append('chat_visible_to_roles', JSON.stringify(chatVisibleToRoleIds));
+			const res = await fetch('?/saveChatSettings', { method: 'POST', body: fd });
+			if (!res.ok) throw new Error(await res.text());
+			toast.success(m.settingsChatSaved?.() ?? 'Chat settings saved');
+			await invalidateAll();
+		} catch (err) {
+			console.error('Error saving chat settings:', err);
+			toast.error(m.settingsChatSaveError?.() ?? 'Failed to save chat settings');
+		} finally {
+			savingChat = false;
+		}
+	}
 
 	function openCreate() {
 		editingPage = null;
@@ -341,6 +370,53 @@
 					{/each}
 				</div>
 			{/if}
+		</Card.Content>
+	</Card.Root>
+
+	<!-- Project Chat -->
+	<Card.Root>
+		<Card.Header>
+			<Card.Title class="flex items-center gap-2">
+				<MessageSquare class="h-5 w-5" />
+				{m.settingsChatTitle?.() ?? 'Project chat'}
+			</Card.Title>
+			<Card.Description>
+				{m.settingsChatDescription?.() ?? 'Enable a project-wide chat for participants. When enabled, members can read, write, and mention each other.'}
+			</Card.Description>
+		</Card.Header>
+		<Card.Content class="flex flex-col gap-4">
+			<div class="flex items-center justify-between">
+				<div class="flex flex-col">
+					<span class="font-medium">{m.settingsChatEnableLabel?.() ?? 'Enable project chat'}</span>
+					<span class="text-xs text-muted-foreground">
+						{m.settingsChatEnableHint?.() ?? 'When off, the chat is hidden from every participant in this project.'}
+					</span>
+				</div>
+				<Switch bind:checked={chatEnabled} />
+			</div>
+			{#if chatEnabled}
+				<div class="space-y-2">
+					<Label>{m.settingsChatRolesLabel?.() ?? 'Roles allowed in chat'}</Label>
+					<MobileMultiSelect
+						bind:selectedIds={chatVisibleToRoleIds}
+						options={(data.roles ?? []) as Array<{ id: string; name: string; description?: string }>}
+						getOptionId={(r: { id: string }) => r.id}
+						getOptionLabel={(r: { name: string }) => r.name}
+						getOptionDescription={(r: { description?: string }) => r.description}
+						placeholder={m.settingsChatRolesPlaceholder?.() ?? 'Empty = everyone in the project'}
+					/>
+					<p class="text-xs text-muted-foreground">
+						{m.settingsChatRolesHint?.() ?? 'Empty list = open to every participant in this project. Add roles to restrict membership.'}
+					</p>
+				</div>
+			{/if}
+			<div>
+				<Button onclick={saveChatSettings} disabled={savingChat}>
+					{savingChat
+						? (m.settingsAdvancedSavingEllipsis?.() ?? 'Saving…')
+						: (m.commonSave?.() ?? 'Save')}
+				</Button>
+			</div>
 		</Card.Content>
 	</Card.Root>
 

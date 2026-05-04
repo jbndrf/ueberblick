@@ -33,7 +33,7 @@ export const load: PageServerLoad = async ({ locals: { pb }, params }) => {
 	try {
 		// Fetch project details (including settings and icon)
 		const project = await pb.collection('projects').getOne(projectId, {
-			fields: 'id, name, settings, icon'
+			fields: 'id, name, settings, icon, chat_enabled, chat_visible_to_roles'
 		});
 
 		// Build icon URL using relative path (works with Vite proxy and nginx)
@@ -1001,6 +1001,33 @@ export const actions: Actions = {
 		} catch (err) {
 			console.error('Error saving admin presets:', err);
 			return fail(500, { message: 'Failed to save admin presets' });
+		}
+	},
+
+	// Project chat settings: kill switch + role allowlist (empty = open).
+	saveChatSettings: async ({ request, locals: { pb }, params }) => {
+		const { projectId } = params;
+		const formData = await request.formData();
+		const chatEnabled = formData.get('chat_enabled') === 'true';
+		const rolesRaw = formData.get('chat_visible_to_roles');
+		let chatVisibleToRoles: string[] = [];
+		if (typeof rolesRaw === 'string' && rolesRaw.trim() !== '') {
+			try {
+				const parsed = JSON.parse(rolesRaw);
+				if (Array.isArray(parsed)) chatVisibleToRoles = parsed.filter((s) => typeof s === 'string');
+			} catch {
+				return fail(400, { message: 'Invalid roles payload' });
+			}
+		}
+		try {
+			await pb.collection('projects').update(projectId, {
+				chat_enabled: chatEnabled,
+				chat_visible_to_roles: chatVisibleToRoles
+			});
+			return { success: true };
+		} catch (err) {
+			console.error('Error saving chat settings:', err);
+			return fail(500, { message: 'Failed to save chat settings' });
 		}
 	}
 };

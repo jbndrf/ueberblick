@@ -1,0 +1,18 @@
+.md-header__button.md-logo {
+	position: relative;
+	overflow: visible;
+}
+.md-header__title {
+	margin-left: 2.4rem;
+}
+.md-header__button.md-logo img,
+.md-header__button.md-logo svg {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	height: 3.6rem;
+	width: auto;
+	max-width: none;
+	max-height: none;
+}

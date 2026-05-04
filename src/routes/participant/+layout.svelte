@@ -4,8 +4,8 @@
 	import { browser, dev } from '$app/environment';
 	import * as m from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
-	import { UserCircle, Layers, Filter, Navigation, Settings, Plus } from '@lucide/svelte';
-	import { mapNavCallbacks } from './map/nav-store.svelte';
+	import { UserCircle, Layers, Filter, Navigation, Settings, Plus, Wrench, Clock } from '@lucide/svelte';
+	import { mapNavCallbacks, mapNavBadges } from './map/nav-store.svelte';
 	import {
 		createParticipantGateway,
 		type ParticipantGateway
@@ -442,10 +442,25 @@
 				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onWorkflowClick?.()} title={m.participantLayoutNew?.() ?? 'New'}>
 					<Plus class="h-5 w-5" />
 				</Button>
+				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onRecentsClick?.()} title={m.participantMapRecentTitle?.() ?? 'Recent'}>
+					<Clock class="h-5 w-5" />
+				</Button>
 				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onLocationClick?.()} title={m.mapMyLocation?.() ?? 'My Location'}>
 					<Navigation class="h-5 w-5" />
 				</Button>
-				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onToolsClick?.()} title={m.mapTools?.() ?? 'Tools'}>
+				{#if $mapNavBadges.participantToolsAvailable}
+					<Button variant="ghost" size="icon" class="relative" onclick={() => $mapNavCallbacks.onParticipantToolsClick?.()} title={m.participantBottomControlBarTools?.() ?? 'Tools'}>
+						<Wrench class="h-5 w-5" />
+						{#if $mapNavBadges.participantToolsHard > 0}
+							<span class="absolute right-1 top-1 flex min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[0.625rem] font-semibold leading-4 text-destructive-foreground">
+								{$mapNavBadges.participantToolsHard > 99 ? '99+' : $mapNavBadges.participantToolsHard}
+							</span>
+						{:else if $mapNavBadges.participantToolsSoft}
+							<span class="absolute right-2 top-2 h-2 w-2 rounded-full bg-muted-foreground"></span>
+						{/if}
+					</Button>
+				{/if}
+				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onToolsClick?.()} title={m.participantBottomControlBarSettings?.() ?? 'Settings'}>
 					<Settings class="h-5 w-5" />
 				</Button>
 			</div>

@@ -417,20 +417,19 @@
 										{#each filterable.valueCounts as { value, count: valueCount, label, icon }}
 											{@const visibleSet = visibleTagValues.get(workflowId)}
 											{@const isVisible = visibleSet ? visibleSet.has(value) : true}
-											<div class="flex items-center justify-between px-3 py-2 pl-10">
+											<div class="flex items-center justify-between p-3 pl-10" style="zoom: 0.8;">
 												<div class="flex items-center gap-2">
 													{#if icon?.svgContent}
-														<div class="flex h-4 w-4 shrink-0 items-center justify-center">
-															{@html renderIcon(icon, 14)}
+														<div class="flex h-5 w-5 shrink-0 items-center justify-center">
+															{@html renderIcon(icon, 16)}
 														</div>
 													{:else}
-														<div class="h-2.5 w-2.5 rounded-full shrink-0 bg-muted-foreground/30"></div>
+														<div class="h-3 w-3 rounded-full shrink-0 bg-muted-foreground/30"></div>
 													{/if}
-													<span class="text-xs">{label}</span>
-													<Badge variant="outline" class="text-[10px] px-1 py-0">{valueCount}</Badge>
+													<span class="text-sm font-medium">{label}</span>
+													<Badge variant="secondary" class="text-xs">{valueCount}</Badge>
 												</div>
 												<Switch
-													class="scale-75"
 													checked={isVisible}
 													disabled={!!activeView}
 													onCheckedChange={(checked) => onTagValueToggle?.(workflowId, value, checked)}

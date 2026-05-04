@@ -6,12 +6,16 @@
 		getDownloadProgress,
 		getDownloadCompleteSignal
 	} from '$lib/participant-state';
-	import { resetPocketBase } from '$lib/pocketbase';
+	import { getPocketBase, resetPocketBase } from '$lib/pocketbase';
 	import { disconnectRealtime } from '$lib/participant-state';
 	import { FieldValueCache } from '$lib/participant-state/field-value-cache.svelte';
 	import { appLoadingMessage, downloadProgress as syncDownloadProgress, downloadAllCollections } from '$lib/participant-state/sync.svelte';
 	import { Loader2 } from '@lucide/svelte';
 	import { MapCanvas, BottomControlBar, LayerSheet, FilterSheet, WorkflowSelector, SettingsSheet, RecentSheet } from './components';
+	import ToolsSheet from './components/ToolsSheet.svelte';
+	import ChatSheet from './components/ChatSheet.svelte';
+	import { isChatMember } from '$lib/participant-tools/availability.svelte';
+	import { createChatUnreadStore } from '$lib/chat/unread-store.svelte';
 	import type { MapLayer, MapMarker, WorkflowInstance as CanvasWorkflowInstance, WorkflowStageInfo } from './components/MapCanvas.svelte';
 	import type { FieldTag } from './components/FilterSheet.svelte';
 	import GeometryDrawTool from '$lib/components/map/geometry-draw-tool.svelte';
@@ -49,7 +53,7 @@
 	import { FormFillTool } from './modules/workflow-instance-detail/tools';
 	import ModuleShell from '$lib/components/module-shell.svelte';
 	import type { Map as LeafletMap, CircleMarker, Circle } from 'leaflet';
-	import { mapNavCallbacks } from './nav-store.svelte';
+	import { mapNavCallbacks, mapNavBadges } from './nav-store.svelte';
 
 	interface Workflow {
 		id: string;
@@ -107,9 +111,8 @@
 	let workflowSelectorOpen = $state(false);
 	let isSelectingCoordinates = $state(false);
 	let settingsSheetOpen = $state(false);
-	// Mobile FAB state -- tri-state cycle lives in BottomControlBar, kept here
-	// so the map-click handler and FilterSheet survey-tap can collapse / open it.
-	let mobileSelectorOpen = $state(false);
+	let toolsSheetOpen = $state(false);
+	let chatSheetOpen = $state(false);
 	let recentSheetOpen = $state(false);
 	let recentWorkflowFilter = $state<string | null>(null);
 
@@ -118,6 +121,20 @@
 	$effect(() => {
 		if (!recentSheetOpen && recentWorkflowFilter !== null) {
 			recentWorkflowFilter = null;
+		}
+	});
+
+	// FAB / "+" opens the workflow-selector popover. Any modal bits-ui Sheet
+	// still open at that moment leaves a body-wide pointer-events lock active
+	// (which used to swallow taps before the popover started portaling) -- close
+	// them as a hygiene measure regardless.
+	$effect(() => {
+		if (workflowSelectorOpen) {
+			layerSheetOpen = false;
+			filterSheetOpen = false;
+			settingsSheetOpen = false;
+			toolsSheetOpen = false;
+			chatSheetOpen = false;
 		}
 	});
 
@@ -155,7 +172,33 @@
 			onFiltersClick: () => (filterSheetOpen = true),
 			onLocationClick: centerOnLocation,
 			onToolsClick: () => (settingsSheetOpen = true),
-			onWorkflowClick: () => (workflowSelectorOpen = !workflowSelectorOpen)
+			onWorkflowClick: () => {
+				// Tri-state cycle to mirror the mobile FAB:
+				// closed -> selector -> selector + recents -> closed.
+				if (!workflowSelectorOpen && !recentSheetOpen) {
+					// Close any modal sheet first -- bits-ui Dialog applies a
+					// body-level pointer-events lock while open which would
+					// otherwise swallow taps inside the popover overlay.
+					layerSheetOpen = false;
+					filterSheetOpen = false;
+					settingsSheetOpen = false;
+					toolsSheetOpen = false;
+					chatSheetOpen = false;
+					workflowSelectorOpen = true;
+				} else if (workflowSelectorOpen && !recentSheetOpen) {
+					recentSheetOpen = true;
+				} else {
+					workflowSelectorOpen = false;
+					recentSheetOpen = false;
+				}
+			},
+			onParticipantToolsClick: () => {
+				toolsSheetOpen = true;
+				layerSheetOpen = false;
+				filterSheetOpen = false;
+				settingsSheetOpen = false;
+			},
+			onRecentsClick: () => (recentSheetOpen = !recentSheetOpen)
 		});
 	});
 
@@ -257,6 +300,50 @@
 
 	// Derived data from live queries
 	const project = $derived(projectLive.records[0]);
+
+	// Participant tools (chat MVP) ---
+	const myRoleIds = $derived.by(() => {
+		const me = getPocketBase().authStore.record;
+		const r = me?.role_id;
+		return Array.isArray(r) ? (r as string[]) : r ? [r as string] : [];
+	});
+	const chatAvailable = $derived(
+		isChatMember(
+			project as { chat_enabled?: boolean; chat_visible_to_roles?: string[] | null } | undefined,
+			myRoleIds
+		)
+	);
+	let chatUnread = $state<ReturnType<typeof createChatUnreadStore> | null>(null);
+	$effect(() => {
+		if (chatAvailable && gateway && gateway.projectId) {
+			const store = createChatUnreadStore(gateway, gateway.projectId);
+			chatUnread = store;
+			return () => {
+				store.destroy();
+				if (chatUnread === store) chatUnread = null;
+			};
+		}
+		chatUnread = null;
+	});
+	const participantToolsAvailable = $derived(chatAvailable);
+	const participantToolsSoft = $derived(!!chatUnread?.hasUnread);
+	const participantToolsHard = $derived(chatUnread?.mentionCount ?? 0);
+	// Mirror badge state into the shared nav store so the desktop header (rendered
+	// by the participant layout) can show the same Tools button + unread indicators.
+	$effect(() => {
+		mapNavBadges.set({
+			participantToolsAvailable,
+			participantToolsSoft: !toolsSheetOpen && participantToolsSoft,
+			participantToolsHard: toolsSheetOpen ? 0 : participantToolsHard
+		});
+	});
+	onDestroy(() => {
+		mapNavBadges.set({
+			participantToolsAvailable: false,
+			participantToolsSoft: false,
+			participantToolsHard: 0
+		});
+	});
 	const mapLayers = $derived(layersLive.records);
 	const markers = $derived(markersLive.records);
 	const workflowInstances = $derived(instancesLive.records);
@@ -1611,8 +1698,8 @@
 		if (clusterDetailOpen) {
 			handleClusterDetailClose();
 		}
-		if (mobileSelectorOpen || recentSheetOpen) {
-			mobileSelectorOpen = false;
+		if (workflowSelectorOpen || recentSheetOpen) {
+			workflowSelectorOpen = false;
 			recentSheetOpen = false;
 		}
 	}
@@ -1640,7 +1727,7 @@
 	) {
 		// Keep the RecentSheet open so the user can pick another entry; just
 		// collapse the FAB popover if it was still on screen.
-		mobileSelectorOpen = false;
+		workflowSelectorOpen = false;
 		if (workflow.workflow_type === 'incident' && instance.centroid && map) {
 			const zoom = Math.max(map.getZoom(), 17);
 			const isDesktop = window.innerWidth >= 768;
@@ -1761,13 +1848,14 @@
 		onLayersClick={() => { const next = !layerSheetOpen; filterSheetOpen = false; settingsSheetOpen = false; layerSheetOpen = next; }}
 		onFiltersClick={() => { const next = !filterSheetOpen; layerSheetOpen = false; settingsSheetOpen = false; filterSheetOpen = next; }}
 		onToolsClick={() => { const next = !settingsSheetOpen; layerSheetOpen = false; filterSheetOpen = false; settingsSheetOpen = next; }}
+		onParticipantToolsClick={() => { toolsSheetOpen = true; layerSheetOpen = false; filterSheetOpen = false; settingsSheetOpen = false; }}
+		{participantToolsAvailable}
+		participantToolsSoft={!toolsSheetOpen && participantToolsSoft}
+		participantToolsHard={toolsSheetOpen ? 0 : participantToolsHard}
 		onLocationClick={centerOnLocation}
-		{workflows}
-		{map}
-		onWorkflowSelect={handleWorkflowSelect}
-		onDrawGeometry={handleDrawGeometry}
 		{isEditingLocation}
-		bind:workflowSelectorOpen={mobileSelectorOpen}
+		{isSelectingCoordinates}
+		bind:workflowSelectorOpen
 		bind:recentOpen={recentSheetOpen}
 	/>
 
@@ -1785,17 +1873,19 @@
 		onInstanceTap={handleRecentInstanceTap}
 	/>
 
-	<!-- Desktop Workflow Selector (mobile handled by BottomControlBar) -->
-	<div class="hidden md:block">
-		<WorkflowSelector
-			{workflows}
-			{map}
-			bind:isOpen={workflowSelectorOpen}
-			bind:isSelectingCoordinates
-			onWorkflowSelect={handleWorkflowSelect}
-			onDrawGeometry={handleDrawGeometry}
-		/>
-	</div>
+	<!-- Single WorkflowSelector instance, shared by mobile FAB and desktop "+".
+	     Internally portals to document.body so it works regardless of where it
+	     sits in the tree. -->
+	<WorkflowSelector
+		{workflows}
+		{map}
+		bind:isOpen={workflowSelectorOpen}
+		bind:isSelectingCoordinates
+		onWorkflowSelect={handleWorkflowSelect}
+		onDrawGeometry={handleDrawGeometry}
+		position={recentSheetOpen ? 'left' : 'center'}
+		onBackdropClose={() => (recentSheetOpen = false)}
+	/>
 
 	<!-- Line / Polygon draw session for incident workflows whose geometry_type
 	     is line or polygon. Mounted on top of the map, unmounted on confirm/cancel. -->
@@ -1929,6 +2019,25 @@
 			{/snippet}
 		</ModuleShell>
 	{/if}
+
+	<!-- Tools Sheet (chat MVP; future tools plug in via availability helpers) -->
+	<ToolsSheet
+		bind:open={toolsSheetOpen}
+		chatAvailable={chatAvailable}
+		chatSoft={participantToolsSoft}
+		chatHard={participantToolsHard}
+		onOpenChat={() => { chatSheetOpen = true; }}
+	/>
+
+	<!-- Chat Sheet (full-width sidebar; reachable from ToolsSheet) -->
+	<ChatSheet
+		bind:open={chatSheetOpen}
+		gateway={gateway ?? null}
+		projectId={gateway?.projectId ?? ''}
+		participantId={gateway?.participantId ?? ''}
+		isMember={chatAvailable}
+		unreadStore={chatUnread}
+	/>
 
 	<!-- Settings Sheet -->
 	<SettingsSheet

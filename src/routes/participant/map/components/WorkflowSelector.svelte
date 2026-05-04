@@ -5,6 +5,19 @@
 	import * as m from '$lib/paraglide/messages';
 	import type { Map as LeafletMap, Marker, Polyline, LatLng } from 'leaflet';
 
+	// Portal action -- moves the node to document.body. Mirrors the pattern in
+	// mobile-multi-select.svelte. Escapes any ancestor stacking context, transform,
+	// or pointer-events lock (eg. a sibling bits-ui Dialog applies a body-wide
+	// modal lock that otherwise swallows taps on absolutely-positioned siblings).
+	function portal(node: HTMLElement) {
+		document.body.appendChild(node);
+		return {
+			destroy() {
+				node.remove();
+			}
+		};
+	}
+
 	interface Workflow {
 		id: string;
 		name: string;
@@ -252,40 +265,46 @@
 		</button>
 	</div>
 {:else}
-	<!-- Popover Menu -->
+	<!-- Popover Menu -- portaled to document.body so that ancestor `display:none`
+	     wrappers, transforms, or pointer-events locks from sibling bits-ui Dialogs
+	     (Sheets) cannot block interaction. Mirrors the working pattern in
+	     mobile-multi-select.svelte. -->
 	{#if isOpen && workflows.length > 0}
-		<!-- Backdrop -->
-		<button
-			onclick={() => { closeMenu(); onBackdropClose?.(); }}
-			class="fixed inset-0 z-[1050]"
-			aria-label={m.mapCloseMenu?.() ?? 'Close menu'}
-		></button>
+		<div use:portal class="workflow-selector-portal">
+			<!-- Backdrop -->
+			<button
+				onclick={() => { closeMenu(); onBackdropClose?.(); }}
+				class="fixed inset-0 z-[9998] bg-transparent"
+				aria-label={m.mapCloseMenu?.() ?? 'Close menu'}
+			></button>
 
-		<!-- Popover - Mobile: bottom, Desktop: top below header.
-		     position='left' anchors to the left half so a sidebar can share the screen. -->
-		<div
-			class={[
-				'fixed z-[1100] flex flex-col items-center gap-2.5 bottom-20 md:bottom-auto md:top-16',
-				position === 'center' ? 'left-1/2 -translate-x-1/2' : 'left-4 md:left-16'
-			]}
-		>
-			{#each workflows as workflow, i}
-				<button
-					onclick={() => selectWorkflow(workflow)}
-					class="workflow-item min-w-[100px] max-w-[200px] rounded-xl
-						bg-background/95 dark:bg-muted/90
-						border border-border/50 dark:border-border/30
-						px-4 py-2.5 text-sm font-medium text-foreground
-						shadow-lg shadow-black/5 dark:shadow-black/20
-						backdrop-blur-md
-						transition-all duration-200 ease-out
-						hover:bg-accent hover:border-accent-foreground/20 hover:scale-[1.02]
-						active:scale-[0.98]"
-					style="animation-delay: {i * 0.03}s"
-				>
-					<span class="line-clamp-2 text-center leading-snug">{workflow.entry_button_label || workflow.name}</span>
-				</button>
-			{/each}
+			<!-- Popover - Mobile: bottom, Desktop: top below header.
+			     position='left' anchors to the left half so a sidebar can share the screen. -->
+			<div
+				class={[
+					'fixed z-[9999] flex flex-col items-center gap-2.5 bottom-20 md:bottom-auto md:top-16',
+					position === 'center' ? 'left-1/2 -translate-x-1/2' : 'left-4 md:left-16'
+				]}
+			>
+				{#each workflows as workflow, i}
+					<button
+						type="button"
+						onclick={() => selectWorkflow(workflow)}
+						class="workflow-item min-w-[100px] max-w-[200px] rounded-xl
+							bg-background/95 dark:bg-muted/90
+							border border-border/50 dark:border-border/30
+							px-4 py-2.5 text-sm font-medium text-foreground
+							shadow-lg shadow-black/5 dark:shadow-black/20
+							backdrop-blur-md
+							transition-all duration-200 ease-out
+							hover:bg-accent hover:border-accent-foreground/20 hover:scale-[1.02]
+							active:scale-[0.98]"
+						style="animation-delay: {i * 0.03}s"
+					>
+						<span class="line-clamp-2 text-center leading-snug">{workflow.entry_button_label || workflow.name}</span>
+					</button>
+				{/each}
+			</div>
 		</div>
 	{/if}
 {/if}

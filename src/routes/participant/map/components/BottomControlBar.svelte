@@ -1,29 +1,21 @@
 <script lang="ts">
-	import { Layers, Filter, Navigation, Settings, Plus } from '@lucide/svelte';
-	import type { Map as LeafletMap } from 'leaflet';
+	import { Layers, Filter, Navigation, Settings, Plus, Wrench } from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
-	import WorkflowSelector from './WorkflowSelector.svelte';
-
-	interface Workflow {
-		id: string;
-		name: string;
-		workflow_type: 'incident' | 'survey';
-		geometry_type?: 'point' | 'line' | 'polygon';
-		description?: string;
-		entry_button_label?: string;
-	}
 
 	interface Props {
 		onLayersClick: () => void;
 		onFiltersClick?: () => void;
 		onToolsClick?: () => void;
+		onParticipantToolsClick?: () => void;
+		participantToolsAvailable?: boolean;
+		participantToolsSoft?: boolean;
+		participantToolsHard?: number;
 		onLocationClick?: () => void;
-		workflows?: Workflow[];
-		map?: LeafletMap | null;
-		onWorkflowSelect?: (workflow: Workflow, coordinates?: { lat: number; lng: number }) => void;
-		onDrawGeometry?: (workflow: Workflow, mode: 'line' | 'polygon') => void;
 		/** Whether location editing is active (hides nav bar) */
 		isEditingLocation?: boolean;
+		/** True while the WorkflowSelector (owned by the parent) is in coordinate
+		 *  selection mode -- bar hides so it doesn't overlap the confirm pill. */
+		isSelectingCoordinates?: boolean;
 		/** Bindable: popover open state (FAB click cycles it). */
 		workflowSelectorOpen?: boolean;
 		/** Bindable: recent sheet open state (2nd FAB click opens it alongside). */
@@ -34,17 +26,16 @@
 		onLayersClick,
 		onFiltersClick,
 		onToolsClick,
+		onParticipantToolsClick,
+		participantToolsAvailable = false,
+		participantToolsSoft = false,
+		participantToolsHard = 0,
 		onLocationClick,
-		workflows = [],
-		map = null,
-		onWorkflowSelect,
-		onDrawGeometry,
 		isEditingLocation = false,
+		isSelectingCoordinates = false,
 		workflowSelectorOpen = $bindable(false),
 		recentOpen = $bindable(false)
 	}: Props = $props();
-
-	let isSelectingCoordinates = $state(false);
 
 	// FAB cycles: 0 closed -> 1 popover (center) -> 2 popover (left) + recent sheet -> 0.
 	const fabRotation = $derived(recentOpen ? 90 : workflowSelectorOpen ? 45 : 0);
@@ -58,21 +49,6 @@
 			workflowSelectorOpen = false;
 			recentOpen = false;
 		}
-	}
-
-	function handleWorkflowSelect(workflow: Workflow, coordinates?: { lat: number; lng: number }) {
-		recentOpen = false;
-		onWorkflowSelect?.(workflow, coordinates);
-	}
-
-	function handleDrawGeometry(workflow: Workflow, mode: 'line' | 'polygon') {
-		recentOpen = false;
-		onDrawGeometry?.(workflow, mode);
-	}
-
-	function handleBackdropClose() {
-		// Explicit dismissal via backdrop -- collapse the sibling recent sheet too.
-		recentOpen = false;
 	}
 </script>
 
@@ -119,6 +95,26 @@
 			<span class="text-[0.625rem]">{m.participantBottomControlBarLocation?.() ?? 'Location'}</span>
 		</button>
 
+		{#if participantToolsAvailable}
+			<button
+				onclick={onParticipantToolsClick ?? (() => {})}
+				class="relative flex h-16 w-14 flex-col items-center justify-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
+				title={m.participantBottomControlBarTools?.() ?? 'Tools'}
+			>
+				<div class="relative">
+					<Wrench class="h-5 w-5" />
+					{#if participantToolsHard > 0}
+						<span class="absolute -right-2 -top-1 flex min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[0.625rem] font-semibold leading-4 text-destructive-foreground">
+							{participantToolsHard > 99 ? '99+' : participantToolsHard}
+						</span>
+					{:else if participantToolsSoft}
+						<span class="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-muted-foreground"></span>
+					{/if}
+				</div>
+				<span class="text-[0.625rem]">{m.participantBottomControlBarTools?.() ?? 'Tools'}</span>
+			</button>
+		{/if}
+
 		<button
 			onclick={onToolsClick ?? (() => {})}
 			class="flex h-16 w-14 flex-col items-center justify-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
@@ -129,17 +125,6 @@
 		</button>
 	</div>
 {/if}
-
-<WorkflowSelector
-	{workflows}
-	{map}
-	bind:isOpen={workflowSelectorOpen}
-	onWorkflowSelect={handleWorkflowSelect}
-	onDrawGeometry={handleDrawGeometry}
-	bind:isSelectingCoordinates
-	position={recentOpen ? 'left' : 'center'}
-	onBackdropClose={handleBackdropClose}
-/>
 
 <style>
 	.center-button {

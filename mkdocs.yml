@@ -8,6 +8,8 @@ use_directory_urls: true
 theme:
   name: material
   language: de
+  logo: assets/logo.png
+  favicon: assets/favicon.png
   features:
     - navigation.instant
     - navigation.tabs
@@ -31,6 +33,9 @@ theme:
       toggle:
         icon: material/weather-sunny
         name: Helles Theme
+
+extra_css:
+  - assets/extra.css
 
 markdown_extensions:
   - admonition
