@@ -476,19 +476,11 @@
 		return editTool?.data ?? null;
 	});
 
-	// Ancestor fields for edit tool configuration
+	// All workflow form fields available for the edit tool picker.
+	// Edit tools may reference any field in the workflow regardless of stage position.
 	const editToolAncestorFields = $derived.by(() => {
 		if (selectionContext.type !== 'editTool') return [];
-		// Get ancestors based on what the edit tool is attached to
-		if (selectionContext.attachedTo.type === 'connection') {
-			return builderState.getAncestorFormFields(selectionContext.attachedTo.connectionId);
-		} else if (selectionContext.attachedTo.type === 'stage') {
-			return builderState.getAncestorFormFieldsForStage(selectionContext.attachedTo.stageId);
-		} else if (selectionContext.attachedTo.type === 'global') {
-			// For global tools, get all form fields from all stages
-			return builderState.getAllFormFields();
-		}
-		return [];
+		return builderState.getAllFormFields();
 	});
 
 	// Protocol tool editor derived state
@@ -498,17 +490,11 @@
 		return tool?.data ?? null;
 	});
 
-	// Ancestor fields for protocol tool configuration
+	// All workflow form fields available for the protocol tool picker.
+	// Protocol tools may reference any field in the workflow regardless of stage position.
 	const protocolToolAncestorFields = $derived.by(() => {
 		if (selectionContext.type !== 'protocolTool') return [];
-		if (selectionContext.attachedTo.type === 'connection') {
-			return builderState.getAncestorFormFields(selectionContext.attachedTo.connectionId);
-		} else if (selectionContext.attachedTo.type === 'stage') {
-			return builderState.getAncestorFormFieldsForStage(selectionContext.attachedTo.stageId);
-		} else if (selectionContext.attachedTo.type === 'global') {
-			return builderState.getAllFormFields();
-		}
-		return [];
+		return builderState.getAllFormFields();
 	});
 
 	// Protocol form field count (number of fields in the linked protocol form)

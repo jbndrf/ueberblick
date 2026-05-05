@@ -492,7 +492,7 @@ cronAdd("automation_scheduled_check", "* * * * *", () => {
       "tools_automation",
       'trigger_type = "scheduled" && is_enabled = true',
       "",
-      100
+      500
     );
 
     var executed = 0;

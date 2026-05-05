@@ -541,17 +541,28 @@ function evaluateExpression(expr, instanceId) {
 
 /**
  * Resolve special date placeholders in condition compare values.
- * Supports: $today, $today+N, $today-N (where N is number of days).
- * Returns the original value unchanged if not a date placeholder.
+ * Supports:
+ *   - $today, $today+N, $today-N (day granularity, returns YYYY-MM-DD)
+ *   - $now (returns full ISO datetime)
+ *   - $now+N{m|h|d}, $now-N{m|h|d} (minute/hour/day offsets, full ISO datetime)
+ * Returns the original value unchanged if not a placeholder.
  */
 function resolveCompareValue(value) {
   if (typeof value !== "string") return value;
   if (value === "$today") return new Date().toISOString().slice(0, 10);
-  var match = value.match(/^\$today([+-]\d+)$/);
-  if (match) {
+  var todayMatch = value.match(/^\$today([+-]\d+)$/);
+  if (todayMatch) {
     var d = new Date();
-    d.setDate(d.getDate() + parseInt(match[1], 10));
+    d.setDate(d.getDate() + parseInt(todayMatch[1], 10));
     return d.toISOString().slice(0, 10);
+  }
+  if (value === "$now") return new Date().toISOString();
+  var nowMatch = value.match(/^\$now([+-]\d+)([mhd])$/);
+  if (nowMatch) {
+    var amount = parseInt(nowMatch[1], 10);
+    var unit = nowMatch[2];
+    var ms = unit === "m" ? 60000 : unit === "h" ? 3600000 : 86400000;
+    return new Date(Date.now() + amount * ms).toISOString();
   }
   return value;
 }
@@ -804,13 +815,46 @@ function logAutomationExecution(instanceId, stageId, automation, actionResults) 
     if (stageId) {
       record.set("stage_id", stageId);
     }
-    record.set("metadata", JSON.stringify({
+
+    var metadata = {
       source: "automation",
       automation_id: automation.id,
       automation_name: automation.get("name"),
       trigger_type: automation.get("trigger_type"),
       actions_taken: actionResults
-    }));
+    };
+
+    // Surface the last successful set_stage as a top-level stage_transition so
+    // the activity-feed renderer (toolUsageLabel) shows "→ <stage name>" instead
+    // of a generic "Action" label.
+    var lastStageChange = null;
+    for (var i = actionResults.length - 1; i >= 0; i--) {
+      if (actionResults[i].type === "set_stage" && actionResults[i].success) {
+        lastStageChange = actionResults[i];
+        break;
+      }
+    }
+    if (lastStageChange) {
+      metadata.action = "stage_transition";
+      var toStageId = lastStageChange.params && lastStageChange.params.stage_id;
+      var fromStageId = lastStageChange.params && lastStageChange.params.from_stage_id;
+      if (toStageId) {
+        metadata.to_stage_id = toStageId;
+        try {
+          var toRec = $app.findRecordById("workflow_stages", toStageId);
+          metadata.to_stage_name = toRec.get("stage_name");
+        } catch (err) { /* stage missing */ }
+      }
+      if (fromStageId) {
+        metadata.from_stage_id = fromStageId;
+        try {
+          var fromRec = $app.findRecordById("workflow_stages", fromStageId);
+          metadata.from_stage_name = fromRec.get("stage_name");
+        } catch (err) { /* stage missing */ }
+      }
+    }
+
+    record.set("metadata", JSON.stringify(metadata));
     $app.save(record);
   } catch (err) {
     console.error("[Automation] Failed to log execution:", err);

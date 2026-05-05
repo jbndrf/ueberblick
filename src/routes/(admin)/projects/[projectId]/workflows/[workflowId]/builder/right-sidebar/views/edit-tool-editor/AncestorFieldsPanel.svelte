@@ -107,9 +107,9 @@
 		{:else}
 			<div class="empty-state">
 				<FileWarning class="h-8 w-8" />
-				<p>{m.editToolAncestorFieldsPanelNoFieldsAvailable?.() ?? 'No ancestor fields available'}</p>
+				<p>{m.editToolAncestorFieldsPanelNoFieldsAvailable?.() ?? 'No form fields in this workflow yet'}</p>
 				<span class="empty-hint">
-					{m.editToolAncestorFieldsPanelNoFieldsHint?.() ?? 'Add fields to forms in earlier stages to make them editable here.'}
+					{m.editToolAncestorFieldsPanelNoFieldsHint?.() ?? 'Add fields to any form in this workflow to make them selectable here.'}
 				</span>
 			</div>
 		{/if}

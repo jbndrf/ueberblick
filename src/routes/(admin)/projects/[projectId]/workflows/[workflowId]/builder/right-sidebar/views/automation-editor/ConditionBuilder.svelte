@@ -206,17 +206,20 @@
 									{/each}
 								</select>
 							{:else}
-								<Input
-									value={condition.params.value ?? ''}
-									oninput={(e) => {
-										updateCondition(index, {
-											...condition,
-											params: { ...condition.params, value: e.currentTarget.value }
-										});
-									}}
-									placeholder={m.automationConditionBuilderValuePlaceholder?.() ?? 'Value...'}
-									class="h-7 text-xs"
-								/>
+								<div class="value-input-wrap">
+									<Input
+										value={condition.params.value ?? ''}
+										oninput={(e) => {
+											updateCondition(index, {
+												...condition,
+												params: { ...condition.params, value: e.currentTarget.value }
+											});
+										}}
+										placeholder={m.automationConditionBuilderValuePlaceholder?.() ?? 'Value, $today, $now-1h...'}
+										class="h-7 text-xs"
+									/>
+									<span class="value-hint" title={m.automationConditionBuilderValueHint?.() ?? ''}>?</span>
+								</div>
 							{/if}
 						{/if}
 					{:else if condition.type === 'instance_status'}
@@ -365,5 +368,32 @@
 
 	:global(.add-condition-btn) {
 		align-self: flex-start;
+	}
+
+	.value-input-wrap {
+		position: relative;
+		display: flex;
+		align-items: center;
+	}
+
+	.value-input-wrap :global(input) {
+		padding-right: 1.5rem;
+	}
+
+	.value-hint {
+		position: absolute;
+		right: 0.375rem;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 0.875rem;
+		height: 0.875rem;
+		font-size: 0.625rem;
+		font-weight: 600;
+		border-radius: 9999px;
+		background: hsl(var(--muted));
+		color: hsl(var(--muted-foreground));
+		cursor: help;
+		user-select: none;
 	}
 </style>
