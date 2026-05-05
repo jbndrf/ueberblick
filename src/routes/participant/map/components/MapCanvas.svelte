@@ -296,7 +296,11 @@
 	// Default settings
 	const defaultCenter: [number, number] = [51.505, 7.45]; // Germany
 	const defaultZoom = 13;
-	const defaultTileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+	// Tiles for tile/preset/uploaded sources are served through our own
+	// proxy so user IPs never reach third-party tile providers (privacy +
+	// OSM tile-policy compliance). WMS still goes direct via Leaflet's WMS
+	// layer; that branch will be proxied separately.
+	const defaultTileUrl = '/api/tiles/default-osm/{z}/{x}/{y}.png';
 	const defaultAttribution =
 		'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
@@ -326,9 +330,12 @@
 		const opacity = config?.opacity ?? 1;
 		const opts = { attribution, minZoom, maxZoom, opacity, ...(maxNativeZoom !== undefined && { maxNativeZoom }) };
 
-		// WMS layers use L.tileLayer.wms()
+		// WMS layers go through our /api/wms proxy so user IPs never reach
+		// the upstream WMS server. Defaults (layers/format/version/transparent)
+		// are applied server-side from the layer config; we still send them
+		// in the request so Leaflet's WMS layer behaves normally.
 		if (layer.source_type === 'wms') {
-			return L.tileLayer.wms(layer.url || '', {
+			return L.tileLayer.wms(`/api/wms/${layer.id}`, {
 				layers: config?.layers || '',
 				format: config?.format || 'image/png',
 				transparent: config?.transparent ?? true,
@@ -337,13 +344,15 @@
 			});
 		}
 
-		// Standard tile layers use cached tile layer (IndexedDB first)
-		return createCachedTileLayer(
-			layer.id,
-			layer.url || defaultTileUrl,
-			opts,
-			L
-		);
+		// Standard tile layers use cached tile layer (IndexedDB first).
+		// For tile/preset sources the upstream URL is proxied through our
+		// own /api/tiles endpoint; for uploaded sources layer.url is
+		// already a /api/tiles/... template written at upload time.
+		const tileUrl =
+			layer.source_type === 'tile' || layer.source_type === 'preset'
+				? `/api/tiles/${layer.id}/{z}/{x}/{y}`
+				: layer.url || defaultTileUrl;
+		return createCachedTileLayer(layer.id, tileUrl, opts, L);
 	}
 
 	// Update base layer

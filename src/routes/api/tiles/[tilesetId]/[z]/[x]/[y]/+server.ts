@@ -1,11 +1,20 @@
 import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { existsSync, createReadStream } from 'fs';
-import { stat } from 'fs/promises';
-import path from 'path';
 import type { MapLayer } from '$lib/types/map-layer';
+import { getOrFetchTile } from '$lib/server/tile-cache';
 
-// Content type mapping for tile formats
+/**
+ * Built-in fallback tile sources used by the participant map when no base
+ * layer is configured. Kept here (not in PocketBase) so the system has a
+ * working default with no DB seeding required.
+ */
+const BUILT_IN_FALLBACKS: Record<string, { url: string; subdomains?: string[] }> = {
+	'default-osm': {
+		url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+		subdomains: ['a', 'b', 'c']
+	}
+};
+
 const CONTENT_TYPES: Record<string, string> = {
 	png: 'image/png',
 	jpg: 'image/jpeg',
@@ -13,15 +22,18 @@ const CONTENT_TYPES: Record<string, string> = {
 	webp: 'image/webp'
 };
 
-// Short-lived cache of (user, layer) -> access decision + format. The PB
-// viewRule on map_layers enforces role-based visibility; calling getOne()
-// per tile is the bottleneck during map panning. 60s TTL means a revoked
-// role is honored within a minute, which is acceptable for tile access.
+// Short-lived cache of (user, layer) -> access decision + layer fields needed
+// to serve a tile. The PB viewRule on map_layers enforces role-based
+// visibility; calling getOne() per tile is the bottleneck during map panning.
+// 60s TTL means a revoked role is honored within a minute, which is
+// acceptable for tile access.
 interface PermEntry {
 	expiresAt: number;
 	format: string;
-	status: string;
+	status: string | null;
 	sourceType: string;
+	url: string | null;
+	subdomains: string[] | undefined;
 }
 const permCache = new Map<string, PermEntry>();
 const PERM_TTL_MS = 60_000;
@@ -39,127 +51,118 @@ function getCachedPerm(userId: string, layerId: string): PermEntry | null {
 
 function setCachedPerm(userId: string, layerId: string, entry: Omit<PermEntry, 'expiresAt'>): void {
 	if (permCache.size >= PERM_CACHE_MAX) {
-		// Cheap eviction: drop oldest insertion order entry.
 		const firstKey = permCache.keys().next().value;
 		if (firstKey) permCache.delete(firstKey);
 	}
 	permCache.set(`${userId}:${layerId}`, { ...entry, expiresAt: Date.now() + PERM_TTL_MS });
 }
 
-export const GET: RequestHandler = async ({ params, locals }) => {
+export const GET: RequestHandler = async ({ params, locals, request, url }) => {
 	const { tilesetId, z, x, y } = params;
 
-	// Check authentication
 	if (!locals.pb.authStore.isValid || !locals.user) {
 		throw error(401, 'Authentication required');
 	}
 
-	// Validate tile coordinates are numbers
 	const zNum = parseInt(z, 10);
 	const xNum = parseInt(x, 10);
-	// y might include file extension like "1234.png"
 	const yParts = y.split('.');
 	const yNum = parseInt(yParts[0], 10);
 
 	if (isNaN(zNum) || isNaN(xNum) || isNaN(yNum)) {
 		throw error(400, 'Invalid tile coordinates');
 	}
-
-	// Validate zoom level
 	if (zNum < 0 || zNum > 24) {
 		throw error(400, 'Invalid zoom level');
 	}
 
+	let perm: PermEntry | null;
 	try {
-		// Resolve the layer's access + format either from our short-lived
-		// per-user cache or by hitting PB (which enforces the viewRule). A
-		// getOne() failure = access denied or not found, handled below.
-		let format: string;
-		let status: string;
-		let sourceType: string;
-		const cached = getCachedPerm(locals.user.id, tilesetId);
-		if (cached) {
-			format = cached.format;
-			status = cached.status;
-			sourceType = cached.sourceType;
-		} else {
+		perm = getCachedPerm(locals.user.id, tilesetId);
+		if (!perm) {
+			// Built-in fallback layers don't live in PocketBase. They exist so
+			// the participant map always has *something* to show even when no
+			// base layer is configured for a project.
+			const builtIn = BUILT_IN_FALLBACKS[tilesetId];
+			if (builtIn) {
+				perm = {
+					expiresAt: 0,
+					format: 'png',
+					status: null,
+					sourceType: 'tile',
+					url: builtIn.url,
+					subdomains: builtIn.subdomains
+				};
+				setCachedPerm(locals.user.id, tilesetId, perm);
+			} else {
 			const layer = await locals.pb.collection('map_layers').getOne<MapLayer>(tilesetId);
-			const layerConfig = layer.config as { tile_format?: string } | null;
-			format = layerConfig?.tile_format || 'png';
-			status = layer.status;
-			sourceType = layer.source_type;
-			setCachedPerm(locals.user.id, tilesetId, { format, status, sourceType });
-		}
-
-		// Verify layer is completed (for uploaded layers)
-		if (sourceType === 'uploaded' && status !== 'completed') {
-			throw error(404, 'Layer not available');
-		}
-
-		// URL extension overrides cached format if the client requested a
-		// specific encoding.
-		if (yParts.length > 1) {
-			const ext = yParts[1].toLowerCase();
-			if (CONTENT_TYPES[ext]) {
-				format = ext === 'jpeg' ? 'jpg' : ext;
+			const cfg = (layer.config as (MapLayer['config'] & { subdomains?: string[] }) | null) ?? null;
+			perm = {
+				expiresAt: 0,
+				format: cfg?.tile_format || 'png',
+				status: layer.status,
+				sourceType: layer.source_type,
+				url: layer.url,
+				subdomains: cfg?.subdomains
+			};
+			setCachedPerm(locals.user.id, tilesetId, perm);
 			}
 		}
-
-		// Build file path
-		const tilePath = path.join(
-			process.cwd(),
-			'data',
-			'tiles',
-			tilesetId,
-			String(zNum),
-			String(xNum),
-			`${yNum}.${format}`
-		);
-
-		// Security: Ensure path is within expected directory
-		const tilesDir = path.join(process.cwd(), 'data', 'tiles');
-		const resolvedPath = path.resolve(tilePath);
-		if (!resolvedPath.startsWith(tilesDir)) {
-			throw error(400, 'Invalid tile path');
-		}
-
-		// Check if tile exists
-		if (!existsSync(tilePath)) {
-			throw error(404, 'Tile not found');
-		}
-
-		// Get file stats for content-length
-		const stats = await stat(tilePath);
-
-		// Create readable stream
-		const stream = createReadStream(tilePath);
-		const webStream = new ReadableStream({
-			start(controller) {
-				stream.on('data', (chunk) => controller.enqueue(chunk));
-				stream.on('end', () => controller.close());
-				stream.on('error', (err) => controller.error(err));
-			}
-		});
-
-		// Return tile with appropriate headers
-		return new Response(webStream, {
-			headers: {
-				'Content-Type': CONTENT_TYPES[format] || 'application/octet-stream',
-				'Content-Length': String(stats.size),
-				'Cache-Control': 'public, max-age=31536000, immutable'
-			}
-		});
 	} catch (err) {
-		// If PocketBase error (not found or unauthorized)
 		if (err && typeof err === 'object' && 'status' in err) {
-			const pbError = err as { status: number; message?: string };
-			if (pbError.status === 404) {
-				throw error(404, 'Tileset not found');
-			}
-			if (pbError.status === 403) {
-				throw error(403, 'Access denied');
-			}
+			const pbError = err as { status: number };
+			if (pbError.status === 404) throw error(404, 'Tileset not found');
+			if (pbError.status === 403) throw error(403, 'Access denied');
 		}
 		throw err;
 	}
+
+	if (perm.sourceType === 'uploaded' && perm.status !== 'completed') {
+		throw error(404, 'Layer not available');
+	}
+	if (perm.sourceType === 'wms' || perm.sourceType === 'geojson') {
+		throw error(400, 'Layer is not a tile source');
+	}
+
+	// URL extension overrides cached format if the client requested a specific encoding.
+	let format = perm.format;
+	if (yParts.length > 1) {
+		const ext = yParts[1].toLowerCase();
+		if (CONTENT_TYPES[ext]) {
+			format = ext === 'jpeg' ? 'jpg' : ext;
+		}
+	}
+
+	// For 'tile' and 'preset', we proxy the configured upstream URL through
+	// the fetch-through cache. For 'uploaded', urlTemplate is unused — the
+	// cache helper finds the bytes under data/tiles/{layerId}/...
+	const urlTemplate = perm.sourceType === 'uploaded' ? '' : perm.url || '';
+
+	const tile = await getOrFetchTile({
+		layerId: tilesetId,
+		z: zNum,
+		x: xNum,
+		y: yNum,
+		urlTemplate,
+		subdomains: perm.subdomains,
+		preferredFormat: format,
+		signal: request.signal,
+		origin: url.origin
+	});
+
+	if (!tile) {
+		throw error(404, 'Tile not found');
+	}
+
+	// Copy into a fresh ArrayBuffer to satisfy TS' BodyInit (Node's
+	// Uint8Array<ArrayBufferLike> isn't accepted directly).
+	const ab = new ArrayBuffer(tile.data.byteLength);
+	new Uint8Array(ab).set(tile.data);
+	return new Response(ab, {
+		headers: {
+			'Content-Type': tile.contentType || CONTENT_TYPES[tile.format] || 'application/octet-stream',
+			'Content-Length': String(tile.data.byteLength),
+			'Cache-Control': 'public, max-age=31536000, immutable'
+		}
+	});
 };

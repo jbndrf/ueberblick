@@ -8,9 +8,7 @@
 import { zip } from 'fflate';
 import { getTilesForPolygon, type TileCoord } from '$lib/utils/geo-utils';
 import type { Feature, Polygon, MultiPolygon } from 'geojson';
-import { existsSync } from 'fs';
-import { readFile } from 'fs/promises';
-import path from 'path';
+import { getOrFetchTile } from '$lib/server/tile-cache';
 
 // =============================================================================
 // Types
@@ -37,6 +35,8 @@ export interface PackageOptions {
 	layers: TileSource[];
 	onProgress?: (done: number, total: number, currentLayer?: string) => void;
 	signal?: AbortSignal;
+	/** Public origin to advertise to upstream tile providers in the User-Agent. */
+	origin?: string | null;
 }
 
 export interface PackageResult {
@@ -51,130 +51,6 @@ export interface TileDownloadError {
 	x: number;
 	y: number;
 	error: string;
-}
-
-// =============================================================================
-// Tile URL Generation
-// =============================================================================
-
-/**
- * Generate actual tile URL from template
- */
-function getTileUrl(
-	urlTemplate: string,
-	z: number,
-	x: number,
-	y: number,
-	subdomains?: string[]
-): string {
-	let url = urlTemplate
-		.replace('{z}', z.toString())
-		.replace('{x}', x.toString())
-		.replace('{y}', y.toString());
-
-	// Handle subdomains (e.g., {s} -> 'a', 'b', or 'c')
-	if (subdomains && subdomains.length > 0 && url.includes('{s}')) {
-		const subdomain = subdomains[(x + y) % subdomains.length];
-		url = url.replace('{s}', subdomain);
-	}
-
-	return url;
-}
-
-/**
- * Determine file extension from URL or content type
- */
-function getFileExtension(url: string, contentType?: string): string {
-	// Try to extract from URL
-	const urlLower = url.toLowerCase();
-	if (urlLower.includes('.png')) return 'png';
-	if (urlLower.includes('.jpg') || urlLower.includes('.jpeg')) return 'jpg';
-	if (urlLower.includes('.webp')) return 'webp';
-
-	// Fallback to content type
-	if (contentType) {
-		if (contentType.includes('png')) return 'png';
-		if (contentType.includes('jpeg') || contentType.includes('jpg')) return 'jpg';
-		if (contentType.includes('webp')) return 'webp';
-	}
-
-	// Default to png
-	return 'png';
-}
-
-// =============================================================================
-// Tile Download / Read
-// =============================================================================
-
-/**
- * Download a single tile from HTTP
- */
-async function downloadTile(
-	url: string,
-	signal?: AbortSignal
-): Promise<{ data: Uint8Array; contentType?: string } | null> {
-	try {
-		const response = await fetch(url, {
-			signal,
-			headers: {
-				// Some tile servers require a user agent
-				'User-Agent': 'UeberblickOfflinePackager/1.0'
-			}
-		});
-
-		if (!response.ok) {
-			console.warn(`Failed to fetch tile ${url}: ${response.status}`);
-			return null;
-		}
-
-		const arrayBuffer = await response.arrayBuffer();
-		return {
-			data: new Uint8Array(arrayBuffer),
-			contentType: response.headers.get('content-type') || undefined
-		};
-	} catch (error) {
-		if (error instanceof Error && error.name === 'AbortError') {
-			throw error;
-		}
-		console.warn(`Error downloading tile ${url}:`, error);
-		return null;
-	}
-}
-
-/**
- * Read a tile from the local filesystem (for uploaded sources)
- */
-async function readUploadedTile(
-	layerId: string,
-	z: number,
-	x: number,
-	y: number,
-	format: string = 'png'
-): Promise<{ data: Uint8Array; format: string } | null> {
-	const tilePath = path.join(
-		process.cwd(),
-		'static',
-		'tiles',
-		layerId,
-		String(z),
-		String(x),
-		`${y}.${format}`
-	);
-
-	if (!existsSync(tilePath)) {
-		return null;
-	}
-
-	try {
-		const data = await readFile(tilePath);
-		return {
-			data: new Uint8Array(data),
-			format
-		};
-	} catch (err) {
-		console.warn(`Error reading tile ${tilePath}:`, err);
-		return null;
-	}
 }
 
 // =============================================================================
@@ -197,7 +73,7 @@ async function readUploadedTile(
  * ```
  */
 export async function createTilePackage(options: PackageOptions): Promise<PackageResult> {
-	const { packageId, regionPolygon, zoomMin, zoomMax, layers, onProgress, signal } = options;
+	const { packageId, regionPolygon, zoomMin, zoomMax, layers, onProgress, signal, origin } = options;
 
 	// Generate zoom levels array
 	const zoomLevels: number[] = [];
@@ -278,35 +154,29 @@ export async function createTilePackage(options: PackageOptions): Promise<Packag
 				const batch = tilesAtZoom.slice(i, i + concurrency);
 				const results = await Promise.all(
 					batch.map(async (coord) => {
-						// For uploaded sources, read from filesystem
-						if (layer.isUploaded && layer.layerId) {
-							const result = await readUploadedTile(
-								layer.layerId,
-								coord.z,
-								coord.x,
-								coord.y,
-								layer.tileFormat || 'png'
-							);
-
-							if (result) {
-								const tilePath = `${layer.id}/${coord.z}/${coord.x}/${coord.y}.${result.format}`;
-								return { path: tilePath, data: result.data, success: true };
-							} else {
-								return { coord, success: false };
-							}
-						}
-
-						// For HTTP sources, download via fetch
-						const url = getTileUrl(layer.urlTemplate, coord.z, coord.x, coord.y, layer.subdomains);
-						const result = await downloadTile(url, signal);
+						// Both uploaded and HTTP sources go through the shared
+						// fetch-through cache: it serves uploaded tiles from
+						// data/tiles/, proxy-cached tiles from data/tiles-cache/,
+						// and falls through to upstream HTTP for misses (which
+						// also warms data/tiles-cache for live serving).
+						const sourceLayerId = layer.isUploaded && layer.layerId ? layer.layerId : layer.id;
+						const result = await getOrFetchTile({
+							layerId: sourceLayerId,
+							z: coord.z,
+							x: coord.x,
+							y: coord.y,
+							urlTemplate: layer.isUploaded ? '' : layer.urlTemplate,
+							subdomains: layer.subdomains,
+							preferredFormat: layer.tileFormat || 'png',
+							signal,
+							origin
+						});
 
 						if (result) {
-							const ext = getFileExtension(url, result.contentType);
-							const tilePath = `${layer.id}/${coord.z}/${coord.x}/${coord.y}.${ext}`;
+							const tilePath = `${layer.id}/${coord.z}/${coord.x}/${coord.y}.${result.format}`;
 							return { path: tilePath, data: result.data, success: true };
-						} else {
-							return { coord, success: false };
 						}
+						return { coord, success: false };
 					})
 				);
 
