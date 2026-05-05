@@ -5,19 +5,6 @@
 	import * as m from '$lib/paraglide/messages';
 	import type { Map as LeafletMap, Marker, Polyline, LatLng } from 'leaflet';
 
-	// Portal action -- moves the node to document.body. Mirrors the pattern in
-	// mobile-multi-select.svelte. Escapes any ancestor stacking context, transform,
-	// or pointer-events lock (eg. a sibling bits-ui Dialog applies a body-wide
-	// modal lock that otherwise swallows taps on absolutely-positioned siblings).
-	function portal(node: HTMLElement) {
-		document.body.appendChild(node);
-		return {
-			destroy() {
-				node.remove();
-			}
-		};
-	}
-
 	interface Workflow {
 		id: string;
 		name: string;
@@ -265,27 +252,23 @@
 		</button>
 	</div>
 {:else}
-	<!-- Popover Menu -- portaled to document.body so that ancestor `display:none`
-	     wrappers, transforms, or pointer-events locks from sibling bits-ui Dialogs
-	     (Sheets) cannot block interaction. Mirrors the working pattern in
-	     mobile-multi-select.svelte. -->
+	<!-- Popover Menu -->
 	{#if isOpen && workflows.length > 0}
-		<div use:portal class="workflow-selector-portal">
-			<!-- Backdrop -->
-			<button
-				onclick={() => { closeMenu(); onBackdropClose?.(); }}
-				class="fixed inset-0 z-[9998] bg-transparent"
-				aria-label={m.mapCloseMenu?.() ?? 'Close menu'}
-			></button>
+		<!-- Backdrop -->
+		<button
+			onclick={() => { closeMenu(); onBackdropClose?.(); }}
+			class="fixed inset-0 z-[1050] bg-transparent"
+			aria-label={m.mapCloseMenu?.() ?? 'Close menu'}
+		></button>
 
-			<!-- Popover - Mobile: bottom, Desktop: top below header.
-			     position='left' anchors to the left half so a sidebar can share the screen. -->
-			<div
-				class={[
-					'fixed z-[9999] flex flex-col items-center gap-2.5 bottom-20 md:bottom-auto md:top-16',
-					position === 'center' ? 'left-1/2 -translate-x-1/2' : 'left-4 md:left-16'
-				]}
-			>
+		<!-- Popover - Mobile: bottom, Desktop: top below header.
+		     position='left' anchors to the left half so a sidebar can share the screen. -->
+		<div
+			class={[
+				'fixed z-[1100] flex flex-col items-center gap-2.5 bottom-20 md:bottom-auto md:top-16',
+				position === 'center' ? 'left-1/2 -translate-x-1/2' : 'left-4 md:left-16'
+			]}
+		>
 				{#each workflows as workflow, i}
 					<button
 						type="button"
@@ -304,7 +287,6 @@
 						<span class="line-clamp-2 text-center leading-snug">{workflow.entry_button_label || workflow.name}</span>
 					</button>
 				{/each}
-			</div>
 		</div>
 	{/if}
 {/if}
