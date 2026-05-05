@@ -579,7 +579,7 @@ export const actions: Actions = {
 	},
 
 	// Create offline package
-	createPackage: async ({ request, locals: { pb }, params }) => {
+	createPackage: async ({ request, locals: { pb }, params, url }) => {
 		const { projectId } = params;
 		const formData = await request.formData();
 		const name = formData.get('name') as string;
@@ -706,6 +706,7 @@ export const actions: Actions = {
 				zoomMin: zoomMinNum,
 				zoomMax: zoomMaxNum,
 				layers: tileSources,
+				origin: url.origin,
 				onProgress: (done, total, layer) => {
 					console.log(`[createPackage] Progress: ${done}/${total} (${layer})`);
 				}
