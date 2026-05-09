@@ -10,7 +10,7 @@ export class ParticipantsPage {
 	private editModeToggle = 'button[role="switch"]';
 
 	async goto(projectId: string) {
-		await this.page.goto(`/projects/${projectId}/participants`);
+		await this.page.goto(`/admin/projects/${projectId}/participants`);
 		await this.page.waitForSelector(this.pageTitle);
 	}
 

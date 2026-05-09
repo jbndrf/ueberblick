@@ -15,7 +15,7 @@ async function safeGetFullList(pb: any, collection: string, options: any) {
 	}
 }
 
-export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
+export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) => {
 	const { projectId, workflowId } = params;
 
 	try {
@@ -96,7 +96,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 };
 
 export const actions: Actions = {
-	createRole: async ({ request, params, locals: { pb } }) => {
+	createRole: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { projectId } = params;
 		const formData = await request.formData();
 		const name = formData.get('name') as string;
@@ -119,7 +119,7 @@ export const actions: Actions = {
 		}
 	},
 
-	saveWorkflow: async ({ request, locals: { pb } }) => {
+	saveWorkflow: async ({ request, locals: { pbAdmin: pb } }) => {
 		const formData = await request.formData();
 		const changesJson = formData.get('changes') as string;
 

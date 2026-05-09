@@ -35,7 +35,7 @@ export const actions: Actions = {
 		try {
 			console.log('Creating project with owner_id:', locals.user.id);
 
-			const project = await locals.pb.collection('projects').create({
+			const project = await locals.pbAdmin.collection('projects').create({
 				name: form.data.name,
 				description: form.data.description || '',
 				owner_id: locals.user.id,

@@ -9,8 +9,8 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Plus, Pencil, Trash2 } from '@lucide/svelte';
-	import FilterBuilder from '../../../../../participant/map/components/view-builder/FilterBuilder.svelte';
-	import type { BuilderContext } from '../../../../../participant/map/components/view-builder/types';
+	import FilterBuilder from '../../../../../(participant)/map/components/view-builder/FilterBuilder.svelte';
+	import type { BuilderContext } from '../../../../../(participant)/map/components/view-builder/types';
 	import type { FilterClause, ViewDefinition } from '$lib/participant-state/types';
 	import { FEATURE_REGISTRY } from '$lib/participant-state/enabled-features.svelte';
 	import type { ProjectStartupDefaults, AdminPreset } from '$lib/schemas/map-settings';

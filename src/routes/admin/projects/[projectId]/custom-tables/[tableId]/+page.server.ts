@@ -15,7 +15,7 @@ const columnSchema = z.object({
 	default_value: z.string().optional().nullable()
 });
 
-export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
+export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) => {
 	const { projectId, tableId } = params;
 
 	try {
@@ -74,7 +74,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 };
 
 export const actions: Actions = {
-	updateTableMeta: async ({ request, params, locals: { pb } }) => {
+	updateTableMeta: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { tableId } = params;
 		const formData = await request.formData();
 		const field = formData.get('field') as string;
@@ -104,7 +104,7 @@ export const actions: Actions = {
 		}
 	},
 
-	createColumn: async ({ request, params, locals: { pb } }) => {
+	createColumn: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { tableId } = params;
 		const formData = await request.formData();
 
@@ -153,7 +153,7 @@ export const actions: Actions = {
 		}
 	},
 
-	updateColumn: async ({ request, params, locals: { pb } }) => {
+	updateColumn: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { tableId } = params;
 		const formData = await request.formData();
 		const columnId = formData.get('fieldId') as string;
@@ -235,7 +235,7 @@ export const actions: Actions = {
 		}
 	},
 
-	deleteColumn: async ({ request, params, locals: { pb } }) => {
+	deleteColumn: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { tableId } = params;
 		const formData = await request.formData();
 		const columnId = formData.get('fieldId') as string;
@@ -279,7 +279,7 @@ export const actions: Actions = {
 		}
 	},
 
-	updateRowData: async ({ request, params, locals: { pb } }) => {
+	updateRowData: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { tableId } = params;
 		const formData = await request.formData();
 		const rowId = formData.get('row_id') as string;
@@ -318,7 +318,7 @@ export const actions: Actions = {
 		}
 	},
 
-	updateRow: async ({ request, params, locals: { pb } }) => {
+	updateRow: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { tableId } = params;
 		const formData = await request.formData();
 		const rowId = formData.get('row_id') as string;
@@ -348,7 +348,7 @@ export const actions: Actions = {
 		}
 	},
 
-	deleteRow: async ({ request, params, locals: { pb } }) => {
+	deleteRow: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { tableId } = params;
 		const formData = await request.formData();
 		const rowId = formData.get('row_id') as string;
@@ -367,7 +367,7 @@ export const actions: Actions = {
 		}
 	},
 
-	createRow: async ({ request, params, locals: { pb } }) => {
+	createRow: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { tableId } = params;
 		const formData = await request.formData();
 		const rowDataJson = formData.get('row_data') as string;
@@ -397,7 +397,7 @@ export const actions: Actions = {
 		}
 	},
 
-	importCSV: async ({ request, params, locals: { pb } }) => {
+	importCSV: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { tableId } = params;
 		const formData = await request.formData();
 		const rowsJson = formData.get('rows') as string;

@@ -44,6 +44,7 @@ export interface SmartDropdownFieldOptions {
 	source_field: string;
 	source_stage_id?: string;
 	mappings: SmartDropdownMapping[];
+	allow_multiple?: boolean;
 }
 
 export interface CustomTableSelectorOptions {

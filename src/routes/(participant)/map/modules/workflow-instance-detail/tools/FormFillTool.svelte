@@ -23,6 +23,7 @@
 		type FormFillState
 	} from './form-state';
 	import type { FormFieldWithValue } from '$lib/components/form-renderer';
+	import type { FieldValue } from '../state.svelte';
 
 	// ==========================================================================
 	// Props
@@ -33,13 +34,16 @@
 		workflowId: string;
 		/** Optional connection ID - if provided, loads form for this specific connection */
 		connectionId?: string;
+		/** Existing field values from the current instance (used as read-only context
+		 *  so dependent fields like smart_dropdown can resolve their source values). */
+		existingFieldValues?: FieldValue[];
 		/** Called when form is submitted successfully */
 		onSubmit: (values: Record<string, unknown>, connectionId: string) => Promise<void>;
 		/** Called when user cancels/closes the form */
 		onCancel: () => void;
 	}
 
-	let { workflowId, connectionId, onSubmit, onCancel }: Props = $props();
+	let { workflowId, connectionId, existingFieldValues, onSubmit, onCancel }: Props = $props();
 
 	const gateway = getParticipantGateway();
 
@@ -61,6 +65,33 @@
 	const hasFields = $derived(formState ? formState.fields.length > 0 : false);
 
 	const currentPage = $derived(formState?.currentPage ?? 1);
+
+	// Read-only context from prior instance values (e.g. earlier-stage form
+	// answers), used so dependent fields like smart_dropdown can resolve their
+	// source values. Keys are field ids; values are parsed where possible.
+	const priorValues = $derived.by((): Record<string, unknown> => {
+		const out: Record<string, unknown> = {};
+		for (const fv of existingFieldValues ?? []) {
+			if (!fv.value) continue;
+			try {
+				out[fv.field_key] =
+					fv.value.startsWith('[') || fv.value.startsWith('{')
+						? JSON.parse(fv.value)
+						: fv.value;
+			} catch {
+				out[fv.field_key] = fv.value;
+			}
+		}
+		return out;
+	});
+
+	// Values passed to FormRenderer: prior context overlaid with this form's
+	// own collected values. formState.values keeps only the form's own data so
+	// submit logic remains unchanged.
+	const renderValues = $derived.by((): Record<string, unknown> => ({
+		...priorValues,
+		...(formState?.values ?? {})
+	}));
 
 	// Convert FormFillState fields to FormFieldWithValue format
 	const formFields = $derived.by((): FormFieldWithValue[] => {
@@ -210,7 +241,7 @@
 			<FormRenderer
 				mode="fill"
 				fields={formFields}
-				values={formState.values}
+				values={renderValues}
 				errors={errorRecord}
 				paginated={totalPages > 1}
 				currentPage={currentPage}

@@ -9,7 +9,7 @@ export class WorkflowsPage {
 	private tableRow = 'table tbody tr';
 
 	async goto(projectId: string) {
-		await this.page.goto(`/projects/${projectId}/workflows`);
+		await this.page.goto(`/admin/projects/${projectId}/workflows`);
 		await this.page.waitForSelector(this.pageTitle);
 	}
 

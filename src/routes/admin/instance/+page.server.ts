@@ -17,7 +17,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		redirect(303, '/');
 	}
 
-	const pages = await locals.pb.collection('instance_legal_pages').getFullList({
+	const pages = await locals.pbAdmin.collection('instance_legal_pages').getFullList({
 		sort: 'sort_order,created',
 		fields: 'id,slug,title,content,sort_order,show_in_consent_footer,updated',
 		requestKey: null
@@ -33,7 +33,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 	} | null = null;
 
 	try {
-		const rec = await locals.pb.collection('instance_settings').getFirstListItem('', {
+		const rec = await locals.pbAdmin.collection('instance_settings').getFirstListItem('', {
 			fields:
 				'id,require_consent_before_login,consent_banner_title,consent_banner_body,consent_accept_label,consent_reject_label',
 			requestKey: null
@@ -81,7 +81,7 @@ export const actions: Actions = {
 		if (!slug) return fail(400, { message: 'Slug is required' });
 
 		try {
-			await locals.pb.collection('instance_legal_pages').create({
+			await locals.pbAdmin.collection('instance_legal_pages').create({
 				slug,
 				title,
 				content,
@@ -114,7 +114,7 @@ export const actions: Actions = {
 		if (!slug) return fail(400, { message: 'Slug is required' });
 
 		try {
-			await locals.pb.collection('instance_legal_pages').update(id, {
+			await locals.pbAdmin.collection('instance_legal_pages').update(id, {
 				slug,
 				title,
 				content,
@@ -138,7 +138,7 @@ export const actions: Actions = {
 		if (!id) return fail(400, { message: 'ID required' });
 
 		try {
-			await locals.pb.collection('instance_legal_pages').delete(id);
+			await locals.pbAdmin.collection('instance_legal_pages').delete(id);
 		} catch (e) {
 			console.error('Failed to delete legal page:', e);
 			return fail(500, { message: 'Delete failed' });
@@ -171,9 +171,9 @@ export const actions: Actions = {
 
 		try {
 			if (id) {
-				await locals.pb.collection('instance_settings').update(id, payload);
+				await locals.pbAdmin.collection('instance_settings').update(id, payload);
 			} else {
-				await locals.pb.collection('instance_settings').create(payload);
+				await locals.pbAdmin.collection('instance_settings').create(payload);
 			}
 		} catch (e) {
 			console.error('Failed to update instance settings:', e);

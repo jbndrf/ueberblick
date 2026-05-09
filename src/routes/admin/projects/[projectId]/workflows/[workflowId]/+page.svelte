@@ -923,7 +923,7 @@
 				<Button
 					variant="outline"
 					size="sm"
-					href="/projects/{$page.params.projectId}/workflows/{$page.params.workflowId}/builder"
+					href="/admin/projects/{$page.params.projectId}/workflows/{$page.params.workflowId}/builder"
 				>
 					<Hammer class="mr-2 h-4 w-4" />
 					{m.workflowDetailBuildButton?.() ?? 'Build'}

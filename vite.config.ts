@@ -19,7 +19,7 @@ export default defineConfig({
 				name: 'Überblick',
 				short_name: 'Überblick',
 				description: 'Geographic data collection with offline-first capabilities',
-				start_url: '/participant/map',
+				start_url: '/map',
 				scope: '/',
 				display: 'standalone',
 				background_color: '#ffffff',
@@ -66,9 +66,11 @@ export default defineConfig({
 				// NetworkFirst runtime cache below handle navigations directly.
 				navigateFallback: null,
 				runtimeCaching: [
-					// Cache participant pages with NetworkFirst strategy
+					// Cache participant pages with NetworkFirst strategy.
+					// Participant routes live at root: /, /map, /login, /logout.
+					// Admin routes (/admin/*) and APIs (/api/*) are excluded.
 					{
-						urlPattern: /^https?:\/\/.*\/participant\/.*/,
+						urlPattern: /^https?:\/\/[^/]+\/(map|login|logout)(\/.*)?$/,
 						handler: 'NetworkFirst',
 						options: {
 							cacheName: 'pages-cache',

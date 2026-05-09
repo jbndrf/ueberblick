@@ -167,6 +167,7 @@ export interface SmartDropdownFieldOptions {
 	source_field: string; // Field ID to base conditions on
 	source_stage_id?: string; // For cross-stage references
 	mappings: SmartDropdownMapping[];
+	allow_multiple?: boolean;
 }
 
 /**

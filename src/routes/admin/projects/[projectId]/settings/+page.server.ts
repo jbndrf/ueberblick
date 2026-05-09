@@ -27,7 +27,7 @@ const DEFAULT_MAP_SETTINGS: ProjectMapDefaults = {
 	center: { lat: 51.1657, lng: 10.4515 }
 };
 
-export const load: PageServerLoad = async ({ locals: { pb }, params }) => {
+export const load: PageServerLoad = async ({ locals: { pbAdmin: pb }, params }) => {
 	const { projectId } = params;
 
 	try {
@@ -174,7 +174,7 @@ export const actions: Actions = {
 	// =====================================================================
 
 	// Save project map defaults (fallback when no base layer)
-	saveDefaults: async ({ request, locals: { pb }, params }) => {
+	saveDefaults: async ({ request, locals: { pbAdmin: pb }, params }) => {
 		const { projectId } = params;
 		const form = await superValidate(request, zod4(projectMapDefaultsSchema));
 
@@ -203,7 +203,7 @@ export const actions: Actions = {
 	},
 
 	// Create new map layer with source fields directly
-	createLayer: async ({ request, locals: { pb }, params }) => {
+	createLayer: async ({ request, locals: { pbAdmin: pb }, params }) => {
 		const { projectId } = params;
 		const form = await superValidate(request, zod4(mapLayerSchema));
 
@@ -244,7 +244,7 @@ export const actions: Actions = {
 	},
 
 	// Add preset layer
-	addPreset: async ({ request, locals: { pb }, params }) => {
+	addPreset: async ({ request, locals: { pbAdmin: pb }, params }) => {
 		const { projectId } = params;
 		const formData = await request.formData();
 		const presetId = formData.get('preset_id') as string;
@@ -314,7 +314,7 @@ export const actions: Actions = {
 	},
 
 	// Add tile URL layer
-	addTile: async ({ request, locals: { pb }, params }) => {
+	addTile: async ({ request, locals: { pbAdmin: pb }, params }) => {
 		const { projectId } = params;
 		const formData = await request.formData();
 		const name = formData.get('name') as string;
@@ -353,7 +353,7 @@ export const actions: Actions = {
 	},
 
 	// Add WMS layer
-	addWms: async ({ request, locals: { pb }, params }) => {
+	addWms: async ({ request, locals: { pbAdmin: pb }, params }) => {
 		const { projectId } = params;
 		const formData = await request.formData();
 		const name = formData.get('name') as string;
@@ -394,7 +394,7 @@ export const actions: Actions = {
 	},
 
 	// Update map layer
-	updateLayer: async ({ request, locals: { pb }, params }) => {
+	updateLayer: async ({ request, locals: { pbAdmin: pb }, params }) => {
 		const { projectId } = params;
 		const formData = await request.formData();
 		const id = formData.get('id') as string;
@@ -441,7 +441,7 @@ export const actions: Actions = {
 	},
 
 	// Delete map layer (soft delete via is_active, or hard delete for uploaded)
-	deleteLayer: async ({ request, locals: { pb } }) => {
+	deleteLayer: async ({ request, locals: { pbAdmin: pb } }) => {
 		const formData = await request.formData();
 		const id = formData.get('id') as string;
 
@@ -471,7 +471,7 @@ export const actions: Actions = {
 	},
 
 	// Toggle layer type between base and overlay
-	toggleLayerType: async ({ request, locals: { pb } }) => {
+	toggleLayerType: async ({ request, locals: { pbAdmin: pb } }) => {
 		const formData = await request.formData();
 		const id = formData.get('id') as string;
 
@@ -491,7 +491,7 @@ export const actions: Actions = {
 	},
 
 	// Update layer role visibility
-	updateLayerRoles: async ({ request, locals: { pb } }) => {
+	updateLayerRoles: async ({ request, locals: { pbAdmin: pb } }) => {
 		const formData = await request.formData();
 		const layerId = formData.get('layerId') as string;
 		const roleIdsJson = formData.get('roleIds') as string;
@@ -518,7 +518,7 @@ export const actions: Actions = {
 		}
 	},
 
-	updateLayerOpacity: async ({ request, locals: { pb } }) => {
+	updateLayerOpacity: async ({ request, locals: { pbAdmin: pb } }) => {
 		const formData = await request.formData();
 		const layerId = formData.get('layerId') as string;
 		const opacityRaw = formData.get('opacity');
@@ -544,7 +544,7 @@ export const actions: Actions = {
 	},
 
 	// Update base layer view defaults
-	updateBaseLayerDefaults: async ({ request, locals: { pb } }) => {
+	updateBaseLayerDefaults: async ({ request, locals: { pbAdmin: pb } }) => {
 		const formData = await request.formData();
 		const layerId = formData.get('layerId') as string;
 		const defaultZoom = formData.get('default_zoom');
@@ -579,7 +579,7 @@ export const actions: Actions = {
 	},
 
 	// Create offline package
-	createPackage: async ({ request, locals: { pb }, params, url }) => {
+	createPackage: async ({ request, locals: { pbAdmin: pb }, params, url }) => {
 		const { projectId } = params;
 		const formData = await request.formData();
 		const name = formData.get('name') as string;
@@ -747,7 +747,7 @@ export const actions: Actions = {
 	},
 
 	// Delete offline package
-	deletePackage: async ({ request, locals: { pb } }) => {
+	deletePackage: async ({ request, locals: { pbAdmin: pb } }) => {
 		const formData = await request.formData();
 		const id = formData.get('id') as string;
 
@@ -765,7 +765,7 @@ export const actions: Actions = {
 	},
 
 	// Update package role visibility
-	updatePackageRoles: async ({ request, locals: { pb } }) => {
+	updatePackageRoles: async ({ request, locals: { pbAdmin: pb } }) => {
 		const formData = await request.formData();
 		const packageId = formData.get('packageId') as string;
 		const roleIdsJson = formData.get('roleIds') as string;
@@ -798,7 +798,7 @@ export const actions: Actions = {
 
 	createInfoPage: async ({ request, params, locals }) => {
 		const { projectId } = params;
-		const pb = locals.pb;
+		const pb = locals.pbAdmin;
 		const formData = await request.formData();
 
 		const title = formData.get('title') as string;
@@ -829,7 +829,7 @@ export const actions: Actions = {
 
 	updateInfoPage: async ({ request, params, locals }) => {
 		const { projectId } = params;
-		const pb = locals.pb;
+		const pb = locals.pbAdmin;
 		const formData = await request.formData();
 
 		const id = formData.get('id') as string;
@@ -862,14 +862,14 @@ export const actions: Actions = {
 
 	deleteInfoPage: async ({ request, params, locals }) => {
 		const { projectId } = params;
-		const pb = locals.pb;
+		const pb = locals.pbAdmin;
 		return createDeleteAction(pb, projectId, {
 			tableName: 'info_pages'
 		})(request);
 	},
 
 	// Upload/update project icon
-	updateAppIcon: async ({ request, locals: { pb }, params }) => {
+	updateAppIcon: async ({ request, locals: { pbAdmin: pb }, params }) => {
 		const { projectId } = params;
 		const formData = await request.formData();
 		const iconFile = formData.get('icon') as File;
@@ -890,7 +890,7 @@ export const actions: Actions = {
 	},
 
 	// Remove project icon
-	removeAppIcon: async ({ locals: { pb }, params }) => {
+	removeAppIcon: async ({ locals: { pbAdmin: pb }, params }) => {
 		const { projectId } = params;
 
 		try {
@@ -905,7 +905,7 @@ export const actions: Actions = {
 	// Delete the project and everything that belongs to it.
 	// Cascade rules handle stages, forms, instances, roles, participants,
 	// custom tables, map layers, offline packages, info pages, etc.
-	deleteProject: async ({ params, locals: { pb } }) => {
+	deleteProject: async ({ params, locals: { pbAdmin: pb } }) => {
 		const { projectId } = params;
 		try {
 			await pb.collection('projects').delete(projectId);
@@ -913,11 +913,11 @@ export const actions: Actions = {
 			console.error('Error deleting project:', err);
 			return fail(500, { message: m.projectsDeleteError?.() ?? 'Failed to delete project' });
 		}
-		throw redirect(303, '/projects');
+		throw redirect(303, '/admin/projects');
 	},
 
 	// Update display name shown in participant app
-	updateDisplayName: async ({ request, locals: { pb }, params }) => {
+	updateDisplayName: async ({ request, locals: { pbAdmin: pb }, params }) => {
 		const { projectId } = params;
 		const formData = await request.formData();
 		const displayName = (formData.get('display_name') as string)?.trim() || '';
@@ -945,7 +945,7 @@ export const actions: Actions = {
 	// (both live in projects.settings JSON -- see plan docs)
 	// =====================================================================
 
-	saveStartupDefaults: async ({ request, locals: { pb }, params }) => {
+	saveStartupDefaults: async ({ request, locals: { pbAdmin: pb }, params }) => {
 		const { projectId } = params;
 		const formData = await request.formData();
 		const payload = formData.get('payload') as string;
@@ -975,7 +975,7 @@ export const actions: Actions = {
 		}
 	},
 
-	saveAdminPresets: async ({ request, locals: { pb }, params }) => {
+	saveAdminPresets: async ({ request, locals: { pbAdmin: pb }, params }) => {
 		const { projectId } = params;
 		const formData = await request.formData();
 		const payload = formData.get('payload') as string;
@@ -1006,7 +1006,7 @@ export const actions: Actions = {
 	},
 
 	// Project chat settings: kill switch + role allowlist (empty = open).
-	saveChatSettings: async ({ request, locals: { pb }, params }) => {
+	saveChatSettings: async ({ request, locals: { pbAdmin: pb }, params }) => {
 		const { projectId } = params;
 		const formData = await request.formData();
 		const chatEnabled = formData.get('chat_enabled') === 'true';

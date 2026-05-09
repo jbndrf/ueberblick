@@ -32,11 +32,11 @@
 	let isLoggingOut = $state(false);
 
 	// Hide sidebar on login page
-	const isLoginPage = $derived(page.url.pathname === '/login');
+	const isLoginPage = $derived(page.url.pathname === '/admin/login');
 
 	// Derive current project ID from URL
 	const currentProjectId = $derived.by(() => {
-		const match = page.url.pathname.match(/\/projects\/([^/]+)/);
+		const match = page.url.pathname.match(/\/admin\/projects\/([^/]+)/);
 		return match ? match[1] : null;
 	});
 
@@ -173,7 +173,7 @@
 				icon_config: {},
 				sort_order: maxOrder + 1
 			});
-			await goto(`/projects/${currentProjectId}/workflows/${record.id}`);
+			await goto(`/admin/projects/${currentProjectId}/workflows/${record.id}`);
 			await refreshSidebar();
 		} catch (err) {
 			console.error('Failed to create workflow:', err);
@@ -193,7 +193,7 @@
 					visible_to_roles: [],
 					fields: []
 				});
-				await goto(`/projects/${currentProjectId}/marker-categories/${record.id}`);
+				await goto(`/admin/projects/${currentProjectId}/marker-categories/${record.id}`);
 				await refreshSidebar();
 			} else {
 				const record = await pb.collection('custom_tables').create({
@@ -201,7 +201,7 @@
 					table_name: 'new_table_' + Date.now(),
 					display_name: 'New Table'
 				});
-				await goto(`/projects/${currentProjectId}/custom-tables/${record.id}`);
+				await goto(`/admin/projects/${currentProjectId}/custom-tables/${record.id}`);
 				await refreshSidebar();
 			}
 		} catch (err) {
@@ -221,7 +221,7 @@
 		data.isOwner
 			? [
 				{
-					href: '/instance',
+					href: '/admin/instance',
 					icon: Settings,
 					label: () => m.navInstanceSettings?.() ?? 'Instance Settings'
 				}
@@ -234,14 +234,14 @@
 
 		try {
 			signOut();
-			await fetch('/logout', {
+			await fetch('/admin/logout', {
 				method: 'POST',
 				redirect: 'manual'
 			});
 		} catch (error) {
 			console.error('Logout error:', error);
 		} finally {
-			await goto('/login', { replaceState: true, invalidateAll: true });
+			await goto('/admin/login', { replaceState: true, invalidateAll: true });
 		}
 	}
 
@@ -277,9 +277,9 @@
 					<!-- Projects link -->
 					<Sidebar.Menu>
 						<Sidebar.MenuItem>
-							<Sidebar.MenuButton isActive={page.url.pathname === '/projects'}>
+							<Sidebar.MenuButton isActive={page.url.pathname === '/admin/projects'}>
 								{#snippet child({ props })}
-									<a href="/projects" {...props}>
+									<a href="/admin/projects" {...props}>
 										<FolderKanban class="h-4 w-4" />
 										<span>{m.navProjects?.() ?? 'Projects'}</span>
 									</a>
@@ -301,9 +301,9 @@
 							{#each projectStaticItems as item}
 								{@const Icon = item.icon}
 								<Sidebar.MenuItem>
-									<Sidebar.MenuButton isActive={page.url.pathname === `/projects/${currentProjectId}/${item.href}`}>
+									<Sidebar.MenuButton isActive={page.url.pathname === `/admin/projects/${currentProjectId}/${item.href}`}>
 										{#snippet child({ props })}
-											<a href="/projects/{currentProjectId}/{item.href}" {...props}>
+											<a href="/admin/projects/{currentProjectId}/{item.href}" {...props}>
 												<Icon class="h-4 w-4" />
 												<span>{item.label()}</span>
 											</a>
@@ -366,8 +366,8 @@
 														class="relative {workflowDropTargetId === wf.id && workflowDropPos === 'before' ? 'before:absolute before:left-0 before:right-0 before:top-0 before:h-0.5 before:bg-primary' : ''} {workflowDropTargetId === wf.id && workflowDropPos === 'after' ? 'after:absolute after:left-0 after:right-0 after:bottom-0 after:h-0.5 after:bg-primary' : ''} {workflowDragId === wf.id ? 'opacity-50' : ''}"
 													>
 														<Sidebar.MenuSubButton
-															href="/projects/{currentProjectId}/workflows/{wf.id}"
-															isActive={page.url.pathname.startsWith(`/projects/${currentProjectId}/workflows/${wf.id}`)}
+															href="/admin/projects/{currentProjectId}/workflows/{wf.id}"
+															isActive={page.url.pathname.startsWith(`/admin/projects/${currentProjectId}/workflows/${wf.id}`)}
 														>
 															{#if wf.workflow_type === 'incident'}
 																<MapPin class="h-4 w-4" />
@@ -430,8 +430,8 @@
 										{#each sidebarTables as tbl}
 												<Sidebar.MenuItem>
 													<Sidebar.MenuSubButton
-														href="/projects/{currentProjectId}/custom-tables/{tbl.id}"
-														isActive={page.url.pathname.startsWith(`/projects/${currentProjectId}/custom-tables/${tbl.id}`)}
+														href="/admin/projects/{currentProjectId}/custom-tables/{tbl.id}"
+														isActive={page.url.pathname.startsWith(`/admin/projects/${currentProjectId}/custom-tables/${tbl.id}`)}
 													>
 														<Table class="h-4 w-4" />
 														<span>{tbl.display_name}</span>
@@ -441,8 +441,8 @@
 											{#each sidebarMarkerCategories as mc}
 												<Sidebar.MenuItem>
 													<Sidebar.MenuSubButton
-														href="/projects/{currentProjectId}/marker-categories/{mc.id}"
-														isActive={page.url.pathname.startsWith(`/projects/${currentProjectId}/marker-categories/${mc.id}`)}
+														href="/admin/projects/{currentProjectId}/marker-categories/{mc.id}"
+														isActive={page.url.pathname.startsWith(`/admin/projects/${currentProjectId}/marker-categories/${mc.id}`)}
 													>
 														<MapPin class="h-4 w-4" />
 														<span>{mc.name}</span>
@@ -469,7 +469,7 @@
 										<Sidebar.MenuItem>
 											<Sidebar.MenuButton>
 												{#snippet child({ props })}
-													<a href="/projects/{project.id}/settings" {...props}>
+													<a href="/admin/projects/{project.id}/settings" {...props}>
 														<FolderKanban class="h-4 w-4" />
 														<span>{project.name}</span>
 													</a>
@@ -484,7 +484,7 @@
 						<Sidebar.Separator class="my-4" />
 						<div class="px-4 py-3 text-sm text-muted-foreground text-center">
 							<p>{m.navNoProjectsYet?.() ?? 'No projects yet'}</p>
-							<Button href="/projects" variant="link" size="sm" class="mt-1">
+							<Button href="/admin/projects" variant="link" size="sm" class="mt-1">
 								{m.navCreateFirstProject?.() ?? 'Create your first project'}
 							</Button>
 						</div>

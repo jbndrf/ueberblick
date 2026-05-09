@@ -18,7 +18,7 @@ const customTableSchema = z.object({
 		.regex(/^[a-z][a-z0-9_]*$/, 'Main column must start with a letter and contain only lowercase letters, numbers, and underscores')
 });
 
-export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
+export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) => {
 	const { projectId } = params;
 
 	try {
@@ -49,7 +49,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 };
 
 export const actions: Actions = {
-	create: async ({ request, params, locals: { pb } }) => {
+	create: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { projectId } = params;
 		const formData = await request.formData();
 		const form = await superValidate(formData, zod4(customTableSchema));
@@ -87,7 +87,7 @@ export const actions: Actions = {
 		}
 	},
 
-	update: async ({ request, params, locals: { pb } }) => {
+	update: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const formData = await request.formData();
 		const tableId = formData.get('id') as string;
 
@@ -125,7 +125,7 @@ export const actions: Actions = {
 		}
 	},
 
-	updateField: async ({ request, params, locals: { pb } }) => {
+	updateField: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const formData = await request.formData();
 		const tableId = formData.get('id') as string;
 		const field = formData.get('field') as string;
@@ -180,7 +180,7 @@ export const actions: Actions = {
 		}
 	},
 
-	delete: async ({ request, params, locals: { pb } }) => {
+	delete: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const formData = await request.formData();
 		const tableId = formData.get('id') as string;
 

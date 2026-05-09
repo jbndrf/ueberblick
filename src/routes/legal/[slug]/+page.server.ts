@@ -8,7 +8,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	}
 
 	try {
-		const record = await locals.pb
+		const record = await locals.pbAdmin
 			.collection('instance_legal_pages')
 			.getFirstListItem(`slug = "${slug}"`, {
 				fields: 'id,slug,title,content,updated',

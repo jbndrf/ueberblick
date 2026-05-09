@@ -6,7 +6,7 @@ import * as m from '$lib/paraglide/messages';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	try {
-		const projects = await locals.pb.collection('projects').getFullList({
+		const projects = await locals.pbAdmin.collection('projects').getFullList({
 			sort: '-created'
 		});
 
@@ -18,7 +18,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 };
 
 export const actions: Actions = {
-	importSchema: async ({ request, locals: { pb, user } }) => {
+	importSchema: async ({ request, locals: { pbAdmin: pb, user } }) => {
 		const formData = await request.formData();
 		const file = formData.get('file') as File | null;
 		const nameOverride = formData.get('name') as string | null;

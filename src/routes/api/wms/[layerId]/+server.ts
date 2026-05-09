@@ -33,21 +33,33 @@ const permCache = new Map<string, PermEntry>();
 const PERM_TTL_MS = 60_000;
 const PERM_CACHE_MAX = 10_000;
 
-function getCachedPerm(userId: string, layerId: string): PermEntry | null {
-	const entry = permCache.get(`${userId}:${layerId}`);
+function permKey(collection: string, id: string, layerId: string) {
+	return `${collection}:${id}:${layerId}`;
+}
+function getCachedPerm(collection: string, id: string, layerId: string): PermEntry | null {
+	const key = permKey(collection, id, layerId);
+	const entry = permCache.get(key);
 	if (!entry) return null;
 	if (entry.expiresAt <= Date.now()) {
-		permCache.delete(`${userId}:${layerId}`);
+		permCache.delete(key);
 		return null;
 	}
 	return entry;
 }
-function setCachedPerm(userId: string, layerId: string, entry: Omit<PermEntry, 'expiresAt'>): void {
+function setCachedPerm(
+	collection: string,
+	id: string,
+	layerId: string,
+	entry: Omit<PermEntry, 'expiresAt'>
+): void {
 	if (permCache.size >= PERM_CACHE_MAX) {
 		const firstKey = permCache.keys().next().value;
 		if (firstKey) permCache.delete(firstKey);
 	}
-	permCache.set(`${userId}:${layerId}`, { ...entry, expiresAt: Date.now() + PERM_TTL_MS });
+	permCache.set(permKey(collection, id, layerId), {
+		...entry,
+		expiresAt: Date.now() + PERM_TTL_MS
+	});
 }
 
 // Only forward params that belong to a WMS GetMap request. Anything else
@@ -187,14 +199,16 @@ const CONTENT_TYPE_BY_EXT: Record<string, string> = {
 export const GET: RequestHandler = async ({ params, locals, request, url }) => {
 	const { layerId } = params;
 
-	if (!locals.pb.authStore.isValid || !locals.user) {
+	const identity = locals.user ?? locals.participant;
+	if (!identity) {
 		throw error(401, 'Authentication required');
 	}
+	const pbForAcl = locals.user ? locals.pbAdmin : locals.pbParticipant;
 
-	let perm = getCachedPerm(locals.user.id, layerId);
+	let perm = getCachedPerm(identity.collectionName, identity.id, layerId);
 	if (!perm) {
 		try {
-			const layer = await locals.pb.collection('map_layers').getOne<MapLayer>(layerId);
+			const layer = await pbForAcl.collection('map_layers').getOne<MapLayer>(layerId);
 			if (layer.source_type !== 'wms') {
 				throw error(400, 'Layer is not a WMS source');
 			}
@@ -207,7 +221,7 @@ export const GET: RequestHandler = async ({ params, locals, request, url }) => {
 				defaultVersion: cfg.version || '1.1.1',
 				defaultTransparent: cfg.transparent ?? true
 			};
-			setCachedPerm(locals.user.id, layerId, perm);
+			setCachedPerm(identity.collectionName, identity.id, layerId, perm);
 		} catch (err) {
 			if (err && typeof err === 'object' && 'status' in err) {
 				const pbError = err as { status: number };

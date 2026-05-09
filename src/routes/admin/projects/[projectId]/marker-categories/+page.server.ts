@@ -11,7 +11,7 @@ const markerCategorySchema = z.object({
 	description: z.string().optional()
 });
 
-export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
+export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) => {
 	const { projectId } = params;
 
 	try {
@@ -46,7 +46,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 };
 
 export const actions: Actions = {
-	create: async ({ request, params, locals: { pb } }) => {
+	create: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { projectId } = params;
 		const form = await superValidate(request, zod4(markerCategorySchema));
 
@@ -74,7 +74,7 @@ export const actions: Actions = {
 		}
 	},
 
-	update: async ({ request, params, locals: { pb } }) => {
+	update: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const formData = await request.formData();
 		const categoryId = formData.get('id') as string;
 
@@ -100,7 +100,7 @@ export const actions: Actions = {
 		}
 	},
 
-	updateField: async ({ request, params, locals: { pb } }) => {
+	updateField: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const formData = await request.formData();
 		const categoryId = formData.get('id') as string;
 		const field = formData.get('field') as string;
@@ -133,7 +133,7 @@ export const actions: Actions = {
 		}
 	},
 
-	delete: async ({ request, params, locals: { pb } }) => {
+	delete: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const formData = await request.formData();
 		const categoryId = formData.get('id') as string;
 
@@ -162,7 +162,7 @@ export const actions: Actions = {
 		}
 	},
 
-	updateIconConfig: async ({ request, params, locals: { pb } }) => {
+	updateIconConfig: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const formData = await request.formData();
 		const categoryId = formData.get('id') as string;
 		const iconConfigJson = formData.get('iconConfig') as string;
@@ -190,7 +190,7 @@ export const actions: Actions = {
 		}
 	},
 
-	updateCategoryRoles: async ({ request, params, locals: { pb } }) => {
+	updateCategoryRoles: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { projectId } = params;
 		const formData = await request.formData();
 		const categoryId = formData.get('categoryId') as string;
@@ -219,7 +219,7 @@ export const actions: Actions = {
 		}
 	},
 
-	updateRoles: async ({ request, params, locals: { pb } }) => {
+	updateRoles: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const formData = await request.formData();
 		const categoryId = formData.get('categoryId') as string;
 		const roleIdsJson = formData.get('roleIds') as string;
@@ -247,7 +247,7 @@ export const actions: Actions = {
 		}
 	},
 
-	createRole: async ({ request, params, locals: { pb } }) => {
+	createRole: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { projectId } = params;
 		const formData = await request.formData();
 		const name = formData.get('name') as string;

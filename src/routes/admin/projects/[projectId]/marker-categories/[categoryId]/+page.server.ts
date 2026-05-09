@@ -19,7 +19,7 @@ const fieldSchema = z.object({
 	default_value: z.string().optional().nullable()
 });
 
-export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
+export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) => {
 	const { projectId, categoryId } = params;
 
 	try {
@@ -64,7 +64,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 };
 
 export const actions: Actions = {
-	updateCategoryMeta: async ({ request, params, locals: { pb } }) => {
+	updateCategoryMeta: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { categoryId } = params;
 		const formData = await request.formData();
 		const field = formData.get('field') as string;
@@ -94,7 +94,7 @@ export const actions: Actions = {
 		}
 	},
 
-	updateIconConfig: async ({ request, params, locals: { pb } }) => {
+	updateIconConfig: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { categoryId } = params;
 		const formData = await request.formData();
 		const iconConfigJson = formData.get('iconConfig') as string;
@@ -117,7 +117,7 @@ export const actions: Actions = {
 		}
 	},
 
-	createField: async ({ request, params, locals: { pb } }) => {
+	createField: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { categoryId } = params;
 		const formData = await request.formData();
 
@@ -167,7 +167,7 @@ export const actions: Actions = {
 		}
 	},
 
-	updateField: async ({ request, params, locals: { pb } }) => {
+	updateField: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { categoryId } = params;
 		const formData = await request.formData();
 		const fieldId = formData.get('fieldId') as string;
@@ -259,7 +259,7 @@ export const actions: Actions = {
 		}
 	},
 
-	deleteField: async ({ request, params, locals: { pb } }) => {
+	deleteField: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { categoryId } = params;
 		const formData = await request.formData();
 		const fieldId = formData.get('fieldId') as string;
@@ -313,7 +313,7 @@ export const actions: Actions = {
 		}
 	},
 
-	updateMarkerField: async ({ request, params, locals: { pb } }) => {
+	updateMarkerField: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { categoryId } = params;
 		const formData = await request.formData();
 		const markerId = formData.get('marker_id') as string;
@@ -346,7 +346,7 @@ export const actions: Actions = {
 		}
 	},
 
-	updateMarkerProperty: async ({ request, params, locals: { pb } }) => {
+	updateMarkerProperty: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { categoryId } = params;
 		const formData = await request.formData();
 		const markerId = formData.get('marker_id') as string;
@@ -383,7 +383,7 @@ export const actions: Actions = {
 		}
 	},
 
-	createMarker: async ({ request, params, locals: { pb } }) => {
+	createMarker: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { projectId, categoryId } = params;
 		const formData = await request.formData();
 		const title = formData.get('title') as string;
@@ -422,7 +422,7 @@ export const actions: Actions = {
 		}
 	},
 
-	deleteMarker: async ({ request, params, locals: { pb } }) => {
+	deleteMarker: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { categoryId } = params;
 		const formData = await request.formData();
 		const markerId = formData.get('marker_id') as string;
@@ -441,7 +441,7 @@ export const actions: Actions = {
 		}
 	},
 
-	importCSV: async ({ request, params, locals: { pb } }) => {
+	importCSV: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { projectId, categoryId } = params;
 		const formData = await request.formData();
 		const rowsJson = formData.get('rows') as string;

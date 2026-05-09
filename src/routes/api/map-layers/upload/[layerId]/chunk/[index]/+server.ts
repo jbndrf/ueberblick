@@ -8,7 +8,7 @@ import {
 	writeSidecar
 } from '$lib/server/chunked-upload';
 
-export const PUT: RequestHandler = async ({ params, request, locals: { pb, user } }) => {
+export const PUT: RequestHandler = async ({ params, request, locals: { pbAdmin: pb, user } }) => {
 	if (!user) {
 		throw error(401, 'Authentication required');
 	}

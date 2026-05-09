@@ -15,9 +15,8 @@ import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async (event) => {
 	const { locals, url, cookies } = event;
-	// If already logged in as participant, redirect to map
-	if (locals.pb.authStore.isValid && locals.pb.authStore.record?.collectionName === 'participants') {
-		redirect(303, '/participant/map');
+	if (locals.participant) {
+		redirect(303, '/map');
 	}
 
 	// Check whether the consent gate is enabled and whether this visitor has
@@ -34,7 +33,7 @@ export const load: PageServerLoad = async (event) => {
 	let settingsRec: SettingsRec | null = null;
 
 	try {
-		const s = await locals.pb.collection('instance_settings').getFirstListItem('', {
+		const s = await locals.pbParticipant.collection('instance_settings').getFirstListItem('', {
 			fields:
 				'require_consent_before_login,consent_banner_title,consent_banner_body,consent_accept_label,consent_reject_label',
 			requestKey: null
@@ -54,14 +53,14 @@ export const load: PageServerLoad = async (event) => {
 		const gate = checkLoginRateLimit(ipKey);
 		if (gate.allowed) {
 			try {
-				const authData = await locals.pb.collection('participants').authWithPassword(urlToken, urlToken);
+				const authData = await locals.pbParticipant.collection('participants').authWithPassword(urlToken, urlToken);
 				const participant = authData.record;
 
 				if (!participant.is_active) {
-					locals.pb.authStore.clear();
+					locals.pbParticipant.authStore.clear();
 					recordLoginFailure(ipKey);
 				} else if (participant.expires_at && new Date(participant.expires_at) < new Date()) {
-					locals.pb.authStore.clear();
+					locals.pbParticipant.authStore.clear();
 					recordLoginFailure(ipKey);
 				} else {
 					const adminPb = await getAdminPb();
@@ -69,7 +68,7 @@ export const load: PageServerLoad = async (event) => {
 						last_active: new Date().toISOString()
 					});
 					recordLoginSuccess(ipKey);
-					redirect(303, '/participant/map');
+					redirect(303, '/map');
 				}
 			} catch (err: any) {
 				// Don't record a failure for SvelteKit's redirect control-flow throws.
@@ -89,7 +88,7 @@ export const load: PageServerLoad = async (event) => {
 	let footerPages: Array<{ slug: string; title: string; content: string }> = [];
 	if (consentEnabled) {
 		try {
-			const pages = await locals.pb.collection('instance_legal_pages').getFullList({
+			const pages = await locals.pbParticipant.collection('instance_legal_pages').getFullList({
 				filter: 'show_in_consent_footer = true',
 				sort: 'sort_order,created',
 				fields: 'slug,title,content',
@@ -144,7 +143,7 @@ export const actions: Actions = {
 		// Hard server-side gate: if consent is required and not yet given,
 		// refuse to process the login no matter what the client does.
 		try {
-			const s = await locals.pb.collection('instance_settings').getFirstListItem('', {
+			const s = await locals.pbParticipant.collection('instance_settings').getFirstListItem('', {
 				fields: 'require_consent_before_login',
 				requestKey: null
 			});
@@ -181,13 +180,13 @@ export const actions: Actions = {
 		try {
 			// Authenticate using PocketBase's native auth
 			// Token is both the identity (lookup field) and password
-			const authData = await locals.pb.collection('participants').authWithPassword(token, token);
+			const authData = await locals.pbParticipant.collection('participants').authWithPassword(token, token);
 
 			const participant = authData.record;
 
 			// Check if participant is active
 			if (!participant.is_active) {
-				locals.pb.authStore.clear();
+				locals.pbParticipant.authStore.clear();
 				recordLoginFailure(ipKey);
 				return fail(400, {
 					form,
@@ -197,7 +196,7 @@ export const actions: Actions = {
 
 			// Check if participant has expired
 			if (participant.expires_at && new Date(participant.expires_at) < new Date()) {
-				locals.pb.authStore.clear();
+				locals.pbParticipant.authStore.clear();
 				recordLoginFailure(ipKey);
 				return fail(400, {
 					form,
@@ -230,6 +229,6 @@ export const actions: Actions = {
 
 		recordLoginSuccess(ipKey);
 		// Redirect OUTSIDE try-catch so SvelteKit can process it
-		redirect(303, '/participant/map');
+		redirect(303, '/map');
 	}
 };

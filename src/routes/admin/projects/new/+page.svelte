@@ -63,7 +63,7 @@
 
 					<div class="flex gap-4">
 						<Button type="submit">{m.projectNewSubmit?.() ?? 'Create Project'}</Button>
-						<Button type="button" variant="outline" href="/projects">{m.commonCancel?.() ?? 'Cancel'}</Button>
+						<Button type="button" variant="outline" href="/admin/projects">{m.commonCancel?.() ?? 'Cancel'}</Button>
 					</div>
 				</div>
 			</form>

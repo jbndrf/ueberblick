@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { readSidecar, readStatus, writeStatus } from '$lib/server/chunked-upload';
 import { processProjectImport } from '$lib/server/project-import-processor';
 
-export const POST: RequestHandler = async ({ params, locals: { pb, user } }) => {
+export const POST: RequestHandler = async ({ params, locals: { pbAdmin: pb, user } }) => {
 	if (!user || user.collectionName !== 'users') {
 		throw error(401, 'Authentication required');
 	}

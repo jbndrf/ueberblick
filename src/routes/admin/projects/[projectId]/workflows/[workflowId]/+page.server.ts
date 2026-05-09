@@ -10,7 +10,7 @@ import {
 } from '$lib/admin/workflow-rows';
 import { duplicateWorkflow } from '$lib/server/schema-transfer';
 
-export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
+export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) => {
 	const { projectId, workflowId } = params;
 
 	try {
@@ -212,7 +212,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 };
 
 export const actions: Actions = {
-	updateFieldValue: async ({ request, params, locals: { pb } }) => {
+	updateFieldValue: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const formData = await request.formData();
 		const instanceId = formData.get('instance_id') as string;
 		const fieldKey = formData.get('field_key') as string;
@@ -260,7 +260,7 @@ export const actions: Actions = {
 		}
 	},
 
-	updateIconConfig: async ({ request, params, locals: { pb } }) => {
+	updateIconConfig: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { workflowId } = params;
 		const formData = await request.formData();
 		const iconConfigJson = formData.get('iconConfig') as string;
@@ -283,7 +283,7 @@ export const actions: Actions = {
 		}
 	},
 
-	updateStageIconConfig: async ({ request, params, locals: { pb } }) => {
+	updateStageIconConfig: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const formData = await request.formData();
 		const stageId = formData.get('stageId') as string;
 		const iconConfigJson = formData.get('iconConfig') as string;
@@ -317,7 +317,7 @@ export const actions: Actions = {
 		}
 	},
 
-	updateFilterValueIcons: async ({ request, params, locals: { pb } }) => {
+	updateFilterValueIcons: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { workflowId } = params;
 		const formData = await request.formData();
 		const iconsJson = formData.get('filterValueIcons') as string;
@@ -340,7 +340,7 @@ export const actions: Actions = {
 		}
 	},
 
-	importCSV: async ({ request, params, locals: { pb } }) => {
+	importCSV: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { workflowId } = params;
 		const formData = await request.formData();
 		const rowsJson = formData.get('rows') as string;
@@ -468,7 +468,7 @@ export const actions: Actions = {
 		}
 	},
 
-	duplicate: async ({ params, locals: { pb } }) => {
+	duplicate: async ({ params, locals: { pbAdmin: pb } }) => {
 		const { projectId, workflowId } = params;
 		try {
 			const newId = await duplicateWorkflow(pb, workflowId, projectId);
@@ -479,7 +479,7 @@ export const actions: Actions = {
 		}
 	},
 
-	importFromProject: async ({ request, params, locals: { pb } }) => {
+	importFromProject: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { projectId } = params;
 		const formData = await request.formData();
 		const sourceWorkflowId = formData.get('sourceWorkflowId') as string;
@@ -497,7 +497,7 @@ export const actions: Actions = {
 		}
 	},
 
-	deleteWorkflow: async ({ params, locals: { pb } }) => {
+	deleteWorkflow: async ({ params, locals: { pbAdmin: pb } }) => {
 		const { projectId, workflowId } = params;
 		try {
 			const record = await pb.collection('workflows').getOne(workflowId);
@@ -512,7 +512,7 @@ export const actions: Actions = {
 		throw redirect(303, `/projects/${projectId}/settings`);
 	},
 
-	updateWorkflowMeta: async ({ request, params, locals: { pb } }) => {
+	updateWorkflowMeta: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { workflowId } = params;
 		const formData = await request.formData();
 		const field = formData.get('field') as string;

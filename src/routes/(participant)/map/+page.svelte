@@ -1796,14 +1796,14 @@
 			disconnectRealtime();
 			await resetAllParticipantState();
 			resetPocketBase();
-			await fetch('/participant/logout', {
+			await fetch('/logout', {
 				method: 'POST',
 				redirect: 'manual'
 			});
 		} catch (error) {
 			console.error('Logout error:', error);
 		}
-		window.location.href = '/participant/login';
+		window.location.href = '/login';
 	}
 </script>
 

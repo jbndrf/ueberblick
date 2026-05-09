@@ -9,7 +9,7 @@ export class LoginPage {
 	private submitButton = 'button[type="submit"]';
 
 	async goto() {
-		await this.page.goto('/login');
+		await this.page.goto('/admin/login');
 		await this.page.waitForSelector(this.emailInput);
 	}
 

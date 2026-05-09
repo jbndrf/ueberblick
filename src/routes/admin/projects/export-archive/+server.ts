@@ -2,7 +2,7 @@ import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { exportProjectArchive } from '$lib/server/project-archive';
 
-export const POST: RequestHandler = async ({ request, locals: { pb, user } }) => {
+export const POST: RequestHandler = async ({ request, locals: { pbAdmin: pb, user } }) => {
 	if (!user || user.collectionName !== 'users') throw error(401, 'Unauthorized');
 
 	const { projectId, includeParticipants, includeParticipantTokens, csvOnly } =

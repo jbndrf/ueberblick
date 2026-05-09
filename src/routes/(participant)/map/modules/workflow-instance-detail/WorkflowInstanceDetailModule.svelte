@@ -26,6 +26,10 @@
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import { AlertTriangle } from '@lucide/svelte';
 	import type { Map as LeafletMap } from 'leaflet';
+	import type { Feature, LineString, MultiLineString, Polygon, MultiPolygon } from 'geojson';
+	import GeometryDrawTool from '$lib/components/map/geometry-draw-tool.svelte';
+	import { deriveCentroid, deriveBBox } from '$lib/utils/instance-geometry';
+	import type { InstanceGeometry } from '$lib/participant-state/types';
 
 	// ==========================================================================
 	// Props
@@ -68,6 +72,7 @@
 	let activeProtocolTool = $state<ToolProtocol | null>(null);
 	let isLocationPickerActive = $state(false);
 	let activeLocationEditTool = $state<ToolEdit | null>(null);
+	let geometryDrawMode = $state<'line' | 'polygon' | null>(null);
 
 	// Connection confirmation dialog state
 	let pendingConfirmConnection = $state<WorkflowConnection | null>(null);
@@ -94,6 +99,7 @@
 		activeProtocolTool = null;
 		isLocationPickerActive = false;
 		activeLocationEditTool = null;
+		geometryDrawMode = null;
 		pendingConfirmConnection = null;
 		showConflictTool = false;
 		newState.load();
@@ -146,7 +152,7 @@
 	// Sync internal location picker state with bindable prop
 	// Use untrack on the write to avoid a bidirectional binding feedback loop
 	$effect(() => {
-		const active = isLocationPickerActive;
+		const active = isLocationPickerActive || geometryDrawMode !== null;
 		untrack(() => { isEditingLocation = active; });
 	});
 
@@ -457,11 +463,20 @@
 
 	function handleEditToolClick(editTool: ToolEdit) {
 		if (editTool.edit_mode === 'location') {
-			// Location edit mode - show map picker
+			// Pick the editor based on the existing instance geometry: points
+			// keep the single-marker picker; lines/polygons re-enter the same
+			// draw tool used for instance creation so the user can fully replace
+			// the shape (vertex-edit is out of scope).
 			activeLocationEditTool = editTool;
-			isLocationPickerActive = true;
-			// Close sheet so user has full map view for location editing
 			isOpen = false;
+			const geomType = (detailState?.instance?.geometry as InstanceGeometry | null | undefined)?.type;
+			if (geomType === 'LineString' || geomType === 'MultiLineString') {
+				geometryDrawMode = 'line';
+			} else if (geomType === 'Polygon' || geomType === 'MultiPolygon') {
+				geometryDrawMode = 'polygon';
+			} else {
+				isLocationPickerActive = true;
+			}
 		} else {
 			// Form fields edit mode
 			activeEditTool = editTool;
@@ -1058,8 +1073,6 @@
 
 		try {
 			// 1. Create tool_usage record with location change (audit trail).
-			//    Location edit only supports point-type instances; line/polygon
-			//    editing will require its own tool (scope for later).
 			const locationStageId = detailState.instance?.current_stage_id as string | undefined;
 			await gateway.collection('workflow_instance_tool_usage').create({
 				instance_id: detailState.instanceId,
@@ -1104,6 +1117,54 @@
 
 	function handleLocationCancel() {
 		isLocationPickerActive = false;
+		activeLocationEditTool = null;
+	}
+
+	async function handleGeometryEditConfirm(
+		feature: Feature<LineString | MultiLineString | Polygon | MultiPolygon>
+	) {
+		if (!detailState || !gateway) return;
+
+		const newGeometry = feature.geometry as InstanceGeometry;
+		const beforeGeometry = detailState.instance?.geometry as InstanceGeometry | null | undefined;
+		const centroid = deriveCentroid(newGeometry);
+		const bbox = deriveBBox(newGeometry);
+
+		try {
+			const locationStageId = detailState.instance?.current_stage_id as string | undefined;
+			await gateway.collection('workflow_instance_tool_usage').create({
+				instance_id: detailState.instanceId,
+				stage_id: locationStageId,
+				executed_by: gateway.participantId,
+				executed_at: new Date().toISOString(),
+				metadata: {
+					action: 'location_edit',
+					stage_name: locationStageId ? (getStageName(locationStageId) || locationStageId) : null,
+					before_geometry_type: beforeGeometry?.type ?? null,
+					after_geometry_type: newGeometry.type,
+					before_centroid: detailState.instance?.centroid
+						? { lat: (detailState.instance.centroid as any).lat, lon: (detailState.instance.centroid as any).lon }
+						: null,
+					after_centroid: centroid
+				}
+			});
+
+			await gateway.collection('workflow_instances').update(detailState.instanceId, {
+				geometry: newGeometry,
+				centroid,
+				bbox
+			});
+
+			geometryDrawMode = null;
+			activeLocationEditTool = null;
+			await detailState.refresh();
+		} catch (error) {
+			console.error('Failed to update geometry:', error);
+		}
+	}
+
+	function handleGeometryEditCancel() {
+		geometryDrawMode = null;
 		activeLocationEditTool = null;
 	}
 
@@ -1186,6 +1247,7 @@
 				<FormFillTool
 					workflowId={activeToolFlow.connection.workflow_id}
 					connectionId={activeToolFlow.connection.id}
+					existingFieldValues={detailState?.fieldValues}
 					onSubmit={handleToolFormSubmit}
 					onCancel={handleToolFlowCancel}
 				/>
@@ -1545,10 +1607,16 @@
 </AlertDialog.Root>
 
 <!-- Location Edit Tool (rendered as map overlay).
-     Anchor is the centroid so point, line, and polygon instances all have a
-     usable starting coordinate for the picker; the edit still writes a point
-     geometry for now, which is fine for point workflows and intentionally
-     lossy for shapes (a dedicated shape-edit tool is out of current scope). -->
+     Point instances use the single-marker picker. Line/polygon instances
+     redraw from scratch with the same draw tool used during creation. -->
+{#if geometryDrawMode && map && detailState}
+	<GeometryDrawTool
+		{map}
+		mode={geometryDrawMode}
+		onConfirm={handleGeometryEditConfirm}
+		onCancel={handleGeometryEditCancel}
+	/>
+{/if}
 {#if isLocationPickerActive && map && detailState}
 	{@const centroid = detailState.instance?.centroid as { lat: number; lon: number } | null}
 	{@const buttonLabel = (activeLocationEditTool?.visual_config?.button_label as string) || 'Update Location'}

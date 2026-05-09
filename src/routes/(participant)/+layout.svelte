@@ -89,7 +89,7 @@
 	let { data, children } = $props();
 
 	// Hide layout chrome on login page
-	const isLoginPage = $derived($page.url.pathname === '/participant/login');
+	const isLoginPage = $derived($page.url.pathname === '/login');
 
 	// Gateway state
 	let gateway: ParticipantGateway | null = $state(null);

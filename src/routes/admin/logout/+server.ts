@@ -3,8 +3,8 @@ import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ locals }) => {
 	// Clear the PocketBase auth store
-	locals.pb.authStore.clear();
+	locals.pbAdmin.authStore.clear();
 
 	// Redirect to login page
-	redirect(303, '/login');
+	redirect(303, '/admin/login');
 };

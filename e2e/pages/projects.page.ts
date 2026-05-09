@@ -4,14 +4,14 @@ export class ProjectsPage {
 	constructor(private page: Page) {}
 
 	// Selectors
-	private createProjectButton = 'a[href="/projects/new"]';
+	private createProjectButton = 'a[href="/admin/projects/new"]';
 	private projectNameInput = '#name';
 	private projectDescriptionInput = '#description';
 	private projectFormSubmit = 'button[type="submit"]:has-text("Create Project")';
 	private projectCards = '[class*="Card"]';
 
 	async goto() {
-		await this.page.goto('/projects');
+		await this.page.goto('/admin/projects');
 		await this.page.waitForSelector('h1:has-text("Projects")');
 	}
 
@@ -41,7 +41,7 @@ export class ProjectsPage {
 	}
 
 	async navigateToProject(projectId: string) {
-		await this.page.goto(`/projects/${projectId}/participants`);
+		await this.page.goto(`/admin/projects/${projectId}/participants`);
 		await this.page.waitForSelector('h1');
 	}
 

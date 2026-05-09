@@ -6,7 +6,7 @@ import type { LayoutServerLoad } from './$types';
  * sidebar show navigable links before the page's JS bundle hydrates -- which
  * matters in dev mode where hydration of large pages takes seconds.
  */
-export const load: LayoutServerLoad = async ({ params, depends, locals: { pb } }) => {
+export const load: LayoutServerLoad = async ({ params, depends, locals: { pbAdmin: pb } }) => {
 	const { projectId } = params;
 	depends('app:sidebar');
 

@@ -300,7 +300,7 @@ const roleSchema = z.object({
 	description: z.string().optional()
 });
 
-export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
+export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) => {
 	const { projectId } = params;
 
 	try {
@@ -335,7 +335,7 @@ export const load: PageServerLoad = async ({ params, locals: { pb } }) => {
 };
 
 export const actions: Actions = {
-	create: async ({ request, params, locals: { pb } }) => {
+	create: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { projectId } = params;
 		const form = await superValidate(request, zod4(roleSchema));
 
@@ -360,7 +360,7 @@ export const actions: Actions = {
 		}
 	},
 
-	update: async ({ request, params, locals: { pb } }) => {
+	update: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const formData = await request.formData();
 		const roleId = formData.get('id') as string;
 
@@ -386,7 +386,7 @@ export const actions: Actions = {
 		}
 	},
 
-	updateField: async ({ request, params, locals: { pb } }) => {
+	updateField: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		return await createUpdateFieldAction(pb, params.projectId, {
 			tableName: 'roles',
 			allowedFields: ['name', 'description'],
@@ -399,14 +399,14 @@ export const actions: Actions = {
 		})(request);
 	},
 
-	delete: async ({ request, params, locals: { pb } }) => {
+	delete: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		return await createDeleteAction(pb, params.projectId, {
 			tableName: 'roles',
 			beforeDelete: cleanupRoleReferences
 		})(request);
 	},
 
-	updateParticipants: async ({ request, params, locals: { pb } }) => {
+	updateParticipants: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const formData = await request.formData();
 		const roleId = formData.get('roleId') as string;
 		const participantIdsJson = formData.get('participantIds') as string;
@@ -458,7 +458,7 @@ export const actions: Actions = {
 		}
 	},
 
-	toggleRole: async ({ request, locals: { pb } }) => {
+	toggleRole: async ({ request, locals: { pbAdmin: pb } }) => {
 		const formData = await request.formData();
 		const collection = formData.get('collection') as string;
 		const recordId = formData.get('recordId') as string;
@@ -506,7 +506,7 @@ export const actions: Actions = {
 		}
 	},
 
-	createParticipant: async ({ request, params, locals: { pb } }) => {
+	createParticipant: async ({ request, params, locals: { pbAdmin: pb } }) => {
 		const { projectId } = params;
 		const formData = await request.formData();
 		const name = formData.get('name') as string;

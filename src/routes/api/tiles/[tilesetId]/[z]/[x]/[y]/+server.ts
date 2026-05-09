@@ -39,30 +39,45 @@ const permCache = new Map<string, PermEntry>();
 const PERM_TTL_MS = 60_000;
 const PERM_CACHE_MAX = 10_000;
 
-function getCachedPerm(userId: string, layerId: string): PermEntry | null {
-	const entry = permCache.get(`${userId}:${layerId}`);
+function permKey(collection: string, id: string, layerId: string) {
+	return `${collection}:${id}:${layerId}`;
+}
+
+function getCachedPerm(collection: string, id: string, layerId: string): PermEntry | null {
+	const key = permKey(collection, id, layerId);
+	const entry = permCache.get(key);
 	if (!entry) return null;
 	if (entry.expiresAt <= Date.now()) {
-		permCache.delete(`${userId}:${layerId}`);
+		permCache.delete(key);
 		return null;
 	}
 	return entry;
 }
 
-function setCachedPerm(userId: string, layerId: string, entry: Omit<PermEntry, 'expiresAt'>): void {
+function setCachedPerm(
+	collection: string,
+	id: string,
+	layerId: string,
+	entry: Omit<PermEntry, 'expiresAt'>
+): void {
 	if (permCache.size >= PERM_CACHE_MAX) {
 		const firstKey = permCache.keys().next().value;
 		if (firstKey) permCache.delete(firstKey);
 	}
-	permCache.set(`${userId}:${layerId}`, { ...entry, expiresAt: Date.now() + PERM_TTL_MS });
+	permCache.set(permKey(collection, id, layerId), {
+		...entry,
+		expiresAt: Date.now() + PERM_TTL_MS
+	});
 }
 
 export const GET: RequestHandler = async ({ params, locals, request, url }) => {
 	const { tilesetId, z, x, y } = params;
 
-	if (!locals.pb.authStore.isValid || !locals.user) {
+	const identity = locals.user ?? locals.participant;
+	if (!identity) {
 		throw error(401, 'Authentication required');
 	}
+	const pbForAcl = locals.user ? locals.pbAdmin : locals.pbParticipant;
 
 	const zNum = parseInt(z, 10);
 	const xNum = parseInt(x, 10);
@@ -78,7 +93,7 @@ export const GET: RequestHandler = async ({ params, locals, request, url }) => {
 
 	let perm: PermEntry | null;
 	try {
-		perm = getCachedPerm(locals.user.id, tilesetId);
+		perm = getCachedPerm(identity.collectionName, identity.id, tilesetId);
 		if (!perm) {
 			// Built-in fallback layers don't live in PocketBase. They exist so
 			// the participant map always has *something* to show even when no
@@ -93,9 +108,9 @@ export const GET: RequestHandler = async ({ params, locals, request, url }) => {
 					url: builtIn.url,
 					subdomains: builtIn.subdomains
 				};
-				setCachedPerm(locals.user.id, tilesetId, perm);
+				setCachedPerm(identity.collectionName, identity.id, tilesetId, perm);
 			} else {
-			const layer = await locals.pb.collection('map_layers').getOne<MapLayer>(tilesetId);
+			const layer = await pbForAcl.collection('map_layers').getOne<MapLayer>(tilesetId);
 			const cfg = (layer.config as (MapLayer['config'] & { subdomains?: string[] }) | null) ?? null;
 			perm = {
 				expiresAt: 0,
@@ -105,7 +120,7 @@ export const GET: RequestHandler = async ({ params, locals, request, url }) => {
 				url: layer.url,
 				subdomains: cfg?.subdomains
 			};
-			setCachedPerm(locals.user.id, tilesetId, perm);
+			setCachedPerm(identity.collectionName, identity.id, tilesetId, perm);
 			}
 		}
 	} catch (err) {

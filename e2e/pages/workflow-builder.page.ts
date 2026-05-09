@@ -16,7 +16,7 @@ export class WorkflowBuilderPage {
 	private endDragItem = '.drag-item-end';
 
 	async goto(projectId: string, workflowId: string) {
-		await this.page.goto(`/projects/${projectId}/workflows/${workflowId}/builder`);
+		await this.page.goto(`/admin/projects/${projectId}/workflows/${workflowId}/builder`);
 		await this.page.waitForSelector(this.canvas, { timeout: 15000 });
 	}
 

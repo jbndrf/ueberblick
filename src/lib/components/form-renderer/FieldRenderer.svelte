@@ -84,9 +84,25 @@
 		if (field.field_type !== 'smart_dropdown' || !smartDropdownOptions) return [];
 		const sourceFieldId = smartDropdownOptions.source_field;
 		const sourceValue = context.values[sourceFieldId];
-		if (!sourceValue) return [];
-		const mapping = smartDropdownOptions.mappings?.find((m) => m.when === sourceValue);
-		return mapping?.options || [];
+		const sourceKeys = Array.isArray(sourceValue)
+			? (sourceValue as string[])
+			: sourceValue
+				? [sourceValue as string]
+				: [];
+		if (sourceKeys.length === 0) return [];
+		const mappings = smartDropdownOptions.mappings ?? [];
+		const seen = new Set<string>();
+		const merged: typeof mappings[number]['options'] = [];
+		for (const key of sourceKeys) {
+			const mapping = mappings.find((m) => m.when === key);
+			if (!mapping) continue;
+			for (const opt of mapping.options) {
+				if (seen.has(opt.label)) continue;
+				seen.add(opt.label);
+				merged.push(opt);
+			}
+		}
+		return merged;
 	});
 
 	// ==========================================================================
@@ -367,7 +383,9 @@
 
 	function handleDropdownChange(ids: string[]) {
 		const isMultiple =
-			field.field_type === 'multiple_choice' || customTableOptions?.allow_multiple;
+			field.field_type === 'multiple_choice' ||
+			customTableOptions?.allow_multiple ||
+			(field.field_type === 'smart_dropdown' && smartDropdownOptions?.allow_multiple);
 		const newValue = isMultiple ? ids : ids[0] || null;
 
 		const currentValue = value;
@@ -639,7 +657,8 @@
 				onSelectedIdsChange={handleDropdownChange}
 			/>
 		{:else if field.field_type === 'smart_dropdown'}
-			{@const hasSourceValue = smartDropdownOptions?.source_field && context.values[smartDropdownOptions.source_field]}
+			{@const sourceRaw = smartDropdownOptions?.source_field ? context.values[smartDropdownOptions.source_field] : null}
+			{@const hasSourceValue = Array.isArray(sourceRaw) ? sourceRaw.length > 0 : !!sourceRaw}
 			{#if !hasSourceValue}
 				<div class="rounded-md border border-dashed border-muted-foreground/30 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
 					Select a value in the dependent field first
@@ -652,7 +671,7 @@
 					getOptionLabel={(o) => o.label}
 					getOptionDescription={(o) => o.description}
 					placeholder={field.placeholder || 'Select...'}
-					singleSelect={true}
+					singleSelect={!smartDropdownOptions?.allow_multiple}
 					{disabled}
 					onSelectedIdsChange={handleDropdownChange}
 				/>

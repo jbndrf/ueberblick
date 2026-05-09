@@ -388,7 +388,7 @@
 								<div class="border rounded-lg overflow-hidden">
 									<div class="flex items-center gap-2 px-3 py-2 bg-muted/30">
 										<a
-											href="/projects/{projectId}/workflows/{wf.id}"
+											href="/admin/projects/{projectId}/workflows/{wf.id}"
 											class="text-sm font-medium hover:underline flex items-center gap-1 flex-1 min-w-0 truncate"
 										>
 											{wf.name}
@@ -652,7 +652,7 @@
 	{@const canRead = hasAccess(selectedPermRoleId, entity.visibleToRoles)}
 	<div class="flex items-center gap-2 px-3 py-2">
 		<a
-			href="/projects/{projectId}/{routeSegment}/{entity.id}"
+			href="/admin/projects/{projectId}/{routeSegment}/{entity.id}"
 			class="text-sm hover:underline flex items-center gap-1 flex-1 min-w-0 truncate"
 		>
 			{entity.name}

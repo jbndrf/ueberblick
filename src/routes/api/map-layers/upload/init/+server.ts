@@ -18,7 +18,7 @@ interface InitBody {
 	total_chunks: number;
 }
 
-export const POST: RequestHandler = async ({ request, locals: { pb, user } }) => {
+export const POST: RequestHandler = async ({ request, locals: { pbAdmin: pb, user } }) => {
 	if (!user) {
 		throw error(401, 'Authentication required');
 	}

@@ -1,84 +1,93 @@
 /**
- * Client-side PocketBase client
- * Provides authentication and database operations for the browser
+ * Client-side PocketBase clients.
+ *
+ * Two independent sessions live in the browser at once: an admin session
+ * (cookie pb_auth_admin) and a participant session (cookie pb_auth_participant).
+ * They never overwrite each other, so a single browser can be signed in to
+ * both surfaces simultaneously.
  */
 
 import PocketBase from 'pocketbase';
 import { POCKETBASE_URL } from '$lib/config/pocketbase';
 import type { RecordModel } from 'pocketbase';
 
-let pocketbaseClient: PocketBase | null = null;
+const ADMIN_COOKIE = 'pb_auth_admin';
+const PARTICIPANT_COOKIE = 'pb_auth_participant';
 
-export function getPocketBase(): PocketBase {
-	if (!pocketbaseClient) {
-		pocketbaseClient = new PocketBase(POCKETBASE_URL);
+let adminClient: PocketBase | null = null;
+let participantClient: PocketBase | null = null;
 
-		// Load auth from cookie if available (browser only)
-		// Note: This may not work if cookies are HttpOnly
-		// For authenticated operations, use server-side actions instead
-		if (typeof document !== 'undefined') {
-			pocketbaseClient.authStore.loadFromCookie(document.cookie);
-		}
+function readCookie(name: string): string | null {
+	if (typeof document === 'undefined') return null;
+	for (const part of document.cookie.split(';')) {
+		const trimmed = part.trim();
+		const eq = trimmed.indexOf('=');
+		if (eq < 0) continue;
+		if (trimmed.slice(0, eq) === name) return trimmed.slice(eq + 1);
 	}
-	return pocketbaseClient;
+	return null;
+}
+
+function makeClient(cookieName: string): PocketBase {
+	const pb = new PocketBase(POCKETBASE_URL);
+	const v = readCookie(cookieName);
+	if (v) pb.authStore.loadFromCookie(`pb_auth=${v}`);
+	return pb;
+}
+
+export function getAdminPocketBase(): PocketBase {
+	if (!adminClient) adminClient = makeClient(ADMIN_COOKIE);
+	return adminClient;
+}
+
+export function getParticipantPocketBase(): PocketBase {
+	if (!participantClient) participantClient = makeClient(PARTICIPANT_COOKIE);
+	return participantClient;
 }
 
 /**
- * Sign in with email and password
+ * Surface-aware client. Picks based on URL: /admin/* → admin, else → participant.
+ * Prefer the explicit getters in code that knows which surface it serves.
  */
+export function getPocketBase(): PocketBase {
+	if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
+		return getAdminPocketBase();
+	}
+	return getParticipantPocketBase();
+}
+
 export async function signIn(email: string, password: string) {
-	const pb = getPocketBase();
+	const pb = getAdminPocketBase();
 	const authData = await pb.collection('users').authWithPassword(email, password);
 	return { user: authData.record };
 }
 
-/**
- * Sign out current user
- */
 export function signOut() {
-	const pb = getPocketBase();
-	pb.authStore.clear();
+	getAdminPocketBase().authStore.clear();
+	getParticipantPocketBase().authStore.clear();
 }
 
 /**
- * Reset the PocketBase client singleton.
- * Call on logout so the next getPocketBase() creates a fresh instance
- * that loads current cookies instead of reusing stale auth state.
+ * Drop cached singletons so the next getter call rebuilds from current cookies.
+ * Useful after a logout/login round-trip.
  */
 export function resetPocketBase(): void {
-	if (pocketbaseClient) {
-		pocketbaseClient.authStore.clear();
-		pocketbaseClient = null;
-	}
+	adminClient?.authStore.clear();
+	participantClient?.authStore.clear();
+	adminClient = null;
+	participantClient = null;
 }
 
-/**
- * Get current user
- */
 export function getCurrentUser(): RecordModel | null {
-	const pb = getPocketBase();
-	return pb.authStore.model;
+	return getPocketBase().authStore.model;
 }
 
-/**
- * Check if user is authenticated
- */
 export function isAuthenticated(): boolean {
-	const pb = getPocketBase();
-	return pb.authStore.isValid;
+	return getPocketBase().authStore.isValid;
 }
 
-/**
- * Subscribe to auth state changes
- */
 export function onAuthStateChange(callback: (user: RecordModel | null) => void) {
 	const pb = getPocketBase();
-
-	// Call immediately with current state
 	callback(pb.authStore.model);
-
-	// Subscribe to changes
-	return pb.authStore.onChange((token, model) => {
-		callback(model);
-	});
+	return pb.authStore.onChange((_token, model) => callback(model));
 }

@@ -13,9 +13,7 @@ import type { Actions, PageServerLoad } from './$types';
 import * as m from '$lib/paraglide/messages';
 
 export const load: PageServerLoad = async ({ locals }) => {
-	// If already logged in as admin user, redirect to admin dashboard
-	// Only redirect for 'users' collection, not 'participants'
-	if (locals.user && locals.pb.authStore.record?.collectionName === 'users') {
+	if (locals.user) {
 		redirect(303, '/admin');
 	}
 
@@ -52,7 +50,7 @@ export const actions: Actions = {
 
 		try {
 			console.log('[LOGIN] Attempting PocketBase auth for:', email);
-			await locals.pb.collection('users').authWithPassword(email, password);
+			await locals.pbAdmin.collection('users').authWithPassword(email, password);
 			console.log('[LOGIN] Auth successful, user:', email);
 		} catch (error) {
 			console.log('[LOGIN] Auth failed:', error);

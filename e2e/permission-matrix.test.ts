@@ -44,10 +44,10 @@ const LOCATIONS = {
 // =============================================================================
 
 async function loginAsParticipant(page: Page, token: string) {
-	await page.goto('/participant/login');
+	await page.goto('/login');
 	await page.fill('[data-testid="token-input"]', token);
 	await page.click('[data-testid="login-button"]');
-	await page.waitForURL('/participant/map', { timeout: 10000 });
+	await page.waitForURL('/map', { timeout: 10000 });
 	// Wait for map to fully load (loading overlay to disappear)
 	await page.waitForSelector('text=Loading map...', { state: 'detached', timeout: 15000 });
 	// Give markers time to render

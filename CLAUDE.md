@@ -6,8 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Überblick is an open-source platform for managing geo-referenced data combined with collaborative process management. It consists of two surfaces backed by the same SvelteKit app:
 
-- **SECTOR** (`src/routes/(admin)/`) — admin UI for projects, workflows, roles, maps, custom tables, automations.
-- **Participant app** (`src/routes/participant/`) — mobile-first, offline-capable PWA. The participant UI is *generated* from the project configuration (workflow stages, transitions, role permissions). Do not build per-feature participant screens; extend the config-driven engine instead.
+- **SECTOR** (`src/routes/admin/`, served at `/admin/...`) — admin UI for projects, workflows, roles, maps, custom tables, automations.
+- **Participant app** (`src/routes/(participant)/`, served at root: `/`, `/map`, `/login`) — mobile-first, offline-capable PWA. The participant UI is *generated* from the project configuration (workflow stages, transitions, role permissions). Do not build per-feature participant screens; extend the config-driven engine instead.
+
+The two surfaces have **independent sessions**: admin and participant use separate auth cookies (`pb_auth_admin`, `pb_auth_participant`), so a single browser can be logged in to both at once. In server code use `event.locals.pbAdmin` / `event.locals.user` for admin access and `event.locals.pbParticipant` / `event.locals.participant` for participant access — never conflate them.
 
 Backend is PocketBase (Go) with SpatiaLite for geospatial queries. Participants authenticate via QR-code (no username/password); admins use the `users` collection.
 
@@ -40,8 +42,8 @@ Run a single Playwright test: `npx playwright test e2e/foo.spec.ts -g "name"`.
 SvelteKit 2 + Svelte 5 (runes: `$state`, `$derived`, `$effect`, `$props`, `$bindable`), Tailwind 4, bits-ui / shadcn-svelte, Leaflet (+ markercluster, supercluster), `@xyflow/svelte` for the workflow canvas, sveltekit-superforms + Zod for forms, Paraglide (`messages/{de,en}.json`) for i18n, Sentry for error tracking.
 
 ### Route groups
-- `src/routes/(admin)/` — SECTOR. Each project has `projects/[projectId]/...` sub-routes (settings, workflows, roles, participants, maps, custom tables).
-- `src/routes/participant/` — participant PWA (map, forms, tools, offline pack management).
+- `src/routes/admin/` — SECTOR, served at `/admin/...`. Each project has `projects/[projectId]/...` sub-routes (settings, workflows, roles, participants, maps, custom tables).
+- `src/routes/(participant)/` — participant PWA at root (`/`, `/map`, `/login`, `/logout`). Map, forms, tools, offline pack management.
 - `src/routes/api/` — internal endpoints (tile serving, sync, etc.).
 - `src/routes/legal/` — public legal pages.
 

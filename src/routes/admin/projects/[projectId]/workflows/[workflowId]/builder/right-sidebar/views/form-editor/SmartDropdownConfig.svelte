@@ -36,6 +36,7 @@
 	// Local state
 	let sourceFieldId = $state<string>('');
 	let mappings = $state<SmartDropdownMapping[]>([]);
+	let allowMultiple = $state(false);
 	let pickerOpen = $state(false);
 	let modalOpen = $state(false);
 
@@ -63,20 +64,32 @@
 
 		for (const group of ancestorFields) {
 			for (const field of group.fields) {
+				let options: FieldOption[] | null = null;
+
 				if (field.field_type === 'dropdown' || field.field_type === 'multiple_choice') {
 					const rawOptions = field.field_options?.options;
 					if (rawOptions && Array.isArray(rawOptions) && rawOptions.length > 0) {
-						const options: FieldOption[] = rawOptions.map((opt: string | FieldOption) => {
+						options = rawOptions.map((opt: string | FieldOption) => {
 							if (typeof opt === 'string') return { label: opt };
 							return opt;
 						});
-						result.push({
-							field,
-							stage: group.stage,
-							form: group.form,
-							options
-						});
 					}
+				} else if (field.field_type === 'smart_dropdown') {
+					const cfg = field.field_options as SmartDropdownFieldOptions | undefined;
+					const seen = new Set<string>();
+					const merged: FieldOption[] = [];
+					for (const m of cfg?.mappings ?? []) {
+						for (const opt of m.options ?? []) {
+							if (seen.has(opt.label)) continue;
+							seen.add(opt.label);
+							merged.push(opt);
+						}
+					}
+					if (merged.length > 0) options = merged;
+				}
+
+				if (options) {
+					result.push({ field, stage: group.stage, form: group.form, options });
 				}
 			}
 		}
@@ -121,6 +134,7 @@
 			sourceFieldId = config.source_field;
 			mappings = config.mappings || [];
 		}
+		allowMultiple = !!config?.allow_multiple;
 
 		initialized = true;
 	});
@@ -153,8 +167,14 @@
 	function emitUpdate() {
 		onUpdate?.({
 			source_field: sourceFieldId,
-			mappings: mappings.filter((m) => m.options.length > 0)
+			mappings: mappings.filter((m) => m.options.length > 0),
+			allow_multiple: allowMultiple
 		});
+	}
+
+	function handleAllowMultipleChange(event: Event) {
+		allowMultiple = (event.target as HTMLInputElement).checked;
+		emitUpdate();
 	}
 </script>
 
@@ -163,12 +183,12 @@
 	<div class="config-section">
 		<Label>{m.formEditorSmartDropdownConfigSourceFieldLabel?.() ?? 'Source Field'}</Label>
 		<p class="config-hint">
-			{m.formEditorSmartDropdownConfigSourceFieldHint?.() ?? 'Select a dropdown or multiple choice field. Options will change based on its value.'}
+			{m.formEditorSmartDropdownConfigSourceFieldHint?.() ?? 'Pick a dropdown, multiple choice, or smart dropdown field. Options will change based on its value.'}
 		</p>
 
 		{#if eligibleFields.length === 0}
 			<p class="no-fields-message">
-				{m.formEditorSmartDropdownConfigNoFields?.() ?? 'No dropdown or multiple choice fields with options found in earlier stages.'}
+				{m.formEditorSmartDropdownConfigNoFields?.() ?? 'No eligible source fields found in earlier stages.'}
 			</p>
 		{:else if selectedSource}
 			<div class="selected-source">
@@ -187,6 +207,17 @@
 				{m.formEditorSmartDropdownConfigBrowseFields?.() ?? 'Browse available fields'}
 			</Button>
 		{/if}
+	</div>
+
+	<!-- Allow multiple selection -->
+	<div class="config-section">
+		<label class="multi-toggle">
+			<input type="checkbox" checked={allowMultiple} onchange={handleAllowMultipleChange} />
+			<span>{m.formEditorSmartDropdownConfigAllowMultiple?.() ?? 'Allow multiple selections'}</span>
+		</label>
+		<p class="config-hint">
+			{m.formEditorSmartDropdownConfigAllowMultipleHint?.() ?? 'Let participants pick more than one option.'}
+		</p>
 	</div>
 
 	<!-- Configure Options Button -->
@@ -236,7 +267,7 @@
 							>
 								<div class="card-header">
 									<span class="card-field-name">{source.field.field_label}</span>
-									<span class="card-field-type">{source.field.field_type === 'multiple_choice' ? (m.formEditorSmartDropdownConfigTypeMultipleChoice?.() ?? 'Multiple choice') : (m.formEditorSmartDropdownConfigTypeDropdown?.() ?? 'Dropdown')}</span>
+									<span class="card-field-type">{source.field.field_type === 'multiple_choice' ? (m.formEditorSmartDropdownConfigTypeMultipleChoice?.() ?? 'Multiple choice') : source.field.field_type === 'smart_dropdown' ? (m.formEditorSmartDropdownConfigTypeSmartDropdown?.() ?? 'Smart dropdown') : (m.formEditorSmartDropdownConfigTypeDropdown?.() ?? 'Dropdown')}</span>
 								</div>
 								<div class="card-options">
 									{#each source.options as opt (opt.label)}
@@ -285,6 +316,14 @@
 		font-size: 0.6875rem;
 		color: hsl(var(--muted-foreground));
 		margin: 0;
+	}
+
+	.multi-toggle {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.8125rem;
+		cursor: pointer;
 	}
 
 	.no-fields-message {

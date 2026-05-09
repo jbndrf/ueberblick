@@ -2,7 +2,7 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { CHUNK_SIZE, readSidecar } from '$lib/server/chunked-upload';
 
-export const GET: RequestHandler = async ({ params, locals: { pb, user } }) => {
+export const GET: RequestHandler = async ({ params, locals: { pbAdmin: pb, user } }) => {
 	if (!user) {
 		throw error(401, 'Authentication required');
 	}

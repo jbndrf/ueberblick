@@ -19,11 +19,14 @@ declare global {
 	namespace App {
 		// interface Error {}
 		interface Locals {
-			pb: PocketBase;
+			pbAdmin: PocketBase;
+			pbParticipant: PocketBase;
 			user: RecordModel | null;
+			participant: RecordModel | null;
 		}
 		interface PageData {
 			user?: RecordModel | null;
+			participant?: RecordModel | null;
 		}
 		// interface PageState {}
 		// interface Platform {}

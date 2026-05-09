@@ -3,17 +3,12 @@ import { getAdminPb } from '$lib/server/admin-auth';
 import type { LayoutServerLoad } from './$types';
 
 export const load: LayoutServerLoad = async ({ locals, url }) => {
-	const isParticipantAuth =
-		locals.pb.authStore.isValid &&
-		locals.pb.authStore.record?.collectionName === 'participants';
+	const participant = locals.participant;
+	const isParticipantAuth = !!participant;
 
-	// If not logged in as participant and not on login page, redirect to login
-	if (!isParticipantAuth && url.pathname !== '/participant/login') {
-		redirect(303, '/participant/login');
+	if (!isParticipantAuth && url.pathname !== '/login') {
+		redirect(303, '/login');
 	}
-
-	// Return participant data from PocketBase auth
-	const participant = isParticipantAuth ? locals.pb.authStore.record : null;
 
 	// Fetch collection metadata, project settings, and info pages in parallel
 	let collectionNames: string[] = [];

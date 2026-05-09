@@ -132,20 +132,18 @@
 	function initializeValues() {
 		const initialValues: Record<string, unknown> = {};
 
-		// Pre-fill with existing values
-		for (const fieldValue of existingFieldValues) {
-			// Check if this field is editable
-			if (editTool.editable_fields?.includes(fieldValue.field_key)) {
-				// Try to parse JSON values (arrays, etc.)
-				try {
-					if (fieldValue.value.startsWith('[') || fieldValue.value.startsWith('{')) {
-						initialValues[fieldValue.field_key] = JSON.parse(fieldValue.value);
-					} else {
-						initialValues[fieldValue.field_key] = fieldValue.value;
-					}
-				} catch {
-					initialValues[fieldValue.field_key] = fieldValue.value;
-				}
+		// Seed every existing value, not just editable ones, so dependent
+		// fields (e.g. smart_dropdown source lookups) can resolve against
+		// the full instance context. Editability is enforced at save time.
+		for (const fv of existingFieldValues) {
+			if (!fv.value) continue;
+			try {
+				initialValues[fv.field_key] =
+					fv.value.startsWith('[') || fv.value.startsWith('{')
+						? JSON.parse(fv.value)
+						: fv.value;
+			} catch {
+				initialValues[fv.field_key] = fv.value;
 			}
 		}
 
@@ -207,8 +205,16 @@
 		isSubmitting = true;
 
 		try {
-			// Merge file changes into values
-			const finalValues = { ...values, ...fileChanges };
+			// Only persist editable fields; `values` may also contain read-only
+			// context seeded for dependent-field resolution.
+			const editableIds = new Set(editTool.editable_fields ?? []);
+			const finalValues: Record<string, unknown> = {};
+			for (const id of editableIds) {
+				if (id in values) finalValues[id] = values[id];
+			}
+			for (const [id, files] of Object.entries(fileChanges)) {
+				if (editableIds.has(id)) finalValues[id] = files;
+			}
 			await onSave(finalValues);
 		} catch (err) {
 			console.error('Edit save failed:', err);

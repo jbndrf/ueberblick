@@ -27,48 +27,104 @@ const CSP_REPORT_ONLY = [
 	"form-action 'self'"
 ].join('; ');
 
-const handleAuth: Handle = async ({ event, resolve }) => {
-	// Create PocketBase instance
-	event.locals.pb = new PocketBase(POCKETBASE_URL);
+const ADMIN_COOKIE = 'pb_auth_admin';
+const PARTICIPANT_COOKIE = 'pb_auth_participant';
 
-	// Load auth store from cookie
-	const cookieHeader = event.request.headers.get('cookie') || '';
-	event.locals.pb.authStore.loadFromCookie(cookieHeader);
-
-	// Refresh auth if we have a token
-	try {
-		// Always attempt refresh if we have a token, not just if valid
-		// PocketBase allows refreshing recently-expired tokens
-		if (event.locals.pb.authStore.token) {
-			const collectionName = event.locals.pb.authStore.record?.collectionName;
-
-			if (collectionName === 'participants') {
-				await event.locals.pb.collection('participants').authRefresh();
-			} else if (collectionName === 'users') {
-				await event.locals.pb.collection('users').authRefresh();
-			}
-		}
-	} catch (err: any) {
-		// Only clear auth on actual auth errors (401/403), not network issues
-		if (err?.status === 401 || err?.status === 403) {
-			event.locals.pb.authStore.clear();
-		}
-		console.error('[Auth] Refresh failed:', err?.message || err);
+function parseCookies(header: string): Record<string, string> {
+	const out: Record<string, string> = {};
+	if (!header) return out;
+	for (const part of header.split(';')) {
+		const eq = part.indexOf('=');
+		if (eq < 0) continue;
+		const k = part.slice(0, eq).trim();
+		const v = part.slice(eq + 1).trim();
+		if (k) out[k] = v;
 	}
+	return out;
+}
 
-	// Set user/participant in locals for easy access
-	event.locals.user = event.locals.pb.authStore.record;
+// PocketBase's authStore.loadFromCookie looks for "pb_auth=" by default. We
+// store under custom names, so we feed it a synthetic cookie with the value
+// from our named cookie. exportToCookie always emits "pb_auth=...", so the
+// outgoing header name is rewritten in exportAuthToNamedCookie.
+function loadAuthFromNamedCookie(
+	pb: PocketBase,
+	cookies: Record<string, string>,
+	name: string
+) {
+	const value = cookies[name];
+	if (!value) return;
+	pb.authStore.loadFromCookie(`pb_auth=${value}`);
+}
 
-	const response = await resolve(event);
-
-	// Send back the auth cookie to the client
-	const exportedCookie = event.locals.pb.authStore.exportToCookie({
+function exportAuthToNamedCookie(pb: PocketBase, name: string): string {
+	const cookieStr = pb.authStore.exportToCookie({
 		httpOnly: false,
 		secure: env.SECURE_COOKIES === 'true',
 		sameSite: 'Lax',
 		maxAge: 60 * 60 * 24 * 7 // 1 week
 	});
-	response.headers.append('set-cookie', exportedCookie);
+	return cookieStr.replace(/^pb_auth=/, `${name}=`);
+}
+
+async function refreshSession(
+	pb: PocketBase,
+	collection: 'users' | 'participants'
+): Promise<void> {
+	if (!pb.authStore.token) return;
+	try {
+		await pb.collection(collection).authRefresh();
+	} catch (err: any) {
+		if (err?.status === 401 || err?.status === 403) {
+			pb.authStore.clear();
+		}
+		console.error(`[Auth ${collection}] Refresh failed:`, err?.message || err);
+	}
+}
+
+const handleAuth: Handle = async ({ event, resolve }) => {
+	const cookies = parseCookies(event.request.headers.get('cookie') || '');
+
+	const pbAdmin = new PocketBase(POCKETBASE_URL);
+	const pbParticipant = new PocketBase(POCKETBASE_URL);
+
+	loadAuthFromNamedCookie(pbAdmin, cookies, ADMIN_COOKIE);
+	loadAuthFromNamedCookie(pbParticipant, cookies, PARTICIPANT_COOKIE);
+
+	if (pbAdmin.authStore.record && pbAdmin.authStore.record.collectionName !== 'users') {
+		pbAdmin.authStore.clear();
+	}
+	if (
+		pbParticipant.authStore.record &&
+		pbParticipant.authStore.record.collectionName !== 'participants'
+	) {
+		pbParticipant.authStore.clear();
+	}
+
+	await Promise.all([
+		refreshSession(pbAdmin, 'users'),
+		refreshSession(pbParticipant, 'participants')
+	]);
+
+	event.locals.pbAdmin = pbAdmin;
+	event.locals.pbParticipant = pbParticipant;
+	event.locals.user =
+		pbAdmin.authStore.isValid && pbAdmin.authStore.record?.collectionName === 'users'
+			? pbAdmin.authStore.record
+			: null;
+	event.locals.participant =
+		pbParticipant.authStore.isValid &&
+		pbParticipant.authStore.record?.collectionName === 'participants'
+			? pbParticipant.authStore.record
+			: null;
+
+	const response = await resolve(event);
+
+	response.headers.append('set-cookie', exportAuthToNamedCookie(pbAdmin, ADMIN_COOKIE));
+	response.headers.append(
+		'set-cookie',
+		exportAuthToNamedCookie(pbParticipant, PARTICIPANT_COOKIE)
+	);
 
 	response.headers.set('X-Content-Type-Options', 'nosniff');
 	response.headers.set('X-Frame-Options', 'DENY');

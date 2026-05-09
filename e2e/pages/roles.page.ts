@@ -9,7 +9,7 @@ export class RolesPage {
 	private editModeToggle = 'button[role="switch"]';
 
 	async goto(projectId: string) {
-		await this.page.goto(`/projects/${projectId}/roles`);
+		await this.page.goto(`/admin/projects/${projectId}/roles`);
 		await this.page.waitForSelector(this.pageTitle);
 	}
 

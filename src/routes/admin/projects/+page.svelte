@@ -33,7 +33,7 @@
 		if (exporting) return;
 		exporting = true;
 		try {
-			const response = await fetch('/projects/export-schema', {
+			const response = await fetch('/admin/projects/export-schema', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ projectId })
@@ -98,7 +98,7 @@
 		if (exportingArchive) return;
 		exportingArchive = true;
 		try {
-			const response = await fetch('/projects/export-archive', {
+			const response = await fetch('/admin/projects/export-archive', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ projectId, includeParticipants: true })
@@ -127,7 +127,7 @@
 		if (exportingCsv) return;
 		exportingCsv = true;
 		try {
-			const response = await fetch('/projects/export-archive', {
+			const response = await fetch('/admin/projects/export-archive', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ projectId, csvOnly: true })
@@ -337,7 +337,7 @@
 	<div class="mb-6 flex items-center justify-between">
 		<h1 class="text-3xl font-bold">{m.navProjects?.() ?? 'Projects'}</h1>
 		<div class="flex">
-			<Button href="/projects/new" class="rounded-r-none">{m.projectsCreateProject?.() ?? 'Create Project'}</Button>
+			<Button href="/admin/projects/new" class="rounded-r-none">{m.projectsCreateProject?.() ?? 'Create Project'}</Button>
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger>
 					{#snippet child({ props })}
@@ -417,7 +417,7 @@
 					</div>
 				</Card.Header>
 				<Card.Content>
-					<Button href="/projects/{project.id}/participants" class="w-full">
+					<Button href="/admin/projects/{project.id}/participants" class="w-full">
 						{m.projectsOpenProject?.() ?? 'Open Project'}
 					</Button>
 				</Card.Content>
@@ -427,7 +427,7 @@
 				<p class="mb-4 text-muted-foreground">
 					{m.projectsEmptyState?.() ?? 'No projects found. Create your first project to get started.'}
 				</p>
-				<Button href="/projects/new">{m.projectsCreateProject?.() ?? 'Create Project'}</Button>
+				<Button href="/admin/projects/new">{m.projectsCreateProject?.() ?? 'Create Project'}</Button>
 			</div>
 		{/each}
 	</div>

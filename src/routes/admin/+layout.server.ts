@@ -6,27 +6,20 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 	const user = locals.user;
 	const isOwner = isInstanceOwner(user);
 
-	if (url.pathname === '/login') {
+	if (url.pathname === '/admin/login') {
 		return { user, currentProject: null, isOwner };
 	}
 
 	if (!user) {
 		const redirectTo = url.pathname + url.search;
-		redirect(303, `/login?redirectTo=${encodeURIComponent(redirectTo)}`);
+		redirect(303, `/admin/login?redirectTo=${encodeURIComponent(redirectTo)}`);
 	}
 
-	if (locals.pb.authStore.record?.collectionName !== 'users') {
-		redirect(303, '/login');
-	}
-
-	// Fetch only the current project's name when inside a project URL.
-	// The /projects page loads its own full list; other admin pages don't
-	// render the project list at all, so there's nothing else to fetch here.
-	const projectIdMatch = url.pathname.match(/^\/projects\/([^/]+)/);
+	const projectIdMatch = url.pathname.match(/^\/admin\/projects\/([^/]+)/);
 	let currentProject: { id: string; name: string } | null = null;
 	if (projectIdMatch) {
 		try {
-			const record = await locals.pb
+			const record = await locals.pbAdmin
 				.collection('projects')
 				.getOne(projectIdMatch[1], {
 					fields: 'id,name',
