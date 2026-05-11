@@ -255,11 +255,14 @@ export interface ToolsEdit {
 	 */
 	is_global: boolean;
 	/**
-	 * Allowed roles for this edit tool.
-	 * - If connection_id is set: IGNORED (inherited from connection.allowed_roles)
-	 * - If stage_id is set: USED (defines who can use this edit action)
+	 * Roles that can edit *only instances they created themselves*.
+	 * Paired with any_edit_roles (any wins on overlap, button renders once).
 	 */
-	allowed_roles?: string[];
+	self_edit_roles?: string[];
+	/**
+	 * Roles that can edit *any* instance (no creator restriction).
+	 */
+	any_edit_roles?: string[];
 	/**
 	 * Visual/button configuration for this edit tool.
 	 * - If connection_id is set: IGNORED (inherited from connection.visual_config)

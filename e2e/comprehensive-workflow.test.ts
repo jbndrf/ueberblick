@@ -532,7 +532,8 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 			is_global: false,
 			name: 'Edit Report Details',
 			editable_fields: [workflow.fields.get('Title')!, workflow.fields.get('Description')!],
-			allowed_roles: [roles.get('Field Worker')!, roles.get('Supervisor')!],
+			any_edit_roles: [roles.get('Field Worker')!, roles.get('Supervisor')!],
+			self_edit_roles: [],
 			visual_config: {
 				button_label: 'Edit Details',
 				button_color: '#3b82f6'
@@ -550,7 +551,8 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 			is_global: false,
 			name: 'Update Priority',
 			editable_fields: [workflow.fields.get('Priority')!],
-			allowed_roles: [roles.get('Supervisor')!, roles.get('Analyst')!],
+			any_edit_roles: [roles.get('Supervisor')!, roles.get('Analyst')!],
+			self_edit_roles: [],
 			visual_config: {
 				button_label: 'Change Priority',
 				button_color: '#f59e0b'
@@ -574,7 +576,8 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 			is_global: true,
 			name: 'Update Location',
 			editable_fields: [],
-			allowed_roles: [roles.get('Field Worker')!, roles.get('Supervisor')!],
+			any_edit_roles: [roles.get('Field Worker')!, roles.get('Supervisor')!],
+			self_edit_roles: [],
 			visual_config: {
 				button_label: 'Move Pin',
 				button_color: '#10b981'
@@ -592,7 +595,8 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 			is_global: true,
 			name: 'Edit Category',
 			editable_fields: [workflow.fields.get('Damage Type')!],
-			allowed_roles: [roles.get('Supervisor')!, roles.get('Analyst')!],
+			any_edit_roles: [roles.get('Supervisor')!, roles.get('Analyst')!],
+			self_edit_roles: [],
 			visual_config: {
 				button_label: 'Change Category',
 				button_color: '#8b5cf6'
@@ -966,10 +970,10 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 		console.log(`  - Editable fields: ${reviewEditTool.editable_fields.length}`);
 
 		// Verify role assignments
-		expect(reportEditTool.allowed_roles).toContain(roles.get('Field Worker'));
-		expect(reportEditTool.allowed_roles).toContain(roles.get('Supervisor'));
-		expect(reviewEditTool.allowed_roles).toContain(roles.get('Supervisor'));
-		expect(reviewEditTool.allowed_roles).toContain(roles.get('Analyst'));
+		expect(reportEditTool.any_edit_roles).toContain(roles.get('Field Worker'));
+		expect(reportEditTool.any_edit_roles).toContain(roles.get('Supervisor'));
+		expect(reviewEditTool.any_edit_roles).toContain(roles.get('Supervisor'));
+		expect(reviewEditTool.any_edit_roles).toContain(roles.get('Analyst'));
 
 		// Verify global tools
 		const globalLocationTool = await adminPb.collection('tools_edit').getOne(workflow.editTools.get('globalLocation')!);

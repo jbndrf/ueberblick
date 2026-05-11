@@ -453,7 +453,7 @@
 														<div class="flex items-center gap-2 shrink-0 w-20 justify-end">
 															<span class="w-5"></span>
 															<span class="w-5"></span>
-															{@render permIcon('update', canUse, () => togglePermission('tools_edit', tool.id, 'allowed_roles'))}
+															{@render permIcon('update', canUse, () => togglePermission('tools_edit', tool.id, 'any_edit_roles'))}
 														</div>
 													</div>
 												{/each}
@@ -485,7 +485,7 @@
 														<div class="flex items-center gap-2 shrink-0 w-20 justify-end">
 															<span class="w-5"></span>
 															<span class="w-5"></span>
-															{@render permIcon('update', canUse, () => togglePermission('tools_edit', tool.id, 'allowed_roles'))}
+															{@render permIcon('update', canUse, () => togglePermission('tools_edit', tool.id, 'any_edit_roles'))}
 														</div>
 													</div>
 												{/each}

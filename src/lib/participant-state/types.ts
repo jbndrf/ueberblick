@@ -372,7 +372,8 @@ export interface ToolEdit {
 	stage_id: string;
 	name: string;
 	editable_fields: string[];
-	allowed_roles: string[];
+	self_edit_roles: string[];
+	any_edit_roles: string[];
 	visual_config: Record<string, unknown> | null;
 	created: string;
 	updated: string;

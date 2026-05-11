@@ -28,8 +28,8 @@
 		automations?: ToolsAutomation[];
 		/** Available roles */
 		roles: Role[];
-		/** Callback when a tool's allowed_roles change */
-		onToolRolesChange?: (toolId: string, roleIds: string[]) => void;
+		/** Callback when a tool's edit roles change; scope picks the array. */
+		onToolRolesChange?: (toolId: string, roleIds: string[], scope: 'self' | 'any') => void;
 		/** Callback when a tool's visual config changes */
 		onToolVisualConfigChange?: (toolId: string, config: VisualConfig) => void;
 		/** Callback when a tool is selected */
@@ -71,43 +71,48 @@
 
 	let activeTab = $state('permissions');
 
-	// Local state for tool roles (keyed by tool ID)
-	let toolRolesMap = $state<Record<string, string[]>>({});
+	// Local state for tool roles (keyed by tool ID + scope)
+	let toolSelfRolesMap = $state<Record<string, string[]>>({});
+	let toolAnyRolesMap = $state<Record<string, string[]>>({});
 
-	// Initialize tool roles map - only update when allowed_roles actually change
+	function rolesMapsEqual(a: Record<string, string[]>, b: Record<string, string[]>) {
+		const aKeys = Object.keys(a);
+		const bKeys = Object.keys(b);
+		if (aKeys.length !== bKeys.length) return false;
+		for (const k of aKeys) {
+			const av = a[k];
+			const bv = b[k];
+			if (!bv || av.length !== bv.length) return false;
+			for (let i = 0; i < av.length; i++) if (av[i] !== bv[i]) return false;
+		}
+		return true;
+	}
+
 	$effect(() => {
-		const newMap: Record<string, string[]> = {};
+		const newSelf: Record<string, string[]> = {};
+		const newAny: Record<string, string[]> = {};
 		for (const tool of globalEditTools) {
-			newMap[tool.id] = tool.allowed_roles || [];
+			newSelf[tool.id] = tool.self_edit_roles || [];
+			newAny[tool.id] = tool.any_edit_roles || [];
 		}
-		// Only reassign if the roles actually changed to avoid triggering loops
-		const currentMap = untrack(() => toolRolesMap);
-		const hasChanged = Object.keys(newMap).some(toolId => {
-			const current = currentMap[toolId];
-			const next = newMap[toolId];
-			if (!current) return true;
-			if (current.length !== next.length) return true;
-			return current.some((id, i) => id !== next[i]);
-		}) || Object.keys(currentMap).some(toolId => !(toolId in newMap));
-
-		if (hasChanged) {
-			toolRolesMap = newMap;
-		}
+		const currentSelf = untrack(() => toolSelfRolesMap);
+		const currentAny = untrack(() => toolAnyRolesMap);
+		if (!rolesMapsEqual(newSelf, currentSelf)) toolSelfRolesMap = newSelf;
+		if (!rolesMapsEqual(newAny, currentAny)) toolAnyRolesMap = newAny;
 	});
 
-	// Handle tool roles change
-	function handleToolRolesChange(toolId: string, newRoleIds: string[]) {
-		const currentRoles = toolRolesMap[toolId];
-		if (currentRoles === undefined) {
-			return;
-		}
+	function handleToolRolesChange(toolId: string, newRoleIds: string[], scope: 'self' | 'any') {
+		const map = scope === 'self' ? toolSelfRolesMap : toolAnyRolesMap;
+		const currentRoles = map[toolId];
+		if (currentRoles === undefined) return;
 
 		const changed = currentRoles.length !== newRoleIds.length ||
 			currentRoles.some((id, i) => id !== newRoleIds[i]);
 
 		if (changed) {
-			toolRolesMap[toolId] = newRoleIds;
-			onToolRolesChange?.(toolId, newRoleIds);
+			if (scope === 'self') toolSelfRolesMap[toolId] = newRoleIds;
+			else toolAnyRolesMap[toolId] = newRoleIds;
+			onToolRolesChange?.(toolId, newRoleIds, scope);
 		}
 	}
 
@@ -165,16 +170,34 @@
 										<span class="tool-name">{tool.name}</span>
 									</div>
 									<div class="tool-permission-roles">
+										<label class="tool-permission-sublabel">
+											{m.editToolAnyRolesLabel?.() ?? "Edit anyone's"}
+										</label>
 										<MobileMultiSelect
-											selectedIds={toolRolesMap[tool.id] || []}
-											onSelectedIdsChange={(ids) => handleToolRolesChange(tool.id, ids)}
+											selectedIds={toolAnyRolesMap[tool.id] || []}
+											onSelectedIdsChange={(ids) => handleToolRolesChange(tool.id, ids, 'any')}
 											options={roles}
 											getOptionId={(r) => r.id}
 											getOptionLabel={(r) => r.name}
 											getOptionDescription={(r) => r.description}
 											allowCreate={!!onCreateRole}
 											onCreateOption={onCreateRole}
-											placeholder={m.propertiesGlobalToolsAllRoles?.() ?? 'All roles...'}
+											placeholder={m.editToolAnyRolesPlaceholder?.() ?? 'Roles that can edit any entry...'}
+											class="w-full"
+										/>
+										<label class="tool-permission-sublabel">
+											{m.editToolSelfRolesLabel?.() ?? 'Self-edit only'}
+										</label>
+										<MobileMultiSelect
+											selectedIds={toolSelfRolesMap[tool.id] || []}
+											onSelectedIdsChange={(ids) => handleToolRolesChange(tool.id, ids, 'self')}
+											options={roles}
+											getOptionId={(r) => r.id}
+											getOptionLabel={(r) => r.name}
+											getOptionDescription={(r) => r.description}
+											allowCreate={!!onCreateRole}
+											onCreateOption={onCreateRole}
+											placeholder={m.editToolSelfRolesPlaceholder?.() ?? 'Roles that can edit only their own...'}
 											class="w-full"
 										/>
 									</div>
@@ -377,7 +400,16 @@
 	}
 
 	.tool-permission-roles {
-		/* Roles selector */
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+	}
+
+	.tool-permission-sublabel {
+		font-size: 0.6875rem;
+		font-weight: 500;
+		color: hsl(var(--muted-foreground));
+		margin-top: 0.25rem;
 	}
 
 	/* Tools list styling */

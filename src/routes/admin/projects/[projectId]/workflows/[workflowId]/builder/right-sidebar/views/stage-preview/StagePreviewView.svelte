@@ -26,7 +26,7 @@
 		// Button config handlers
 		onButtonLabelChange?: (actionId: string, actionType: string, label: string) => void;
 		onButtonColorChange?: (actionId: string, actionType: string, color: string) => void;
-		onButtonRolesChange?: (actionId: string, actionType: string, roleIds: string[]) => void;
+		onButtonRolesChange?: (actionId: string, actionType: string, roleIds: string[], scope?: 'self' | 'any') => void;
 		onButtonDelete?: (actionId: string, actionType: string) => void;
 		// Add button handlers
 		onAddConnection?: (fromStageId: string, toStageId: string) => void;
@@ -188,9 +188,9 @@
 							if (!selectedAction) return;
 							onButtonColorChange?.(selectedAction.id, selectedAction.type, color);
 						}}
-						onRolesChange={(roleIds) => {
+						onRolesChange={(roleIds, scope) => {
 							if (!selectedAction) return;
-							onButtonRolesChange?.(selectedAction.id, selectedAction.type, roleIds);
+							onButtonRolesChange?.(selectedAction.id, selectedAction.type, roleIds, scope);
 						}}
 						onDelete={() => {
 							if (!selectedAction) return;

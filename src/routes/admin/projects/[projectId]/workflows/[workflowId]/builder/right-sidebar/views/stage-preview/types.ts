@@ -27,7 +27,8 @@ export type StageAction =
 			id: string;
 			buttonLabel: string;
 			buttonColor?: string;
-			allowed_roles?: string[];
+			self_edit_roles?: string[];
+			any_edit_roles?: string[];
 			tool: ToolsEdit;
 	  }
 	| {
@@ -43,7 +44,8 @@ export type StageAction =
 			id: string;
 			buttonLabel: string;
 			buttonColor?: string;
-			allowed_roles?: string[];
+			self_edit_roles?: string[];
+			any_edit_roles?: string[];
 			tool: ToolsEdit;
 	  };
 

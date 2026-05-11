@@ -605,7 +605,8 @@ export class WorkflowBuilderState {
 			...(connectionId && { tool_order: this.getNextToolOrder(connectionId) }),
 			// Stage-attached edit tools need their own config; connection-attached tools inherit
 			...(isStageAttached && {
-				allowed_roles: [],
+				self_edit_roles: [],
+				any_edit_roles: [],
 				visual_config: {
 					button_label: 'Edit',
 				}
@@ -635,7 +636,8 @@ export class WorkflowBuilderState {
 			editable_fields: [],
 			edit_mode: editMode,
 			is_global: true,
-			allowed_roles: [],
+			self_edit_roles: [],
+			any_edit_roles: [],
 			visual_config: {
 				button_label: editMode === 'location' ? 'Location' : 'Edit',
 			}

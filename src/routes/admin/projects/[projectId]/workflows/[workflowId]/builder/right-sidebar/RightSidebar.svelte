@@ -85,7 +85,7 @@
 		onSelectAction?: (edge: Edge) => void;
 		onSelectStage?: (node: Node) => void;
 		// Tool handlers (for stage property panel)
-		onToolRolesChange?: (toolId: string, roleIds: string[]) => void;
+		onToolRolesChange?: (toolId: string, roleIds: string[], scope: 'self' | 'any') => void;
 		onToolVisualConfigChange?: (toolId: string, config: VisualConfig) => void;
 		onSelectTool?: (toolType: string, toolId: string) => void;
 		onDeleteTool?: (toolType: string, toolId: string) => void;
@@ -137,7 +137,7 @@
 		onAddStageTool?: (stageId: string, toolType: string) => void;
 		onButtonLabelChange?: (actionId: string, actionType: string, label: string) => void;
 		onButtonColorChange?: (actionId: string, actionType: string, color: string) => void;
-		onButtonRolesChange?: (actionId: string, actionType: string, roleIds: string[]) => void;
+		onButtonRolesChange?: (actionId: string, actionType: string, roleIds: string[], scope?: 'self' | 'any') => void;
 		onButtonDelete?: (actionId: string, actionType: string) => void;
 		onConnectionVisualConfigChange?: (connectionId: string, config: VisualConfig) => void;
 		onCreateStageAndConnect?: (fromStageId: string) => void;

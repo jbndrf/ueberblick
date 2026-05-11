@@ -236,7 +236,7 @@ export const WORKFLOW_LAYERS: DuplicationLayer[] = [
 		},
 		remap: { connection_id: 'workflow_connections' },
 		remapArrays: { stage_id: 'workflow_stages', editable_fields: 'tools_form_fields' },
-		roleFields: ['allowed_roles'],
+		roleFields: ['self_edit_roles', 'any_edit_roles'],
 	},
 	{
 		collection: 'tools_protocol',
@@ -725,10 +725,10 @@ export async function importProjectSchema(
 					(id: string) => fieldMap.get(id) ?? id
 				);
 			}
-			if (Array.isArray(data.allowed_roles)) {
-				data.allowed_roles = data.allowed_roles.map(
-					(id: string) => roleMap.get(id) ?? id
-				);
+			for (const field of ['self_edit_roles', 'any_edit_roles'] as const) {
+				if (Array.isArray(data[field])) {
+					data[field] = data[field].map((id: string) => roleMap.get(id) ?? id);
+				}
 			}
 			data.id = newId;
 			await pb.collection('tools_edit').create(data);

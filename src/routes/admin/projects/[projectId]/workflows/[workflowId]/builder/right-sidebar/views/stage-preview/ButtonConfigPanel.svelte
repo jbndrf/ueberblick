@@ -13,7 +13,7 @@
 		roles: Role[];
 		onLabelChange?: (label: string) => void;
 		onColorChange?: (color: string) => void;
-		onRolesChange?: (roleIds: string[]) => void;
+		onRolesChange?: (roleIds: string[], scope?: 'self' | 'any') => void;
 		onDelete?: () => void;
 		onOpenTool?: (toolType: string, toolId: string) => void;
 		onClose?: () => void;
@@ -21,6 +21,8 @@
 	}
 
 	let { action, roles, onLabelChange, onColorChange, onRolesChange, onDelete, onOpenTool, onClose, onCreateRole }: Props = $props();
+
+	const isEditToolAction = $derived(action.type === 'stage_tool' || action.type === 'global_tool');
 
 	let labelValue = $state(action.buttonLabel);
 	let colorValue = $state(action.buttonColor || getDefaultButtonColor(action.type));
@@ -31,8 +33,24 @@
 		colorValue = action.buttonColor || getDefaultButtonColor(action.type);
 	});
 
-	// Get current allowed_roles from the action
-	const currentRoleIds = $derived(action.allowed_roles || []);
+	// Roles displayed in the panel. For edit-tool actions the legacy
+	// allowed_roles is split into two scopes; for other actions there's a
+	// single allowed_roles array.
+	const currentRoleIds = $derived(
+		action.type === 'connection' || action.type === 'stage_form'
+			? (action.allowed_roles || [])
+			: []
+	);
+	const currentAnyRoleIds = $derived(
+		action.type === 'stage_tool' || action.type === 'global_tool'
+			? (action.any_edit_roles || [])
+			: []
+	);
+	const currentSelfRoleIds = $derived(
+		action.type === 'stage_tool' || action.type === 'global_tool'
+			? (action.self_edit_roles || [])
+			: []
+	);
 
 	function handleLabelInput(e: Event) {
 		const value = (e.target as HTMLInputElement).value;
@@ -46,8 +64,8 @@
 		onColorChange?.(value);
 	}
 
-	function handleRolesChange(ids: string[]) {
-		onRolesChange?.(ids);
+	function handleRolesChange(ids: string[], scope?: 'self' | 'any') {
+		onRolesChange?.(ids, scope);
 	}
 </script>
 
@@ -116,21 +134,57 @@
 		<!-- Allowed Roles -->
 		<section class="config-section">
 			<h4 class="section-title">{m.stagePreviewButtonConfigAllowedRoles?.() ?? 'Allowed Roles'}</h4>
-			<MobileMultiSelect
-				selectedIds={currentRoleIds}
-				options={roles}
-				getOptionId={(r) => r.id}
-				getOptionLabel={(r) => r.name}
-				getOptionDescription={(r) => r.description}
-				allowCreate={!!onCreateRole}
-				onCreateOption={onCreateRole}
-				onSelectedIdsChange={handleRolesChange}
-				placeholder={m.stagePreviewButtonConfigAllRolesPlaceholder?.() ?? 'All roles...'}
-				class="w-full"
-			/>
-			<p class="help-text">
-				{m.stagePreviewButtonConfigRolesHelp?.() ?? 'Only participants with these roles can use this button. Leave empty to allow all.'}
-			</p>
+			{#if isEditToolAction}
+				<label class="text-xs text-muted-foreground" for="any-edit-roles">
+					{m.editToolAnyRolesLabel?.() ?? "Edit anyone's"}
+				</label>
+				<MobileMultiSelect
+					selectedIds={currentAnyRoleIds}
+					options={roles}
+					getOptionId={(r) => r.id}
+					getOptionLabel={(r) => r.name}
+					getOptionDescription={(r) => r.description}
+					allowCreate={!!onCreateRole}
+					onCreateOption={onCreateRole}
+					onSelectedIdsChange={(ids) => handleRolesChange(ids, 'any')}
+					placeholder={m.editToolAnyRolesPlaceholder?.() ?? 'Roles that can edit any entry...'}
+					class="w-full"
+				/>
+				<label class="text-xs text-muted-foreground mt-2 block" for="self-edit-roles">
+					{m.editToolSelfRolesLabel?.() ?? 'Self-edit only'}
+				</label>
+				<MobileMultiSelect
+					selectedIds={currentSelfRoleIds}
+					options={roles}
+					getOptionId={(r) => r.id}
+					getOptionLabel={(r) => r.name}
+					getOptionDescription={(r) => r.description}
+					allowCreate={!!onCreateRole}
+					onCreateOption={onCreateRole}
+					onSelectedIdsChange={(ids) => handleRolesChange(ids, 'self')}
+					placeholder={m.editToolSelfRolesPlaceholder?.() ?? 'Roles that can edit only their own...'}
+					class="w-full"
+				/>
+				<p class="help-text">
+					{m.editToolRolesHelp?.() ?? 'A role in both lists is treated as "Edit anyone\'s" and renders one button.'}
+				</p>
+			{:else}
+				<MobileMultiSelect
+					selectedIds={currentRoleIds}
+					options={roles}
+					getOptionId={(r) => r.id}
+					getOptionLabel={(r) => r.name}
+					getOptionDescription={(r) => r.description}
+					allowCreate={!!onCreateRole}
+					onCreateOption={onCreateRole}
+					onSelectedIdsChange={(ids) => handleRolesChange(ids)}
+					placeholder={m.stagePreviewButtonConfigAllRolesPlaceholder?.() ?? 'All roles...'}
+					class="w-full"
+				/>
+				<p class="help-text">
+					{m.stagePreviewButtonConfigRolesHelp?.() ?? 'Only participants with these roles can use this button. Leave empty to allow all.'}
+				</p>
+			{/if}
 		</section>
 
 		<Separator />

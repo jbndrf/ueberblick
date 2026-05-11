@@ -645,7 +645,8 @@
 				id: t.data.id,
 				buttonLabel: t.data.visual_config?.button_label || t.data.name,
 				buttonColor: t.data.visual_config?.button_color,
-				allowed_roles: t.data.allowed_roles || [],
+				self_edit_roles: t.data.self_edit_roles || [],
+				any_edit_roles: t.data.any_edit_roles || [],
 				tool: t.data
 			}));
 
@@ -667,7 +668,8 @@
 			id: t.data.id,
 			buttonLabel: t.data.visual_config?.button_label || t.data.name,
 			buttonColor: t.data.visual_config?.button_color,
-			allowed_roles: t.data.allowed_roles || [],
+			self_edit_roles: t.data.self_edit_roles || [],
+			any_edit_roles: t.data.any_edit_roles || [],
 			tool: t.data
 		}));
 
@@ -1248,8 +1250,11 @@
 	}
 
 	// Tool handlers for stage property panel
-	function handleToolRolesChange(toolId: string, roleIds: string[]) {
-		builderState.updateEditTool(toolId, { allowed_roles: roleIds });
+	function handleToolRolesChange(toolId: string, roleIds: string[], scope: 'self' | 'any') {
+		builderState.updateEditTool(
+			toolId,
+			scope === 'self' ? { self_edit_roles: roleIds } : { any_edit_roles: roleIds }
+		);
 	}
 
 	function handleToolVisualConfigChange(toolId: string, config: VisualConfig) {
@@ -1530,11 +1535,19 @@
 		}
 	}
 
-	function handleButtonRolesChange(actionId: string, actionType: string, roleIds: string[]) {
+	function handleButtonRolesChange(
+		actionId: string,
+		actionType: string,
+		roleIds: string[],
+		scope: 'self' | 'any' = 'any'
+	) {
 		if (actionType === 'connection') {
 			builderState.updateConnection(actionId, { allowed_roles: roleIds });
 		} else if (actionType === 'stage_tool' || actionType === 'global_tool') {
-			builderState.updateEditTool(actionId, { allowed_roles: roleIds });
+			builderState.updateEditTool(
+				actionId,
+				scope === 'self' ? { self_edit_roles: roleIds } : { any_edit_roles: roleIds }
+			);
 		} else if (actionType === 'stage_form') {
 			builderState.updateForm(actionId, { allowed_roles: roleIds });
 		}

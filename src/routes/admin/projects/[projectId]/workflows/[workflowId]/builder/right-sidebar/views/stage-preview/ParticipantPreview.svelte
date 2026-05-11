@@ -69,7 +69,11 @@
 	const visibleButtons = $derived.by(() => {
 		if (roleFilter === 'all') return allButtons;
 		return allButtons.map((btn) => {
-			const allowedRoles = btn.allowed_roles || [];
+			// Edit-tool actions use paired self/any role arrays; others use allowed_roles.
+			const allowedRoles =
+				btn.type === 'stage_tool' || btn.type === 'global_tool'
+					? [...(btn.any_edit_roles || []), ...(btn.self_edit_roles || [])]
+					: (btn.allowed_roles || []);
 			const isVisible = allowedRoles.length === 0 || allowedRoles.includes(roleFilter);
 			return { ...btn, _dimmed: !isVisible };
 		});

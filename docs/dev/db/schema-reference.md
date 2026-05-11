@@ -405,7 +405,7 @@ The "empty array = all roles" convention applies to all role-based fields (`visi
 | workflow_instance_field_values | Owner | stage visible_to_roles | stage visible_to_roles |
 | tools_forms | Owner | connection.allowed_roles or form.allowed_roles | -- |
 | tools_form_fields | Owner | Project members | -- |
-| tools_edit | Owner | connection.allowed_roles or tool.allowed_roles | -- |
+| tools_edit | Owner | any_edit_roles ∪ self_edit_roles (empty = nobody) | -- |
 | marker_categories | Owner | visible_to_roles | -- |
 | markers | Owner | category visible_to_roles | Project members (create), category roles (update/delete) |
 | map_layers | Owner | visible_to_roles | -- |

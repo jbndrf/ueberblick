@@ -8,6 +8,7 @@
 import type { ParticipantGateway } from '$lib/participant-state/gateway.svelte';
 import { onDataChange } from '$lib/participant-state/gateway.svelte';
 import type { FieldValueCache } from '$lib/participant-state/field-value-cache.svelte';
+import { getPocketBase } from '$lib/pocketbase';
 import type { Snippet } from 'svelte';
 
 // =============================================================================
@@ -90,7 +91,8 @@ export interface ToolEdit {
 	edit_mode: 'form_fields' | 'location';
 	is_global: boolean;
 	tool_order?: number;
-	allowed_roles: string[];
+	self_edit_roles: string[];
+	any_edit_roles: string[];
 	visual_config?: Record<string, unknown>;
 }
 
@@ -219,10 +221,32 @@ export class WorkflowInstanceDetailState {
 	availableStageEditTools = $derived.by((): ToolEdit[] => {
 		if (!this.instance) return [];
 		const currentStageId = this.instance.current_stage_id as string;
+
+		// Resolve current participant's role ids + identity from auth store.
+		const me = getPocketBase().authStore.record;
+		const myId = me?.id as string | undefined;
+		const rawRole = me?.role_id;
+		const myRoleIds: string[] = Array.isArray(rawRole)
+			? (rawRole as string[])
+			: rawRole
+				? [rawRole as string]
+				: [];
+
+		const instanceCreator = this.instance.created_by as string | undefined;
+		const isOwnInstance = !!myId && !!instanceCreator && myId === instanceCreator;
+
 		return this.editTools.filter(e => {
 			if (e.connection_id) return false;
 			if (!e.stage_id || e.stage_id.length === 0) return false;
-			return e.stage_id.includes(currentStageId);
+			if (!e.stage_id.includes(currentStageId)) return false;
+
+			// Scope resolution: any > self. A role present in both arrays
+			// resolves to 'any' so the tool is rendered exactly once.
+			const inAny = myRoleIds.some(r => e.any_edit_roles?.includes(r));
+			if (inAny) return true;
+			const inSelf = myRoleIds.some(r => e.self_edit_roles?.includes(r));
+			if (inSelf) return isOwnInstance;
+			return false;
 		});
 	});
 

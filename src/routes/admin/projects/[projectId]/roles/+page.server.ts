@@ -107,7 +107,7 @@ async function loadPermissionsData(pb: PocketBase, projectId: string) {
 			}
 			editTools = await pb.collection('tools_edit').getFullList({
 				filter: editToolFilters.join(' || '),
-				fields: 'id,name,allowed_roles,connection_id,stage_id,is_global'
+				fields: 'id,name,self_edit_roles,any_edit_roles,connection_id,stage_id,is_global'
 			});
 		}
 	}
@@ -176,7 +176,7 @@ async function loadPermissionsData(pb: PocketBase, projectId: string) {
 				stageEditTools.push({
 					id: et.id,
 					name: et.name as string,
-					allowedRoles: et.allowed_roles || []
+					allowedRoles: et.any_edit_roles || []
 				});
 			}
 
@@ -203,7 +203,7 @@ async function loadPermissionsData(pb: PocketBase, projectId: string) {
 			.map((et) => ({
 				id: et.id,
 				name: et.name as string,
-				allowedRoles: et.allowed_roles || []
+				allowedRoles: et.any_edit_roles || []
 			}));
 
 		return {
@@ -471,7 +471,7 @@ export const actions: Actions = {
 			workflow_stages: ['visible_to_roles'],
 			workflow_connections: ['allowed_roles'],
 			tools_forms: ['allowed_roles'],
-			tools_edit: ['allowed_roles'],
+			tools_edit: ['any_edit_roles', 'self_edit_roles'],
 			custom_tables: ['visible_to_roles'],
 			marker_categories: ['visible_to_roles'],
 			map_layers: ['visible_to_roles'],

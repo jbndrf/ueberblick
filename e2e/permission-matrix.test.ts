@@ -569,7 +569,9 @@ test.describe.serial('Permission Matrix E2E Test', () => {
 			is_global: false,
 			name: 'Open Edit Tool',
 			editable_fields: [workflow.fields.get('Public Field - Anyone Can Read This')!],
-			allowed_roles: [], // All can use
+			// Empty arrays now mean "nobody"; populate with every role so any participant can use.
+			any_edit_roles: Array.from(roles.values()),
+			self_edit_roles: [],
 			visual_config: {
 				button_label: 'Edit Public',
 				button_color: '#10b981'
@@ -585,7 +587,8 @@ test.describe.serial('Permission Matrix E2E Test', () => {
 			is_global: false,
 			name: 'Full Access Edit Tool',
 			editable_fields: [workflow.fields.get('Restricted Field - Full Access Only')!],
-			allowed_roles: [roles.get('Full Access Role')!],
+			any_edit_roles: [roles.get('Full Access Role')!],
+			self_edit_roles: [],
 			visual_config: {
 				button_label: 'Edit Restricted',
 				button_color: '#ef4444'
@@ -608,7 +611,8 @@ test.describe.serial('Permission Matrix E2E Test', () => {
 			is_global: true,
 			name: 'Global Location Tool',
 			editable_fields: [],
-			allowed_roles: [roles.get('Full Access Role')!],
+			any_edit_roles: [roles.get('Full Access Role')!],
+			self_edit_roles: [],
 			visual_config: {
 				button_label: 'Move Pin',
 				button_color: '#3b82f6'
@@ -994,9 +998,10 @@ test.describe.serial('Permission Matrix E2E Test', () => {
 		// Update all edit tools to only be allowed by Noone Role
 		for (const [toolName, toolId] of workflow.editTools) {
 			await adminPb.collection('tools_edit').update(toolId, {
-				allowed_roles: [nooneRoleId]
+				any_edit_roles: [nooneRoleId],
+				self_edit_roles: []
 			});
-			console.log(`Updated edit tool "${toolName}" allowed_roles to Noone Role`);
+			console.log(`Updated edit tool "${toolName}" any_edit_roles to Noone Role`);
 		}
 
 		console.log(`\nAll permissions changed to Noone Role`);

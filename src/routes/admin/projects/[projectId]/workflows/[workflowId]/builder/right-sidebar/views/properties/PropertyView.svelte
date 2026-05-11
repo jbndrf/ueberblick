@@ -34,8 +34,9 @@
 		onEdgeDelete?: (edgeId: string) => void;
 		onEdgeRolesChange?: (edgeId: string, roleIds: string[]) => void;
 		onEdgeSettingsChange?: (edgeId: string, settings: Record<string, any>) => void;
-		/** Callback when a tool's allowed_roles change (for stage-attached tools) */
-		onToolRolesChange?: (toolId: string, roleIds: string[]) => void;
+		/** Callback when a tool's edit roles change (for stage-attached tools).
+		 *  scope selects which array (self_edit_roles vs any_edit_roles). */
+		onToolRolesChange?: (toolId: string, roleIds: string[], scope: 'self' | 'any') => void;
 		/** Callback when a tool's visual config changes (for stage-attached tools) */
 		onToolVisualConfigChange?: (toolId: string, config: VisualConfig) => void;
 		/** Callback when a tool is selected */
