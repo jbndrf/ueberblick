@@ -3,6 +3,8 @@
 	import { ArrowLeft } from '@lucide/svelte';
 	import * as m from '$lib/paraglide/messages';
 	import { sanitizeHtml } from '$lib/sanitize-html';
+	import { enhance } from '$app/forms';
+	import { invalidateAll } from '$app/navigation';
 
 	type FooterPage = { slug: string; title: string; content: string };
 
@@ -90,6 +92,15 @@
 				<form
 					method="POST"
 					{action}
+					use:enhance={() => async ({ result }) => {
+						if (result.type === 'redirect') {
+							window.location.href = result.location;
+						} else if (result.type === 'success') {
+							await invalidateAll();
+						} else {
+							window.location.reload();
+						}
+					}}
 					class="flex flex-col gap-2 border-t p-4 sm:flex-row sm:justify-end"
 				>
 					{#if returnTo}

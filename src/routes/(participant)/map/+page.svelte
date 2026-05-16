@@ -24,6 +24,7 @@
 	import type {
 		FilterClause as FilterClauseType,
 		InstanceGeometry,
+		Role,
 		ToolConfigRecord,
 		ViewDefinition
 	} from '$lib/participant-state/types';
@@ -85,6 +86,8 @@
 			fileFields?: Record<string, string[]>;
 			infoPages?: Array<{ id: string; title: string; content: string }>;
 			legalPages?: Array<{ id: string; slug: string; title: string; content: string }>;
+			participantToken?: string | null;
+			loginLink?: string | null;
 		};
 	}
 
@@ -253,6 +256,7 @@
 	const markersLive = gateway!.collection<MapMarker>('markers').live({ filter: projectScopedFilter, expand: 'category_id', priority: 'normal' });
 	const instancesLive = gateway!.collection<CanvasWorkflowInstance>('workflow_instances').live({ expand: 'workflow_id', priority: 'normal' });
 	const workflowsLive = gateway!.collection<Workflow>('workflows').live({ filter: `is_active = true && ${projectScopedFilter}`, priority: 'normal' });
+	const rolesLive = gateway!.collection<Role>('roles').live({ filter: projectScopedFilter, priority: 'deferred' });
 	const stagesLive = gateway!.collection<WorkflowStageInfo>('workflow_stages').live({ priority: 'deferred' });
 	const fieldTagsLive = gateway!.collection<FieldTag>('tools_field_tags').live({ priority: 'deferred' });
 	const fieldValueCache = new FieldValueCache();
@@ -442,6 +446,36 @@
 		return { center_lat, center_lon, default_zoom, min_zoom, max_zoom };
 	});
 
+	const participantRoleIds: string[] = $derived(
+		Array.isArray(data.participant.role_id)
+			? data.participant.role_id
+			: data.participant.role_id ? [data.participant.role_id] : []
+	);
+
+	// Live count of workflow_instances created by this participant. Drives the
+	// client-side quota gate so we don't optimistically write to IndexedDB when
+	// the server would reject the create.
+	const myInstanceCount = $derived(
+		(instancesLive.records as any[]).filter(
+			(i) => i.created_by === data.participant.id
+		).length
+	);
+
+	// Most-permissive max_instances across this participant's roles.
+	// 0/missing on every role => unlimited (mirrors PB hook semantics).
+	const myMaxInstances = $derived.by(() => {
+		let max = 0;
+		let any = false;
+		for (const r of rolesLive.records as any[]) {
+			if (!participantRoleIds.includes(r.id)) continue;
+			const v = Number(r.max_instances) || 0;
+			if (v > 0) { any = true; if (v > max) max = v; }
+		}
+		return any ? max : 0;
+	});
+
+	const quotaReached = $derived(myMaxInstances > 0 && myInstanceCount >= myMaxInstances);
+
 	// Workflows with entry labels derived from connections, filtered by participant role
 	const workflows: Workflow[] = $derived.by(() => {
 		const entryLabelByWorkflow = new Map<string, string>();
@@ -450,9 +484,6 @@
 			const label = (conn.visual_config as any)?.button_label;
 			if (label) entryLabelByWorkflow.set(conn.workflow_id as string, label);
 		}
-		const participantRoleIds: string[] = Array.isArray(data.participant.role_id)
-			? data.participant.role_id
-			: data.participant.role_id ? [data.participant.role_id] : [];
 		return (workflowsLive.records as any[])
 			.filter(wf => {
 				const roles = wf.entry_allowed_roles;
@@ -1540,6 +1571,10 @@
 		coordinates?: { lat: number; lng: number },
 		geometry?: InstanceGeometry
 	) {
+		if (quotaReached) {
+			alert(m.quotaExceededInstances?.() ?? "You've reached your limit of created entries.");
+			return;
+		}
 		console.log('Workflow selected:', workflow, 'Coordinates:', coordinates, 'Geometry:', !!geometry);
 		pendingWorkflow = { workflow, coordinates, geometry };
 		formFillOpen = true;
@@ -1673,6 +1708,12 @@
 			selection = createSelection.workflowInstance(instance.id);
 		} catch (error) {
 			console.error('Failed to create workflow instance:', error);
+			const msg = String((error as any)?.response?.message ?? (error as any)?.message ?? '');
+			const data = (error as any)?.response?.data ?? (error as any)?.data ?? null;
+			const dataStr = data ? JSON.stringify(data) : '';
+			if (msg.includes('quota_exceeded:instances') || dataStr.includes('quota_exceeded:instances')) {
+				alert(m.quotaExceededInstances?.() ?? "You've reached your limit of created entries.");
+			}
 			throw error;
 		}
 	}
@@ -1885,6 +1926,8 @@
 		onDrawGeometry={handleDrawGeometry}
 		position={recentSheetOpen ? 'left' : 'center'}
 		onBackdropClose={() => (recentSheetOpen = false)}
+		{quotaReached}
+		quotaHint={quotaReached ? (m.quotaReachedHint?.() ?? "You've reached your limit of created entries. Delete an existing one to make room.") : ''}
 	/>
 
 	<!-- Line / Polygon draw session for incident workflows whose geometry_type
@@ -2053,6 +2096,8 @@
 		fileFields={data.fileFields ?? {}}
 		infoPages={data.infoPages ?? []}
 		legalPages={data.legalPages ?? []}
+		participantToken={data.participantToken ?? null}
+		loginLink={data.loginLink ?? null}
 		onLogout={handleLogout}
 	/>
 

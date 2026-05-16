@@ -20,91 +20,96 @@
 // never leak records the caller cannot legitimately see.
 //
 // Global hook (no tag filter) -- applies to every create request.
+//
+// IMPORTANT: only the *lookup / rule-check* phase runs inside the try/catch.
+// The downstream e.next() must NOT be wrapped: any error a later hook
+// throws (e.g. quota validation rejecting a BadRequestError) needs to
+// propagate to the client. Wrapping e.next() would silently turn rejects
+// into successes.
 
 onRecordCreateRequest((e) => {
   var collectionName = "(unknown)";
   var incomingId = "(none)";
+  var shortCircuited = false;
+
   try {
     if (!e.record) {
-      return e.next();
-    }
+      // fall through
+    } else {
+      incomingId = e.record.id || "";
+      if (incomingId) {
+        var collection = e.record.collection();
+        collectionName = collection.name;
 
-    incomingId = e.record.id || "";
-    if (!incomingId) {
-      // No client-supplied id -- PB will generate one, no collision possible.
-      return e.next();
-    }
-
-    var collection = e.record.collection();
-    collectionName = collection.name;
-
-    var existing;
-    try {
-      existing = $app.findRecordById(collectionName, incomingId);
-    } catch (err) {
-      // Not found -- normal create path.
-      return e.next();
-    }
-
-    if (!existing) {
-      return e.next();
-    }
-
-    // Rule check. PB rules:
-    //   null / undefined  -> superusers only
-    //   ""                -> always allowed
-    //   "<filter>"        -> evaluate filter against the request
-    var createRule = collection.createRule;
-
-    if (createRule === null || createRule === undefined) {
-      // Superusers only.
-      if (!e.hasSuperuserAuth()) {
-        console.log(
-          "[idempotent-create] " + collectionName + "/" + incomingId +
-          ": fall through (superuser-only rule, not superuser)"
-        );
-        return e.next();
-      }
-    } else if (createRule !== "") {
-      try {
-        var info = e.requestInfo();
-        var allowed = $app.canAccessRecord(existing, info, createRule);
-        if (!allowed) {
-          console.log(
-            "[idempotent-create] " + collectionName + "/" + incomingId +
-            ": fall through (createRule denied)"
-          );
-          return e.next();
+        var existing = null;
+        try {
+          existing = $app.findRecordById(collectionName, incomingId);
+        } catch (err) {
+          existing = null; // not found -- normal create path
         }
-      } catch (err) {
-        console.error(
-          "[idempotent-create] " + collectionName + "/" + incomingId +
-          ": canAccessRecord threw, falling through:",
-          err
-        );
-        return e.next();
+
+        if (existing) {
+          // Rule check. PB rules:
+          //   null / undefined  -> superusers only
+          //   ""                -> always allowed
+          //   "<filter>"        -> evaluate filter against the request
+          var createRule = collection.createRule;
+          var allowed = false;
+
+          if (createRule === null || createRule === undefined) {
+            allowed = !!e.hasSuperuserAuth();
+            if (!allowed) {
+              console.log(
+                "[idempotent-create] " + collectionName + "/" + incomingId +
+                ": fall through (superuser-only rule, not superuser)"
+              );
+            }
+          } else if (createRule === "") {
+            allowed = true;
+          } else {
+            try {
+              var info = e.requestInfo();
+              allowed = !!$app.canAccessRecord(existing, info, createRule);
+              if (!allowed) {
+                console.log(
+                  "[idempotent-create] " + collectionName + "/" + incomingId +
+                  ": fall through (createRule denied)"
+                );
+              }
+            } catch (err) {
+              console.error(
+                "[idempotent-create] " + collectionName + "/" + incomingId +
+                ": canAccessRecord threw, falling through:",
+                err
+              );
+              allowed = false;
+            }
+          }
+
+          if (allowed) {
+            console.log(
+              "[idempotent-create] " + collectionName + "/" + incomingId +
+              ": short-circuiting (record already exists, auth allowed)"
+            );
+            e.json(200, existing);
+            shortCircuited = true;
+          }
+        }
       }
     }
-    // else: createRule === "" -> always allowed, no check needed.
-
-    console.log(
-      "[idempotent-create] " + collectionName + "/" + incomingId +
-      ": short-circuiting (record already exists, auth allowed)"
-    );
-
-    // Short-circuit: respond with the existing record and do NOT call
-    // e.next(). The PB SDK on the client parses this as a successful
-    // create and reconciles its local state.
-    e.json(200, existing);
-    return;
   } catch (err) {
-    // Any unexpected error: fall through so we never block a legitimate
-    // create because of a bug in this hook.
+    // Any unexpected error from the lookup/rule-check path: fall through
+    // so we never block a legitimate create because of a bug in this hook.
     console.error(
       "[idempotent-create] " + collectionName + "/" + incomingId +
-      ": unexpected error, falling through:",
+      ": unexpected error in lookup phase, falling through:",
       err
     );
-    return e.next();
+  }
+
+  if (!shortCircuited) {
+    // NOTE: outside try/catch by design -- downstream hook rejections
+    // (e.g. quota_exceeded BadRequestError) must propagate.
+    e.next();
   }
 });

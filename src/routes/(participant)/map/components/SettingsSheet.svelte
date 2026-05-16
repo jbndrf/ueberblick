@@ -22,7 +22,8 @@
 		WifiOff,
 		CloudUpload
 	} from '@lucide/svelte';
-	import { sanitizeHtml } from '$lib/sanitize-html';
+	import { parseInfoPage } from '$lib/info-page-render';
+	import QrCode from '$lib/components/qr-code.svelte';
 	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
 	import { getFullLocalCopyMode, setFullLocalCopyMode } from '$lib/participant-state/context.svelte';
 	import { getNetworkStatus } from '$lib/participant-state/network.svelte';
@@ -60,6 +61,8 @@
 		fileFields?: Record<string, string[]>;
 		infoPages?: Array<{ id: string; title: string; content: string }>;
 		legalPages?: Array<{ id: string; slug: string; title: string; content: string }>;
+		participantToken?: string | null;
+		loginLink?: string | null;
 		onLogout?: () => void;
 	}
 
@@ -71,6 +74,8 @@
 		fileFields = {},
 		infoPages = [],
 		legalPages = [],
+		participantToken = null,
+		loginLink = null,
 		onLogout
 	}: Props = $props();
 
@@ -110,6 +115,14 @@
 	// Legal page dialog (instance-wide pages -- imprint/privacy/etc.)
 	let legalPageDialogOpen = $state(false);
 	let selectedLegalPage = $state<{ id: string; slug: string; title: string; content: string } | null>(null);
+
+	const infoCtx = $derived({ token: participantToken, loginLink });
+	const infoSegments = $derived(
+		selectedInfoPage ? parseInfoPage(selectedInfoPage.content, infoCtx) : []
+	);
+	const legalSegments = $derived(
+		selectedLegalPage ? parseInfoPage(selectedLegalPage.content, infoCtx) : []
+	);
 
 	// Full local copy mode (controls media caching)
 	let fullLocalCopy = $state(false);
@@ -667,7 +680,15 @@
 		</Dialog.Header>
 		{#if selectedInfoPage}
 			<div class="info-content min-h-0 flex-1 overflow-y-auto break-words">
-				{@html sanitizeHtml(selectedInfoPage.content)}
+				{#each infoSegments as seg, i (i)}
+					{#if seg.kind === 'html'}
+						{@html seg.html}
+					{:else}
+						<div class="my-3 flex justify-center">
+							<QrCode value={seg.value} />
+						</div>
+					{/if}
+				{/each}
 			</div>
 		{/if}
 	</Dialog.Content>
@@ -681,7 +702,15 @@
 		</Dialog.Header>
 		{#if selectedLegalPage}
 			<div class="info-content min-h-0 flex-1 overflow-y-auto break-words">
-				{@html sanitizeHtml(selectedLegalPage.content)}
+				{#each legalSegments as seg, i (i)}
+					{#if seg.kind === 'html'}
+						{@html seg.html}
+					{:else}
+						<div class="my-3 flex justify-center">
+							<QrCode value={seg.value} />
+						</div>
+					{/if}
+				{/each}
 			</div>
 		{/if}
 	</Dialog.Content>

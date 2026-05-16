@@ -509,7 +509,7 @@ export const actions: Actions = {
 			console.error('Error deleting workflow:', err);
 			return fail(500, { message: m.workflowsDeleteError?.() ?? 'Failed to delete workflow' });
 		}
-		throw redirect(303, `/projects/${projectId}/settings`);
+		throw redirect(303, `/admin/projects/${projectId}/settings`);
 	},
 
 	updateWorkflowMeta: async ({ request, params, locals: { pbAdmin: pb } }) => {

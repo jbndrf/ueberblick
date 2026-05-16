@@ -10,7 +10,7 @@
 	import { toast } from 'svelte-sonner';
 	import {
 		Users, Eye, EyeOff, FilePlus, FileMinus, Pencil, PencilOff,
-		Lock, ChevronRight, Wrench, TriangleAlert, ShieldCheck
+		Lock, ChevronRight, Wrench, TriangleAlert, ShieldCheck, Link
 	} from '@lucide/svelte';
 	import type { PageData } from './$types';
 	import { BaseTable, type BaseColumnConfig } from '$lib/components/admin/base-table';
@@ -26,11 +26,46 @@
 		description?: string;
 		created_at: string;
 		project_id: string;
+		self_joinable?: boolean;
+		join_slug?: string;
+		max_instances?: number;
 		assigned_participants?: Array<{
 			id: string;
 			name: string;
 		}>;
 	};
+
+	async function toggleSelfJoinable(rowId: string, value: boolean) {
+		const formData = new FormData();
+		formData.append('id', rowId);
+		formData.append('enabled', String(value));
+		try {
+			const res = await fetch('?/toggleSelfJoinable', { method: 'POST', body: formData });
+			if (!res.ok) {
+				toast.error(m.rolesSelfJoinToggleError?.() ?? 'Failed to update self-join setting');
+				return;
+			}
+			await invalidateAll();
+			toast.success(
+				value
+					? (m.rolesSelfJoinEnabled?.() ?? 'Self-join enabled')
+					: (m.rolesSelfJoinDisabled?.() ?? 'Self-join disabled')
+			);
+		} catch (err) {
+			console.error(err);
+			toast.error(m.rolesSelfJoinToggleError?.() ?? 'Failed to update self-join setting');
+		}
+	}
+
+	async function copyJoinUrl(slug: string) {
+		const url = `${window.location.origin}/join/${slug}`;
+		try {
+			await navigator.clipboard.writeText(url);
+			toast.success(m.rolesSelfJoinUrlCopied?.() ?? 'Join URL copied');
+		} catch {
+			toast.error(m.rolesSelfJoinUrlCopyError?.() ?? 'Could not copy URL');
+		}
+	}
 
 	let { data }: { data: PageData } = $props();
 
@@ -42,8 +77,62 @@
 	let editDialogOpen = $state(false);
 	let deleteDialogOpen = $state(false);
 	let editParticipantsDialogOpen = $state(false);
+	let joinInfoDialogOpen = $state(false);
+	let joinInfoRole = $state<Role | null>(null);
 	let selectedRole = $state<Role | null>(null);
 	let selectedParticipantIds = $state<string[]>([]);
+
+	const joinInfoUrl = $derived(
+		joinInfoRole?.join_slug && typeof window !== 'undefined'
+			? `${window.location.origin}/join/${joinInfoRole.join_slug}`
+			: ''
+	);
+
+	function openJoinInfo(role: Role) {
+		if (!role.self_joinable || !role.join_slug) {
+			toast.error(
+				m.rolesSelfJoinNotEnabled?.() ?? 'Enable self-join first to get a join URL'
+			);
+			return;
+		}
+		joinInfoRole = role;
+		quotaInput = role.max_instances ?? 0;
+		joinInfoDialogOpen = true;
+	}
+
+	let quotaInput = $state(0);
+	let savingQuota = $state(false);
+
+	async function saveQuota() {
+		if (!joinInfoRole) return;
+		const value = Number(quotaInput);
+		if (!Number.isFinite(value) || value < 0 || !Number.isInteger(value)) {
+			toast.error(m.rolesQuotaInvalid?.() ?? 'Quota must be a non-negative whole number');
+			return;
+		}
+		savingQuota = true;
+		try {
+			const formData = new FormData();
+			formData.append('id', joinInfoRole.id);
+			formData.append('maxInstances', String(value));
+			const res = await fetch('?/updateRoleInstanceQuota', { method: 'POST', body: formData });
+			if (!res.ok) {
+				toast.error(m.rolesQuotaSaveError?.() ?? 'Failed to save quota');
+				return;
+			}
+			await invalidateAll();
+			toast.success(m.rolesQuotaSaved?.() ?? 'Quota saved');
+		} catch (err) {
+			console.error(err);
+			toast.error(m.rolesQuotaSaveError?.() ?? 'Failed to save quota');
+		} finally {
+			savingQuota = false;
+		}
+	}
+
+	function selectJoinUrlInput(e: Event) {
+		(e.currentTarget as HTMLInputElement).select();
+	}
 
 	// --- Permissions tab state ---
 	let selectedPermRoleId = $state(data.roles[0]?.id || '');
@@ -214,6 +303,20 @@
 			onUpdate: (rowId, value) => updateField(rowId, value, 'description')
 		},
 		{
+			id: 'self_joinable',
+			header: m.rolesSelfJoin?.() ?? 'Self-join',
+			accessorKey: 'self_joinable',
+			fieldType: 'boolean',
+			capabilities: {
+				sortable: true,
+				filterable: true,
+				editable: false
+			},
+			booleanConfig: {
+				onToggle: toggleSelfJoinable
+			}
+		},
+		{
 			id: 'assigned_participants',
 			header: m.rolesAssignedParticipants?.() ?? 'Assigned Participants',
 			accessorFn: (row) => {
@@ -312,6 +415,11 @@
 							label: m.rolesEditParticipants?.() ?? 'Edit Participants',
 							icon: Users,
 							onClick: openEditParticipants
+						},
+						{
+							label: m.rolesSelfJoinShowUrl?.() ?? 'Show join URL & defaults',
+							icon: Link,
+							onClick: openJoinInfo
 						}
 					]
 				}}
@@ -568,6 +676,115 @@
 	onDeleteOpenChange={(open) => (deleteDialogOpen = open)}
 	onEntityChange={(entity) => (selectedRole = entity as Role | null)}
 />
+
+<!-- Self-Join URL & Defaults Dialog -->
+<Dialog.Root bind:open={joinInfoDialogOpen}>
+	<Dialog.Content class="max-w-lg">
+		<Dialog.Header>
+			<Dialog.Title>
+				{m.rolesSelfJoinInfoTitle?.() ?? 'Self-join link'}
+				{#if joinInfoRole}
+					<span class="text-muted-foreground font-normal">— {joinInfoRole.name}</span>
+				{/if}
+			</Dialog.Title>
+			<Dialog.Description>
+				{m.rolesSelfJoinInfoDescription?.() ??
+					'Anyone with this link can register themselves as a guest participant in this role.'}
+			</Dialog.Description>
+		</Dialog.Header>
+
+		<div class="space-y-5 py-2">
+			<div class="space-y-2">
+				<label for="join-url-input" class="text-sm font-medium">
+					{m.rolesSelfJoinInfoUrlLabel?.() ?? 'Join URL'}
+				</label>
+				<div class="flex items-center gap-2">
+					<input
+						id="join-url-input"
+						type="text"
+						readonly
+						value={joinInfoUrl}
+						onclick={selectJoinUrlInput}
+						onfocus={selectJoinUrlInput}
+						class="flex-1 h-9 rounded-md border border-input bg-muted/40 px-3 py-1 font-mono text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring select-all"
+					/>
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						onclick={() => joinInfoRole?.join_slug && copyJoinUrl(joinInfoRole.join_slug)}
+					>
+						{m.commonCopy?.() ?? 'Copy'}
+					</Button>
+				</div>
+				<p class="text-xs text-muted-foreground">
+					{m.rolesSelfJoinInfoUrlHint?.() ??
+						'If the Copy button does nothing in your browser, click the field and copy manually.'}
+				</p>
+			</div>
+
+			<div class="space-y-2">
+				<label for="quota-max-instances" class="text-sm font-medium">
+					{m.rolesQuotaMaxInstancesLabel?.() ?? 'Max workflow instances per participant (0 = unlimited)'}
+				</label>
+				<div class="flex items-center gap-2">
+					<input
+						id="quota-max-instances"
+						type="number"
+						min="0"
+						step="1"
+						bind:value={quotaInput}
+						class="flex-1 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+					/>
+					<Button type="button" variant="default" size="sm" disabled={savingQuota} onclick={saveQuota}>
+						{m.rolesQuotaSave?.() ?? 'Save'}
+					</Button>
+				</div>
+				<p class="text-xs text-muted-foreground">
+					{m.rolesQuotaHelp?.() ?? 'Applies to anyone in this role. Lifetime total; admin deletions free the count.'}
+				</p>
+			</div>
+
+			<div class="space-y-2">
+				<h4 class="text-sm font-medium">
+					{m.rolesSelfJoinInfoDefaultsTitle?.() ?? 'Defaults applied on self-join'}
+				</h4>
+				<ul class="space-y-1.5 rounded-md border bg-muted/20 p-3 text-sm">
+					<li class="flex justify-between gap-4">
+						<span class="text-muted-foreground">{m.rolesSelfJoinInfoDefaultName?.() ?? 'Name'}</span>
+						<span class="font-mono">Guest</span>
+					</li>
+					<li class="flex justify-between gap-4">
+						<span class="text-muted-foreground">{m.rolesSelfJoinInfoDefaultRole?.() ?? 'Role'}</span>
+						<span>{joinInfoRole?.name ?? ''}</span>
+					</li>
+					<li class="flex justify-between gap-4">
+						<span class="text-muted-foreground">{m.rolesSelfJoinInfoDefaultEmail?.() ?? 'Email'}</span>
+						<span class="font-mono text-xs">p-…@placeholder.local</span>
+					</li>
+					<li class="flex justify-between gap-4">
+						<span class="text-muted-foreground">{m.rolesSelfJoinInfoDefaultActive?.() ?? 'Active'}</span>
+						<span>{m.commonYes?.() ?? 'Yes'}</span>
+					</li>
+					<li class="flex justify-between gap-4">
+						<span class="text-muted-foreground">{m.rolesSelfJoinInfoDefaultLandingPage?.() ?? 'Lands on'}</span>
+						<span class="font-mono">/map</span>
+					</li>
+					<li class="flex justify-between gap-4">
+						<span class="text-muted-foreground">{m.rolesSelfJoinInfoDefaultRetention?.() ?? 'Auto-delete after'}</span>
+						<span>{m.rolesSelfJoinInfoDefaultRetentionValue?.() ?? '90 days of inactivity'}</span>
+					</li>
+				</ul>
+			</div>
+		</div>
+
+		<Dialog.Footer>
+			<Button variant="outline" onclick={() => (joinInfoDialogOpen = false)}>
+				{m.commonClose?.() ?? 'Close'}
+			</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
 
 <!-- Edit Participants Dialog -->
 <Dialog.Root bind:open={editParticipantsDialogOpen}>

@@ -1,4 +1,5 @@
 import { error, fail } from '@sveltejs/kit';
+import { randomBytes } from 'crypto';
 import type { Actions, PageServerLoad } from './$types';
 import { z } from 'zod';
 import { superValidate } from 'sveltekit-superforms';
@@ -6,6 +7,10 @@ import { zod4 } from 'sveltekit-superforms/adapters';
 import { createUpdateFieldAction, createDeleteAction } from '$lib/server/crud-actions';
 import type PocketBase from 'pocketbase';
 import * as m from '$lib/paraglide/messages';
+
+function generateJoinSlug(): string {
+	return randomBytes(12).toString('base64url');
+}
 
 type StagePermissions = {
 	id: string;
@@ -503,6 +508,74 @@ export const actions: Actions = {
 		} catch (err) {
 			console.error('Error toggling role:', err);
 			return fail(500, { message: 'Failed to toggle role' });
+		}
+	},
+
+	updateRoleInstanceQuota: async ({ request, params, locals: { pbAdmin: pb } }) => {
+		const formData = await request.formData();
+		const roleId = formData.get('id') as string;
+		const raw = formData.get('maxInstances');
+		const parsed = raw === null || raw === '' ? 0 : Number(raw);
+
+		if (!roleId) {
+			return fail(400, { message: 'Role id is required' });
+		}
+		if (!Number.isFinite(parsed) || parsed < 0 || !Number.isInteger(parsed)) {
+			return fail(400, { message: 'maxInstances must be a non-negative integer' });
+		}
+
+		try {
+			const role = await pb.collection('roles').getOne(roleId);
+			if (role.project_id !== params.projectId) {
+				return fail(403, { message: 'Role does not belong to this project' });
+			}
+			const updated = await pb.collection('roles').update(roleId, { max_instances: parsed });
+			return { success: true, entity: updated };
+		} catch (err) {
+			console.error('Error updating role instance quota:', err);
+			return fail(500, { message: 'Failed to update quota' });
+		}
+	},
+
+	toggleSelfJoinable: async ({ request, params, locals: { pbAdmin: pb } }) => {
+		const formData = await request.formData();
+		const roleId = formData.get('id') as string;
+		const enabled = formData.get('enabled') === 'true';
+
+		if (!roleId) {
+			return fail(400, { message: 'Role id is required' });
+		}
+
+		try {
+			const role = await pb.collection('roles').getOne(roleId);
+			if (role.project_id !== params.projectId) {
+				return fail(403, { message: 'Role does not belong to this project' });
+			}
+
+			const payload: Record<string, unknown> = { self_joinable: enabled };
+			// Auto-generate a slug on first enable; keep the existing one on toggle-off.
+			if (enabled && !role.join_slug) {
+				for (let attempt = 0; attempt < 3; attempt++) {
+					const candidate = generateJoinSlug();
+					try {
+						const updated = await pb.collection('roles').update(roleId, {
+							self_joinable: true,
+							join_slug: candidate
+						});
+						return { success: true, entity: updated };
+					} catch (err: any) {
+						if (err?.data?.join_slug?.message?.includes('unique')) continue;
+						throw err;
+					}
+				}
+				return fail(500, { message: 'Could not generate a unique join slug' });
+			}
+
+			const updated = await pb.collection('roles').update(roleId, payload);
+			return { success: true, entity: updated };
+		} catch (err) {
+			console.error('Error toggling self_joinable:', err);
+			return fail(500, { message: 'Failed to update self-join setting' });
 		}
 	},
 

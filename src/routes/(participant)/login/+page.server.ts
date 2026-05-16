@@ -10,6 +10,7 @@ import {
 	recordLoginSuccess,
 	retryAfterMinutes
 } from '$lib/server/rate-limit';
+import { env } from '$env/dynamic/private';
 import * as m from '$lib/paraglide/messages';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -126,14 +127,20 @@ export const actions: Actions = {
 			path: '/',
 			httpOnly: false,
 			sameSite: 'lax',
+			secure: env.SECURE_COOKIES === 'true',
 			maxAge: 60 * 60 * 24 * 365
 		});
-		// Preserve any ?token=... or ?redirectTo=... on the current URL so the
-		// page load re-runs with consent in place -- the auto-login via token
-		// will then fire normally, and QR/manual submissions get an unblocked
-		// form.
-		const returnTo = String(form.get('returnTo') ?? '') || url.pathname + url.search;
-		redirect(303, returnTo);
+		const raw = String(form.get('returnTo') ?? '');
+		const safeReturnTo = raw.startsWith('/') && !raw.startsWith('//') ? raw : '';
+		const currentUrl = url.pathname + url.search;
+		// Only redirect when we'd land on a different URL. When returnTo equals
+		// the current page (the common /login -> /login self-redirect), return
+		// success and let the client invalidate -- avoids SvelteKit same-URL
+		// navigation quirks where load doesn't see the freshly-set cookie.
+		if (safeReturnTo && safeReturnTo !== currentUrl) {
+			redirect(303, safeReturnTo);
+		}
+		return { setConsent: { ok: true } };
 	},
 
 	login: async (event) => {

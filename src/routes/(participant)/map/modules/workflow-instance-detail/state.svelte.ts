@@ -654,10 +654,7 @@ export class WorkflowInstanceDetailState {
 
 	/** Get form fields for a protocol form, sorted by page/row/order */
 	getProtocolFormFields(protocolFormId: string): FormField[] {
-		const form = this.forms.find(f => f.id === protocolFormId);
-		if (!form) return [];
-
-		return this.formFields
+		const fields = this.formFields
 			.filter(f => f.form_id === protocolFormId)
 			.sort((a, b) => {
 				if ((a.page ?? 1) !== (b.page ?? 1)) return (a.page ?? 1) - (b.page ?? 1);
@@ -665,6 +662,11 @@ export class WorkflowInstanceDetailState {
 				const posOrder = { left: 0, right: 1, full: 2 };
 				return (posOrder[a.column_position ?? 'full'] ?? 2) - (posOrder[b.column_position ?? 'full'] ?? 2);
 			});
+
+		if (fields.length === 0) {
+			console.warn(`[detailState] No form fields found for protocol_form_id=${protocolFormId}`);
+		}
+		return fields;
 	}
 
 	/** Get tools for a connection, sorted by tool_order */

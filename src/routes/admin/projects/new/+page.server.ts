@@ -52,6 +52,6 @@ export const actions: Actions = {
 			});
 		}
 
-		throw redirect(303, `/projects/${projectId}/participants`);
+		throw redirect(303, `/admin/projects/${projectId}/participants`);
 	}
 };

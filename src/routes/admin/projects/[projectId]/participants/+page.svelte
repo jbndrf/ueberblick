@@ -7,6 +7,9 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { toast } from 'svelte-sonner';
 	import { UserCog } from '@lucide/svelte';
+	import { Switch } from '$lib/components/ui/switch';
+	import { Label } from '$lib/components/ui/label';
+	import { goto } from '$app/navigation';
 	import type { PageData } from './$types';
 	import { BaseTable, type BaseColumnConfig } from '$lib/components/admin/base-table';
 	import QrExportButton from './qr-export-button.svelte';
@@ -285,7 +288,27 @@
 			<h1 class="text-3xl font-bold tracking-tight">{m.participantsTitle()}</h1>
 			<p class="text-muted-foreground">{m.participantsDescription()}</p>
 		</div>
-		<QrExportButton selectedParticipants={selectedParticipants.map(p => ({ name: p.name, token: p.token }))} />
+		<div class="flex items-center gap-3">
+			<div class="flex items-center gap-2">
+				<Switch
+					id="show-guests"
+					checked={data.showGuests}
+					onCheckedChange={(checked) => {
+						const u = new URL($page.url);
+						if (checked) {
+							u.searchParams.set('showGuests', 'true');
+						} else {
+							u.searchParams.delete('showGuests');
+						}
+						goto(u.pathname + u.search, { keepFocus: true, noScroll: true });
+					}}
+				/>
+				<Label for="show-guests" class="text-sm">
+					{m.participantsShowGuests?.() ?? 'Show guests'}
+				</Label>
+			</div>
+			<QrExportButton selectedParticipants={selectedParticipants.map(p => ({ name: p.name, token: p.token }))} />
+		</div>
 	</div>
 
 	<!-- Base Table -->

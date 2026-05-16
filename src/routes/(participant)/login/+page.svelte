@@ -17,7 +17,11 @@
 	import { page } from '$app/stores';
 
 	let { data } = $props();
-	const loginReturnTo = $derived($page.url.pathname + $page.url.search);
+	const loginReturnTo = $derived.by(() => {
+		const rt = $page.url.searchParams.get('returnTo');
+		if (rt && rt.startsWith('/') && !rt.startsWith('//')) return rt;
+		return $page.url.pathname + $page.url.search;
+	});
 
 	const form = superForm(data.form, {
 		validators: zod4Client(participantLoginSchema),

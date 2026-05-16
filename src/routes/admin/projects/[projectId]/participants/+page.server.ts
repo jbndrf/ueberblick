@@ -24,15 +24,20 @@ function generateUniqueToken(): string {
 	return randomBytes(16).toString('base64url');
 }
 
-export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) => {
+export const load: PageServerLoad = async ({ params, url, locals: { pbAdmin: pb } }) => {
 	const { projectId } = params;
+	const showGuests = url.searchParams.get('showGuests') === 'true';
 
 	try {
 		// Use admin client to fetch participants - ensures access to token field
 		// (token is an identity field which PocketBase hides from regular API requests)
 		const adminPb = await getAdminPb();
+		const baseFilter = `project_id = "${projectId}"`;
+		const filter = showGuests
+			? baseFilter
+			: `${baseFilter} && (self_joined = false || self_joined = null)`;
 		const participantsRaw = await adminPb.collection('participants').getFullList({
-			filter: `project_id = "${projectId}"`,
+			filter,
 			sort: '-created',
 			fields: '*'
 		});
@@ -75,7 +80,8 @@ export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) 
 			participants: participantsWithRoles,
 			roles: roles || [],
 			customFields: customFields || [],
-			form
+			form,
+			showGuests
 		};
 	} catch (err) {
 		console.error('Error loading participants:', err);

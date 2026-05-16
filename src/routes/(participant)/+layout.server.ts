@@ -2,11 +2,25 @@ import { redirect } from '@sveltejs/kit';
 import { getAdminPb } from '$lib/server/admin-auth';
 import type { LayoutServerLoad } from './$types';
 
+async function getParticipantToken(locals: App.Locals): Promise<string | null> {
+	if (!locals.participant) return null;
+	try {
+		const adminPb = await getAdminPb();
+		const rec = await adminPb.collection('participants').getOne(locals.participant.id, {
+			fields: 'token',
+			requestKey: null
+		});
+		return (rec.token as string) ?? null;
+	} catch {
+		return null;
+	}
+}
+
 export const load: LayoutServerLoad = async ({ locals, url }) => {
 	const participant = locals.participant;
 	const isParticipantAuth = !!participant;
 
-	if (!isParticipantAuth && url.pathname !== '/login') {
+	if (!isParticipantAuth && url.pathname !== '/login' && !url.pathname.startsWith('/join/')) {
 		redirect(303, '/login');
 	}
 
@@ -17,6 +31,8 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 	let legalPages: Array<{ id: string; slug: string; title: string; content: string }> = [];
 	let projectIcon: string | null = null;
 	let projectName: string | null = null;
+	let participantToken: string | null = null;
+	let loginLink: string | null = null;
 
 	if (isParticipantAuth) {
 		const adminPb = await getAdminPb();
@@ -54,12 +70,17 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 			return [] as Array<{ id: string; slug: string; title: string; content: string }>;
 		});
 
-		const [collections, pages, project, legal] = await Promise.all([
+		const [collections, pages, project, legal, token] = await Promise.all([
 			collectionsPromise,
 			infoPagesPromise,
 			projectPromise,
-			legalPagesPromise
+			legalPagesPromise,
+			getParticipantToken(locals)
 		]);
+		participantToken = token;
+		if (token) {
+			loginLink = `${url.origin}/login?token=${encodeURIComponent(token)}`;
+		}
 
 		// Process collections
 		if (collections.length > 0) {
@@ -102,6 +123,8 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 		infoPages,
 		legalPages,
 		projectIcon,
-		projectName
+		projectName,
+		participantToken,
+		loginLink
 	};
 };

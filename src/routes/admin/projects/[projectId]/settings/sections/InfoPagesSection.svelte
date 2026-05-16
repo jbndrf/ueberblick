@@ -172,6 +172,30 @@
 					{m.infoPagesContentHint?.() ??
 						'HTML is supported. You can use tags for links, paragraphs, bold, italic, lists, and headings.'}
 				</p>
+				<div class="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+					<p class="mb-1 font-medium text-foreground">
+						{m.infoPagesVariablesTitle?.() ?? 'Per-participant variables'}
+					</p>
+					<ul class="space-y-1">
+						<li>
+							<code class="font-mono">$token</code> —
+							{m.infoPagesVarToken?.() ?? "the viewer's access token"}
+						</li>
+						<li>
+							<code class="font-mono">$loginlink</code> —
+							{m.infoPagesVarLoginLink?.() ?? 'a one-click login URL with the token embedded'}
+						</li>
+						<li>
+							<code class="font-mono">$qrtoken</code> —
+							{m.infoPagesVarQrToken?.() ?? 'QR code of the access token (scan on the login page)'}
+						</li>
+						<li>
+							<code class="font-mono">$qrloginlink</code> —
+							{m.infoPagesVarQrLoginLink?.() ??
+								'QR code of the login URL (camera scan auto-authenticates)'}
+						</li>
+					</ul>
+				</div>
 			</div>
 
 			<div class="space-y-2">

@@ -491,7 +491,8 @@ export class WorkflowBuilderState {
 	}
 
 	getFormsForConnection(connectionId: string): TrackedForm[] {
-		return this.visibleForms.filter((f) => f.data.connection_id === connectionId);
+		const protocolFormIds = this.getProtocolFormIds();
+		return this.visibleForms.filter((f) => f.data.connection_id === connectionId && !protocolFormIds.has(f.data.id));
 	}
 
 	getFormsForStage(stageId: string): TrackedForm[] {

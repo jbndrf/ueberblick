@@ -32,6 +32,11 @@
 		 *  picked). Used by parents that host a sibling sheet so they can collapse
 		 *  both together on explicit dismissal. */
 		onBackdropClose?: () => void;
+		/** When true, the participant has hit their per-role workflow_instance
+		 *  quota. Buttons render disabled and a banner explains why. */
+		quotaReached?: boolean;
+		/** Hint text shown when quotaReached is true. */
+		quotaHint?: string;
 	}
 
 	let {
@@ -43,7 +48,9 @@
 		onOpenChange,
 		isSelectingCoordinates = $bindable(false),
 		position = 'center',
-		onBackdropClose
+		onBackdropClose,
+		quotaReached = false,
+		quotaHint = ''
 	}: Props = $props();
 
 	// State
@@ -87,6 +94,7 @@
 	}
 
 	function selectWorkflow(workflow: Workflow) {
+		if (quotaReached) return;
 		selectedWorkflow = workflow;
 		closeMenu();
 
@@ -269,10 +277,25 @@
 				position === 'center' ? 'left-1/2 -translate-x-1/2' : 'left-4 md:left-16'
 			]}
 		>
+				{#if quotaReached && quotaHint}
+					<div
+						class="workflow-item max-w-[260px] rounded-xl
+							bg-destructive/10 dark:bg-destructive/20
+							border border-destructive/40
+							px-3 py-2 text-xs font-medium text-destructive
+							shadow-lg shadow-black/5 dark:shadow-black/20
+							backdrop-blur-md text-center"
+						role="status"
+					>
+						{quotaHint}
+					</div>
+				{/if}
 				{#each workflows as workflow, i}
 					<button
 						type="button"
 						onclick={() => selectWorkflow(workflow)}
+						disabled={quotaReached}
+						aria-disabled={quotaReached}
 						class="workflow-item min-w-[100px] max-w-[200px] rounded-xl
 							bg-background/95 dark:bg-muted/90
 							border border-border/50 dark:border-border/30
@@ -281,7 +304,8 @@
 							backdrop-blur-md
 							transition-all duration-200 ease-out
 							hover:bg-accent hover:border-accent-foreground/20 hover:scale-[1.02]
-							active:scale-[0.98]"
+							active:scale-[0.98]
+							disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-background/95 disabled:hover:border-border/50 disabled:hover:scale-100"
 						style="animation-delay: {i * 0.03}s"
 					>
 						<span class="line-clamp-2 text-center leading-snug">{workflow.entry_button_label || workflow.name}</span>

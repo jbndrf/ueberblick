@@ -402,6 +402,7 @@ export interface Role {
 	id: string;
 	name: string;
 	project_id: string;
+	max_instances?: number;
 	created: string;
 	updated: string;
 }
