@@ -1,6 +1,34 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		commonCancel,
+		mapWorkflowContinue,
+		participantWorkflowInstanceDetailAdminUpdated,
+		participantWorkflowInstanceDetailAttachmentAlt,
+		participantWorkflowInstanceDetailConfirmAction,
+		participantWorkflowInstanceDetailConfirmProceed,
+		participantWorkflowInstanceDetailConflictMany,
+		participantWorkflowInstanceDetailConflictOne,
+		participantWorkflowInstanceDetailEntryAction,
+		participantWorkflowInstanceDetailEntryConflictResolved,
+		participantWorkflowInstanceDetailEntryCreated,
+		participantWorkflowInstanceDetailEntryDataRecorded,
+		participantWorkflowInstanceDetailEntryInspectionRecorded,
+		participantWorkflowInstanceDetailEntryLocationUpdated,
+		participantWorkflowInstanceDetailFieldFallback,
+		participantWorkflowInstanceDetailFieldsNoun,
+		participantWorkflowInstanceDetailFieldsUpdated,
+		participantWorkflowInstanceDetailJustNow,
+		participantWorkflowInstanceDetailLocationLabel,
+		participantWorkflowInstanceDetailMovedTo,
+		participantWorkflowInstanceDetailNoActivity,
+		participantWorkflowInstanceDetailNoData,
+		participantWorkflowInstanceDetailNoLocation,
+		participantWorkflowInstanceDetailTabActivity,
+		participantWorkflowInstanceDetailTabData,
+		participantWorkflowInstanceDetailUpdatedSuffix,
+		participantWorkflowInstanceDetailYesterday
+	} from '$lib/paraglide/messages';
 	import ModuleShell from '$lib/components/module-shell.svelte';
 	import { requireParticipantGateway } from '$lib/participant-state/context.svelte';
 	import {
@@ -13,6 +41,7 @@
 		type ToolUsageRecord
 	} from './state.svelte';
 	import type { FieldValueCache } from '$lib/participant-state/field-value-cache.svelte';
+	import type { FieldDef } from '$lib/participant-state/types';
 	import type { WorkflowInstanceSelection } from '../types';
 	import * as Tabs from '$lib/components/ui/tabs';
 	import { ChevronRight } from '@lucide/svelte';
@@ -80,6 +109,94 @@
 	// Conflict resolution state
 	let pendingConflicts = $state<SyncConflict[]>([]);
 	let showConflictTool = $state(false);
+
+	// ==========================================================================
+	// Field-value write helper (unified across form / edit / protocol)
+	// ==========================================================================
+
+	function serializeValue(value: unknown): string {
+		if (value === null || value === undefined) return '';
+		if (typeof value === 'object' && !(value instanceof File)) return JSON.stringify(value);
+		return String(value);
+	}
+
+	/**
+	 * Write a single field value, honouring write_mode:
+	 *   singleton -> upsert by (instance, field_def) using the in-memory cache.
+	 *   observation -> always append a new row.
+	 *   computed -> reject (server-only).
+	 *
+	 * Files: when `value` is a File, write the binary into `file_value` instead.
+	 */
+	async function writeFieldValue(
+		fieldDef: FieldDef,
+		value: string | File | null,
+		ctx: { instanceId: string; stageId: string; toolUsageId?: string }
+	): Promise<void> {
+		if (!detailState) return;
+		const writeMode = fieldDef.write_mode;
+		const nowIso = new Date().toISOString();
+
+		if (writeMode === 'computed') {
+			console.warn('[writeFieldValue] computed field is server-evaluated; skipping client write', fieldDef.id);
+			return;
+		}
+
+		const isFile = value instanceof File;
+
+		const buildPayload = (): Record<string, unknown> | FormData => {
+			if (isFile) {
+				const fd = new FormData();
+				fd.append('instance_id', ctx.instanceId);
+				fd.append('field_def_id', fieldDef.id);
+				fd.append('write_mode', writeMode);
+				fd.append('recorded_at', nowIso);
+				fd.append('recorded_at_stage', ctx.stageId);
+				if (ctx.toolUsageId) fd.append('recorded_by_action', ctx.toolUsageId);
+				fd.append('value', '');
+				fd.append('file_value', value as File);
+				return fd;
+			}
+			return {
+				instance_id: ctx.instanceId,
+				field_def_id: fieldDef.id,
+				write_mode: writeMode,
+				recorded_at: nowIso,
+				recorded_at_stage: ctx.stageId,
+				recorded_by_action: ctx.toolUsageId ?? '',
+				value: typeof value === 'string' ? value : serializeValue(value)
+			};
+		};
+
+		if (writeMode === 'observation') {
+			await gateway.collection('workflow_field_values').create(buildPayload() as any);
+			return;
+		}
+
+		// singleton: upsert by (instance, field_def) using the local cache.
+		const existing = detailState.fieldValuesByDefId.get(fieldDef.id)?.[0];
+		if (existing) {
+			if (isFile) {
+				const fd = new FormData();
+				fd.append('value', '');
+				fd.append('file_value', value as File);
+				fd.append('recorded_at', nowIso);
+				fd.append('recorded_at_stage', ctx.stageId);
+				if (ctx.toolUsageId) fd.append('recorded_by_action', ctx.toolUsageId);
+				await gateway.collection('workflow_field_values').update(existing.id, fd as any);
+			} else {
+				await gateway.collection('workflow_field_values').update(existing.id, {
+					value: typeof value === 'string' ? value : serializeValue(value),
+					recorded_at: nowIso,
+					recorded_at_stage: ctx.stageId,
+					recorded_by_action: ctx.toolUsageId ?? ''
+				});
+			}
+			return;
+		}
+
+		await gateway.collection('workflow_field_values').create(buildPayload() as any);
+	}
 
 	// ==========================================================================
 	// Effects
@@ -161,8 +278,8 @@
 	// ==========================================================================
 
 	const tabs = [
-		{ id: 'activity', label: m.participantWorkflowInstanceDetailTabActivity?.() ?? 'Activity' },
-		{ id: 'data', label: m.participantWorkflowInstanceDetailTabData?.() ?? 'Data' }
+		{ id: 'activity', label: participantWorkflowInstanceDetailTabActivity?.() ?? 'Activity' },
+		{ id: 'data', label: participantWorkflowInstanceDetailTabData?.() ?? 'Data' }
 	];
 
 	// ==========================================================================
@@ -211,7 +328,7 @@
 		}));
 		const label = instanceLabel({
 			instance: { id: inst.id, updated: inst.updated, created: inst.created, current_stage_id: inst.current_stage_id },
-			fieldValues: instanceFVs.map((fv) => ({ field_key: fv.field_key, value: fv.value })),
+			fieldValues: instanceFVs.map((fv) => ({ field_def_id: (fv as any).field_def_id, value: fv.value })),
 			formFields,
 			locale: 'de'
 		});
@@ -279,10 +396,10 @@
 		const diffH = Math.floor(diffMs / 3600000);
 		const diffDays = Math.floor(diffMs / 86400000);
 
-		if (diffMin < 1) return (m.participantWorkflowInstanceDetailJustNow?.() ?? 'Just now');
+		if (diffMin < 1) return (participantWorkflowInstanceDetailJustNow?.() ?? 'Just now');
 		if (diffMin < 60) return `${diffMin}m ago`;
 		if (diffH < 24) return `${diffH}h ago`;
-		if (diffDays === 1) return (m.participantWorkflowInstanceDetailYesterday?.() ?? 'Yesterday');
+		if (diffDays === 1) return (participantWorkflowInstanceDetailYesterday?.() ?? 'Yesterday');
 		if (diffDays < 7) return `${diffDays}d ago`;
 		return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 	}
@@ -362,30 +479,30 @@
 	});
 
 	function getEntryLabel(metadata: ToolUsageRecord['metadata']): string {
-		if (!metadata?.action) return (m.participantWorkflowInstanceDetailEntryAction?.() ?? 'Action');
+		if (!metadata?.action) return (participantWorkflowInstanceDetailEntryAction?.() ?? 'Action');
 		switch (metadata.action) {
 			case 'instance_created':
-				return (m.participantWorkflowInstanceDetailEntryCreated?.() ?? 'Created');
+				return (participantWorkflowInstanceDetailEntryCreated?.() ?? 'Created');
 			case 'form_fill':
-				return (m.participantWorkflowInstanceDetailEntryDataRecorded?.() ?? 'Data recorded');
+				return (participantWorkflowInstanceDetailEntryDataRecorded?.() ?? 'Data recorded');
 			case 'edit':
 			case 'admin_edit': {
 				if (metadata.changes?.length === 1) {
 					const fieldDef = detailState?.formFields.find(f => f.id === metadata.changes![0].field_key);
-					return `${fieldDef?.field_label || (m.participantWorkflowInstanceDetailFieldFallback?.() ?? 'Field')} ${(m.participantWorkflowInstanceDetailUpdatedSuffix?.() ?? 'updated')}`;
+					return `${fieldDef?.field_label || (participantWorkflowInstanceDetailFieldFallback?.() ?? 'Field')} ${(participantWorkflowInstanceDetailUpdatedSuffix?.() ?? 'updated')}`;
 				}
 				return metadata.action === 'admin_edit'
-					? `${(m.participantWorkflowInstanceDetailAdminUpdated?.() ?? 'Admin updated')} ${metadata.changes?.length || ''} ${(m.participantWorkflowInstanceDetailFieldsNoun?.() ?? 'fields')}`
-					: `${metadata.changes?.length || ''} ${(m.participantWorkflowInstanceDetailFieldsUpdated?.() ?? 'fields updated')}`;
+					? `${(participantWorkflowInstanceDetailAdminUpdated?.() ?? 'Admin updated')} ${metadata.changes?.length || ''} ${(participantWorkflowInstanceDetailFieldsNoun?.() ?? 'fields')}`
+					: `${metadata.changes?.length || ''} ${(participantWorkflowInstanceDetailFieldsUpdated?.() ?? 'fields updated')}`;
 			}
 			case 'location_edit':
-				return (m.participantWorkflowInstanceDetailEntryLocationUpdated?.() ?? 'Location updated');
+				return (participantWorkflowInstanceDetailEntryLocationUpdated?.() ?? 'Location updated');
 			case 'protocol':
-				return (m.participantWorkflowInstanceDetailEntryInspectionRecorded?.() ?? 'Inspection recorded');
+				return (participantWorkflowInstanceDetailEntryInspectionRecorded?.() ?? 'Inspection recorded');
 			case 'conflict_resolution':
-				return (m.participantWorkflowInstanceDetailEntryConflictResolved?.() ?? 'Sync conflict resolved');
+				return (participantWorkflowInstanceDetailEntryConflictResolved?.() ?? 'Sync conflict resolved');
 			default:
-				return (m.participantWorkflowInstanceDetailEntryAction?.() ?? 'Action');
+				return (participantWorkflowInstanceDetailEntryAction?.() ?? 'Action');
 		}
 	}
 
@@ -505,9 +622,20 @@
 		const targetStageId = activeToolFlow.connection.to_stage_id;
 
 		try {
-			// Build list of field values for audit log
+			// Restrict the form submission to field defs actually referenced by
+			// this connection's form(s); the formValues object may carry prior
+			// instance values seeded for dependent-field resolution.
+			const formIds = new Set(
+				detailState.forms.filter(f => f.connection_id === connectionId).map(f => f.id)
+			);
+			const refDefIds = new Set(
+				detailState.formFieldRefs.filter(r => formIds.has(r.form_id)).map(r => r.field_def_id)
+			);
+
 			const fieldEntries = Object.entries(formValues).filter(
-				([_, value]) => value !== null && value !== undefined && value !== ''
+				([fieldId, value]) =>
+					refDefIds.has(fieldId) &&
+					value !== null && value !== undefined && value !== ''
 			);
 
 			const createdFields = fieldEntries.map(([fieldId, value]) => ({
@@ -531,32 +659,26 @@
 				}
 			}) as { id: string };
 
-			// 2. Save form field values with link to tool_usage
-
+			// 2. Save field values through the unified write helper.
 			for (const [fieldId, value] of fieldEntries) {
+				const def = detailState.fieldDefsById.get(fieldId);
+				if (!def) {
+					console.warn('[handleToolFormSubmit] no field_def found for id', fieldId);
+					continue;
+				}
 				if (Array.isArray(value) && value.length > 0 && value[0] instanceof File) {
-					// File upload - create separate record for each file
 					for (const file of value as File[]) {
-						const formData = new FormData();
-						formData.append('instance_id', activeToolFlow.instanceId);
-						formData.append('field_key', fieldId);
-						formData.append('stage_id', targetStageId);
-						formData.append('value', '');
-						formData.append('file_value', file);
-						formData.append('created_by_action', toolUsage.id);
-
-						await gateway.collection('workflow_instance_field_values').create(formData as any);
+						await writeFieldValue(def, file, {
+							instanceId: activeToolFlow.instanceId,
+							stageId: targetStageId,
+							toolUsageId: toolUsage.id
+						});
 					}
 				} else {
-					// Regular value
-					const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
-
-					await gateway.collection('workflow_instance_field_values').create({
-						instance_id: activeToolFlow.instanceId,
-						field_key: fieldId,
-						stage_id: targetStageId,
-						value: stringValue,
-						created_by_action: toolUsage.id
+					await writeFieldValue(def, serializeValue(value), {
+						instanceId: activeToolFlow.instanceId,
+						stageId: targetStageId,
+						toolUsageId: toolUsage.id
 					});
 				}
 			}
@@ -794,94 +916,13 @@
 	}
 
 	async function handleEditSave(values: Record<string, unknown>) {
+		// TODO(field-def-redesign): tools_edit removed; admin should convert to Form tool.
+		// activeEditTool can never be set in the new world (availableStageEditTools
+		// is empty), so this is effectively dead. Kept as a no-op so existing
+		// callers (and ProtocolTool's editValues path) compile.
 		if (!activeEditTool || !detailState || !gateway) return;
-
-		const currentStageId = detailState.instance?.current_stage_id as string;
-
-		try {
-			// Build changes array for audit log (before/after values)
-			const changes: Array<{ field_key: string; field_name: string; before: string | null; after: string }> = [];
-			for (const [fieldId, newValue] of Object.entries(values)) {
-				if (newValue === null || newValue === undefined || newValue === '') continue;
-
-				const existing = detailState.fieldValues.find(fv => fv.field_key === fieldId);
-				const oldValue = existing?.value || null;
-				const newValueStr = Array.isArray(newValue) && newValue[0] instanceof File
-					? `[${(newValue as File[]).length} file(s)]`
-					: typeof newValue === 'object' ? JSON.stringify(newValue) : String(newValue);
-
-				// Only log if actually changed (or new)
-				if (oldValue !== newValueStr) {
-					changes.push({ field_key: fieldId, field_name: getFieldName(fieldId) || fieldId, before: oldValue, after: newValueStr });
-				}
-			}
-
-			// 1. Create tool_usage record with actual changes (audit trail)
-			const toolUsage = await gateway.collection('workflow_instance_tool_usage').create({
-				instance_id: detailState.instanceId,
-				stage_id: currentStageId,
-				executed_by: gateway.participantId,
-				executed_at: new Date().toISOString(),
-				metadata: {
-					action: 'edit',
-					stage_name: getStageName(currentStageId) || currentStageId,
-					changes: changes
-				}
-			}) as { id: string };
-
-			// 2. Update or create field values with link to tool_usage
-			for (const [fieldId, value] of Object.entries(values)) {
-				if (value === null || value === undefined || value === '') continue;
-
-				// Find existing field value (by field_key only - the value may have been created in an earlier stage)
-				const existing = detailState.fieldValues.find(
-					fv => fv.field_key === fieldId
-				);
-
-				// Determine the correct stage_id for this field (based on its form, not current stage)
-				const fieldStageId = getStageIdForField(fieldId) || currentStageId;
-
-				if (Array.isArray(value) && value.length > 0 && value[0] instanceof File) {
-					// File upload - create separate record for each file
-					for (const file of value as File[]) {
-						const formData = new FormData();
-						formData.append('instance_id', detailState.instanceId);
-						formData.append('field_key', fieldId);
-						formData.append('stage_id', fieldStageId);
-						formData.append('value', '');
-						formData.append('file_value', file);
-						formData.append('created_by_action', toolUsage.id);
-
-						await gateway.collection('workflow_instance_field_values').create(formData as any);
-					}
-				} else {
-					// Regular value
-					const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
-
-					if (existing) {
-						await gateway.collection('workflow_instance_field_values').update(existing.id, {
-							value: stringValue
-						});
-					} else {
-						// Create new - use the field's original stage, not current stage
-						await gateway.collection('workflow_instance_field_values').create({
-							instance_id: detailState.instanceId,
-							field_key: fieldId,
-							stage_id: fieldStageId,
-							value: stringValue,
-							created_by_action: toolUsage.id
-						});
-					}
-				}
-			}
-
-			// Refresh state and close edit
-			await detailState.refresh();
-			activeEditTool = null;
-		} catch (error) {
-			console.error('Failed to save edit:', error);
-			throw error;
-		}
+		console.warn('[handleEditSave] tools_edit is deprecated; received values for', Object.keys(values));
+		activeEditTool = null;
 	}
 
 	function handleEditCancel() {
@@ -971,7 +1012,9 @@
 
 		const currentStageId = detailState.instance?.current_stage_id as string;
 
-		// 1. Build deterministic snapshot of protocol values
+		// 1. Build deterministic snapshot. Includes the protocol form's fields
+		//    plus any `protocol_only_field_defs` (snapshot-only — never written
+		//    to workflow_field_values).
 		const snapshotFields: Array<Record<string, unknown>> = [];
 		const protocolFormFields = protocolTool.protocol_form_id
 			? detailState.getProtocolFormFields(protocolTool.protocol_form_id)
@@ -996,11 +1039,36 @@
 			snapshotFields.push(entry);
 		}
 
+		// Snapshot-only field defs (live only inside this entry's snapshot JSON).
+		const protocolOnlyIds = protocolTool.protocol_only_field_defs ?? [];
+		for (const defId of protocolOnlyIds) {
+			const def = detailState.fieldDefsById.get(defId);
+			if (!def) continue;
+			const value = protocolValues[defId];
+			const entry: Record<string, unknown> = {
+				id: def.id,
+				name: def.label,
+				type: def.field_type,
+				snapshot_only: true
+			};
+			if (Array.isArray(value) && value.length > 0 && value[0] instanceof File) {
+				entry.images_added = (value as File[]).map(f => f.name);
+			} else if (value !== null && value !== undefined && value !== '') {
+				entry.value = typeof value === 'object' ? value : String(value);
+			} else {
+				entry.value = null;
+			}
+			snapshotFields.push(entry);
+		}
+
 		// Sort by field ID for determinism
 		snapshotFields.sort((a, b) => String(a.id).localeCompare(String(b.id)));
 
 		const snapshotJson = sortedStringify(snapshotFields);
 		const hashHex = await sha256Hex(snapshotJson);
+
+		// Snapshot-only ids -- used below to skip writeFieldValue for these.
+		const protocolOnlySet = new Set(protocolOnlyIds);
 
 		// 2. Create protocol entry record
 		const hasFiles = Object.values(protocolValues).some(
@@ -1046,11 +1114,12 @@
 			}) as { id: string };
 		}
 
-		// 3. Create tool_usage record (audit trail)
+		// 3. Create tool_usage record (audit trail). Edit changes (legacy
+		//    "lifecycle fields") are compared against the latest known value.
 		const editChanges: Array<{ field_key: string; field_name: string; before: string | null; after: string }> = [];
 		for (const [fieldId, newValue] of Object.entries(editValues)) {
 			if (newValue === null || newValue === undefined || newValue === '') continue;
-			const existing = detailState.fieldValues.find(fv => fv.field_key === fieldId);
+			const existing = detailState.fieldValuesByDefId.get(fieldId)?.[0];
 			const oldValue = existing?.value || null;
 			const newValueStr = Array.isArray(newValue) && newValue[0] instanceof File
 				? `[${(newValue as File[]).length} file(s)]`
@@ -1074,40 +1143,57 @@
 			}
 		}) as { id: string };
 
-		// 4. Update field_values for edit fields that changed
-		for (const [fieldId, value] of Object.entries(editValues)) {
+		// 4. Write field values for the protocol form's fields through the
+		//    unified helper. write_mode on each field def decides upsert vs append.
+		//    Snapshot-only fields are intentionally skipped here.
+		for (const [fieldId, value] of Object.entries(protocolValues)) {
 			if (value === null || value === undefined || value === '') continue;
-
-			const existing = detailState.fieldValues.find(fv => fv.field_key === fieldId);
-			const fieldStageId = getStageIdForField(fieldId) || currentStageId;
-
+			if (protocolOnlySet.has(fieldId)) continue;
+			const def = detailState.fieldDefsById.get(fieldId);
+			if (!def) {
+				console.warn('[saveProtocol] no field_def found for id', fieldId);
+				continue;
+			}
+			const stageId = getStageIdForField(fieldId) || currentStageId;
 			if (Array.isArray(value) && value.length > 0 && value[0] instanceof File) {
 				for (const file of value as File[]) {
-					const formData = new FormData();
-					formData.append('instance_id', detailState.instanceId);
-					formData.append('field_key', fieldId);
-					formData.append('stage_id', fieldStageId);
-					formData.append('value', '');
-					formData.append('file_value', file);
-					formData.append('created_by_action', toolUsage.id);
-					await gateway.collection('workflow_instance_field_values').create(formData as any);
+					await writeFieldValue(def, file, {
+						instanceId: detailState.instanceId,
+						stageId,
+						toolUsageId: toolUsage.id
+					});
 				}
 			} else {
-				const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+				await writeFieldValue(def, serializeValue(value), {
+					instanceId: detailState.instanceId,
+					stageId,
+					toolUsageId: toolUsage.id
+				});
+			}
+		}
 
-				if (existing) {
-					await gateway.collection('workflow_instance_field_values').update(existing.id, {
-						value: stringValue
-					});
-				} else {
-					await gateway.collection('workflow_instance_field_values').create({
-						instance_id: detailState.instanceId,
-						field_key: fieldId,
-						stage_id: fieldStageId,
-						value: stringValue,
-						created_by_action: toolUsage.id
+		// editValues survives only because ProtocolTool still exposes a separate
+		// edit-section panel. Route those values through writeFieldValue too --
+		// no separate "edit" code path, no tools_edit semantics.
+		for (const [fieldId, value] of Object.entries(editValues)) {
+			if (value === null || value === undefined || value === '') continue;
+			const def = detailState.fieldDefsById.get(fieldId);
+			if (!def) continue;
+			const stageId = getStageIdForField(fieldId) || currentStageId;
+			if (Array.isArray(value) && value.length > 0 && value[0] instanceof File) {
+				for (const file of value as File[]) {
+					await writeFieldValue(def, file, {
+						instanceId: detailState.instanceId,
+						stageId,
+						toolUsageId: toolUsage.id
 					});
 				}
+			} else {
+				await writeFieldValue(def, serializeValue(value), {
+					instanceId: detailState.instanceId,
+					stageId,
+					toolUsageId: toolUsage.id
+				});
 			}
 		}
 
@@ -1379,8 +1465,8 @@
 						<AlertTriangle class="h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
 						<span class="text-sm text-amber-800 dark:text-amber-200">
 							{pendingConflicts.length === 1
-								? (m.participantWorkflowInstanceDetailConflictOne?.() ?? 'One of your changes was overridden. Tap to review.')
-								: (m.participantWorkflowInstanceDetailConflictMany?.({ count: pendingConflicts.length }) ?? `${pendingConflicts.length} changes were overridden. Tap to review.`)}
+								? (participantWorkflowInstanceDetailConflictOne?.() ?? 'One of your changes was overridden. Tap to review.')
+								: (participantWorkflowInstanceDetailConflictMany?.({ count: pendingConflicts.length }) ?? `${pendingConflicts.length} changes were overridden. Tap to review.`)}
 						</span>
 					</button>
 				{/if}
@@ -1433,7 +1519,7 @@
 						<!-- ACTIVITY TAB - Grouped by stage -->
 						{#if activitySections.length === 0}
 							<div class="text-center py-12 text-muted-foreground">
-								<p class="text-sm">{m.participantWorkflowInstanceDetailNoActivity?.() ?? 'No activity yet'}</p>
+								<p class="text-sm">{participantWorkflowInstanceDetailNoActivity?.() ?? 'No activity yet'}</p>
 							</div>
 						{:else}
 							<div class="space-y-1">
@@ -1448,7 +1534,7 @@
 										>
 											<div class="flex-1 min-w-0">
 												<p class="text-sm font-semibold text-blue-900 dark:text-blue-100">
-													{m.participantWorkflowInstanceDetailMovedTo?.({ stageName: section.stageName }) ?? `Moved to: ${section.stageName}`}
+													{participantWorkflowInstanceDetailMovedTo?.({ stageName: section.stageName }) ?? `Moved to: ${section.stageName}`}
 												</p>
 												<p class="text-xs text-blue-700/70 dark:text-blue-300/70">
 													{relativeTime(section.transitionEntry.executed_at)}{transBy ? ` \u00b7 ${transBy}` : ''}
@@ -1496,7 +1582,7 @@
 														{#if metadata.action === 'instance_created' && metadata.created_fields}
 															{#if metadata.centroid}
 																<div class="flex gap-1.5 text-xs mb-0.5">
-																	<span class="text-muted-foreground shrink-0">{m.participantWorkflowInstanceDetailLocationLabel?.() ?? 'Location'}:</span>
+																	<span class="text-muted-foreground shrink-0">{participantWorkflowInstanceDetailLocationLabel?.() ?? 'Location'}:</span>
 																	<span class="font-medium truncate">{metadata.centroid.lat.toFixed(5)}, {metadata.centroid.lon.toFixed(5)}{metadata.geometry_type && metadata.geometry_type !== 'Point' ? ` (${metadata.geometry_type})` : ''}</span>
 																</div>
 															{/if}
@@ -1539,7 +1625,7 @@
 																{#if metadata.before}
 																	<span class="line-through text-muted-foreground/60">{metadata.before.lat.toFixed(5)}, {metadata.before.lon.toFixed(5)}</span>
 																{:else}
-																	<span class="text-muted-foreground">({m.participantWorkflowInstanceDetailNoLocation?.() ?? 'no location'})</span>
+																	<span class="text-muted-foreground">({participantWorkflowInstanceDetailNoLocation?.() ?? 'no location'})</span>
 																{/if}
 																<span class="text-muted-foreground mx-0.5">-></span>
 																{#if metadata.after}
@@ -1563,14 +1649,14 @@
 
 														<!-- Photo thumbnails -->
 														{#if metadata.action === 'form_fill' || metadata.action === 'instance_created' || metadata.action === 'protocol'}
-															{@const fileValues = detailState?.fieldValues.filter(fv => fv.file_value && fv.created_by_action === entry.id) ?? []}
+															{@const fileValues = detailState?.fieldValues.filter(fv => fv.file_value && (fv as any).recorded_by_action === entry.id) ?? []}
 															{#if fileValues.length > 0}
 																<div class="flex gap-1.5 mt-1.5 flex-wrap">
 																	{#each fileValues.slice(0, 4) as fv}
 																		<FieldValueImage
 																			recordId={fv.id}
 																			fileName={fv.file_value}
-																			alt={m.participantWorkflowInstanceDetailAttachmentAlt?.() ?? 'Attachment'}
+																			alt={participantWorkflowInstanceDetailAttachmentAlt?.() ?? 'Attachment'}
 																			class="h-12 w-12 rounded object-cover border border-border"
 																		/>
 																	{/each}
@@ -1621,7 +1707,7 @@
 								</Tabs.Root>
 							{:else}
 								<div class="text-center py-8 text-muted-foreground">
-									<p class="text-sm">{m.participantWorkflowInstanceDetailNoData?.() ?? 'No data yet'}</p>
+									<p class="text-sm">{participantWorkflowInstanceDetailNoData?.() ?? 'No data yet'}</p>
 								</div>
 							{/if}
 						</div>
@@ -1642,14 +1728,14 @@
 	<AlertDialog.Content>
 		<AlertDialog.Header>
 			<AlertDialog.Title>
-				{pendingConfirmConnection?.visual_config?.button_label || pendingConfirmConnection?.action_name || (m.participantWorkflowInstanceDetailConfirmAction?.() ?? 'Confirm action')}
+				{pendingConfirmConnection?.visual_config?.button_label || pendingConfirmConnection?.action_name || (participantWorkflowInstanceDetailConfirmAction?.() ?? 'Confirm action')}
 			</AlertDialog.Title>
 			<AlertDialog.Description>
-				{pendingConfirmConnection?.visual_config?.confirmation_message || (m.participantWorkflowInstanceDetailConfirmProceed?.() ?? 'Are you sure you want to proceed?')}
+				{pendingConfirmConnection?.visual_config?.confirmation_message || (participantWorkflowInstanceDetailConfirmProceed?.() ?? 'Are you sure you want to proceed?')}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<AlertDialog.Footer>
-			<AlertDialog.Cancel>{m.commonCancel?.() ?? 'Cancel'}</AlertDialog.Cancel>
+			<AlertDialog.Cancel>{commonCancel?.() ?? 'Cancel'}</AlertDialog.Cancel>
 			<AlertDialog.Action
 				onclick={async () => {
 					const connection = pendingConfirmConnection;
@@ -1657,7 +1743,7 @@
 					if (connection) await proceedConnection(connection);
 				}}
 			>
-				{m.mapWorkflowContinue?.() ?? 'Continue'}
+				{mapWorkflowContinue?.() ?? 'Continue'}
 			</AlertDialog.Action>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>

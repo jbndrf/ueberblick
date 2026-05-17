@@ -28,19 +28,15 @@ routerAdd("GET", "/api/custom/selectable-entities", (e) => {
     return e.json(400, { error: "field_id query param required" });
   }
 
-  var field;
+  // Phase-1 redesign: fieldId is a workflow_field_defs.id. The def carries
+  // workflow_id directly, so we can resolve project/workflow without walking
+  // through a form (a field def may be referenced by many forms, or none).
+  var field, workflow;
   try {
-    field = $app.findRecordById("tools_form_fields", fieldId);
+    field = $app.findRecordById("workflow_field_defs", fieldId);
+    workflow = $app.findRecordById("workflows", field.get("workflow_id"));
   } catch (err) {
     return e.json(404, { error: "field not found" });
-  }
-
-  var form, workflow;
-  try {
-    form = $app.findRecordById("tools_forms", field.get("form_id"));
-    workflow = $app.findRecordById("workflows", form.get("workflow_id"));
-  } catch (err) {
-    return e.json(404, { error: "field ancestors missing" });
   }
 
   var projectId = workflow.get("project_id");

@@ -4,7 +4,22 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { Switch } from '$lib/components/ui/switch';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		automationEditorViewAddStep,
+		automationEditorViewDefaultStepName,
+		automationEditorViewDeleteAutomation,
+		automationEditorViewEnabledLabel,
+		automationEditorViewExecutionModeLabel,
+		automationEditorViewFirstMatchHint,
+		automationEditorViewModeFirstMatch,
+		automationEditorViewModeRunAll,
+		automationEditorViewNameLabel,
+		automationEditorViewNamePlaceholder,
+		automationEditorViewNoSteps,
+		automationEditorViewStepsSection,
+		automationEditorViewTitle,
+		automationEditorViewTriggerSection
+	} from '$lib/paraglide/messages';
 
 	import TriggerCard from './TriggerCard.svelte';
 	import StepCard from './StepCard.svelte';
@@ -85,7 +100,7 @@
 
 	function addStep() {
 		const newStep: AutomationStep = {
-			name: (m.automationEditorViewDefaultStepName?.() ?? 'Step') + ' ' + (automation.steps.length + 1),
+			name: (automationEditorViewDefaultStepName?.() ?? 'Step') + ' ' + (automation.steps.length + 1),
 			conditions: null,
 			actions: []
 		};
@@ -172,7 +187,7 @@
 				<div class="header-icon">
 					<Zap class="h-4 w-4" />
 				</div>
-				<span class="header-title">{m.automationEditorViewTitle?.() ?? 'Automation'}</span>
+				<span class="header-title">{automationEditorViewTitle?.() ?? 'Automation'}</span>
 			</div>
 			<Button variant="ghost" size="icon" class="h-7 w-7" onclick={onClose}>
 				<X class="h-4 w-4" />
@@ -182,17 +197,17 @@
 		<div class="editor-content">
 			<!-- Name + Enabled -->
 			<div class="field-group">
-				<Label class="text-xs">{m.automationEditorViewNameLabel?.() ?? 'Name'}</Label>
+				<Label class="text-xs">{automationEditorViewNameLabel?.() ?? 'Name'}</Label>
 				<Input
 					bind:value={name}
 					onblur={handleNameBlur}
-					placeholder={m.automationEditorViewNamePlaceholder?.() ?? 'Automation name...'}
+					placeholder={automationEditorViewNamePlaceholder?.() ?? 'Automation name...'}
 					class="h-8 text-sm"
 				/>
 			</div>
 
 			<div class="field-row">
-				<Label class="text-xs">{m.automationEditorViewEnabledLabel?.() ?? 'Enabled'}</Label>
+				<Label class="text-xs">{automationEditorViewEnabledLabel?.() ?? 'Enabled'}</Label>
 				<Switch
 					checked={automation.is_enabled}
 					onCheckedChange={(checked) => onEnabledChange?.(checked)}
@@ -201,7 +216,7 @@
 
 			<!-- Trigger -->
 			<div class="section">
-				<span class="section-title">{m.automationEditorViewTriggerSection?.() ?? 'Trigger'}</span>
+				<span class="section-title">{automationEditorViewTriggerSection?.() ?? 'Trigger'}</span>
 				<div class="section-content">
 					<TriggerCard
 						triggerType={automation.trigger_type}
@@ -217,27 +232,27 @@
 
 			<!-- Execution Mode -->
 			<div class="field-group">
-				<Label class="text-xs">{m.automationEditorViewExecutionModeLabel?.() ?? 'Execution Mode'}</Label>
+				<Label class="text-xs">{automationEditorViewExecutionModeLabel?.() ?? 'Execution Mode'}</Label>
 				<select
 					class="execution-mode-select"
 					value={automation.execution_mode || 'run_all'}
 					onchange={(e) => onExecutionModeChange?.(e.currentTarget.value as ExecutionMode)}
 				>
-					<option value="run_all">{m.automationEditorViewModeRunAll?.() ?? 'Run all matching steps'}</option>
-					<option value="first_match">{m.automationEditorViewModeFirstMatch?.() ?? 'Stop at first match'}</option>
+					<option value="run_all">{automationEditorViewModeRunAll?.() ?? 'Run all matching steps'}</option>
+					<option value="first_match">{automationEditorViewModeFirstMatch?.() ?? 'Stop at first match'}</option>
 				</select>
 				{#if (automation.execution_mode || 'run_all') === 'first_match'}
-					<span class="mode-hint">{m.automationEditorViewFirstMatchHint?.() ?? 'Steps act as a priority list -- only the first matching step executes.'}</span>
+					<span class="mode-hint">{automationEditorViewFirstMatchHint?.() ?? 'Steps act as a priority list -- only the first matching step executes.'}</span>
 				{/if}
 			</div>
 
 			<!-- Steps -->
 			<div class="section">
-				<span class="section-title">{m.automationEditorViewStepsSection?.() ?? 'Steps'}</span>
+				<span class="section-title">{automationEditorViewStepsSection?.() ?? 'Steps'}</span>
 				<div class="section-content">
 					{#if automation.steps.length === 0}
 						<div class="empty-steps">
-							<span class="empty-text">{m.automationEditorViewNoSteps?.() ?? 'No steps yet'}</span>
+							<span class="empty-text">{automationEditorViewNoSteps?.() ?? 'No steps yet'}</span>
 						</div>
 					{:else}
 						<div class="step-list">
@@ -258,7 +273,7 @@
 
 					<Button variant="ghost" size="sm" class="add-step-btn" onclick={addStep}>
 						<Plus class="h-3 w-3 mr-1" />
-						{m.automationEditorViewAddStep?.() ?? 'Add Step'}
+						{automationEditorViewAddStep?.() ?? 'Add Step'}
 					</Button>
 				</div>
 			</div>
@@ -267,7 +282,7 @@
 			<div class="delete-section">
 				<Button variant="destructive" size="sm" onclick={onDelete}>
 					<Trash2 class="h-3.5 w-3.5 mr-1.5" />
-					{m.automationEditorViewDeleteAutomation?.() ?? 'Delete Automation'}
+					{automationEditorViewDeleteAutomation?.() ?? 'Delete Automation'}
 				</Button>
 			</div>
 		</div>

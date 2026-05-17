@@ -1,7 +1,20 @@
 <script lang="ts" generics="T extends Record<string, any>">
 	import { onMount, tick } from 'svelte';
 	import { X, ChevronDown, Search, Plus } from '@lucide/svelte';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		mobileMultiSelectClose,
+		mobileMultiSelectCountSelected,
+		mobileMultiSelectCreateHint,
+		mobileMultiSelectCreateLabel,
+		mobileMultiSelectDialogLabel,
+		mobileMultiSelectDone,
+		mobileMultiSelectDoneWithCount,
+		mobileMultiSelectEmptyLabel,
+		mobileMultiSelectOptionsLabel,
+		mobileMultiSelectPlaceholder,
+		mobileMultiSelectRemoveOption,
+		mobileMultiSelectSearch
+	} from '$lib/paraglide/messages';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { cn } from '$lib/utils';
@@ -109,17 +122,17 @@
 		getOptionId,
 		getOptionLabel,
 		getOptionDescription,
-		placeholder = (m.mobileMultiSelectPlaceholder?.() ?? 'Select options...'),
+		placeholder = (mobileMultiSelectPlaceholder?.() ?? 'Select options...'),
 		singleSelect = false,
 		disabled = false,
 		class: className = '',
 		allowCreate = false,
 		onCreateOption,
-		createLabel = (query: string) => (m.mobileMultiSelectCreateLabel?.({ query }) ?? `Create "${query}"`),
+		createLabel = (query: string) => (mobileMultiSelectCreateLabel?.({ query }) ?? `Create "${query}"`),
 		hideSelected = false,
 		autoAddCreated = false,
-		emptyLabel = (m.mobileMultiSelectEmptyLabel?.() ?? 'No options found'),
-		createHintLabel = (m.mobileMultiSelectCreateHint?.() ?? 'Press Enter to create'),
+		emptyLabel = (mobileMultiSelectEmptyLabel?.() ?? 'No options found'),
+		createHintLabel = (mobileMultiSelectCreateHint?.() ?? 'Press Enter to create'),
 		summarizeMultiple = false,
 		onSelectedIdsChange,
 		disablePortal = false
@@ -423,7 +436,7 @@
 							'rounded-full hover:bg-muted-foreground/20 focus:outline-none',
 							isLg ? 'ml-1 focus:ring-1 focus:ring-ring' : 'ml-0.5'
 						)}
-						aria-label={m.mobileMultiSelectRemoveOption?.({ option: getOptionLabel(option) }) ?? `Remove ${getOptionLabel(option)}`}
+						aria-label={mobileMultiSelectRemoveOption?.({ option: getOptionLabel(option) }) ?? `Remove ${getOptionLabel(option)}`}
 					>
 						<X class="h-3 w-3" />
 					</button>
@@ -435,7 +448,7 @@
 			type="text"
 			bind:value={searchQuery}
 			onkeydown={handleSearchKeydown}
-			placeholder={selectedOptions.length === 0 ? (m.mobileMultiSelectSearch?.() ?? 'Search...') : ''}
+			placeholder={selectedOptions.length === 0 ? (mobileMultiSelectSearch?.() ?? 'Search...') : ''}
 			class={cn(
 				'flex-1 bg-transparent outline-none placeholder:text-muted-foreground',
 				isLg ? 'text-base min-w-[80px]' : 'text-sm min-w-[60px]'
@@ -549,7 +562,7 @@
 		{:else if selectedOptions.length === 1}
 			<span class="flex-1 text-left truncate">{getOptionLabel(selectedOptions[0])}</span>
 		{:else if summarizeMultiple || isOpen}
-			<span class="flex-1 text-left truncate">{m.mobileMultiSelectCountSelected?.({ count: selectedOptions.length }) ?? `${selectedOptions.length} selected`}</span>
+			<span class="flex-1 text-left truncate">{mobileMultiSelectCountSelected?.({ count: selectedOptions.length }) ?? `${selectedOptions.length} selected`}</span>
 		{:else}
 			<div class="flex-1 flex flex-wrap gap-1 overflow-hidden pointer-events-none">
 				{#each selectedOptions as option (getOptionId(option))}
@@ -573,7 +586,7 @@
 					onclick={close}
 					role="button"
 					tabindex="-1"
-					aria-label={m.mobileMultiSelectClose?.() ?? 'Close'}
+					aria-label={mobileMultiSelectClose?.() ?? 'Close'}
 				></div>
 
 				<!-- Modal Content - uses visualViewport height for keyboard awareness -->
@@ -582,7 +595,7 @@
 					style="top: {viewportHeight * 0.1}px; height: {viewportHeight * 0.8}px;"
 					role="dialog"
 					aria-modal="true"
-					aria-label={m.mobileMultiSelectDialogLabel?.() ?? 'Select options'}
+					aria-label={mobileMultiSelectDialogLabel?.() ?? 'Select options'}
 				>
 					<!-- Header: Search box with inline badges -->
 					<div class="p-4 border-b border-border shrink-0">
@@ -607,9 +620,9 @@
 					<div class="p-4 border-t border-border shrink-0">
 						<Button class="w-full" onclick={close}>
 							{#if selectedOptions.length > 0}
-								{m.mobileMultiSelectDoneWithCount?.({ count: selectedOptions.length }) ?? `Done (${selectedOptions.length})`}
+								{mobileMultiSelectDoneWithCount?.({ count: selectedOptions.length }) ?? `Done (${selectedOptions.length})`}
 							{:else}
-								{m.mobileMultiSelectDone?.() ?? 'Done'}
+								{mobileMultiSelectDone?.() ?? 'Done'}
 							{/if}
 						</Button>
 					</div>
@@ -624,7 +637,7 @@
 			class="fixed z-[9999] bg-popover border border-border rounded-md shadow-lg overflow-hidden"
 			style="top: {dropdownPosition.top}px; left: {dropdownPosition.left}px; width: {dropdownPosition.width}px;{openUpward ? ' transform: translateY(-100%);' : ''}"
 			role="listbox"
-			aria-label={m.mobileMultiSelectOptionsLabel?.() ?? 'Options'}
+			aria-label={mobileMultiSelectOptionsLabel?.() ?? 'Options'}
 			use:portal={!disablePortal}
 		>
 			<!-- Search input with inline badges -->

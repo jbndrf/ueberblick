@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Input } from '$lib/components/ui/input';
 	import { toast } from 'svelte-sonner';
-	import * as m from '$lib/paraglide/messages';
+	import { commonSave } from '$lib/paraglide/messages';
 
 	interface NumberFieldProps {
 		value: any;
@@ -37,7 +37,7 @@
 
 		try {
 			await onUpdate(editingValue);
-			toast.success(m.commonSave());
+			toast.success(commonSave());
 			isEditing = false;
 		} catch (error) {
 			console.error('Error updating cell:', error);

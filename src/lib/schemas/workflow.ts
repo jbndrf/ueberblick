@@ -2,6 +2,13 @@
  * Workflow Builder Zod Schemas
  *
  * Validation schemas for workflow builder forms using Zod.
+ *
+ * TODO(field-def-redesign): The `formFieldSchema` / `fieldOptionsSchema` /
+ * `fieldValidationSchema` / `smartDropdownMappingSchema` below mirror the
+ * legacy `tools_form_fields` shape (using `field_key`). The new model splits
+ * field declarations into `workflow_field_defs` (registry) and per-form
+ * references in `tools_form_field_refs`. These schemas need to be split
+ * accordingly. Admin-side worker is updating consumers in parallel.
  */
 
 import { z } from 'zod';

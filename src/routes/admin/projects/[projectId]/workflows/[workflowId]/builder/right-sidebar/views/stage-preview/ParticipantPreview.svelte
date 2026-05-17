@@ -1,6 +1,33 @@
 <script lang="ts">
 	import { X, Plus, ArrowRight, Wrench, MapPin, Globe, FileText } from '@lucide/svelte';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		commonClose,
+		stagePreviewParticipantAddActionButton,
+		stagePreviewParticipantAllRoles,
+		stagePreviewParticipantConnection,
+		stagePreviewParticipantConnections,
+		stagePreviewParticipantDataCollected,
+		stagePreviewParticipantDeleteStage,
+		stagePreviewParticipantEditStageName,
+		stagePreviewParticipantNoFields,
+		stagePreviewParticipantNoForms,
+		stagePreviewParticipantOutgoing,
+		stagePreviewParticipantProgress,
+		stagePreviewParticipantSelectRoles,
+		stagePreviewParticipantStageName,
+		stagePreviewParticipantStageNameHint,
+		stagePreviewParticipantStageNamePlaceholder,
+		stagePreviewParticipantTabDetails,
+		stagePreviewParticipantTabOverview,
+		stagePreviewParticipantTabSettings,
+		stagePreviewParticipantTool,
+		stagePreviewParticipantTools,
+		stagePreviewParticipantToolsCount,
+		stagePreviewParticipantUnnamedForm,
+		stagePreviewParticipantVia,
+		stagePreviewParticipantVisibleToRolesHint,
+		tileSetVisibleToRoles
+	} from '$lib/paraglide/messages';
 	import * as Tabs from '$lib/components/ui/tabs';
 	import * as Card from '$lib/components/ui/card';
 	import { Separator } from '$lib/components/ui/separator';
@@ -162,7 +189,7 @@
 					<button
 						class="text-lg font-semibold truncate text-left hover:opacity-80 transition-opacity cursor-text"
 						onclick={() => (editingName = true)}
-						title={m.stagePreviewParticipantEditStageName?.() ?? 'Click to edit stage name'}
+						title={stagePreviewParticipantEditStageName?.() ?? 'Click to edit stage name'}
 					>
 						{stage.stage_name}
 					</button>
@@ -177,7 +204,7 @@
 				value={roleFilter}
 				onchange={(e) => onRoleFilterChange?.(e.currentTarget.value)}
 			>
-				<option value="all">{m.stagePreviewParticipantAllRoles?.() ?? 'All roles'}</option>
+				<option value="all">{stagePreviewParticipantAllRoles?.() ?? 'All roles'}</option>
 				{#each roles as role}
 					<option value={role.id}>{role.name}</option>
 				{/each}
@@ -187,7 +214,7 @@
 			<button
 				class="flex items-center justify-center p-2 rounded hover:bg-primary-foreground/10 transition-colors"
 				onclick={() => onClose?.()}
-				aria-label={m.commonClose?.() ?? 'Close'}
+				aria-label={commonClose?.() ?? 'Close'}
 			>
 				<X class="w-4 h-4" />
 			</button>
@@ -213,7 +240,7 @@
 							transition-all duration-200 ease-out
 							hover:scale-[1.02] active:scale-[0.98]"
 						onclick={() => onAddButtonClick?.()}
-						title={m.stagePreviewParticipantAddActionButton?.() ?? 'Add action button'}
+						title={stagePreviewParticipantAddActionButton?.() ?? 'Add action button'}
 					>
 						<Plus class="w-5 h-5" />
 					</button>
@@ -267,13 +294,13 @@
 					style="grid-template-columns: repeat(3, minmax(0, 1fr))"
 				>
 					<Tabs.Trigger value="overview" class="text-xs sm:text-sm">
-						{m.stagePreviewParticipantTabOverview?.() ?? 'Overview'}
+						{stagePreviewParticipantTabOverview?.() ?? 'Overview'}
 					</Tabs.Trigger>
 					<Tabs.Trigger value="details" class="text-xs sm:text-sm">
-						{m.stagePreviewParticipantTabDetails?.() ?? 'Details'}
+						{stagePreviewParticipantTabDetails?.() ?? 'Details'}
 					</Tabs.Trigger>
 					<Tabs.Trigger value="settings" class="text-xs sm:text-sm">
-						{m.stagePreviewParticipantTabSettings?.() ?? 'Settings'}
+						{stagePreviewParticipantTabSettings?.() ?? 'Settings'}
 					</Tabs.Trigger>
 				</Tabs.List>
 
@@ -284,7 +311,7 @@
 					<div class="space-y-4">
 						<!-- Progress Timeline (exact participant styling) -->
 						<div class="space-y-3">
-							<h4 class="text-sm font-semibold">{m.stagePreviewParticipantProgress?.() ?? 'Progress'}</h4>
+							<h4 class="text-sm font-semibold">{stagePreviewParticipantProgress?.() ?? 'Progress'}</h4>
 
 							<div class="space-y-2">
 								{#each timeline as timelineStage, index}
@@ -345,11 +372,11 @@
 										class="flex items-center gap-1.5 text-xs text-muted-foreground mb-1"
 									>
 										<ArrowRight class="w-3 h-3" />
-										{m.stagePreviewParticipantOutgoing?.() ?? 'Outgoing'}
+										{stagePreviewParticipantOutgoing?.() ?? 'Outgoing'}
 									</div>
 									<div class="text-xs font-medium text-foreground">
 										{outgoingCount}
-										{(outgoingCount === 1 ? (m.stagePreviewParticipantConnection?.() ?? 'connection') : (m.stagePreviewParticipantConnections?.() ?? 'connections'))}
+										{(outgoingCount === 1 ? (stagePreviewParticipantConnection?.() ?? 'connection') : (stagePreviewParticipantConnections?.() ?? 'connections'))}
 									</div>
 								</Card.Content>
 							</Card.Root>
@@ -359,11 +386,11 @@
 										class="flex items-center gap-1.5 text-xs text-muted-foreground mb-1"
 									>
 										<Wrench class="w-3 h-3" />
-										{m.stagePreviewParticipantTools?.() ?? 'Tools'}
+										{stagePreviewParticipantTools?.() ?? 'Tools'}
 									</div>
 									<div class="text-xs font-medium text-foreground">
 										{toolCount}
-										{(toolCount === 1 ? (m.stagePreviewParticipantTool?.() ?? 'tool') : (m.stagePreviewParticipantToolsCount?.() ?? 'tools'))}
+										{(toolCount === 1 ? (stagePreviewParticipantTool?.() ?? 'tool') : (stagePreviewParticipantToolsCount?.() ?? 'tools'))}
 									</div>
 								</Card.Content>
 							</Card.Root>
@@ -378,21 +405,21 @@
 					<div class="space-y-4">
 						{#if incomingForms.length === 0}
 							<p class="text-sm text-muted-foreground text-center py-4">
-								{m.stagePreviewParticipantNoForms?.() ?? 'No forms are attached to incoming connections for this stage.'}
+								{stagePreviewParticipantNoForms?.() ?? 'No forms are attached to incoming connections for this stage.'}
 							</p>
 						{:else}
 							<p class="text-xs text-muted-foreground mb-2">
-								{m.stagePreviewParticipantDataCollected?.() ?? 'Data collected when arriving at this stage via incoming connections.'}
+								{stagePreviewParticipantDataCollected?.() ?? 'Data collected when arriving at this stage via incoming connections.'}
 							</p>
 							{#each incomingForms as group}
 								<div class="form-group">
 									<div class="form-group-header">
 										<FileText class="w-3.5 h-3.5 text-muted-foreground" />
-										<span class="text-xs font-semibold">{group.form.name || (m.stagePreviewParticipantUnnamedForm?.() ?? 'Unnamed form')}</span>
-										<span class="text-[10px] text-muted-foreground ml-auto">{m.stagePreviewParticipantVia?.({ name: group.connectionName }) ?? `via ${group.connectionName}`}</span>
+										<span class="text-xs font-semibold">{group.form.name || (stagePreviewParticipantUnnamedForm?.() ?? 'Unnamed form')}</span>
+										<span class="text-[10px] text-muted-foreground ml-auto">{stagePreviewParticipantVia?.({ name: group.connectionName }) ?? `via ${group.connectionName}`}</span>
 									</div>
 									{#if group.fields.length === 0}
-										<p class="text-xs text-muted-foreground px-3 py-2">{m.stagePreviewParticipantNoFields?.() ?? 'No fields yet'}</p>
+										<p class="text-xs text-muted-foreground px-3 py-2">{stagePreviewParticipantNoFields?.() ?? 'No fields yet'}</p>
 									{:else}
 										<div class="p-3">
 											<FormRenderer mode="view" fields={toFormFields(group.fields)} />
@@ -412,7 +439,7 @@
 						<!-- Stage Name -->
 						<div class="space-y-2">
 							<label class="text-sm font-medium" for="stage-name-input">
-								{m.stagePreviewParticipantStageName?.() ?? 'Stage Name'}
+								{stagePreviewParticipantStageName?.() ?? 'Stage Name'}
 							</label>
 							<input
 								id="stage-name-input"
@@ -420,16 +447,16 @@
 								value={stage.stage_name}
 								oninput={(e) =>
 									onStageRename?.(e.currentTarget.value)}
-								placeholder={m.stagePreviewParticipantStageNamePlaceholder?.() ?? 'Stage name...'}
+								placeholder={stagePreviewParticipantStageNamePlaceholder?.() ?? 'Stage name...'}
 							/>
 							<p class="text-xs text-muted-foreground">
-								{m.stagePreviewParticipantStageNameHint?.() ?? 'Shown in the participant progress view'}
+								{stagePreviewParticipantStageNameHint?.() ?? 'Shown in the participant progress view'}
 							</p>
 						</div>
 
 						<!-- Visible to Roles -->
 						<div class="space-y-2">
-							<div class="text-sm font-medium">{m.tileSetVisibleToRoles?.() ?? 'Visible to Roles'}</div>
+							<div class="text-sm font-medium">{tileSetVisibleToRoles?.() ?? 'Visible to Roles'}</div>
 							<MobileMultiSelect
 								selectedIds={selectedRoleIds}
 								options={roles}
@@ -439,11 +466,11 @@
 								allowCreate={!!onCreateRole}
 								onCreateOption={onCreateRole}
 								onSelectedIdsChange={handleRolesChange}
-								placeholder={m.stagePreviewParticipantSelectRoles?.() ?? 'Select or search roles...'}
+								placeholder={stagePreviewParticipantSelectRoles?.() ?? 'Select or search roles...'}
 								class="w-full"
 							/>
 							<p class="text-xs text-muted-foreground">
-								{m.stagePreviewParticipantVisibleToRolesHint?.() ?? 'Only participants with these roles can see this stage. Leave empty to make visible to all.'}
+								{stagePreviewParticipantVisibleToRolesHint?.() ?? 'Only participants with these roles can see this stage. Leave empty to make visible to all.'}
 							</p>
 						</div>
 
@@ -453,7 +480,7 @@
 								class="text-sm text-destructive hover:text-destructive/80 transition-colors"
 								onclick={() => onStageDelete?.()}
 							>
-								{m.stagePreviewParticipantDeleteStage?.() ?? 'Delete this stage'}
+								{stagePreviewParticipantDeleteStage?.() ?? 'Delete this stage'}
 							</button>
 						</div>
 					</div>

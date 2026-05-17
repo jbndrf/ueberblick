@@ -1,7 +1,79 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		commonCancel,
+		commonClose,
+		commonCopy,
+		commonCreate,
+		commonDelete,
+		commonSave,
+		commonYes,
+		permissionsCanCreate,
+		permissionsCanUpdate,
+		permissionsCanView,
+		permissionsDescription,
+		permissionsGlobalTools,
+		permissionsHiddenButGranted,
+		permissionsMapLayers,
+		permissionsMarkerCategories,
+		permissionsNoEntities,
+		permissionsOfflinePackages,
+		permissionsSelectRole,
+		permissionsTables,
+		permissionsTitle,
+		permissionsWorkflows,
+		rolesActions,
+		rolesAssignedParticipants,
+		rolesCreateError,
+		rolesCreateRole,
+		rolesCreateSuccess,
+		rolesCreateYourFirst,
+		rolesDelete,
+		rolesDeleteConfirm,
+		rolesDeleteError,
+		rolesDeleteSuccess,
+		rolesDescription,
+		rolesDescriptionPlaceholder,
+		rolesDescription_field,
+		rolesEdit,
+		rolesEditModeLabel,
+		rolesEditParticipants,
+		rolesInactive,
+		rolesName,
+		rolesNamePlaceholder,
+		rolesNoRoles,
+		rolesQuotaHelp,
+		rolesQuotaInvalid,
+		rolesQuotaMaxInstancesLabel,
+		rolesQuotaSave,
+		rolesQuotaSaveError,
+		rolesQuotaSaved,
+		rolesSelectOrSearchParticipants,
+		rolesSelfJoin,
+		rolesSelfJoinDisabled,
+		rolesSelfJoinEnabled,
+		rolesSelfJoinInfoDefaultActive,
+		rolesSelfJoinInfoDefaultEmail,
+		rolesSelfJoinInfoDefaultLandingPage,
+		rolesSelfJoinInfoDefaultName,
+		rolesSelfJoinInfoDefaultRetention,
+		rolesSelfJoinInfoDefaultRetentionValue,
+		rolesSelfJoinInfoDefaultRole,
+		rolesSelfJoinInfoDefaultsTitle,
+		rolesSelfJoinInfoDescription,
+		rolesSelfJoinInfoTitle,
+		rolesSelfJoinInfoUrlHint,
+		rolesSelfJoinInfoUrlLabel,
+		rolesSelfJoinNotEnabled,
+		rolesSelfJoinShowUrl,
+		rolesSelfJoinToggleError,
+		rolesSelfJoinUrlCopied,
+		rolesSelfJoinUrlCopyError,
+		rolesTitle,
+		rolesUpdateError,
+		rolesUpdateSuccess
+	} from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Tabs from '$lib/components/ui/tabs';
@@ -42,18 +114,18 @@
 		try {
 			const res = await fetch('?/toggleSelfJoinable', { method: 'POST', body: formData });
 			if (!res.ok) {
-				toast.error(m.rolesSelfJoinToggleError?.() ?? 'Failed to update self-join setting');
+				toast.error(rolesSelfJoinToggleError?.() ?? 'Failed to update self-join setting');
 				return;
 			}
 			await invalidateAll();
 			toast.success(
 				value
-					? (m.rolesSelfJoinEnabled?.() ?? 'Self-join enabled')
-					: (m.rolesSelfJoinDisabled?.() ?? 'Self-join disabled')
+					? (rolesSelfJoinEnabled?.() ?? 'Self-join enabled')
+					: (rolesSelfJoinDisabled?.() ?? 'Self-join disabled')
 			);
 		} catch (err) {
 			console.error(err);
-			toast.error(m.rolesSelfJoinToggleError?.() ?? 'Failed to update self-join setting');
+			toast.error(rolesSelfJoinToggleError?.() ?? 'Failed to update self-join setting');
 		}
 	}
 
@@ -61,9 +133,9 @@
 		const url = `${window.location.origin}/join/${slug}`;
 		try {
 			await navigator.clipboard.writeText(url);
-			toast.success(m.rolesSelfJoinUrlCopied?.() ?? 'Join URL copied');
+			toast.success(rolesSelfJoinUrlCopied?.() ?? 'Join URL copied');
 		} catch {
-			toast.error(m.rolesSelfJoinUrlCopyError?.() ?? 'Could not copy URL');
+			toast.error(rolesSelfJoinUrlCopyError?.() ?? 'Could not copy URL');
 		}
 	}
 
@@ -91,7 +163,7 @@
 	function openJoinInfo(role: Role) {
 		if (!role.self_joinable || !role.join_slug) {
 			toast.error(
-				m.rolesSelfJoinNotEnabled?.() ?? 'Enable self-join first to get a join URL'
+				rolesSelfJoinNotEnabled?.() ?? 'Enable self-join first to get a join URL'
 			);
 			return;
 		}
@@ -107,7 +179,7 @@
 		if (!joinInfoRole) return;
 		const value = Number(quotaInput);
 		if (!Number.isFinite(value) || value < 0 || !Number.isInteger(value)) {
-			toast.error(m.rolesQuotaInvalid?.() ?? 'Quota must be a non-negative whole number');
+			toast.error(rolesQuotaInvalid?.() ?? 'Quota must be a non-negative whole number');
 			return;
 		}
 		savingQuota = true;
@@ -117,14 +189,14 @@
 			formData.append('maxInstances', String(value));
 			const res = await fetch('?/updateRoleInstanceQuota', { method: 'POST', body: formData });
 			if (!res.ok) {
-				toast.error(m.rolesQuotaSaveError?.() ?? 'Failed to save quota');
+				toast.error(rolesQuotaSaveError?.() ?? 'Failed to save quota');
 				return;
 			}
 			await invalidateAll();
-			toast.success(m.rolesQuotaSaved?.() ?? 'Quota saved');
+			toast.success(rolesQuotaSaved?.() ?? 'Quota saved');
 		} catch (err) {
 			console.error(err);
-			toast.error(m.rolesQuotaSaveError?.() ?? 'Failed to save quota');
+			toast.error(rolesQuotaSaveError?.() ?? 'Failed to save quota');
 		} finally {
 			savingQuota = false;
 		}
@@ -208,16 +280,16 @@
 		fields: [
 			{
 				name: 'name',
-				label: m.rolesName(),
+				label: rolesName(),
 				type: 'text',
-				placeholder: m.rolesNamePlaceholder(),
+				placeholder: rolesNamePlaceholder(),
 				required: true
 			},
 			{
 				name: 'description',
-				label: m.rolesDescription_field(),
+				label: rolesDescription_field(),
 				type: 'textarea',
-				placeholder: m.rolesDescriptionPlaceholder(),
+				placeholder: rolesDescriptionPlaceholder(),
 				rows: 3
 			}
 		],
@@ -225,20 +297,20 @@
 		updateAction: '?/update',
 		deleteAction: '?/delete',
 		messages: {
-			createTitle: m.rolesCreateRole(),
-			editTitle: m.rolesEdit(),
-			deleteTitle: m.rolesDelete(),
-			deleteConfirm: m.rolesDeleteConfirm(),
-			createSuccess: m.rolesCreateSuccess(),
-			updateSuccess: m.rolesUpdateSuccess(),
-			deleteSuccess: m.rolesDeleteSuccess(),
-			createError: m.rolesCreateError(),
-			updateError: m.rolesUpdateError(),
-			deleteError: m.rolesDeleteError(),
-			cancel: m.commonCancel(),
-			save: m.commonSave(),
-			create: m.commonCreate(),
-			delete: m.commonDelete()
+			createTitle: rolesCreateRole(),
+			editTitle: rolesEdit(),
+			deleteTitle: rolesDelete(),
+			deleteConfirm: rolesDeleteConfirm(),
+			createSuccess: rolesCreateSuccess(),
+			updateSuccess: rolesUpdateSuccess(),
+			deleteSuccess: rolesDeleteSuccess(),
+			createError: rolesCreateError(),
+			updateError: rolesUpdateError(),
+			deleteError: rolesDeleteError(),
+			cancel: commonCancel(),
+			save: commonSave(),
+			create: commonCreate(),
+			delete: commonDelete()
 		}
 	};
 
@@ -280,7 +352,7 @@
 	const columns = $derived.by((): BaseColumnConfig<Role>[] => [
 		{
 			id: 'name',
-			header: m.rolesName(),
+			header: rolesName(),
 			accessorKey: 'name',
 			fieldType: 'text',
 			capabilities: {
@@ -292,7 +364,7 @@
 		},
 		{
 			id: 'description',
-			header: m.rolesDescription_field(),
+			header: rolesDescription_field(),
 			accessorKey: 'description',
 			fieldType: 'text',
 			capabilities: {
@@ -304,7 +376,7 @@
 		},
 		{
 			id: 'self_joinable',
-			header: m.rolesSelfJoin?.() ?? 'Self-join',
+			header: rolesSelfJoin?.() ?? 'Self-join',
 			accessorKey: 'self_joinable',
 			fieldType: 'boolean',
 			capabilities: {
@@ -318,7 +390,7 @@
 		},
 		{
 			id: 'assigned_participants',
-			header: m.rolesAssignedParticipants?.() ?? 'Assigned Participants',
+			header: rolesAssignedParticipants?.() ?? 'Assigned Participants',
 			accessorFn: (row) => {
 				if (!row.assigned_participants || row.assigned_participants.length === 0) return 0;
 				return row.assigned_participants.length;
@@ -343,11 +415,11 @@
 		editParticipantsDialogOpen = false;
 		selectedRole = null;
 		invalidateAll();
-		toast.success(m.rolesUpdateSuccess?.() ?? 'Participants updated successfully');
+		toast.success(rolesUpdateSuccess?.() ?? 'Participants updated successfully');
 	}
 
 	function handleParticipantsUpdateError() {
-		toast.error(m.rolesUpdateError?.() ?? 'Failed to update participants');
+		toast.error(rolesUpdateError?.() ?? 'Failed to update participants');
 	}
 
 	function generateUniqueToken(): string {
@@ -369,19 +441,19 @@
 <div class="flex flex-col gap-6 min-w-0 w-full">
 	<!-- Header -->
 	<div>
-		<h1 class="text-3xl font-bold tracking-tight">{m.rolesTitle()}</h1>
-		<p class="text-muted-foreground">{m.rolesDescription()}</p>
+		<h1 class="text-3xl font-bold tracking-tight">{rolesTitle()}</h1>
+		<p class="text-muted-foreground">{rolesDescription()}</p>
 	</div>
 
 	<Tabs.Root bind:value={currentTab}>
 		<Tabs.List>
 			<Tabs.Trigger value="roles" class="flex items-center gap-2">
 				<ShieldCheck class="h-4 w-4" />
-				{m.rolesTitle()}
+				{rolesTitle()}
 			</Tabs.Trigger>
 			<Tabs.Trigger value="permissions" class="flex items-center gap-2">
 				<Eye class="h-4 w-4" />
-				{m.permissionsTitle()}
+				{permissionsTitle()}
 			</Tabs.Trigger>
 		</Tabs.List>
 
@@ -397,11 +469,11 @@
 				enableShiftSelect={true}
 				showToolbar={true}
 				showEditMode={true}
-				editModeLabel={m.rolesEditModeLabel?.() ?? 'Edit roles inline'}
-				emptyMessage={m.rolesNoRoles()}
-				emptySubMessage={m.rolesCreateYourFirst()}
+				editModeLabel={rolesEditModeLabel?.() ?? 'Edit roles inline'}
+				emptyMessage={rolesNoRoles()}
+				emptySubMessage={rolesCreateYourFirst()}
 				rowActions={{
-					header: m.rolesActions(),
+					header: rolesActions(),
 					onEdit: (role) => {
 						selectedRole = role;
 						editDialogOpen = true;
@@ -412,12 +484,12 @@
 					},
 					customActions: [
 						{
-							label: m.rolesEditParticipants?.() ?? 'Edit Participants',
+							label: rolesEditParticipants?.() ?? 'Edit Participants',
 							icon: Users,
 							onClick: openEditParticipants
 						},
 						{
-							label: m.rolesSelfJoinShowUrl?.() ?? 'Show join URL & defaults',
+							label: rolesSelfJoinShowUrl?.() ?? 'Show join URL & defaults',
 							icon: Link,
 							onClick: openJoinInfo
 						}
@@ -425,7 +497,7 @@
 				}}
 				inlineRowCreation={{
 					enabled: true,
-					createButtonLabel: m.rolesCreateRole(),
+					createButtonLabel: rolesCreateRole(),
 					requiredFields: ['name'],
 					excludeFields: ['assigned_participants'],
 					onCreateRow: async (rowData) => {
@@ -441,9 +513,9 @@
 						const result = await response.json();
 						if (result.type === 'success') {
 							await invalidateAll();
-							toast.success(m.rolesCreateSuccess());
+							toast.success(rolesCreateSuccess());
 						} else {
-							toast.error(m.rolesCreateError());
+							toast.error(rolesCreateError());
 							throw new Error('Failed to create role');
 						}
 					}
@@ -457,10 +529,10 @@
 				<!-- Sticky header with role selector -->
 				<div class="sticky top-0 z-10 bg-background border-b pb-3 pt-1 mb-4">
 					<div class="flex items-center justify-between gap-4">
-						<p class="text-muted-foreground text-sm">{m.permissionsDescription()}</p>
+						<p class="text-muted-foreground text-sm">{permissionsDescription()}</p>
 						<div class="flex items-center gap-2 shrink-0">
 							<label for="role-select" class="text-sm text-muted-foreground whitespace-nowrap">
-								{m.permissionsSelectRole()}:
+								{permissionsSelectRole()}:
 							</label>
 							<select
 								id="role-select"
@@ -476,16 +548,16 @@
 
 					<!-- R / C / U legend -->
 					<div class="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-						<span class="flex items-center gap-1"><Eye class="h-3 w-3" /> {m.permissionsCanView()}</span>
-						<span class="flex items-center gap-1"><FilePlus class="h-3 w-3" /> {m.permissionsCanCreate()}</span>
-						<span class="flex items-center gap-1"><Pencil class="h-3 w-3" /> {m.permissionsCanUpdate?.() ?? 'Update'}</span>
+						<span class="flex items-center gap-1"><Eye class="h-3 w-3" /> {permissionsCanView()}</span>
+						<span class="flex items-center gap-1"><FilePlus class="h-3 w-3" /> {permissionsCanCreate()}</span>
+						<span class="flex items-center gap-1"><Pencil class="h-3 w-3" /> {permissionsCanUpdate?.() ?? 'Update'}</span>
 					</div>
 				</div>
 
 				<!-- WORKFLOWS -->
 				{#if data.permWorkflows.length > 0}
 					<section class="mb-6">
-						<h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{m.permissionsWorkflows()}</h3>
+						<h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{permissionsWorkflows()}</h3>
 						<div class="space-y-1">
 							{#each data.permWorkflows as wf}
 								{@const wfCanRead = hasAccess(selectedPermRoleId, wf.visibleToRoles)}
@@ -508,7 +580,7 @@
 													<TriangleAlert class="h-4 w-4 text-amber-500 shrink-0" />
 												</Tooltip.Trigger>
 												<Tooltip.Content class="max-w-xs text-xs">
-													{m.permissionsHiddenButGranted()}
+													{permissionsHiddenButGranted()}
 												</Tooltip.Content>
 											</Tooltip.Root>
 										{/if}
@@ -516,7 +588,7 @@
 											<Lock class="h-3.5 w-3.5 text-muted-foreground" />
 										{/if}
 										{#if !wf.isActive}
-											<Badge variant="outline" class="text-xs">{m.rolesInactive?.() ?? 'Inactive'}</Badge>
+											<Badge variant="outline" class="text-xs">{rolesInactive?.() ?? 'Inactive'}</Badge>
 										{/if}
 										<div class="flex items-center gap-2 shrink-0 w-20 justify-end">
 											{@render permIcon('read', wfCanRead, () => togglePermission('workflows', wf.id, 'visible_to_roles'))}
@@ -583,7 +655,7 @@
 											{#if wf.globalTools.length > 0}
 												<div class="flex items-center gap-2 px-3 py-1.5 pl-6 text-sm">
 													<Wrench class="h-3 w-3 shrink-0 text-muted-foreground {dimmed}" />
-													<span class="text-muted-foreground flex-1 {dimmed}">{m.permissionsGlobalTools?.() ?? 'Global Tools'}</span>
+													<span class="text-muted-foreground flex-1 {dimmed}">{permissionsGlobalTools?.() ?? 'Global Tools'}</span>
 												</div>
 												{#each wf.globalTools as tool}
 													{@const canUse = hasAccess(selectedPermRoleId, tool.allowedRoles)}
@@ -609,7 +681,7 @@
 				<!-- TABLES -->
 				{#if data.permTables.length > 0}
 					<section class="mb-6">
-						<h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{m.permissionsTables()}</h3>
+						<h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{permissionsTables()}</h3>
 						<div class="border rounded-lg divide-y">
 							{#each data.permTables as entity}
 								{@render simpleEntityRow(entity, 'custom-tables', 'custom_tables')}
@@ -621,7 +693,7 @@
 				<!-- MARKER CATEGORIES -->
 				{#if data.permCategories.length > 0}
 					<section class="mb-6">
-						<h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{m.permissionsMarkerCategories()}</h3>
+						<h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{permissionsMarkerCategories()}</h3>
 						<div class="border rounded-lg divide-y">
 							{#each data.permCategories as entity}
 								{@render simpleEntityRow(entity, 'marker-categories', 'marker_categories')}
@@ -633,7 +705,7 @@
 				<!-- MAP LAYERS -->
 				{#if data.permLayers.length > 0}
 					<section class="mb-6">
-						<h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{m.permissionsMapLayers()}</h3>
+						<h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{permissionsMapLayers()}</h3>
 						<div class="border rounded-lg divide-y">
 							{#each data.permLayers as entity}
 								{@render simpleEntityRow(entity, 'map-settings', 'map_layers')}
@@ -645,7 +717,7 @@
 				<!-- OFFLINE PACKAGES -->
 				{#if data.permPackages.length > 0}
 					<section class="mb-6">
-						<h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{m.permissionsOfflinePackages()}</h3>
+						<h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{permissionsOfflinePackages()}</h3>
 						<div class="border rounded-lg divide-y">
 							{#each data.permPackages as entity}
 								{@render simpleEntityRow(entity, 'map-settings', 'offline_packages')}
@@ -656,7 +728,7 @@
 
 				{#if data.permWorkflows.length === 0 && data.permTables.length === 0 && data.permCategories.length === 0 && data.permLayers.length === 0 && data.permPackages.length === 0}
 					<div class="text-center py-8 text-muted-foreground">
-						{m.permissionsNoEntities()}
+						{permissionsNoEntities()}
 					</div>
 				{/if}
 			</div>
@@ -682,13 +754,13 @@
 	<Dialog.Content class="max-w-lg">
 		<Dialog.Header>
 			<Dialog.Title>
-				{m.rolesSelfJoinInfoTitle?.() ?? 'Self-join link'}
+				{rolesSelfJoinInfoTitle?.() ?? 'Self-join link'}
 				{#if joinInfoRole}
 					<span class="text-muted-foreground font-normal">— {joinInfoRole.name}</span>
 				{/if}
 			</Dialog.Title>
 			<Dialog.Description>
-				{m.rolesSelfJoinInfoDescription?.() ??
+				{rolesSelfJoinInfoDescription?.() ??
 					'Anyone with this link can register themselves as a guest participant in this role.'}
 			</Dialog.Description>
 		</Dialog.Header>
@@ -696,7 +768,7 @@
 		<div class="space-y-5 py-2">
 			<div class="space-y-2">
 				<label for="join-url-input" class="text-sm font-medium">
-					{m.rolesSelfJoinInfoUrlLabel?.() ?? 'Join URL'}
+					{rolesSelfJoinInfoUrlLabel?.() ?? 'Join URL'}
 				</label>
 				<div class="flex items-center gap-2">
 					<input
@@ -714,18 +786,18 @@
 						size="sm"
 						onclick={() => joinInfoRole?.join_slug && copyJoinUrl(joinInfoRole.join_slug)}
 					>
-						{m.commonCopy?.() ?? 'Copy'}
+						{commonCopy?.() ?? 'Copy'}
 					</Button>
 				</div>
 				<p class="text-xs text-muted-foreground">
-					{m.rolesSelfJoinInfoUrlHint?.() ??
+					{rolesSelfJoinInfoUrlHint?.() ??
 						'If the Copy button does nothing in your browser, click the field and copy manually.'}
 				</p>
 			</div>
 
 			<div class="space-y-2">
 				<label for="quota-max-instances" class="text-sm font-medium">
-					{m.rolesQuotaMaxInstancesLabel?.() ?? 'Max workflow instances per participant (0 = unlimited)'}
+					{rolesQuotaMaxInstancesLabel?.() ?? 'Max workflow instances per participant (0 = unlimited)'}
 				</label>
 				<div class="flex items-center gap-2">
 					<input
@@ -737,42 +809,42 @@
 						class="flex-1 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
 					/>
 					<Button type="button" variant="default" size="sm" disabled={savingQuota} onclick={saveQuota}>
-						{m.rolesQuotaSave?.() ?? 'Save'}
+						{rolesQuotaSave?.() ?? 'Save'}
 					</Button>
 				</div>
 				<p class="text-xs text-muted-foreground">
-					{m.rolesQuotaHelp?.() ?? 'Applies to anyone in this role. Lifetime total; admin deletions free the count.'}
+					{rolesQuotaHelp?.() ?? 'Applies to anyone in this role. Lifetime total; admin deletions free the count.'}
 				</p>
 			</div>
 
 			<div class="space-y-2">
 				<h4 class="text-sm font-medium">
-					{m.rolesSelfJoinInfoDefaultsTitle?.() ?? 'Defaults applied on self-join'}
+					{rolesSelfJoinInfoDefaultsTitle?.() ?? 'Defaults applied on self-join'}
 				</h4>
 				<ul class="space-y-1.5 rounded-md border bg-muted/20 p-3 text-sm">
 					<li class="flex justify-between gap-4">
-						<span class="text-muted-foreground">{m.rolesSelfJoinInfoDefaultName?.() ?? 'Name'}</span>
+						<span class="text-muted-foreground">{rolesSelfJoinInfoDefaultName?.() ?? 'Name'}</span>
 						<span class="font-mono">Guest</span>
 					</li>
 					<li class="flex justify-between gap-4">
-						<span class="text-muted-foreground">{m.rolesSelfJoinInfoDefaultRole?.() ?? 'Role'}</span>
+						<span class="text-muted-foreground">{rolesSelfJoinInfoDefaultRole?.() ?? 'Role'}</span>
 						<span>{joinInfoRole?.name ?? ''}</span>
 					</li>
 					<li class="flex justify-between gap-4">
-						<span class="text-muted-foreground">{m.rolesSelfJoinInfoDefaultEmail?.() ?? 'Email'}</span>
+						<span class="text-muted-foreground">{rolesSelfJoinInfoDefaultEmail?.() ?? 'Email'}</span>
 						<span class="font-mono text-xs">p-…@placeholder.local</span>
 					</li>
 					<li class="flex justify-between gap-4">
-						<span class="text-muted-foreground">{m.rolesSelfJoinInfoDefaultActive?.() ?? 'Active'}</span>
-						<span>{m.commonYes?.() ?? 'Yes'}</span>
+						<span class="text-muted-foreground">{rolesSelfJoinInfoDefaultActive?.() ?? 'Active'}</span>
+						<span>{commonYes?.() ?? 'Yes'}</span>
 					</li>
 					<li class="flex justify-between gap-4">
-						<span class="text-muted-foreground">{m.rolesSelfJoinInfoDefaultLandingPage?.() ?? 'Lands on'}</span>
+						<span class="text-muted-foreground">{rolesSelfJoinInfoDefaultLandingPage?.() ?? 'Lands on'}</span>
 						<span class="font-mono">/map</span>
 					</li>
 					<li class="flex justify-between gap-4">
-						<span class="text-muted-foreground">{m.rolesSelfJoinInfoDefaultRetention?.() ?? 'Auto-delete after'}</span>
-						<span>{m.rolesSelfJoinInfoDefaultRetentionValue?.() ?? '90 days of inactivity'}</span>
+						<span class="text-muted-foreground">{rolesSelfJoinInfoDefaultRetention?.() ?? 'Auto-delete after'}</span>
+						<span>{rolesSelfJoinInfoDefaultRetentionValue?.() ?? '90 days of inactivity'}</span>
 					</li>
 				</ul>
 			</div>
@@ -780,7 +852,7 @@
 
 		<Dialog.Footer>
 			<Button variant="outline" onclick={() => (joinInfoDialogOpen = false)}>
-				{m.commonClose?.() ?? 'Close'}
+				{commonClose?.() ?? 'Close'}
 			</Button>
 		</Dialog.Footer>
 	</Dialog.Content>
@@ -790,7 +862,7 @@
 <Dialog.Root bind:open={editParticipantsDialogOpen}>
 	<Dialog.Content>
 		<Dialog.Header>
-			<Dialog.Title>{m.rolesEditParticipants?.() ?? 'Edit Participants'}</Dialog.Title>
+			<Dialog.Title>{rolesEditParticipants?.() ?? 'Edit Participants'}</Dialog.Title>
 		</Dialog.Header>
 		{#if selectedRole}
 			<form
@@ -816,7 +888,7 @@
 						getOptionLabel={(p: { id: string; name: string }) => p.name}
 						allowCreate={true}
 						onCreateOption={createParticipant}
-						placeholder={m.rolesSelectOrSearchParticipants?.() ?? 'Select or search participants...'}
+						placeholder={rolesSelectOrSearchParticipants?.() ?? 'Select or search participants...'}
 					/>
 				</div>
 				<Dialog.Footer>
@@ -825,9 +897,9 @@
 						variant="outline"
 						onclick={() => (editParticipantsDialogOpen = false)}
 					>
-						{m.commonCancel()}
+						{commonCancel()}
 					</Button>
-					<Button type="submit">{m.commonSave()}</Button>
+					<Button type="submit">{commonSave()}</Button>
 				</Dialog.Footer>
 			</form>
 		{/if}
@@ -838,7 +910,7 @@
 {#snippet permIcon(type: 'read' | 'create' | 'update', allowed: boolean, onclick: () => void)}
 	<button
 		class="w-5 flex items-center justify-center cursor-pointer hover:scale-125 transition-transform disabled:opacity-50 disabled:cursor-wait"
-		title={type === 'read' ? m.permissionsCanView() : type === 'create' ? m.permissionsCanCreate() : (m.permissionsCanUpdate?.() ?? 'Update')}
+		title={type === 'read' ? permissionsCanView() : type === 'create' ? permissionsCanCreate() : (permissionsCanUpdate?.() ?? 'Update')}
 		disabled={toggling !== null}
 		{onclick}
 	>

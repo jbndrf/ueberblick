@@ -131,15 +131,15 @@ export async function deletePack(packId: string): Promise<void> {
 	const collections = [
 		'markers',
 		'workflow_instances',
-		'workflow_instance_field_values',
+		'workflow_field_values',
+		'workflow_field_defs',
 		'marker_categories',
 		'roles',
 		'workflows',
 		'workflow_stages',
 		'workflow_connections',
 		'tools_forms',
-		'tools_form_fields',
-		'tools_edit',
+		'tools_form_field_refs',
 		'map_layers'
 	];
 

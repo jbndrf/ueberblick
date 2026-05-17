@@ -7,12 +7,22 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		commonCancel,
+		projectNewDescriptionLabel,
+		projectNewDescriptionPlaceholder,
+		projectNewNameLabel,
+		projectNewNamePlaceholder,
+		projectNewSubmit,
+		projectNewSubtitle,
+		projectNewTitle,
+		projectNewValidationNameRequired
+	} from '$lib/paraglide/messages';
 
 	let { data } = $props();
 
 	const projectSchema = z.object({
-		name: z.string().min(1, m.projectNewValidationNameRequired?.() ?? 'Name is required').max(255),
+		name: z.string().min(1, projectNewValidationNameRequired?.() ?? 'Name is required').max(255),
 		description: z.string().max(1000).optional()
 	});
 
@@ -25,8 +35,8 @@
 
 <div class="container mx-auto max-w-2xl p-6">
 	<div class="mb-6">
-		<h1 class="text-3xl font-bold">{m.projectNewTitle?.() ?? 'Create New Project'}</h1>
-		<p class="text-muted-foreground">{m.projectNewSubtitle?.() ?? 'Create a new project to get started'}</p>
+		<h1 class="text-3xl font-bold">{projectNewTitle?.() ?? 'Create New Project'}</h1>
+		<p class="text-muted-foreground">{projectNewSubtitle?.() ?? 'Create a new project to get started'}</p>
 	</div>
 
 	<Card.Root>
@@ -34,12 +44,12 @@
 			<form method="POST" use:enhance>
 				<div class="space-y-4">
 					<div class="space-y-2">
-						<Label for="name">{m.projectNewNameLabel?.() ?? 'Project Name'}</Label>
+						<Label for="name">{projectNewNameLabel?.() ?? 'Project Name'}</Label>
 						<Input
 							id="name"
 							name="name"
 							bind:value={$formData.name}
-							placeholder={m.projectNewNamePlaceholder?.() ?? 'My Project'}
+							placeholder={projectNewNamePlaceholder?.() ?? 'My Project'}
 							aria-invalid={$errors.name ? 'true' : undefined}
 						/>
 						{#if $errors.name}
@@ -48,12 +58,12 @@
 					</div>
 
 					<div class="space-y-2">
-						<Label for="description">{m.projectNewDescriptionLabel?.() ?? 'Description'}</Label>
+						<Label for="description">{projectNewDescriptionLabel?.() ?? 'Description'}</Label>
 						<Textarea
 							id="description"
 							name="description"
 							bind:value={$formData.description}
-							placeholder={m.projectNewDescriptionPlaceholder?.() ?? 'Project description...'}
+							placeholder={projectNewDescriptionPlaceholder?.() ?? 'Project description...'}
 							rows={4}
 						/>
 						{#if $errors.description}
@@ -62,8 +72,8 @@
 					</div>
 
 					<div class="flex gap-4">
-						<Button type="submit">{m.projectNewSubmit?.() ?? 'Create Project'}</Button>
-						<Button type="button" variant="outline" href="/admin/projects">{m.commonCancel?.() ?? 'Cancel'}</Button>
+						<Button type="submit">{projectNewSubmit?.() ?? 'Create Project'}</Button>
+						<Button type="button" variant="outline" href="/admin/projects">{commonCancel?.() ?? 'Cancel'}</Button>
 					</div>
 				</div>
 			</form>

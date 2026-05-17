@@ -4,10 +4,22 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { Checkbox } from '$lib/components/ui/checkbox';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		protocolToolEditorCreateForm,
+		protocolToolEditorDeleteRegion,
+		protocolToolEditorDeleteTool,
+		protocolToolEditorEditForm,
+		protocolToolEditorEditableFields,
+		protocolToolEditorName,
+		protocolToolEditorNoStages,
+		protocolToolEditorRegionDescription,
+		protocolToolEditorRegionNamePlaceholder,
+		protocolToolEditorRegionStages,
+		protocolToolEditorToolNamePlaceholder
+	} from '$lib/paraglide/messages';
 
-	import { AncestorFieldsPanel } from '../edit-tool-editor';
-	import { FieldSelectionPreview } from '../edit-tool-editor';
+	import AncestorFieldsPanel from './AncestorFieldsPanel.svelte';
+	import FieldSelectionPreview from './FieldSelectionPreview.svelte';
 
 	import type { ToolsProtocol, ToolsForm, ToolsFormField, WorkflowStage } from '$lib/workflow-builder';
 
@@ -153,13 +165,13 @@
 				{/if}
 			</div>
 			<div class="header-title">
-				<Label for="protocol-tool-name" class="sr-only">{m.protocolToolEditorName?.() ?? 'Protocol Tool Name'}</Label>
+				<Label for="protocol-tool-name" class="sr-only">{protocolToolEditorName?.() ?? 'Protocol Tool Name'}</Label>
 				<Input
 					id="protocol-tool-name"
 					bind:value={toolName}
 					onblur={handleNameBlur}
 					class="name-input"
-					placeholder={isRegion ? (m.protocolToolEditorRegionNamePlaceholder?.() ?? 'Region name...') : (m.protocolToolEditorToolNamePlaceholder?.() ?? 'Protocol tool name...')}
+					placeholder={isRegion ? (protocolToolEditorRegionNamePlaceholder?.() ?? 'Region name...') : (protocolToolEditorToolNamePlaceholder?.() ?? 'Protocol tool name...')}
 				/>
 			</div>
 			<Button variant="ghost" size="icon" onclick={onClose}>
@@ -168,7 +180,7 @@
 		</div>
 		{#if isRegion}
 			<p class="header-description">
-				{m.protocolToolEditorRegionDescription?.() ?? 'Automatically snapshots the audit trail when an instance exits this region.'}
+				{protocolToolEditorRegionDescription?.() ?? 'Automatically snapshots the audit trail when an instance exits this region.'}
 			</p>
 		{/if}
 	</div>
@@ -177,7 +189,7 @@
 		<!-- Region mode: stage picker -->
 		<div class="region-content">
 			<div class="panel-header">
-				<span class="panel-label">{m.protocolToolEditorRegionStages?.() ?? 'Region Stages'}</span>
+				<span class="panel-label">{protocolToolEditorRegionStages?.() ?? 'Region Stages'}</span>
 				<span class="stage-count">{selectedStageIds.length} / {allStages.length}</span>
 			</div>
 			<div class="stage-list">
@@ -195,14 +207,14 @@
 					</button>
 				{/each}
 				{#if allStages.length === 0}
-					<p class="empty-message">{m.protocolToolEditorNoStages?.() ?? 'No stages available.'}</p>
+					<p class="empty-message">{protocolToolEditorNoStages?.() ?? 'No stages available.'}</p>
 				{/if}
 			</div>
 
 			<div class="editor-footer">
 				<Button variant="destructive" size="sm" onclick={onDelete} class="w-full">
 					<Trash2 class="h-4 w-4 mr-2" />
-					{m.protocolToolEditorDeleteRegion?.() ?? 'Delete Protocol Region'}
+					{protocolToolEditorDeleteRegion?.() ?? 'Delete Protocol Region'}
 				</Button>
 			</div>
 		</div>
@@ -211,7 +223,7 @@
 		<div class="editor-content">
 			<div class="left-panel">
 				<div class="panel-header">
-					<span class="panel-label">{m.protocolToolEditorEditableFields?.() ?? 'Editable Fields'}</span>
+					<span class="panel-label">{protocolToolEditorEditableFields?.() ?? 'Editable Fields'}</span>
 				</div>
 
 				<AncestorFieldsPanel
@@ -235,14 +247,14 @@
 				<div class="form-section">
 					<Button variant="outline" size="sm" onclick={onEditForm} class="w-full">
 						<FileText class="h-4 w-4 mr-2" />
-						{protocolTool.protocol_form_id ? (m.protocolToolEditorEditForm?.({ count: formFieldCount }) ?? `Edit Protocol Form (${formFieldCount} fields)`) : (m.protocolToolEditorCreateForm?.() ?? 'Create Protocol Form')}
+						{protocolTool.protocol_form_id ? (protocolToolEditorEditForm?.({ count: formFieldCount }) ?? `Edit Protocol Form (${formFieldCount} fields)`) : (protocolToolEditorCreateForm?.() ?? 'Create Protocol Form')}
 					</Button>
 				</div>
 
 				<div class="editor-footer">
 					<Button variant="destructive" size="sm" onclick={onDelete} class="w-full">
 						<Trash2 class="h-4 w-4 mr-2" />
-						{m.protocolToolEditorDeleteTool?.() ?? 'Delete Protocol Tool'}
+						{protocolToolEditorDeleteTool?.() ?? 'Delete Protocol Tool'}
 					</Button>
 				</div>
 			</div>

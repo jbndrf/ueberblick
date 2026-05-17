@@ -2,7 +2,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Plus, Trash2, ChevronUp, ChevronDown, ChevronRight } from '@lucide/svelte';
-	import * as m from '$lib/paraglide/messages';
+	import { automationStepBuilderActionsLabel, automationStepBuilderAddStep, automationStepBuilderConditionsLabel, automationStepBuilderDefaultStepName, automationStepBuilderStepNamePlaceholder } from '$lib/paraglide/messages';
 
 	import ConditionBuilder from './ConditionBuilder.svelte';
 	import ActionBuilder from './ActionBuilder.svelte';
@@ -35,7 +35,7 @@
 
 	function addStep() {
 		const newStep: AutomationStep = {
-			name: (m.automationStepBuilderDefaultStepName?.({ number: steps.length + 1 }) ?? `Step ${steps.length + 1}`),
+			name: (automationStepBuilderDefaultStepName?.({ number: steps.length + 1 }) ?? `Step ${steps.length + 1}`),
 			conditions: null,
 			actions: []
 		};
@@ -99,7 +99,7 @@
 				<Input
 					value={step.name}
 					oninput={(e) => updateStepName(index, e.currentTarget.value)}
-					placeholder={m.automationStepBuilderStepNamePlaceholder?.() ?? 'Step name...'}
+					placeholder={automationStepBuilderStepNamePlaceholder?.() ?? 'Step name...'}
 					class="h-6 text-xs flex-1"
 				/>
 				<div class="step-controls">
@@ -124,7 +124,7 @@
 			{#if expandedSteps.has(index)}
 				<div class="step-content">
 					<div class="step-section">
-						<span class="section-label">{m.automationStepBuilderConditionsLabel?.() ?? 'Conditions (guard)'}</span>
+						<span class="section-label">{automationStepBuilderConditionsLabel?.() ?? 'Conditions (guard)'}</span>
 						<ConditionBuilder
 							conditions={step.conditions}
 							{fieldOptions}
@@ -132,7 +132,7 @@
 						/>
 					</div>
 					<div class="step-section">
-						<span class="section-label">{m.automationStepBuilderActionsLabel?.() ?? 'Actions'}</span>
+						<span class="section-label">{automationStepBuilderActionsLabel?.() ?? 'Actions'}</span>
 						<ActionBuilder
 							actions={step.actions}
 							{fieldOptions}
@@ -147,7 +147,7 @@
 
 	<Button variant="ghost" size="sm" class="add-step-btn" onclick={addStep}>
 		<Plus class="h-3 w-3 mr-1" />
-		{m.automationStepBuilderAddStep?.() ?? 'Add Step'}
+		{automationStepBuilderAddStep?.() ?? 'Add Step'}
 	</Button>
 </div>
 

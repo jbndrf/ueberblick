@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as m from '$lib/paraglide/messages';
+	import { participantsExportQr, participantsQrExportError, participantsQrExportSuccess } from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { toast } from 'svelte-sonner';
 	import { QrCode, Loader2 } from '@lucide/svelte';
@@ -16,10 +16,10 @@
 		loading = true;
 		try {
 			await generateQrPdf(selectedParticipants);
-			toast.success(m.participantsQrExportSuccess?.() ?? 'QR code PDF exported successfully');
+			toast.success(participantsQrExportSuccess?.() ?? 'QR code PDF exported successfully');
 		} catch (e) {
 			console.error('QR PDF export failed:', e);
-			toast.error(m.participantsQrExportError?.() ?? 'Failed to export QR code PDF');
+			toast.error(participantsQrExportError?.() ?? 'Failed to export QR code PDF');
 		} finally {
 			loading = false;
 		}
@@ -33,6 +33,6 @@
 		{:else}
 			<QrCode class="mr-2 h-4 w-4" />
 		{/if}
-		{m.participantsExportQr?.({ count: selectedParticipants.length }) ?? `Export QR (${selectedParticipants.length})`}
+		{participantsExportQr?.({ count: selectedParticipants.length }) ?? `Export QR (${selectedParticipants.length})`}
 	</Button>
 {/if}

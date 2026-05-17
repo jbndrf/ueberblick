@@ -2,7 +2,55 @@
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import { page } from '$app/stores';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		commonCancel,
+		commonClose,
+		commonCreate,
+		commonDelete,
+		commonSave,
+		participantsAdminCustomFieldsAddButton,
+		participantsAdminCustomFieldsCreateError,
+		participantsAdminCustomFieldsCreateSuccess,
+		participantsAdminCustomFieldsDefaultValue,
+		participantsAdminCustomFieldsDeleteConfirm,
+		participantsAdminCustomFieldsDeleteError,
+		participantsAdminCustomFieldsDeleteSuccess,
+		participantsAdminCustomFieldsDescription,
+		participantsAdminCustomFieldsFieldName,
+		participantsAdminCustomFieldsFieldType,
+		participantsAdminCustomFieldsNoFields,
+		participantsAdminCustomFieldsRequired,
+		participantsAdminCustomFieldsTitle,
+		participantsAdminCustomFieldsUpdateError,
+		participantsAdminCustomFieldsUpdateSuccess,
+		participantsAdminSelectOrSearchRoles,
+		participantsCreateError,
+		participantsCreateParticipant,
+		participantsCreateSuccess,
+		participantsCreateYourFirst,
+		participantsDelete,
+		participantsDeleteConfirm,
+		participantsDeleteError,
+		participantsDeleteSuccess,
+		participantsDescription,
+		participantsEdit,
+		participantsEditRoles,
+		participantsEmail,
+		participantsEmailPlaceholder,
+		participantsName,
+		participantsNamePlaceholder,
+		participantsNoParticipants,
+		participantsPhone,
+		participantsPhonePlaceholder,
+		participantsRoles,
+		participantsShowGuests,
+		participantsStatus,
+		participantsTitle,
+		participantsToken,
+		participantsUpdateError,
+		participantsUpdateSuccess,
+		rolesActions
+	} from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { toast } from 'svelte-sonner';
@@ -69,42 +117,42 @@
 		fields: [
 			{
 				name: 'name',
-				label: m.participantsName(),
+				label: participantsName(),
 				type: 'text',
-				placeholder: m.participantsNamePlaceholder(),
+				placeholder: participantsNamePlaceholder(),
 				required: true
 			},
 			{
 				name: 'email',
-				label: m.participantsEmail(),
+				label: participantsEmail(),
 				type: 'email',
-				placeholder: m.participantsEmailPlaceholder()
+				placeholder: participantsEmailPlaceholder()
 			},
 			{
 				name: 'phone',
-				label: m.participantsPhone(),
+				label: participantsPhone(),
 				type: 'text',
-				placeholder: m.participantsPhonePlaceholder()
+				placeholder: participantsPhonePlaceholder()
 			}
 		],
 		createAction: '?/create',
 		updateAction: '?/update',
 		deleteAction: '?/delete',
 		messages: {
-			createTitle: m.participantsCreateParticipant(),
-			editTitle: m.participantsEdit(),
-			deleteTitle: m.participantsDelete(),
-			deleteConfirm: m.participantsDeleteConfirm(),
-			createSuccess: m.participantsCreateSuccess(),
-			updateSuccess: m.participantsUpdateSuccess(),
-			deleteSuccess: m.participantsDeleteSuccess(),
-			createError: m.participantsCreateError(),
-			updateError: m.participantsUpdateError(),
-			deleteError: m.participantsDeleteError(),
-			cancel: m.commonCancel(),
-			save: m.commonSave(),
-			create: m.commonCreate(),
-			delete: m.commonDelete()
+			createTitle: participantsCreateParticipant(),
+			editTitle: participantsEdit(),
+			deleteTitle: participantsDelete(),
+			deleteConfirm: participantsDeleteConfirm(),
+			createSuccess: participantsCreateSuccess(),
+			updateSuccess: participantsUpdateSuccess(),
+			deleteSuccess: participantsDeleteSuccess(),
+			createError: participantsCreateError(),
+			updateError: participantsUpdateError(),
+			deleteError: participantsDeleteError(),
+			cancel: commonCancel(),
+			save: commonSave(),
+			create: commonCreate(),
+			delete: commonDelete()
 		}
 	};
 
@@ -121,22 +169,22 @@
 		updateAction: 'updateCustomFieldDefinition',
 		deleteAction: 'deleteCustomFieldDefinition',
 		labels: {
-			title: m.participantsAdminCustomFieldsTitle?.() ?? 'Custom Fields',
-			description: m.participantsAdminCustomFieldsDescription?.() ?? 'Define additional fields for participants in this project',
-			addButton: m.participantsAdminCustomFieldsAddButton?.() ?? 'Add Field',
-			fieldName: m.participantsAdminCustomFieldsFieldName?.() ?? 'Field Name',
-			fieldType: m.participantsAdminCustomFieldsFieldType?.() ?? 'Field Type',
-			defaultValue: m.participantsAdminCustomFieldsDefaultValue?.() ?? 'Default Value (Optional)',
-			required: m.participantsAdminCustomFieldsRequired?.() ?? 'Required field',
-			noFields: m.participantsAdminCustomFieldsNoFields?.() ?? 'No custom fields defined yet',
-			createSuccess: m.participantsAdminCustomFieldsCreateSuccess?.() ?? 'Custom field created successfully',
-			createError: m.participantsAdminCustomFieldsCreateError?.() ?? 'Failed to create custom field',
-			updateSuccess: m.participantsAdminCustomFieldsUpdateSuccess?.() ?? 'Custom field updated successfully',
-			updateError: m.participantsAdminCustomFieldsUpdateError?.() ?? 'Failed to update custom field',
-			deleteSuccess: m.participantsAdminCustomFieldsDeleteSuccess?.() ?? 'Custom field deleted successfully',
-			deleteError: m.participantsAdminCustomFieldsDeleteError?.() ?? 'Failed to delete custom field',
+			title: participantsAdminCustomFieldsTitle?.() ?? 'Custom Fields',
+			description: participantsAdminCustomFieldsDescription?.() ?? 'Define additional fields for participants in this project',
+			addButton: participantsAdminCustomFieldsAddButton?.() ?? 'Add Field',
+			fieldName: participantsAdminCustomFieldsFieldName?.() ?? 'Field Name',
+			fieldType: participantsAdminCustomFieldsFieldType?.() ?? 'Field Type',
+			defaultValue: participantsAdminCustomFieldsDefaultValue?.() ?? 'Default Value (Optional)',
+			required: participantsAdminCustomFieldsRequired?.() ?? 'Required field',
+			noFields: participantsAdminCustomFieldsNoFields?.() ?? 'No custom fields defined yet',
+			createSuccess: participantsAdminCustomFieldsCreateSuccess?.() ?? 'Custom field created successfully',
+			createError: participantsAdminCustomFieldsCreateError?.() ?? 'Failed to create custom field',
+			updateSuccess: participantsAdminCustomFieldsUpdateSuccess?.() ?? 'Custom field updated successfully',
+			updateError: participantsAdminCustomFieldsUpdateError?.() ?? 'Failed to update custom field',
+			deleteSuccess: participantsAdminCustomFieldsDeleteSuccess?.() ?? 'Custom field deleted successfully',
+			deleteError: participantsAdminCustomFieldsDeleteError?.() ?? 'Failed to delete custom field',
 			deleteConfirm:
-				m.participantsAdminCustomFieldsDeleteConfirm?.() ?? 'Are you sure you want to delete this custom field? This will remove the field definition but preserve existing data in participant metadata.'
+				participantsAdminCustomFieldsDeleteConfirm?.() ?? 'Are you sure you want to delete this custom field? This will remove the field definition but preserve existing data in participant metadata.'
 		}
 	};
 
@@ -157,7 +205,7 @@
 		const coreColumns: BaseColumnConfig<Participant>[] = [
 		{
 			id: 'name',
-			header: m.participantsName(),
+			header: participantsName(),
 			accessorKey: 'name',
 			fieldType: 'text',
 			capabilities: {
@@ -169,7 +217,7 @@
 		},
 		{
 			id: 'email',
-			header: m.participantsEmail(),
+			header: participantsEmail(),
 			accessorKey: 'email',
 			fieldType: 'text',
 			capabilities: {
@@ -181,7 +229,7 @@
 		},
 		{
 			id: 'phone',
-			header: m.participantsPhone(),
+			header: participantsPhone(),
 			accessorKey: 'phone',
 			fieldType: 'text',
 			capabilities: {
@@ -193,7 +241,7 @@
 		},
 		{
 			id: 'token',
-			header: m.participantsToken(),
+			header: participantsToken(),
 			accessorKey: 'token',
 			fieldType: 'text',
 			capabilities: {
@@ -206,7 +254,7 @@
 		},
 		{
 			id: 'roles',
-			header: m.participantsRoles(),
+			header: participantsRoles(),
 			accessorFn: (row) => {
 				// Return the role IDs for the entity selector
 				if (!row.role_id || row.role_id.length === 0) return [];
@@ -230,7 +278,7 @@
 		},
 		{
 			id: 'is_active',
-			header: m.participantsStatus(),
+			header: participantsStatus(),
 			accessorKey: 'is_active',
 			fieldType: 'boolean',
 			capabilities: {
@@ -273,11 +321,11 @@
 		editRolesDialogOpen = false;
 		selectedParticipant = null;
 		invalidateAll();
-		toast.success(m.participantsUpdateSuccess?.() ?? 'Roles updated successfully');
+		toast.success(participantsUpdateSuccess?.() ?? 'Roles updated successfully');
 	}
 
 	function handleRolesUpdateError() {
-		toast.error(m.participantsUpdateError?.() ?? 'Failed to update roles');
+		toast.error(participantsUpdateError?.() ?? 'Failed to update roles');
 	}
 </script>
 
@@ -285,8 +333,8 @@
 	<!-- Header -->
 	<div class="flex items-start justify-between">
 		<div>
-			<h1 class="text-3xl font-bold tracking-tight">{m.participantsTitle()}</h1>
-			<p class="text-muted-foreground">{m.participantsDescription()}</p>
+			<h1 class="text-3xl font-bold tracking-tight">{participantsTitle()}</h1>
+			<p class="text-muted-foreground">{participantsDescription()}</p>
 		</div>
 		<div class="flex items-center gap-3">
 			<div class="flex items-center gap-2">
@@ -304,7 +352,7 @@
 					}}
 				/>
 				<Label for="show-guests" class="text-sm">
-					{m.participantsShowGuests?.() ?? 'Show guests'}
+					{participantsShowGuests?.() ?? 'Show guests'}
 				</Label>
 			</div>
 			<QrExportButton selectedParticipants={selectedParticipants.map(p => ({ name: p.name, token: p.token }))} />
@@ -324,11 +372,11 @@
 		}}
 		showToolbar={true}
 		showEditMode={true}
-		editModeLabel={m.participantsEdit?.() ?? 'Edit mode'}
-		emptyMessage={m.participantsNoParticipants()}
-		emptySubMessage={m.participantsCreateYourFirst()}
+		editModeLabel={participantsEdit?.() ?? 'Edit mode'}
+		emptyMessage={participantsNoParticipants()}
+		emptySubMessage={participantsCreateYourFirst()}
 		rowActions={{
-			header: m.rolesActions(),
+			header: rolesActions(),
 			onEdit: (participant) => {
 				selectedParticipant = participant;
 				selectedRoleIds = participant.role_id || [];
@@ -340,7 +388,7 @@
 			},
 			customActions: [
 				{
-					label: m.participantsEditRoles?.() ?? 'Edit Roles',
+					label: participantsEditRoles?.() ?? 'Edit Roles',
 					icon: UserCog,
 					onClick: openEditRoles
 				}
@@ -352,7 +400,7 @@
 		}}
 		inlineRowCreation={{
 			enabled: true,
-			createButtonLabel: m.participantsCreateParticipant(),
+			createButtonLabel: participantsCreateParticipant(),
 			requiredFields: ['name'],
 			excludeFields: ['token', 'is_active'],
 			onCreateRow: async (rowData) => {
@@ -375,9 +423,9 @@
 				const result = await response.json();
 				if (result.type === 'success' || result.data?.success) {
 					await invalidateAll();
-					toast.success(m.participantsCreateSuccess());
+					toast.success(participantsCreateSuccess());
 				} else {
-					const errorMessage = result.data?.message || m.participantsCreateError();
+					const errorMessage = result.data?.message || participantsCreateError();
 					toast.error(errorMessage);
 					throw new Error('Failed to create participant');
 				}
@@ -403,7 +451,7 @@
 <Dialog.Root bind:open={editRolesDialogOpen}>
 	<Dialog.Content>
 		<Dialog.Header>
-			<Dialog.Title>{m.participantsEditRoles?.() ?? 'Edit Roles'}</Dialog.Title>
+			<Dialog.Title>{participantsEditRoles?.() ?? 'Edit Roles'}</Dialog.Title>
 		</Dialog.Header>
 		{#if selectedParticipant}
 			<form
@@ -430,14 +478,14 @@
 						getOptionDescription={(r: { id: string; name: string; description?: string }) => r.description}
 						allowCreate={true}
 						onCreateOption={createRole}
-						placeholder={m.participantsAdminSelectOrSearchRoles?.() ?? 'Select or search roles...'}
+						placeholder={participantsAdminSelectOrSearchRoles?.() ?? 'Select or search roles...'}
 					/>
 				</div>
 				<Dialog.Footer>
 					<Button type="button" variant="outline" onclick={() => (editRolesDialogOpen = false)}>
-						{m.commonCancel()}
+						{commonCancel()}
 					</Button>
-					<Button type="submit">{m.commonSave()}</Button>
+					<Button type="submit">{commonSave()}</Button>
 				</Dialog.Footer>
 			</form>
 		{/if}
@@ -450,7 +498,7 @@
 		<CustomFieldManagerGeneric fields={data.customFields} config={customFieldConfig} />
 		<Dialog.Footer>
 			<Button variant="outline" onclick={() => (customFieldsDialogOpen = false)}>
-				{m.commonClose?.() ?? 'Close'}
+				{commonClose?.() ?? 'Close'}
 			</Button>
 		</Dialog.Footer>
 	</Dialog.Content>

@@ -3,6 +3,15 @@
  *
  * Type definitions for the workflow builder system including workflows,
  * stages, actions, form fields, and related entities.
+ *
+ * TODO(field-def-redesign): `FormField` here still mirrors the legacy
+ * `tools_form_fields` shape (with `field_key`, `form_id`). The new model
+ * splits this into `FieldDef` (workflow_field_defs registry, owns `key`,
+ * `label`, `field_type`, `write_mode`) and `ToolFormFieldRef`
+ * (tools_form_field_refs, owns `form_id` + per-form layout/overrides). See
+ * `src/lib/participant-state/types.ts` for the canonical shapes. The admin-
+ * UI worker is rewriting consumers in parallel; do not delete this file
+ * until that lands.
  */
 
 import type { ToolConfig } from '$lib/workflow-builder/tools';

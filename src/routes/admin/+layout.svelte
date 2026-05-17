@@ -3,7 +3,32 @@
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import { getPocketBase, onAuthStateChange, signOut } from '$lib/pocketbase';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		navAddTable,
+		navAddWorkflow,
+		navCreateFirstProject,
+		navCreateTableError,
+		navCreateWorkflowError,
+		navInstanceSettings,
+		navNewIncident,
+		navNewMarkerTable,
+		navNewSurvey,
+		navNewTable,
+		navNoProjectsYet,
+		navNoTables,
+		navNoWorkflows,
+		navParticipants,
+		navProjectSettings,
+		navProjects,
+		navReorderWorkflowError,
+		navRoles,
+		navTables,
+		navWorkflows,
+		navYourProjects,
+		profileAccount,
+		profileSettings,
+		profileSignOut
+	} from '$lib/paraglide/messages';
 	import * as Sidebar from '$lib/components/ui/sidebar';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { Button } from '$lib/components/ui/button';
@@ -134,7 +159,7 @@
 			workflowOrderOverride = null;
 		} catch (err) {
 			console.error('Failed to reorder workflows:', err);
-			toast.error(m.navReorderWorkflowError?.() ?? 'Failed to reorder workflows');
+			toast.error(navReorderWorkflowError?.() ?? 'Failed to reorder workflows');
 			workflowOrderOverride = null;
 			await refreshSidebar();
 		}
@@ -177,7 +202,7 @@
 			await refreshSidebar();
 		} catch (err) {
 			console.error('Failed to create workflow:', err);
-			toast.error(m.navCreateWorkflowError?.() ?? 'Failed to create workflow');
+			toast.error(navCreateWorkflowError?.() ?? 'Failed to create workflow');
 		}
 	}
 
@@ -206,15 +231,15 @@
 			}
 		} catch (err) {
 			console.error('Failed to create table:', err);
-			toast.error(m.navCreateTableError?.() ?? 'Failed to create table');
+			toast.error(navCreateTableError?.() ?? 'Failed to create table');
 		}
 	}
 
 	// Static menu items for project context
 	const projectStaticItems = [
-		{ href: 'settings', icon: Settings, label: () => m.navProjectSettings?.() ?? 'Project Settings' },
-		{ href: 'participants', icon: Users, label: () => m.navParticipants?.() ?? 'Participants' },
-		{ href: 'roles', icon: ShieldCheck, label: () => m.navRoles?.() ?? 'Roles' }
+		{ href: 'settings', icon: Settings, label: () => navProjectSettings?.() ?? 'Project Settings' },
+		{ href: 'participants', icon: Users, label: () => navParticipants?.() ?? 'Participants' },
+		{ href: 'roles', icon: ShieldCheck, label: () => navRoles?.() ?? 'Roles' }
 	];
 
 	const globalMenuItems = $derived(
@@ -223,7 +248,7 @@
 				{
 					href: '/admin/instance',
 					icon: Settings,
-					label: () => m.navInstanceSettings?.() ?? 'Instance Settings'
+					label: () => navInstanceSettings?.() ?? 'Instance Settings'
 				}
 			]
 			: []
@@ -281,7 +306,7 @@
 								{#snippet child({ props })}
 									<a href="/admin/projects" {...props}>
 										<FolderKanban class="h-4 w-4" />
-										<span>{m.navProjects?.() ?? 'Projects'}</span>
+										<span>{navProjects?.() ?? 'Projects'}</span>
 									</a>
 								{/snippet}
 							</Sidebar.MenuButton>
@@ -325,7 +350,7 @@
 									<ChevronRight
 										class="h-3 w-3 transition-transform {workflowsCollapsed ? '' : 'rotate-90'}"
 									/>
-									{m.navWorkflows?.() ?? 'Workflows'}
+									{navWorkflows?.() ?? 'Workflows'}
 								</button>
 							</Sidebar.GroupLabel>
 							<Sidebar.GroupAction>
@@ -334,18 +359,18 @@
 										{#snippet child({ props })}
 											<button {...props}>
 												<Plus class="h-4 w-4" />
-												<span class="sr-only">{m.navAddWorkflow?.() ?? 'Add workflow'}</span>
+												<span class="sr-only">{navAddWorkflow?.() ?? 'Add workflow'}</span>
 											</button>
 										{/snippet}
 									</DropdownMenu.Trigger>
 									<DropdownMenu.Content side="right" align="start" class="w-48">
 										<DropdownMenu.Item onclick={() => createWorkflow('incident')}>
 											<MapPin class="mr-2 h-4 w-4" />
-											{m.navNewIncident?.() ?? 'New Incident Workflow'}
+											{navNewIncident?.() ?? 'New Incident Workflow'}
 										</DropdownMenu.Item>
 										<DropdownMenu.Item onclick={() => createWorkflow('survey')}>
 											<Workflow class="mr-2 h-4 w-4" />
-											{m.navNewSurvey?.() ?? 'New Survey Workflow'}
+											{navNewSurvey?.() ?? 'New Survey Workflow'}
 										</DropdownMenu.Item>
 									</DropdownMenu.Content>
 								</DropdownMenu.Root>
@@ -381,7 +406,7 @@
 											{/each}
 										{#if displayed.length === 0}
 											<div class="px-3 py-2 text-xs text-muted-foreground">
-												{m.navNoWorkflows?.() ?? 'No workflows yet'}
+												{navNoWorkflows?.() ?? 'No workflows yet'}
 											</div>
 										{/if}
 									</Sidebar.Menu>
@@ -399,7 +424,7 @@
 									<ChevronRight
 										class="h-3 w-3 transition-transform {tablesCollapsed ? '' : 'rotate-90'}"
 									/>
-									{m.navTables?.() ?? 'Tables'}
+									{navTables?.() ?? 'Tables'}
 								</button>
 							</Sidebar.GroupLabel>
 							<Sidebar.GroupAction>
@@ -408,18 +433,18 @@
 										{#snippet child({ props })}
 											<button {...props}>
 												<Plus class="h-4 w-4" />
-												<span class="sr-only">{m.navAddTable?.() ?? 'Add table'}</span>
+												<span class="sr-only">{navAddTable?.() ?? 'Add table'}</span>
 											</button>
 										{/snippet}
 									</DropdownMenu.Trigger>
 									<DropdownMenu.Content side="right" align="start" class="w-48">
 										<DropdownMenu.Item onclick={() => createTable(false)}>
 											<Table class="mr-2 h-4 w-4" />
-											{m.navNewTable?.() ?? 'New Table'}
+											{navNewTable?.() ?? 'New Table'}
 										</DropdownMenu.Item>
 										<DropdownMenu.Item onclick={() => createTable(true)}>
 											<MapPin class="mr-2 h-4 w-4" />
-											{m.navNewMarkerTable?.() ?? 'New Marker Table'}
+											{navNewMarkerTable?.() ?? 'New Marker Table'}
 										</DropdownMenu.Item>
 									</DropdownMenu.Content>
 								</DropdownMenu.Root>
@@ -451,7 +476,7 @@
 											{/each}
 										{#if sidebarTables.length === 0 && sidebarMarkerCategories.length === 0}
 											<div class="px-3 py-2 text-xs text-muted-foreground">
-												{m.navNoTables?.() ?? 'No tables yet'}
+												{navNoTables?.() ?? 'No tables yet'}
 											</div>
 										{/if}
 									</Sidebar.Menu>
@@ -462,7 +487,7 @@
 					{:else if projectsList.length > 0}
 						<Sidebar.Separator class="my-4" />
 						<Sidebar.Group>
-							<Sidebar.GroupLabel>{m.navYourProjects?.() ?? 'Your Projects'}</Sidebar.GroupLabel>
+							<Sidebar.GroupLabel>{navYourProjects?.() ?? 'Your Projects'}</Sidebar.GroupLabel>
 							<Sidebar.GroupContent>
 								<Sidebar.Menu>
 									{#each projectsList as project}
@@ -483,9 +508,9 @@
 					{:else if data.user}
 						<Sidebar.Separator class="my-4" />
 						<div class="px-4 py-3 text-sm text-muted-foreground text-center">
-							<p>{m.navNoProjectsYet?.() ?? 'No projects yet'}</p>
+							<p>{navNoProjectsYet?.() ?? 'No projects yet'}</p>
 							<Button href="/admin/projects" variant="link" size="sm" class="mt-1">
-								{m.navCreateFirstProject?.() ?? 'Create your first project'}
+								{navCreateFirstProject?.() ?? 'Create your first project'}
 							</Button>
 						</div>
 					{/if}
@@ -531,14 +556,14 @@
 								{#snippet child({ props })}
 									<Button {...props} variant="ghost" size="icon" class="h-9 w-9">
 										<UserCircle class="h-5 w-5" />
-										<span class="sr-only">{m.profileAccount?.() ?? 'Account'}</span>
+										<span class="sr-only">{profileAccount?.() ?? 'Account'}</span>
 									</Button>
 								{/snippet}
 							</DropdownMenu.Trigger>
 							<DropdownMenu.Content align="end" class="w-56">
 								<DropdownMenu.Label>
 									<div class="flex flex-col space-y-1">
-										<p class="text-sm font-medium leading-none">{m.profileAccount?.() ?? 'Account'}</p>
+										<p class="text-sm font-medium leading-none">{profileAccount?.() ?? 'Account'}</p>
 										<p class="text-xs leading-none text-muted-foreground">
 											{data.user.email}
 										</p>
@@ -556,12 +581,12 @@
 
 								<DropdownMenu.Item onclick={() => (window.location.href = '/settings')}>
 									<Settings class="mr-2 h-4 w-4" />
-									{m.profileSettings?.() ?? 'Settings'}
+									{profileSettings?.() ?? 'Settings'}
 								</DropdownMenu.Item>
 								<DropdownMenu.Separator />
 								<DropdownMenu.Item onclick={handleSignOut}>
 									<LogOut class="mr-2 h-4 w-4" />
-									{m.profileSignOut?.() ?? 'Sign out'}
+									{profileSignOut?.() ?? 'Sign out'}
 								</DropdownMenu.Item>
 							</DropdownMenu.Content>
 						</DropdownMenu.Root>

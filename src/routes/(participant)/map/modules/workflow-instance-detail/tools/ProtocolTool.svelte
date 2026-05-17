@@ -14,7 +14,16 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import type { FormFieldWithValue } from '$lib/components/form-renderer';
 	import type { ToolProtocol, FormField, FieldValue } from '../state.svelte';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		commonCancel,
+		participantProtocolToolFieldRequired,
+		participantProtocolToolLifecycleFields,
+		participantProtocolToolLoading,
+		participantProtocolToolNoFields,
+		participantProtocolToolProtocolFields,
+		participantProtocolToolSave,
+		participantProtocolToolSaving
+	} from '$lib/paraglide/messages';
 
 	// ==========================================================================
 	// Props
@@ -48,13 +57,18 @@
 	// Derived
 	// ==========================================================================
 
-	const editableFieldIds = $derived(protocolTool.editable_fields || []);
+	// TODO(field-def-redesign): tools_protocol.editable_fields was dropped.
+	// Lifecycle-style edits are now driven by the field def's own write_mode --
+	// any singleton field referenced by the protocol form upserts naturally.
+	// We keep an empty list so the rendering stays compatible while admin sweeps
+	// the data.
+	const editableFieldIds = $derived<string[]>([]);
 	const prefillConfig = $derived(protocolTool.prefill_config || {});
 
 	const editableFields = $derived.by((): FormFieldWithValue[] => {
 		const filtered = formFields.filter(f => editableFieldIds.includes(f.id));
 		return filtered.map(field => {
-			const fieldValuesForField = existingFieldValues.filter(fv => fv.field_key === field.id);
+			const fieldValuesForField = existingFieldValues.filter(fv => (fv as any).field_def_id === field.id);
 			const storedFiles = fieldValuesForField
 				.filter(fv => fv.file_value)
 				.map(fv => ({ recordId: fv.id, fileName: fv.file_value }));
@@ -94,19 +108,21 @@
 
 		// Pre-fill edit fields from existing values, respecting prefill_config
 		for (const fieldValue of existingFieldValues) {
-			if (!editableFieldIds.includes(fieldValue.field_key)) continue;
+			const key = (fieldValue as any).field_def_id as string | undefined;
+			if (!key) continue;
+			if (!editableFieldIds.includes(key)) continue;
 
 			// Check if prefill is enabled for this field (default is true)
-			if (prefillConfig[fieldValue.field_key] === false) continue;
+			if (prefillConfig[key] === false) continue;
 
 			try {
 				if (fieldValue.value.startsWith('[') || fieldValue.value.startsWith('{')) {
-					initialEditValues[fieldValue.field_key] = JSON.parse(fieldValue.value);
+					initialEditValues[key] = JSON.parse(fieldValue.value);
 				} else {
-					initialEditValues[fieldValue.field_key] = fieldValue.value;
+					initialEditValues[key] = fieldValue.value;
 				}
 			} catch {
-				initialEditValues[fieldValue.field_key] = fieldValue.value;
+				initialEditValues[key] = fieldValue.value;
 			}
 		}
 
@@ -152,11 +168,11 @@
 			const value = editValues[field.id];
 			if (field.is_required) {
 				if (value === null || value === undefined || value === '') {
-					newErrors[field.id] = (m.participantProtocolToolFieldRequired?.() ?? 'This field is required');
+					newErrors[field.id] = (participantProtocolToolFieldRequired?.() ?? 'This field is required');
 					continue;
 				}
 				if (Array.isArray(value) && value.length === 0) {
-					newErrors[field.id] = (m.participantProtocolToolFieldRequired?.() ?? 'This field is required');
+					newErrors[field.id] = (participantProtocolToolFieldRequired?.() ?? 'This field is required');
 					continue;
 				}
 			}
@@ -166,11 +182,11 @@
 			const value = protocolValues[field.id];
 			if (field.is_required) {
 				if (value === null || value === undefined || value === '') {
-					newErrors[field.id] = (m.participantProtocolToolFieldRequired?.() ?? 'This field is required');
+					newErrors[field.id] = (participantProtocolToolFieldRequired?.() ?? 'This field is required');
 					continue;
 				}
 				if (Array.isArray(value) && value.length === 0) {
-					newErrors[field.id] = (m.participantProtocolToolFieldRequired?.() ?? 'This field is required');
+					newErrors[field.id] = (participantProtocolToolFieldRequired?.() ?? 'This field is required');
 					continue;
 				}
 			}
@@ -205,13 +221,13 @@
 				<div
 					class="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2"
 				></div>
-				<p class="text-sm text-muted-foreground">{m.participantProtocolToolLoading?.() ?? 'Loading...'}</p>
+				<p class="text-sm text-muted-foreground">{participantProtocolToolLoading?.() ?? 'Loading...'}</p>
 			</div>
 		</div>
 	{:else}
 		{#if hasEditFields}
 			<div class="p-4">
-				<h4 class="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">{m.participantProtocolToolLifecycleFields?.() ?? 'Lifecycle Fields'}</h4>
+				<h4 class="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">{participantProtocolToolLifecycleFields?.() ?? 'Lifecycle Fields'}</h4>
 				<FormRenderer
 					mode="edit"
 					fields={editableFields}
@@ -230,7 +246,7 @@
 
 		{#if hasProtocolFields}
 			<div class="p-4">
-				<h4 class="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">{m.participantProtocolToolProtocolFields?.() ?? 'Protocol Fields'}</h4>
+				<h4 class="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">{participantProtocolToolProtocolFields?.() ?? 'Protocol Fields'}</h4>
 				<FormRenderer
 					mode="fill"
 					fields={protocolFieldsWithValues}
@@ -245,7 +261,7 @@
 
 		{#if !hasEditFields && !hasProtocolFields}
 			<div class="flex-1 flex items-center justify-center p-4 py-12">
-				<p class="text-sm text-muted-foreground">{m.participantProtocolToolNoFields?.() ?? 'No fields configured for this protocol tool.'}</p>
+				<p class="text-sm text-muted-foreground">{participantProtocolToolNoFields?.() ?? 'No fields configured for this protocol tool.'}</p>
 			</div>
 		{/if}
 	{/if}
@@ -261,7 +277,7 @@
 				class="flex-1"
 			>
 				<X class="w-4 h-4 mr-1" />
-				{m.commonCancel?.() ?? 'Cancel'}
+				{commonCancel?.() ?? 'Cancel'}
 			</Button>
 
 			<Button
@@ -271,10 +287,10 @@
 			>
 				{#if isSubmitting}
 					<Loader2 class="w-4 h-4 mr-2 animate-spin" />
-					{m.participantProtocolToolSaving?.() ?? 'Saving...'}
+					{participantProtocolToolSaving?.() ?? 'Saving...'}
 				{:else}
 					<Save class="w-4 h-4 mr-2" />
-					{m.participantProtocolToolSave?.() ?? 'Save Protocol'}
+					{participantProtocolToolSave?.() ?? 'Save Protocol'}
 				{/if}
 			</Button>
 		</div>

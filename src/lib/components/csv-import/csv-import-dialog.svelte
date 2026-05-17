@@ -6,7 +6,37 @@
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Progress } from '$lib/components/ui/progress';
 	import { toast } from 'svelte-sonner';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		csvImportAndMoreRows,
+		csvImportBack,
+		csvImportCancel,
+		csvImportColumnsFound,
+		csvImportContinue,
+		csvImportCsvColumn,
+		csvImportDialogDescription,
+		csvImportDialogTitle,
+		csvImportError,
+		csvImportFileLabel,
+		csvImportImportData,
+		csvImportImporting,
+		csvImportLatitudeError,
+		csvImportLongitudeError,
+		csvImportMapsTo,
+		csvImportPreview,
+		csvImportProgressText,
+		csvImportReadyToImport,
+		csvImportReplaceData,
+		csvImportRequiredEmptyError,
+		csvImportRequiredFieldsMissing,
+		csvImportRowsFound,
+		csvImportSkipColumn,
+		csvImportSuccess,
+		csvImportTargetStage,
+		csvImportTargetStageHint,
+		csvImportValidation,
+		csvImportValidationBlockingErrors,
+		csvImportValidationWarnings
+	} from '$lib/paraglide/messages';
 	import { parseCSV } from './parse-csv';
 
 	export type TargetField = {
@@ -55,10 +85,10 @@
 		stages = [],
 		selectedStage = $bindable(''),
 		replaceOption = true,
-		title = m.csvImportDialogTitle(),
-		description = m.csvImportDialogDescription(),
-		replaceLabel = m.csvImportReplaceData(),
-		importLabel = m.csvImportImportData(),
+		title = csvImportDialogTitle(),
+		description = csvImportDialogDescription(),
+		replaceLabel = csvImportReplaceData(),
+		importLabel = csvImportImportData(),
 		onimport
 	}: Props = $props();
 
@@ -179,9 +209,9 @@
 
 	function getValidationMessage(v: ColumnValidation): string {
 		switch (v.errorType) {
-			case 'lat': return m.csvImportLatitudeError({ count: v.errors });
-			case 'lon': return m.csvImportLongitudeError({ count: v.errors });
-			case 'required': return m.csvImportRequiredEmptyError({ count: v.errors });
+			case 'lat': return csvImportLatitudeError({ count: v.errors });
+			case 'lon': return csvImportLongitudeError({ count: v.errors });
+			case 'required': return csvImportRequiredEmptyError({ count: v.errors });
 		}
 	}
 
@@ -217,7 +247,7 @@
 		const { headers, rows } = parseCSV(text);
 
 		if (headers.length === 0) {
-			toast.error(m.csvImportError());
+			toast.error(csvImportError());
 			csvFile = null;
 			return;
 		}
@@ -271,14 +301,14 @@
 			});
 
 			if (result.success) {
-				toast.success(`${m.csvImportSuccess()} (${result.count})`);
+				toast.success(`${csvImportSuccess()} (${result.count})`);
 				resetAndClose();
 			} else {
-				toast.error(result.error || m.csvImportError());
+				toast.error(result.error || csvImportError());
 			}
 		} catch (err) {
 			console.error('CSV import error:', err);
-			toast.error(m.csvImportError());
+			toast.error(csvImportError());
 		} finally {
 			importing = false;
 		}
@@ -320,7 +350,7 @@
 		{#if step === 'upload'}
 			<div class="space-y-4 py-4">
 				<div class="space-y-2">
-					<Label for="csv-file">{m.csvImportFileLabel()}</Label>
+					<Label for="csv-file">{csvImportFileLabel()}</Label>
 					<Input
 						id="csv-file"
 						type="file"
@@ -331,19 +361,19 @@
 			</div>
 			<Dialog.Footer>
 				<Button variant="outline" onclick={resetAndClose}>
-					{m.csvImportCancel()}
+					{csvImportCancel()}
 				</Button>
 			</Dialog.Footer>
 
 		{:else if step === 'map'}
 			<div class="space-y-4 py-4">
 				<p class="text-sm text-muted-foreground">
-					{csvRows.length} {m.csvImportRowsFound()} -- {csvHeaders.length} {m.csvImportColumnsFound()}
+					{csvRows.length} {csvImportRowsFound()} -- {csvHeaders.length} {csvImportColumnsFound()}
 				</p>
 
 				{#if stages.length > 0}
 					<div class="space-y-2">
-						<Label for="import-stage">{m.csvImportTargetStage()}</Label>
+						<Label for="import-stage">{csvImportTargetStage()}</Label>
 						<select
 							id="import-stage"
 							class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -354,7 +384,7 @@
 								<option value={stage.id}>{stage.label}</option>
 							{/each}
 						</select>
-						<p class="text-xs text-muted-foreground">{m.csvImportTargetStageHint()}</p>
+						<p class="text-xs text-muted-foreground">{csvImportTargetStageHint()}</p>
 					</div>
 				{/if}
 
@@ -363,10 +393,10 @@
 					<table class="w-full text-sm">
 						<thead>
 							<tr class="border-b bg-muted/50">
-								<th class="text-left p-2 font-medium whitespace-nowrap">{m.csvImportCsvColumn()}</th>
-								<th class="text-left p-2 font-medium whitespace-nowrap">{m.csvImportMapsTo()}</th>
-								<th class="text-left p-2 font-medium whitespace-nowrap">{m.csvImportPreview()}</th>
-								<th class="text-left p-2 font-medium whitespace-nowrap">{m.csvImportValidation()}</th>
+								<th class="text-left p-2 font-medium whitespace-nowrap">{csvImportCsvColumn()}</th>
+								<th class="text-left p-2 font-medium whitespace-nowrap">{csvImportMapsTo()}</th>
+								<th class="text-left p-2 font-medium whitespace-nowrap">{csvImportPreview()}</th>
+								<th class="text-left p-2 font-medium whitespace-nowrap">{csvImportValidation()}</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -380,7 +410,7 @@
 											value={columnMapping[header] || ''}
 											onchange={(e) => handleMappingChange(header, (e.target as HTMLSelectElement).value)}
 										>
-											<option value="">-- {m.csvImportSkipColumn()} --</option>
+											<option value="">-- {csvImportSkipColumn()} --</option>
 											{#each availableTargetsFor(header) as target}
 												<option value={target.id}>
 													{target.label}{target.required ? ' *' : ''}
@@ -406,26 +436,26 @@
 
 				{#if hasBlockingErrors}
 					<p class="text-sm text-destructive">
-						{m.csvImportValidationBlockingErrors()}
+						{csvImportValidationBlockingErrors()}
 					</p>
 				{:else if hasValidationWarnings}
 					<p class="text-sm text-amber-600">
-						{m.csvImportValidationWarnings()}
+						{csvImportValidationWarnings()}
 					</p>
 				{/if}
 
 				{#if !allRequiredMapped}
 					<p class="text-sm text-destructive">
-						{m.csvImportRequiredFieldsMissing()}
+						{csvImportRequiredFieldsMissing()}
 					</p>
 				{/if}
 			</div>
 			<Dialog.Footer>
 				<Button variant="outline" onclick={goBack}>
-					{m.csvImportBack()}
+					{csvImportBack()}
 				</Button>
 				<Button onclick={() => { step = 'confirm'; }} disabled={!allRequiredMapped || hasBlockingErrors}>
-					{m.csvImportContinue()}
+					{csvImportContinue()}
 				</Button>
 			</Dialog.Footer>
 
@@ -435,12 +465,12 @@
 					<div class="space-y-3">
 						<Progress value={importProgress} max={importTotal} />
 						<p class="text-sm text-muted-foreground text-center">
-							{m.csvImportProgressText({ current: importProgress, total: importTotal })}
+							{csvImportProgressText({ current: importProgress, total: importTotal })}
 						</p>
 					</div>
 				{:else}
 					<p class="text-sm">
-						{m.csvImportReadyToImport({ count: csvRows.length, fields: mappedTargets.length })}
+						{csvImportReadyToImport({ count: csvRows.length, fields: mappedTargets.length })}
 					</p>
 
 					<!-- Preview table -->
@@ -467,7 +497,7 @@
 						</div>
 						{#if csvRows.length > 3}
 							<p class="text-xs text-muted-foreground">
-								... {m.csvImportAndMoreRows({ count: csvRows.length - 3 })}
+								... {csvImportAndMoreRows({ count: csvRows.length - 3 })}
 							</p>
 						{/if}
 					{/if}
@@ -488,10 +518,10 @@
 			</div>
 			<Dialog.Footer>
 				<Button variant="outline" onclick={goBack} disabled={importing}>
-					{m.csvImportBack()}
+					{csvImportBack()}
 				</Button>
 				<Button onclick={handleImport} disabled={importing}>
-					{importing ? m.csvImportImporting() : importLabel}
+					{importing ? csvImportImporting() : importLabel}
 				</Button>
 			</Dialog.Footer>
 		{/if}

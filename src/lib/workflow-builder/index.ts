@@ -14,6 +14,8 @@ export {
 export type {
 	WorkflowStage,
 	WorkflowConnection,
+	SentryClause,
+	WorkflowFieldDef,
 	ToolsForm,
 	ToolsFormField,
 	ToolsEdit,

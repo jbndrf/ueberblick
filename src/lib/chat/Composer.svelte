@@ -1,7 +1,7 @@
 <script lang="ts">
 	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 	import { Send, Loader2 } from '@lucide/svelte';
-	import * as m from '$lib/paraglide/messages';
+	import { chatComposerPlaceholder, chatComposerReadOnly, chatMentionButtonTitle, chatMentionPickerEmpty } from '$lib/paraglide/messages';
 	import { activeMentionTrigger, insertMention } from './mentions';
 	import type { MentionableStore } from './mentionable.svelte';
 
@@ -102,8 +102,8 @@
 				singleSelect={false}
 				summarizeMultiple={true}
 				disabled={disabled || mentionables.participants.length === 0}
-				placeholder={m.chatMentionButtonTitle?.() ?? '@ Mention'}
-				emptyLabel={m.chatMentionPickerEmpty?.() ?? 'No participants'}
+				placeholder={chatMentionButtonTitle?.() ?? '@ Mention'}
+				emptyLabel={chatMentionPickerEmpty?.() ?? 'No participants'}
 				class="h-9 text-sm"
 				disablePortal={true}
 				onSelectedIdsChange={onPickerChange}
@@ -113,7 +113,7 @@
 			bind:this={textareaEl}
 			class="max-h-32 min-h-[2.5rem] flex-1 resize-none rounded-md border bg-background p-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
 			rows="1"
-			placeholder={disabled ? (m.chatComposerReadOnly?.() ?? 'Read-only') : (m.chatComposerPlaceholder?.() ?? 'Message…')}
+			placeholder={disabled ? (chatComposerReadOnly?.() ?? 'Read-only') : (chatComposerPlaceholder?.() ?? 'Message…')}
 			bind:value
 			{disabled}
 			oninput={onInput}

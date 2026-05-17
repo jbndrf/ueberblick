@@ -5,7 +5,42 @@
 	import { toast } from 'svelte-sonner';
 	import { X, Pencil, Trash2, Play, Square, CircleStop, ArrowLeft, Image } from '@lucide/svelte';
 	import MarkerIconDesigner from './marker-icon-designer.svelte';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		adminWorkflowIconDesignerBack,
+		adminWorkflowIconDesignerCustomIcon,
+		adminWorkflowIconDesignerCustomIconSet,
+		adminWorkflowIconDesignerDefaultIconHeading,
+		adminWorkflowIconDesignerDefaultIconHint,
+		adminWorkflowIconDesignerDone,
+		adminWorkflowIconDesignerEdit,
+		adminWorkflowIconDesignerEditingLabelFilterValue,
+		adminWorkflowIconDesignerEditingLabelStage,
+		adminWorkflowIconDesignerEditingLabelWorkflow,
+		adminWorkflowIconDesignerFilterValueCount,
+		adminWorkflowIconDesignerFilterValueIconClearError,
+		adminWorkflowIconDesignerFilterValueIconCleared,
+		adminWorkflowIconDesignerFilterValueIconsHeading,
+		adminWorkflowIconDesignerFilterValueIconsHint,
+		adminWorkflowIconDesignerNoIcon,
+		adminWorkflowIconDesignerNoStages,
+		adminWorkflowIconDesignerSaveError,
+		adminWorkflowIconDesignerSet,
+		adminWorkflowIconDesignerSetIcon,
+		adminWorkflowIconDesignerStageCount,
+		adminWorkflowIconDesignerStageIconClearError,
+		adminWorkflowIconDesignerStageIconCleared,
+		adminWorkflowIconDesignerStageOverridesHeading,
+		adminWorkflowIconDesignerStageTypeEnd,
+		adminWorkflowIconDesignerStageTypeStart,
+		adminWorkflowIconDesignerStageTypeStep,
+		adminWorkflowIconDesignerSubtitle,
+		adminWorkflowIconDesignerTitle,
+		adminWorkflowIconDesignerUnknown,
+		adminWorkflowIconDesignerUsedForMapFiltering,
+		adminWorkflowIconDesignerUsesDefault,
+		adminWorkflowIconDesignerWorkflowIconClearError,
+		adminWorkflowIconDesignerWorkflowIconCleared
+	} from '$lib/paraglide/messages';
 
 	interface IconStyle {
 		size: number;
@@ -90,9 +125,9 @@
 	);
 
 	const stageTypeConfig = {
-		start: { icon: Play, label: m.adminWorkflowIconDesignerStageTypeStart(), color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' },
-		intermediate: { icon: Square, label: m.adminWorkflowIconDesignerStageTypeStep(), color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
-		end: { icon: CircleStop, label: m.adminWorkflowIconDesignerStageTypeEnd(), color: 'bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-400' }
+		start: { icon: Play, label: adminWorkflowIconDesignerStageTypeStart(), color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' },
+		intermediate: { icon: Square, label: adminWorkflowIconDesignerStageTypeStep(), color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
+		end: { icon: CircleStop, label: adminWorkflowIconDesignerStageTypeEnd(), color: 'bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-400' }
 	};
 
 	function editWorkflowIcon() {
@@ -111,9 +146,9 @@
 		try {
 			await onSaveWorkflowIcon(null);
 			workflowIconConfig = undefined;
-			toast.success(m.adminWorkflowIconDesignerWorkflowIconCleared());
+			toast.success(adminWorkflowIconDesignerWorkflowIconCleared());
 		} catch {
-			toast.error(m.adminWorkflowIconDesignerWorkflowIconClearError());
+			toast.error(adminWorkflowIconDesignerWorkflowIconClearError());
 		}
 	}
 
@@ -122,9 +157,9 @@
 			await onSaveStageIcon(stageId, null);
 			stageIconConfigs.delete(stageId);
 			stageIconConfigs = stageIconConfigs; // trigger reactivity
-			toast.success(m.adminWorkflowIconDesignerStageIconCleared());
+			toast.success(adminWorkflowIconDesignerStageIconCleared());
 		} catch {
-			toast.error(m.adminWorkflowIconDesignerStageIconClearError());
+			toast.error(adminWorkflowIconDesignerStageIconClearError());
 		}
 	}
 
@@ -140,9 +175,9 @@
 			const updated = { ...localFilterValueIcons };
 			delete updated[value];
 			localFilterValueIcons = updated;
-			toast.success(m.adminWorkflowIconDesignerFilterValueIconCleared());
+			toast.success(adminWorkflowIconDesignerFilterValueIconCleared());
 		} catch {
-			toast.error(m.adminWorkflowIconDesignerFilterValueIconClearError());
+			toast.error(adminWorkflowIconDesignerFilterValueIconClearError());
 		}
 	}
 
@@ -164,7 +199,7 @@
 			view = 'overview';
 			editingTarget = null;
 		} catch {
-			toast.error(m.adminWorkflowIconDesignerSaveError());
+			toast.error(adminWorkflowIconDesignerSaveError());
 		}
 	}
 
@@ -184,11 +219,11 @@
 
 	function getEditingLabel(): string {
 		if (!editingTarget) return '';
-		if (editingTarget.type === 'workflow') return m.adminWorkflowIconDesignerEditingLabelWorkflow({ workflowName });
-		if (editingTarget.type === 'filterValue') return m.adminWorkflowIconDesignerEditingLabelFilterValue({ value: editingTarget.value });
+		if (editingTarget.type === 'workflow') return adminWorkflowIconDesignerEditingLabelWorkflow({ workflowName });
+		if (editingTarget.type === 'filterValue') return adminWorkflowIconDesignerEditingLabelFilterValue({ value: editingTarget.value });
 		const target = editingTarget;
 		const stage = stages.find(s => s.id === target.stageId);
-		return m.adminWorkflowIconDesignerEditingLabelStage({ stageName: stage?.stage_name ?? m.adminWorkflowIconDesignerUnknown() });
+		return adminWorkflowIconDesignerEditingLabelStage({ stageName: stage?.stage_name ?? adminWorkflowIconDesignerUnknown() });
 	}
 </script>
 
@@ -198,7 +233,7 @@
 		<div class="flex items-center gap-3 border-b px-6 py-3">
 			<Button variant="ghost" size="sm" onclick={handleDesignerCancel}>
 				<ArrowLeft class="mr-1 h-4 w-4" />
-				{m.adminWorkflowIconDesignerBack()}
+				{adminWorkflowIconDesignerBack()}
 			</Button>
 			<Separator orientation="vertical" class="h-5" />
 			<span class="text-sm font-medium text-muted-foreground">{getEditingLabel()}</span>
@@ -217,9 +252,9 @@
 		<!-- Header -->
 		<div class="flex items-center justify-between">
 			<div>
-				<h2 class="text-2xl font-semibold">{m.adminWorkflowIconDesignerTitle()}</h2>
+				<h2 class="text-2xl font-semibold">{adminWorkflowIconDesignerTitle()}</h2>
 				<p class="text-sm text-muted-foreground">
-					{m.adminWorkflowIconDesignerSubtitle({ workflowName })}
+					{adminWorkflowIconDesignerSubtitle({ workflowName })}
 				</p>
 			</div>
 			{#if onCancel}
@@ -232,7 +267,7 @@
 		<div class="flex-1 space-y-6 overflow-auto">
 			<!-- Default Workflow Icon -->
 			<div class="space-y-3">
-				<h3 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{m.adminWorkflowIconDesignerDefaultIconHeading()}</h3>
+				<h3 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{adminWorkflowIconDesignerDefaultIconHeading()}</h3>
 				<div class="flex items-center gap-4 rounded-lg border p-4">
 					<!-- Icon preview -->
 					<div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-muted/50">
@@ -246,10 +281,10 @@
 					<!-- Info -->
 					<div class="min-w-0 flex-1">
 						<div class="text-sm font-medium">
-							{workflowIconConfig?.svgContent ? (m.adminWorkflowIconDesignerCustomIconSet()) : (m.adminWorkflowIconDesignerNoIcon())}
+							{workflowIconConfig?.svgContent ? (adminWorkflowIconDesignerCustomIconSet()) : (adminWorkflowIconDesignerNoIcon())}
 						</div>
 						<div class="text-xs text-muted-foreground">
-							{m.adminWorkflowIconDesignerDefaultIconHint()}
+							{adminWorkflowIconDesignerDefaultIconHint()}
 						</div>
 					</div>
 
@@ -257,7 +292,7 @@
 					<div class="flex gap-2">
 						<Button variant="outline" size="sm" onclick={editWorkflowIcon}>
 							<Pencil class="mr-1 h-3 w-3" />
-							{workflowIconConfig?.svgContent ? (m.adminWorkflowIconDesignerEdit()) : (m.adminWorkflowIconDesignerSetIcon())}
+							{workflowIconConfig?.svgContent ? (adminWorkflowIconDesignerEdit()) : (adminWorkflowIconDesignerSetIcon())}
 						</Button>
 						{#if workflowIconConfig?.svgContent}
 							<Button variant="outline" size="sm" onclick={clearWorkflowIcon}>
@@ -273,16 +308,16 @@
 			<!-- Per-Stage Overrides -->
 			<div class="space-y-3">
 				<h3 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-					{m.adminWorkflowIconDesignerStageOverridesHeading()}
-					<span class="ml-1 font-normal normal-case">({m.adminWorkflowIconDesignerStageCount({ count: sortedStages.length })})</span>
+					{adminWorkflowIconDesignerStageOverridesHeading()}
+					<span class="ml-1 font-normal normal-case">({adminWorkflowIconDesignerStageCount({ count: sortedStages.length })})</span>
 					{#if filterMode === 'stage'}
-						<span class="ml-1 font-normal normal-case text-xs">({m.adminWorkflowIconDesignerUsedForMapFiltering()})</span>
+						<span class="ml-1 font-normal normal-case text-xs">({adminWorkflowIconDesignerUsedForMapFiltering()})</span>
 					{/if}
 				</h3>
 
 				{#if sortedStages.length === 0}
 					<p class="py-4 text-center text-sm text-muted-foreground">
-						{m.adminWorkflowIconDesignerNoStages()}
+						{adminWorkflowIconDesignerNoStages()}
 					</p>
 				{:else}
 					<div class="space-y-2">
@@ -313,9 +348,9 @@
 									</div>
 									<div class="text-xs text-muted-foreground">
 										{#if stageIcon?.svgContent}
-											{m.adminWorkflowIconDesignerCustomIcon()}
+											{adminWorkflowIconDesignerCustomIcon()}
 										{:else}
-											{m.adminWorkflowIconDesignerUsesDefault()}
+											{adminWorkflowIconDesignerUsesDefault()}
 										{/if}
 									</div>
 								</div>
@@ -324,7 +359,7 @@
 								<div class="flex gap-2">
 									<Button variant="ghost" size="sm" onclick={() => editStageIcon(stage.id)}>
 										<Pencil class="mr-1 h-3 w-3" />
-										{stageIcon?.svgContent ? (m.adminWorkflowIconDesignerEdit()) : (m.adminWorkflowIconDesignerSet())}
+										{stageIcon?.svgContent ? (adminWorkflowIconDesignerEdit()) : (adminWorkflowIconDesignerSet())}
 									</Button>
 									{#if stageIcon?.svgContent}
 										<Button variant="ghost" size="sm" onclick={() => clearStageIcon(stage.id)}>
@@ -344,11 +379,11 @@
 
 				<div class="space-y-3">
 					<h3 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-						{m.adminWorkflowIconDesignerFilterValueIconsHeading()}
-						<span class="ml-1 font-normal normal-case">({m.adminWorkflowIconDesignerFilterValueCount({ count: filterFieldOptions.length })})</span>
+						{adminWorkflowIconDesignerFilterValueIconsHeading()}
+						<span class="ml-1 font-normal normal-case">({adminWorkflowIconDesignerFilterValueCount({ count: filterFieldOptions.length })})</span>
 					</h3>
 					<p class="text-xs text-muted-foreground">
-						{m.adminWorkflowIconDesignerFilterValueIconsHint()}
+						{adminWorkflowIconDesignerFilterValueIconsHint()}
 					</p>
 
 					<div class="space-y-2">
@@ -373,9 +408,9 @@
 									<div class="text-sm font-medium">{value}</div>
 									<div class="text-xs text-muted-foreground">
 										{#if valueIcon?.svgContent}
-											{m.adminWorkflowIconDesignerCustomIcon()}
+											{adminWorkflowIconDesignerCustomIcon()}
 										{:else}
-											{m.adminWorkflowIconDesignerUsesDefault()}
+											{adminWorkflowIconDesignerUsesDefault()}
 										{/if}
 									</div>
 								</div>
@@ -384,7 +419,7 @@
 								<div class="flex gap-2">
 									<Button variant="ghost" size="sm" onclick={() => editFilterValueIcon(value)}>
 										<Pencil class="mr-1 h-3 w-3" />
-										{valueIcon?.svgContent ? (m.adminWorkflowIconDesignerEdit()) : (m.adminWorkflowIconDesignerSet())}
+										{valueIcon?.svgContent ? (adminWorkflowIconDesignerEdit()) : (adminWorkflowIconDesignerSet())}
 									</Button>
 									{#if valueIcon?.svgContent}
 										<Button variant="ghost" size="sm" onclick={() => clearFilterValueIcon(value)}>
@@ -402,7 +437,7 @@
 		<!-- Footer -->
 		<div class="flex justify-end border-t pt-4">
 			{#if onCancel}
-				<Button variant="outline" onclick={onCancel}>{m.adminWorkflowIconDesignerDone()}</Button>
+				<Button variant="outline" onclick={onCancel}>{adminWorkflowIconDesignerDone()}</Button>
 			{/if}
 		</div>
 	</div>

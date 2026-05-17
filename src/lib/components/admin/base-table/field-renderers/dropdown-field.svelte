@@ -3,7 +3,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { ChevronDown } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
-	import * as m from '$lib/paraglide/messages';
+	import { commonSave } from '$lib/paraglide/messages';
 	import type { Snippet } from 'svelte';
 
 	interface DropdownOption {
@@ -52,7 +52,7 @@
 		isSaving = true;
 		try {
 			await onUpdate(selectedValue);
-			toast.success(m.commonSave());
+			toast.success(commonSave());
 		} catch (error) {
 			console.error('Error updating dropdown field:', error);
 			toast.error('Failed to update');

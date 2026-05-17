@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Input } from '$lib/components/ui/input';
 	import type { FilterClause } from '$lib/participant-state/types';
-	import * as m from '$lib/paraglide/messages';
+	import { participantFilterClauseTextPlaceholder } from '$lib/paraglide/messages';
 
 	type TextClause = Extract<FilterClause, { field: 'field_value'; op: 'contains' }>;
 
@@ -16,7 +16,7 @@
 <Input
 	type="text"
 	class="h-9"
-	placeholder={m.participantFilterClauseTextPlaceholder?.() ?? 'Contains…'}
+	placeholder={participantFilterClauseTextPlaceholder?.() ?? 'Contains…'}
 	value={clause.text}
 	oninput={(e) => onChange({ ...clause, text: (e.currentTarget as HTMLInputElement).value })}
 />

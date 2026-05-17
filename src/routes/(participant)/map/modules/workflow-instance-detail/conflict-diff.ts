@@ -5,11 +5,15 @@ import type { SyncConflict } from '$lib/participant-state/db';
 // between the cleanup check and the rendering code.
 const SKIP_KEYS = new Set([
 	'id', 'created', 'updated', 'collectionId', 'collectionName',
-	'instance_id', 'field_key', 'stage_id',
-	'created_by_action', 'last_modified_by_action', 'last_modified_at'
+	'instance_id', 'field_def_id', 'recorded_at_stage',
+	'recorded_by_action', 'recorded_at',
+	// write_mode is denormalized from the field def -- conflict review should
+	// ignore it (only the def can change it, not a participant edit).
+	'write_mode',
+	'last_modified_by_action', 'last_modified_at'
 ]);
 
-// For workflow_instance_field_values, only these columns carry user data.
+// For workflow_field_values, only these columns carry user data.
 const FIELD_VALUE_DISPLAY_KEYS = new Set(['value', 'file_value']);
 
 export interface ChangedField {
@@ -20,7 +24,7 @@ export interface ChangedField {
 
 export function getChangedFields(conflict: SyncConflict): ChangedField[] {
 	const changed: ChangedField[] = [];
-	const isFieldValues = conflict.collection === 'workflow_instance_field_values';
+	const isFieldValues = conflict.collection === 'workflow_field_values';
 
 	for (const [key, localVal] of Object.entries(conflict.localVersion)) {
 		if (SKIP_KEYS.has(key)) continue;

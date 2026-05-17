@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as m from '$lib/paraglide/messages';
+	import { participantClusterDetailInstancesCount, participantClusterDetailItemPlural, participantClusterDetailItemSingular, participantClusterDetailWorkflowPlural, participantClusterDetailWorkflowSingular } from '$lib/paraglide/messages';
 	import ModuleShell from '$lib/components/module-shell.svelte';
 	import type { WorkflowClusterGroup, WorkflowClusterRow } from '$lib/components/map/supercluster-manager';
 
@@ -26,8 +26,8 @@
 
 <ModuleShell
 	{isOpen}
-	title={(m.participantClusterDetailInstancesCount?.({ count: totalCount }) ?? `${totalCount} Instances`)}
-	subtitle={(groups.length === 1 ? (m.participantClusterDetailWorkflowSingular?.() ?? 'Workflow') : (m.participantClusterDetailWorkflowPlural?.({ count: groups.length }) ?? `${groups.length} Workflows`))}
+	title={(participantClusterDetailInstancesCount?.({ count: totalCount }) ?? `${totalCount} Instances`)}
+	subtitle={(groups.length === 1 ? (participantClusterDetailWorkflowSingular?.() ?? 'Workflow') : (participantClusterDetailWorkflowPlural?.({ count: groups.length }) ?? `${groups.length} Workflows`))}
 	onClose={() => { isOpen = false; onClose(); }}
 	mobileHeightPeek={35}
 	mobileHeightExpanded={75}
@@ -56,7 +56,7 @@
 							<div class="min-w-0 flex-1">
 								<span class="block truncate text-sm font-medium">{row.label}</span>
 								<span class="text-muted-foreground text-xs">
-									{(row.count === 1 ? (m.participantClusterDetailItemSingular?.() ?? 'item') : (m.participantClusterDetailItemPlural?.({ count: row.count }) ?? `${row.count} items`))}
+									{(row.count === 1 ? (participantClusterDetailItemSingular?.() ?? 'item') : (participantClusterDetailItemPlural?.({ count: row.count }) ?? `${row.count} items`))}
 								</span>
 							</div>
 							<div class="w-20 shrink-0">

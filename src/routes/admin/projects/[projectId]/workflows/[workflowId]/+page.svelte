@@ -2,7 +2,65 @@
 	import { goto, invalidate, invalidateAll } from '$app/navigation';
 	import { deserialize } from '$app/forms';
 	import { page } from '$app/stores';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		commonCancel,
+		commonDelete,
+		csvImportButton,
+		csvImportError,
+		csvImportImportInstances,
+		csvImportInstancesDescription,
+		csvImportInstancesTitle,
+		csvImportReplaceInstances,
+		customTableEditRefresh,
+		deleteConfirmPlaceholder,
+		deleteConfirmPrompt,
+		rolesActive,
+		rolesInactive,
+		workflowDetailBuildButton,
+		workflowDetailColCreated,
+		workflowDetailColCreatedBy,
+		workflowDetailColLocation,
+		workflowDetailColStage,
+		workflowDetailColStatus,
+		workflowDetailEditMode,
+		workflowDetailEmptyMessage,
+		workflowDetailEmptySubMessage,
+		workflowDetailIconDesignerLoadError,
+		workflowDetailIconsButton,
+		workflowDetailLoadRowsError,
+		workflowDetailPreviewAlt,
+		workflowDetailUpdateError,
+		workflowDetailUpdateFieldError,
+		workflowPrivateInstances,
+		workflowPrivateInstancesHelp,
+		workflowsActionDelete,
+		workflowsActionDuplicate,
+		workflowsDeleteAlsoDeleted,
+		workflowsDeleteCountAutomations,
+		workflowsDeleteCountConnections,
+		workflowsDeleteCountFieldValues,
+		workflowsDeleteCountFormFields,
+		workflowsDeleteCountForms,
+		workflowsDeleteCountInstances,
+		workflowsDeleteCountProtocolTools,
+		workflowsDeleteCountStages,
+		workflowsDeleteError,
+		workflowsDeleteIntro,
+		workflowsDeleteLoadingCounts,
+		workflowsDeleteNoDependencies,
+		workflowsDeleteSuccess,
+		workflowsDeleteTitle,
+		workflowsDuplicateError,
+		workflowsDuplicateSuccess,
+		workflowsImportFromProject,
+		workflowsMoreActions,
+		workflowsTypeChangeHelp,
+		workflowsTypeChangeSuccess,
+		workflowsTypeIncident,
+		workflowsTypeIncidentWorkflow,
+		workflowsTypeSurvey,
+		workflowsTypeSurveyWorkflow
+	} from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Switch } from '$lib/components/ui/switch';
@@ -106,7 +164,7 @@
 			}
 		} catch (err) {
 			console.error('Failed to load remaining rows:', err);
-			toast.error(m.workflowDetailLoadRowsError?.() ?? 'Failed to load all rows');
+			toast.error(workflowDetailLoadRowsError?.() ?? 'Failed to load all rows');
 		} finally {
 			if (version === loadVersion) loadingMore = false;
 		}
@@ -216,8 +274,8 @@
 		if (result.type === 'success') {
 			await invalidateAll();
 		} else {
-			toast.error(m.workflowDetailUpdateFieldError?.() ?? 'Failed to update field value');
-			throw new Error(result.data?.message || (m.workflowDetailUpdateError?.() ?? 'Failed to update'));
+			toast.error(workflowDetailUpdateFieldError?.() ?? 'Failed to update field value');
+			throw new Error(result.data?.message || (workflowDetailUpdateError?.() ?? 'Failed to update'));
 		}
 	}
 
@@ -248,7 +306,7 @@
 		const standardColumns: BaseColumnConfig<InstanceRow>[] = [
 			{
 				id: 'status',
-				header: m.workflowDetailColStatus?.() ?? 'Status',
+				header: workflowDetailColStatus?.() ?? 'Status',
 				accessorKey: 'status',
 				fieldType: 'text',
 				capabilities: { sortable: true, filterable: true, readonly: true },
@@ -256,14 +314,14 @@
 			},
 			{
 				id: 'current_stage',
-				header: m.workflowDetailColStage?.() ?? 'Stage',
+				header: workflowDetailColStage?.() ?? 'Stage',
 				accessorFn: (row) => row.current_stage_name,
 				fieldType: 'text',
 				capabilities: { sortable: true, filterable: true, readonly: true }
 			},
 			{
 				id: 'created_by',
-				header: m.workflowDetailColCreatedBy?.() ?? 'Created By',
+				header: workflowDetailColCreatedBy?.() ?? 'Created By',
 				accessorFn: (row) => row.created_by_name,
 				fieldType: 'text',
 				capabilities: { sortable: true, filterable: true, readonly: true }
@@ -273,7 +331,7 @@
 		if (data.workflow.workflow_type === 'incident') {
 			standardColumns.push({
 				id: 'location',
-				header: m.workflowDetailColLocation?.() ?? 'Location',
+				header: workflowDetailColLocation?.() ?? 'Location',
 				accessorFn: (row) => {
 					if (!row.centroid) return '';
 					const base = `${Number(row.centroid.lat).toFixed(4)}, ${Number(row.centroid.lon).toFixed(4)}`;
@@ -366,7 +424,7 @@
 		const metaColumns: BaseColumnConfig<InstanceRow>[] = [
 			{
 				id: 'created',
-				header: m.workflowDetailColCreated?.() ?? 'Created',
+				header: workflowDetailColCreated?.() ?? 'Created',
 				accessorKey: 'created',
 				fieldType: 'date',
 				dateConfig: { mode: 'datetime' },
@@ -391,7 +449,7 @@
 		if (result.type === 'success') {
 			await invalidateAll();
 		} else {
-			toast.error(m.workflowDetailUpdateError?.() ?? 'Failed to update');
+			toast.error(workflowDetailUpdateError?.() ?? 'Failed to update');
 		}
 	}
 
@@ -462,7 +520,7 @@
 
 			const result = await response.json();
 			if (result.type !== 'success') {
-				return { success: false, count: imported, error: result.data?.message || m.csvImportError() };
+				return { success: false, count: imported, error: result.data?.message || csvImportError() };
 			}
 			imported += batch.length;
 			onProgress(imported, rows.length);
@@ -513,8 +571,9 @@
 				} else if (filterBy === 'field' && filterable.fieldId) {
 					filterMode = 'field';
 					try {
-						const formField = await pb.collection('tools_form_fields').getOne(filterable.fieldId);
-						const opts = (formField.field_options as any)?.options || [];
+						// TODO(field-def-redesign): filterable.fieldId now references workflow_field_defs.
+						const fieldDef = await pb.collection('workflow_field_defs').getOne(filterable.fieldId);
+						const opts = (fieldDef.field_options as any)?.options || [];
 						filterFieldOptions = opts.map((o: any) => o.label || o);
 					} catch {
 						// Field might have been deleted
@@ -527,7 +586,7 @@
 			iconDesignerOpen = true;
 		} catch (err) {
 			console.error('Error loading icon designer data:', err);
-			toast.error(m.workflowDetailIconDesignerLoadError?.() ?? 'Failed to load icon designer data');
+			toast.error(workflowDetailIconDesignerLoadError?.() ?? 'Failed to load icon designer data');
 		}
 	}
 
@@ -597,7 +656,7 @@
 	async function changeWorkflowType(newType: 'incident' | 'survey') {
 		if (newType === data.workflow.workflow_type) return;
 		await updateMeta('workflow_type', newType);
-		toast.success(m.workflowsTypeChangeSuccess?.() ?? 'Workflow type updated');
+		toast.success(workflowsTypeChangeSuccess?.() ?? 'Workflow type updated');
 	}
 
 	// True when switching geometry_type is unsafe because instances would be
@@ -661,8 +720,8 @@
 			const instanceFilter = `instance_id.workflow_id = "${workflowId}"`;
 			const formFieldFilter = `form_id.workflow_id = "${workflowId}"`;
 			const [formFields, fieldValues] = await Promise.all([
-				one('tools_form_fields', formFieldFilter),
-				one('workflow_instance_field_values', instanceFilter),
+				one('tools_form_field_refs', formFieldFilter),
+				one('workflow_field_values', instanceFilter),
 			]);
 
 			deleteCounts = { stages, connections, forms, formFields, automations, protocolTools, instances, fieldValues };
@@ -692,7 +751,7 @@
 			};
 			if (result.type === 'success') {
 				const newId = result.data?.duplicatedWorkflowId;
-				toast.success(m.workflowsDuplicateSuccess?.({ name: data.workflow.name }) ?? `Workflow duplicated`);
+				toast.success(workflowsDuplicateSuccess?.({ name: data.workflow.name }) ?? `Workflow duplicated`);
 				if (newId) {
 					await goto(`/admin/projects/${$page.params.projectId}/workflows/${newId}`);
 					await invalidateAll();
@@ -700,11 +759,11 @@
 					await invalidateAll();
 				}
 			} else {
-				toast.error(result.data?.message || (m.workflowsDuplicateError?.() ?? 'Failed to duplicate workflow'));
+				toast.error(result.data?.message || (workflowsDuplicateError?.() ?? 'Failed to duplicate workflow'));
 			}
 		} catch (err) {
 			console.error('Error duplicating workflow:', err);
-			toast.error(m.workflowsDuplicateError?.() ?? 'Failed to duplicate workflow');
+			toast.error(workflowsDuplicateError?.() ?? 'Failed to duplicate workflow');
 		} finally {
 			duplicating = false;
 		}
@@ -725,17 +784,17 @@
 				data?: { message?: string };
 			};
 			if (result.type === 'redirect' && result.location) {
-				toast.success(m.workflowsDeleteSuccess?.() ?? 'Workflow deleted');
+				toast.success(workflowsDeleteSuccess?.() ?? 'Workflow deleted');
 				await goto(result.location, { invalidateAll: true });
 			} else if (result.type === 'success') {
-				toast.success(m.workflowsDeleteSuccess?.() ?? 'Workflow deleted');
+				toast.success(workflowsDeleteSuccess?.() ?? 'Workflow deleted');
 				await goto(`/admin/projects/${$page.params.projectId}/settings`, { invalidateAll: true });
 			} else {
-				toast.error(result.data?.message || (m.workflowsDeleteError?.() ?? 'Failed to delete workflow'));
+				toast.error(result.data?.message || (workflowsDeleteError?.() ?? 'Failed to delete workflow'));
 			}
 		} catch (err) {
 			console.error('Error deleting workflow:', err);
-			toast.error(m.workflowsDeleteError?.() ?? 'Failed to delete workflow');
+			toast.error(workflowsDeleteError?.() ?? 'Failed to delete workflow');
 		} finally {
 			deleting = false;
 			deleteDialogOpen = false;
@@ -748,7 +807,7 @@
 	{#if files.length > 0}
 		<div class="flex items-center gap-1">
 			{#each files as file}
-				{@const url = `${POCKETBASE_URL}/api/files/workflow_instance_field_values/${file.recordId}/${file.fileName}`}
+				{@const url = `${POCKETBASE_URL}/api/files/workflow_field_values/${file.recordId}/${file.fileName}`}
 				{#if isImageFile(file.fileName)}
 					<button
 						type="button"
@@ -805,14 +864,14 @@
 								type="button"
 								{...props}
 								class="inline-flex items-center rounded-md px-2.5 py-0.5 text-xs font-semibold transition-colors hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {data.workflow.workflow_type === 'incident' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'}"
-								title={m.workflowsTypeChangeHelp?.() ?? 'Click to change workflow type'}
+								title={workflowsTypeChangeHelp?.() ?? 'Click to change workflow type'}
 							>
 								{#if data.workflow.workflow_type === 'incident'}
 									<MapPin class="mr-1 h-3 w-3" />
 								{/if}
 								{data.workflow.workflow_type === 'incident'
-									? (m.workflowsTypeIncident?.() ?? 'Incident')
-									: (m.workflowsTypeSurvey?.() ?? 'Survey')}
+									? (workflowsTypeIncident?.() ?? 'Incident')
+									: (workflowsTypeSurvey?.() ?? 'Survey')}
 							</button>
 						{/snippet}
 					</DropdownMenu.Trigger>
@@ -823,7 +882,7 @@
 							{:else}
 								<span class="mr-2 inline-block h-4 w-4"></span>
 							{/if}
-							{m.workflowsTypeIncidentWorkflow?.() ?? 'Incident Workflow'}
+							{workflowsTypeIncidentWorkflow?.() ?? 'Incident Workflow'}
 						</DropdownMenu.Item>
 						<DropdownMenu.Item onclick={() => changeWorkflowType('survey')}>
 							{#if data.workflow.workflow_type === 'survey'}
@@ -831,7 +890,7 @@
 							{:else}
 								<span class="mr-2 inline-block h-4 w-4"></span>
 							{/if}
-							{m.workflowsTypeSurveyWorkflow?.() ?? 'Survey Workflow'}
+							{workflowsTypeSurveyWorkflow?.() ?? 'Survey Workflow'}
 						</DropdownMenu.Item>
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
@@ -895,15 +954,15 @@
 				{/if}
 
 				<div class="flex items-center gap-2 text-sm">
-					<span class="text-muted-foreground">{data.workflow.is_active ? (m.rolesActive?.() ?? 'Active') : (m.rolesInactive?.() ?? 'Inactive')}</span>
+					<span class="text-muted-foreground">{data.workflow.is_active ? (rolesActive?.() ?? 'Active') : (rolesInactive?.() ?? 'Inactive')}</span>
 					<Switch
 						checked={data.workflow.is_active}
 						onCheckedChange={toggleActive}
 					/>
 				</div>
 
-				<div class="flex items-center gap-2 text-sm" title={m.workflowPrivateInstancesHelp()}>
-					<span class="text-muted-foreground">{m.workflowPrivateInstances()}</span>
+				<div class="flex items-center gap-2 text-sm" title={workflowPrivateInstancesHelp()}>
+					<span class="text-muted-foreground">{workflowPrivateInstances()}</span>
 					<Switch
 						checked={data.workflow.private_instances}
 						onCheckedChange={togglePrivateInstances}
@@ -912,12 +971,12 @@
 
 				<Button variant="outline" size="sm" onclick={() => (csvImportOpen = true)}>
 					<Upload class="mr-2 h-4 w-4" />
-					{m.csvImportButton()}
+					{csvImportButton()}
 				</Button>
 
 				<Button variant="outline" size="sm" onclick={() => openIconDesigner()}>
 					<Palette class="mr-2 h-4 w-4" />
-					{m.workflowDetailIconsButton?.() ?? 'Icons'}
+					{workflowDetailIconsButton?.() ?? 'Icons'}
 				</Button>
 
 				<Button
@@ -926,18 +985,18 @@
 					href="/admin/projects/{$page.params.projectId}/workflows/{$page.params.workflowId}/builder"
 				>
 					<Hammer class="mr-2 h-4 w-4" />
-					{m.workflowDetailBuildButton?.() ?? 'Build'}
+					{workflowDetailBuildButton?.() ?? 'Build'}
 				</Button>
 
 				<Button variant="outline" size="sm" onclick={() => invalidateAll()}>
 					<RefreshCw class="mr-2 h-4 w-4" />
-					{m.customTableEditRefresh()}
+					{customTableEditRefresh()}
 				</Button>
 
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger>
 						{#snippet child({ props })}
-							<Button variant="outline" size="sm" {...props} aria-label={m.workflowsMoreActions?.() ?? 'More actions'}>
+							<Button variant="outline" size="sm" {...props} aria-label={workflowsMoreActions?.() ?? 'More actions'}>
 								<MoreVertical class="h-4 w-4" />
 							</Button>
 						{/snippet}
@@ -945,11 +1004,11 @@
 					<DropdownMenu.Content align="end">
 						<DropdownMenu.Item onclick={handleDuplicate} disabled={duplicating}>
 							<Copy class="mr-2 h-4 w-4" />
-							{m.workflowsActionDuplicate?.() ?? 'Duplicate workflow'}
+							{workflowsActionDuplicate?.() ?? 'Duplicate workflow'}
 						</DropdownMenu.Item>
 						<DropdownMenu.Item onclick={() => (importDialogOpen = true)}>
 							<Import class="mr-2 h-4 w-4" />
-							{m.workflowsImportFromProject?.() ?? 'Import from another project...'}
+							{workflowsImportFromProject?.() ?? 'Import from another project...'}
 						</DropdownMenu.Item>
 						<DropdownMenu.Separator />
 						<DropdownMenu.Item
@@ -957,7 +1016,7 @@
 							onclick={() => (deleteDialogOpen = true)}
 						>
 							<Trash2 class="mr-2 h-4 w-4" />
-							{m.workflowsActionDelete?.() ?? 'Delete workflow'}
+							{workflowsActionDelete?.() ?? 'Delete workflow'}
 						</DropdownMenu.Item>
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
@@ -974,9 +1033,9 @@
 		enableShiftSelect={true}
 		showToolbar={true}
 		showEditMode={true}
-		editModeLabel={m.workflowDetailEditMode?.() ?? 'Edit mode'}
-		emptyMessage={m.workflowDetailEmptyMessage?.() ?? 'No workflow instances yet'}
-		emptySubMessage={m.workflowDetailEmptySubMessage?.() ?? 'Instances are created by participants through the app'}
+		editModeLabel={workflowDetailEditMode?.() ?? 'Edit mode'}
+		emptyMessage={workflowDetailEmptyMessage?.() ?? 'No workflow instances yet'}
+		emptySubMessage={workflowDetailEmptySubMessage?.() ?? 'Instances are created by participants through the app'}
 	/>
 </div>
 
@@ -1015,10 +1074,10 @@
 	specialColumns={csvImportSpecialColumns}
 	stages={csvImportStages}
 	bind:selectedStage={selectedImportStageId}
-	title={m.csvImportInstancesTitle()}
-	description={m.csvImportInstancesDescription()}
-	importLabel={m.csvImportImportInstances()}
-	replaceLabel={m.csvImportReplaceInstances()}
+	title={csvImportInstancesTitle()}
+	description={csvImportInstancesDescription()}
+	importLabel={csvImportImportInstances()}
+	replaceLabel={csvImportReplaceInstances()}
 	onimport={handleCsvImport}
 />
 
@@ -1034,32 +1093,32 @@
 <AlertDialog.Root bind:open={deleteDialogOpen}>
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>{m.workflowsDeleteTitle?.() ?? 'Delete workflow'}</AlertDialog.Title>
+			<AlertDialog.Title>{workflowsDeleteTitle?.() ?? 'Delete workflow'}</AlertDialog.Title>
 			<AlertDialog.Description>
-				{m.workflowsDeleteIntro?.({ name: data.workflow.name }) ?? `This permanently deletes “${data.workflow.name}” and everything that belongs to it. This action cannot be undone.`}
+				{workflowsDeleteIntro?.({ name: data.workflow.name }) ?? `This permanently deletes “${data.workflow.name}” and everything that belongs to it. This action cannot be undone.`}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<div class="text-sm space-y-3">
 			{#if deleteCountsLoading && !deleteCounts}
-				<div class="text-muted-foreground">{m.workflowsDeleteLoadingCounts?.() ?? 'Loading dependencies…'}</div>
+				<div class="text-muted-foreground">{workflowsDeleteLoadingCounts?.() ?? 'Loading dependencies…'}</div>
 			{:else if deleteCounts}
 				{@const c = deleteCounts}
 				{@const configRows = [
-					{ n: c.stages, label: m.workflowsDeleteCountStages?.({ n: c.stages }) ?? `${c.stages} stages` },
-					{ n: c.connections, label: m.workflowsDeleteCountConnections?.({ n: c.connections }) ?? `${c.connections} connections` },
-					{ n: c.forms, label: m.workflowsDeleteCountForms?.({ n: c.forms }) ?? `${c.forms} forms` },
-					{ n: c.formFields, label: m.workflowsDeleteCountFormFields?.({ n: c.formFields }) ?? `${c.formFields} form fields` },
-					{ n: c.automations, label: m.workflowsDeleteCountAutomations?.({ n: c.automations }) ?? `${c.automations} automations` },
-					{ n: c.protocolTools, label: m.workflowsDeleteCountProtocolTools?.({ n: c.protocolTools }) ?? `${c.protocolTools} protocol tools` },
+					{ n: c.stages, label: workflowsDeleteCountStages?.({ n: c.stages }) ?? `${c.stages} stages` },
+					{ n: c.connections, label: workflowsDeleteCountConnections?.({ n: c.connections }) ?? `${c.connections} connections` },
+					{ n: c.forms, label: workflowsDeleteCountForms?.({ n: c.forms }) ?? `${c.forms} forms` },
+					{ n: c.formFields, label: workflowsDeleteCountFormFields?.({ n: c.formFields }) ?? `${c.formFields} form fields` },
+					{ n: c.automations, label: workflowsDeleteCountAutomations?.({ n: c.automations }) ?? `${c.automations} automations` },
+					{ n: c.protocolTools, label: workflowsDeleteCountProtocolTools?.({ n: c.protocolTools }) ?? `${c.protocolTools} protocol tools` },
 				].filter((r) => r.n > 0)}
 				{@const dataRows = [
-					{ n: c.instances, label: m.workflowsDeleteCountInstances?.({ n: c.instances }) ?? `${c.instances} workflow entries` },
-					{ n: c.fieldValues, label: m.workflowsDeleteCountFieldValues?.({ n: c.fieldValues }) ?? `${c.fieldValues} recorded field values` },
+					{ n: c.instances, label: workflowsDeleteCountInstances?.({ n: c.instances }) ?? `${c.instances} workflow entries` },
+					{ n: c.fieldValues, label: workflowsDeleteCountFieldValues?.({ n: c.fieldValues }) ?? `${c.fieldValues} recorded field values` },
 				].filter((r) => r.n > 0)}
 				{#if configRows.length === 0 && dataRows.length === 0}
-					<div class="text-muted-foreground">{m.workflowsDeleteNoDependencies?.() ?? 'No associated data.'}</div>
+					<div class="text-muted-foreground">{workflowsDeleteNoDependencies?.() ?? 'No associated data.'}</div>
 				{:else}
-					<div class="font-medium">{m.workflowsDeleteAlsoDeleted?.() ?? 'Also deleted:'}</div>
+					<div class="font-medium">{workflowsDeleteAlsoDeleted?.() ?? 'Also deleted:'}</div>
 					<ul class="list-disc pl-5 space-y-0.5 text-muted-foreground">
 						{#each configRows as r}
 							<li>{r.label}</li>
@@ -1074,7 +1133,7 @@
 				{#if c.instances > 0}
 					<div class="pt-2 border-t space-y-2">
 						<label for="workflow-delete-confirm" class="block text-sm">
-							{m.deleteConfirmPrompt?.() ?? 'To confirm, type the number of workflow entries (shown above) below:'}
+							{deleteConfirmPrompt?.() ?? 'To confirm, type the number of workflow entries (shown above) below:'}
 						</label>
 						<input
 							id="workflow-delete-confirm"
@@ -1083,7 +1142,7 @@
 							pattern="[0-9]*"
 							autocomplete="off"
 							bind:value={deleteConfirmInput}
-							placeholder={m.deleteConfirmPlaceholder?.() ?? 'Number'}
+							placeholder={deleteConfirmPlaceholder?.() ?? 'Number'}
 							class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 						/>
 					</div>
@@ -1091,13 +1150,13 @@
 			{/if}
 		</div>
 		<AlertDialog.Footer>
-			<AlertDialog.Cancel disabled={deleting}>{m.commonCancel?.() ?? 'Cancel'}</AlertDialog.Cancel>
+			<AlertDialog.Cancel disabled={deleting}>{commonCancel?.() ?? 'Cancel'}</AlertDialog.Cancel>
 			<AlertDialog.Action
 				class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 				onclick={handleDelete}
 				disabled={deleting || !deleteConfirmOk}
 			>
-				{m.commonDelete?.() ?? 'Delete'}
+				{commonDelete?.() ?? 'Delete'}
 			</AlertDialog.Action>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>
@@ -1107,7 +1166,7 @@
 <Dialog.Root bind:open={lightboxOpen}>
 	<Dialog.Content class="max-w-3xl p-0 overflow-hidden">
 		{#if lightboxUrl}
-			<img src={lightboxUrl} alt={m.workflowDetailPreviewAlt?.() ?? 'Preview'} class="w-full h-auto" />
+			<img src={lightboxUrl} alt={workflowDetailPreviewAlt?.() ?? 'Preview'} class="w-full h-auto" />
 		{/if}
 	</Dialog.Content>
 </Dialog.Root>

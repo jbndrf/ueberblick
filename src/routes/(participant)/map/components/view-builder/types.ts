@@ -43,7 +43,8 @@ export type FilterableFieldType =
 export interface FilterableFieldOption {
 	workflow_id: string;
 	workflow_name: string;
-	field_key: string;
+	/** Field definition id from `workflow_field_defs` (replaces old `field_key`). */
+	field_def_id: string;
 	field_label: string;
 	field_type: FilterableFieldType;
 	/** Populated for select-family types. Empty otherwise. */

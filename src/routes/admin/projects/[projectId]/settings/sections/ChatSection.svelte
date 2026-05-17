@@ -1,6 +1,18 @@
 <script lang="ts">
 	import { invalidateAll } from '$app/navigation';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		commonSave,
+		settingsAdvancedSavingEllipsis,
+		settingsChatDescription,
+		settingsChatEnableHint,
+		settingsChatEnableLabel,
+		settingsChatRolesHint,
+		settingsChatRolesLabel,
+		settingsChatRolesPlaceholder,
+		settingsChatSaveError,
+		settingsChatSaved,
+		settingsChatTitle
+	} from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { Label } from '$lib/components/ui/label';
 	import { Switch } from '$lib/components/ui/switch';
@@ -26,11 +38,11 @@
 			fd.append('chat_visible_to_roles', JSON.stringify(chatVisibleToRoleIds));
 			const res = await fetch('?/saveChatSettings', { method: 'POST', body: fd });
 			if (!res.ok) throw new Error(await res.text());
-			toast.success(m.settingsChatSaved?.() ?? 'Chat settings saved');
+			toast.success(settingsChatSaved?.() ?? 'Chat settings saved');
 			await invalidateAll();
 		} catch (err) {
 			console.error('Error saving chat settings:', err);
-			toast.error(m.settingsChatSaveError?.() ?? 'Failed to save chat settings');
+			toast.error(settingsChatSaveError?.() ?? 'Failed to save chat settings');
 		} finally {
 			savingChat = false;
 		}
@@ -38,16 +50,16 @@
 </script>
 
 <SettingsSection
-	name={m.settingsChatTitle?.() ?? 'Project chat'}
-	description={m.settingsChatDescription?.() ??
+	name={settingsChatTitle?.() ?? 'Project chat'}
+	description={settingsChatDescription?.() ??
 		'Enable a project-wide chat for participants. When enabled, members can read, write, and mention each other.'}
 >
 	<div class="flex flex-col gap-4">
 		<div class="flex items-center justify-between gap-4 rounded-md border p-4">
 			<div class="flex flex-col">
-				<span class="font-medium">{m.settingsChatEnableLabel?.() ?? 'Enable project chat'}</span>
+				<span class="font-medium">{settingsChatEnableLabel?.() ?? 'Enable project chat'}</span>
 				<span class="text-xs text-muted-foreground">
-					{m.settingsChatEnableHint?.() ??
+					{settingsChatEnableHint?.() ??
 						'When off, the chat is hidden from every participant in this project.'}
 				</span>
 			</div>
@@ -56,17 +68,17 @@
 
 		{#if chatEnabled}
 			<div class="space-y-2">
-				<Label>{m.settingsChatRolesLabel?.() ?? 'Roles allowed in chat'}</Label>
+				<Label>{settingsChatRolesLabel?.() ?? 'Roles allowed in chat'}</Label>
 				<MobileMultiSelect
 					bind:selectedIds={chatVisibleToRoleIds}
 					options={(data.roles ?? []) as Array<{ id: string; name: string; description?: string }>}
 					getOptionId={(r: { id: string }) => r.id}
 					getOptionLabel={(r: { name: string }) => r.name}
 					getOptionDescription={(r: { description?: string }) => r.description}
-					placeholder={m.settingsChatRolesPlaceholder?.() ?? 'Empty = everyone in the project'}
+					placeholder={settingsChatRolesPlaceholder?.() ?? 'Empty = everyone in the project'}
 				/>
 				<p class="text-xs text-muted-foreground">
-					{m.settingsChatRolesHint?.() ??
+					{settingsChatRolesHint?.() ??
 						'Empty list = open to every participant in this project. Add roles to restrict membership.'}
 				</p>
 			</div>
@@ -75,8 +87,8 @@
 		<div>
 			<Button onclick={saveChatSettings} disabled={savingChat}>
 				{savingChat
-					? (m.settingsAdvancedSavingEllipsis?.() ?? 'Saving…')
-					: (m.commonSave?.() ?? 'Save')}
+					? (settingsAdvancedSavingEllipsis?.() ?? 'Saving…')
+					: (commonSave?.() ?? 'Save')}
 			</Button>
 		</div>
 	</div>

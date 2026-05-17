@@ -4,7 +4,28 @@ import type { Actions, PageServerLoad } from './$types';
 import { z } from 'zod';
 import { superValidate } from 'sveltekit-superforms';
 import { zod4 } from 'sveltekit-superforms/adapters';
-import * as m from '$lib/paraglide/messages';
+import {
+	participantsAdminServer_createCustomFieldFailed,
+	participantsAdminServer_createRoleFailed,
+	participantsAdminServer_deleteCustomFieldFailed,
+	participantsAdminServer_fieldIdNameTypeRequired,
+	participantsAdminServer_fieldIdRequired,
+	participantsAdminServer_fieldNameExists,
+	participantsAdminServer_fieldNameTypeRequired,
+	participantsAdminServer_invalidEmailFormat,
+	participantsAdminServer_invalidFieldType,
+	participantsAdminServer_invalidRoleIdsFormat,
+	participantsAdminServer_nameRequired,
+	participantsAdminServer_participantIdRequired,
+	participantsAdminServer_roleNameRequired,
+	participantsAdminServer_tokenGenerationFailed,
+	participantsAdminServer_unexpectedError,
+	participantsAdminServer_updateCustomFieldFailed,
+	participantsAdminServer_updateRolesFailed,
+	participantsAdminServer_updateStatusFailed,
+	participantsCreateError,
+	participantsUpdateError
+} from '$lib/paraglide/messages';
 import type { RecordModel } from 'pocketbase';
 import {
 	createUpdateFieldAction,
@@ -15,7 +36,7 @@ import { normalizeRecords, prepareArrayField } from '$lib/server/pocketbase-help
 import { getAdminPb } from '$lib/server/admin-auth';
 
 const participantSchema = z.object({
-	name: z.string().min(1, m.participantsAdminServer_nameRequired?.() ?? 'Name is required'),
+	name: z.string().min(1, participantsAdminServer_nameRequired?.() ?? 'Name is required'),
 	email: z.string().email().optional().or(z.literal('')),
 	phone: z.string().optional().or(z.literal(''))
 });
@@ -143,7 +164,7 @@ export const actions: Actions = {
 					} else {
 						return fail(500, {
 							form,
-							message: m.participantsAdminServer_tokenGenerationFailed?.() ?? 'Failed to generate unique token. Please try again.'
+							message: participantsAdminServer_tokenGenerationFailed?.() ?? 'Failed to generate unique token. Please try again.'
 						});
 					}
 				}
@@ -151,12 +172,12 @@ export const actions: Actions = {
 				console.error('Error creating participant:', insertError);
 				return fail(500, {
 					form,
-					message: m.participantsCreateError?.() ?? 'Failed to create participant'
+					message: participantsCreateError?.() ?? 'Failed to create participant'
 				});
 			}
 		}
 
-		return fail(500, { form, message: m.participantsAdminServer_unexpectedError?.() ?? 'Unexpected error' });
+		return fail(500, { form, message: participantsAdminServer_unexpectedError?.() ?? 'Unexpected error' });
 	},
 
 	update: async ({ request, params, locals: { pbAdmin: pb } }) => {
@@ -189,7 +210,7 @@ export const actions: Actions = {
 			console.error('Error updating participant:', updateError);
 			return fail(500, {
 				form,
-				message: m.participantsUpdateError?.() ?? 'Failed to update participant'
+				message: participantsUpdateError?.() ?? 'Failed to update participant'
 			});
 		}
 
@@ -208,14 +229,14 @@ export const actions: Actions = {
 		const roleIdsJson = formData.get('roleIds') as string;
 
 		if (!participantId) {
-			return fail(400, { message: m.participantsAdminServer_participantIdRequired?.() ?? 'Participant ID is required' });
+			return fail(400, { message: participantsAdminServer_participantIdRequired?.() ?? 'Participant ID is required' });
 		}
 
 		let roleIds: string[] = [];
 		try {
 			roleIds = JSON.parse(roleIdsJson || '[]');
 		} catch (e) {
-			return fail(400, { message: m.participantsAdminServer_invalidRoleIdsFormat?.() ?? 'Invalid role IDs format' });
+			return fail(400, { message: participantsAdminServer_invalidRoleIdsFormat?.() ?? 'Invalid role IDs format' });
 		}
 
 		try {
@@ -224,7 +245,7 @@ export const actions: Actions = {
 			});
 		} catch (updateError) {
 			console.error('Error updating participant roles:', updateError);
-			return fail(500, { message: m.participantsAdminServer_updateRolesFailed?.() ?? 'Failed to update roles' });
+			return fail(500, { message: participantsAdminServer_updateRolesFailed?.() ?? 'Failed to update roles' });
 		}
 
 		return { success: true };
@@ -237,11 +258,11 @@ export const actions: Actions = {
 			validators: {
 				name: (value) => ({
 					valid: value.trim().length >= 1,
-					error: m.participantsAdminServer_nameRequired?.() ?? 'Name is required'
+					error: participantsAdminServer_nameRequired?.() ?? 'Name is required'
 				}),
 				email: (value) => ({
 					valid: !value || value.includes('@'),
-					error: m.participantsAdminServer_invalidEmailFormat?.() ?? 'Invalid email format'
+					error: participantsAdminServer_invalidEmailFormat?.() ?? 'Invalid email format'
 				})
 			}
 		})(request);
@@ -253,7 +274,7 @@ export const actions: Actions = {
 		const isActive = formData.get('is_active') === 'true';
 
 		if (!participantId) {
-			return fail(400, { message: m.participantsAdminServer_participantIdRequired?.() ?? 'Participant ID is required' });
+			return fail(400, { message: participantsAdminServer_participantIdRequired?.() ?? 'Participant ID is required' });
 		}
 
 		try {
@@ -262,7 +283,7 @@ export const actions: Actions = {
 			});
 		} catch (updateError) {
 			console.error('Error toggling participant status:', updateError);
-			return fail(500, { message: m.participantsAdminServer_updateStatusFailed?.() ?? 'Failed to update status' });
+			return fail(500, { message: participantsAdminServer_updateStatusFailed?.() ?? 'Failed to update status' });
 		}
 
 		return { success: true };
@@ -284,11 +305,11 @@ export const actions: Actions = {
 		const defaultValue = formData.get('defaultValue') as string;
 
 		if (!fieldName || !fieldType) {
-			return fail(400, { message: m.participantsAdminServer_fieldNameTypeRequired?.() ?? 'Field name and type are required' });
+			return fail(400, { message: participantsAdminServer_fieldNameTypeRequired?.() ?? 'Field name and type are required' });
 		}
 
 		if (!['text', 'number', 'date', 'boolean'].includes(fieldType)) {
-			return fail(400, { message: m.participantsAdminServer_invalidFieldType?.() ?? 'Invalid field type' });
+			return fail(400, { message: participantsAdminServer_invalidFieldType?.() ?? 'Invalid field type' });
 		}
 
 		try {
@@ -315,10 +336,10 @@ export const actions: Actions = {
 
 			// Check for duplicate field name
 			if (insertError?.data?.field_name?.message?.includes('unique')) {
-				return fail(400, { message: m.participantsAdminServer_fieldNameExists?.() ?? 'A field with this name already exists' });
+				return fail(400, { message: participantsAdminServer_fieldNameExists?.() ?? 'A field with this name already exists' });
 			}
 
-			return fail(500, { message: m.participantsAdminServer_createCustomFieldFailed?.() ?? 'Failed to create custom field' });
+			return fail(500, { message: participantsAdminServer_createCustomFieldFailed?.() ?? 'Failed to create custom field' });
 		}
 
 		return { success: true };
@@ -334,11 +355,11 @@ export const actions: Actions = {
 		const defaultValue = formData.get('defaultValue') as string;
 
 		if (!fieldId || !fieldName || !fieldType) {
-			return fail(400, { message: m.participantsAdminServer_fieldIdNameTypeRequired?.() ?? 'Field ID, name, and type are required' });
+			return fail(400, { message: participantsAdminServer_fieldIdNameTypeRequired?.() ?? 'Field ID, name, and type are required' });
 		}
 
 		if (!['text', 'number', 'date', 'boolean'].includes(fieldType)) {
-			return fail(400, { message: m.participantsAdminServer_invalidFieldType?.() ?? 'Invalid field type' });
+			return fail(400, { message: participantsAdminServer_invalidFieldType?.() ?? 'Invalid field type' });
 		}
 
 		try {
@@ -353,10 +374,10 @@ export const actions: Actions = {
 
 			// Check for duplicate field name
 			if (updateError?.data?.field_name?.message?.includes('unique')) {
-				return fail(400, { message: m.participantsAdminServer_fieldNameExists?.() ?? 'A field with this name already exists' });
+				return fail(400, { message: participantsAdminServer_fieldNameExists?.() ?? 'A field with this name already exists' });
 			}
 
-			return fail(500, { message: m.participantsAdminServer_updateCustomFieldFailed?.() ?? 'Failed to update custom field' });
+			return fail(500, { message: participantsAdminServer_updateCustomFieldFailed?.() ?? 'Failed to update custom field' });
 		}
 
 		return { success: true };
@@ -368,14 +389,14 @@ export const actions: Actions = {
 		const fieldId = formData.get('fieldId') as string;
 
 		if (!fieldId) {
-			return fail(400, { message: m.participantsAdminServer_fieldIdRequired?.() ?? 'Field ID is required' });
+			return fail(400, { message: participantsAdminServer_fieldIdRequired?.() ?? 'Field ID is required' });
 		}
 
 		try {
 			await pb.collection('participant_custom_fields').delete(fieldId);
 		} catch (deleteError) {
 			console.error('Error deleting custom field:', deleteError);
-			return fail(500, { message: m.participantsAdminServer_deleteCustomFieldFailed?.() ?? 'Failed to delete custom field' });
+			return fail(500, { message: participantsAdminServer_deleteCustomFieldFailed?.() ?? 'Failed to delete custom field' });
 		}
 
 		return { success: true };
@@ -390,7 +411,7 @@ export const actions: Actions = {
 
 		if (!name) {
 			console.error('[createRole] No name provided');
-			return fail(400, { message: m.participantsAdminServer_roleNameRequired?.() ?? 'Role name is required' });
+			return fail(400, { message: participantsAdminServer_roleNameRequired?.() ?? 'Role name is required' });
 		}
 
 		try {
@@ -404,7 +425,7 @@ export const actions: Actions = {
 			return { success: true, entity: newRole };
 		} catch (error) {
 			console.error('[createRole] Error creating role:', error);
-			return fail(500, { message: m.participantsAdminServer_createRoleFailed?.() ?? 'Failed to create role' });
+			return fail(500, { message: participantsAdminServer_createRoleFailed?.() ?? 'Failed to create role' });
 		}
 	}
 };

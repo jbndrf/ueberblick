@@ -3,10 +3,10 @@ import { superValidate } from 'sveltekit-superforms';
 import { zod4 } from 'sveltekit-superforms/adapters';
 import { z } from 'zod';
 import type { Actions, PageServerLoad } from './$types';
-import * as m from '$lib/paraglide/messages';
+import { projectNewServerCreateError, projectNewServerNameRequired, projectNewServerNotAuthenticated } from '$lib/paraglide/messages';
 
 const projectSchema = z.object({
-	name: z.string().min(1, m.projectNewServerNameRequired?.() ?? 'Name is required').max(255),
+	name: z.string().min(1, projectNewServerNameRequired?.() ?? 'Name is required').max(255),
 	description: z.string().max(1000).optional()
 });
 
@@ -27,7 +27,7 @@ export const actions: Actions = {
 		if (!locals.user || !locals.user.id) {
 			return fail(401, {
 				form,
-				message: m.projectNewServerNotAuthenticated?.() ?? 'You must be logged in to create a project'
+				message: projectNewServerNotAuthenticated?.() ?? 'You must be logged in to create a project'
 			});
 		}
 
@@ -48,7 +48,7 @@ export const actions: Actions = {
 			const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 			return fail(500, {
 				form,
-				message: errorMessage || (m.projectNewServerCreateError?.() ?? 'Failed to create project')
+				message: errorMessage || (projectNewServerCreateError?.() ?? 'Failed to create project')
 			});
 		}
 

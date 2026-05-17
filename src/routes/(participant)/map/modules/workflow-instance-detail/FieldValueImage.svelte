@@ -26,7 +26,7 @@
 	});
 
 	const src = $derived(
-		blobUrl ?? `/api/files/workflow_instance_field_values/${recordId}/${encodeURIComponent(fileName)}`
+		blobUrl ?? `/api/files/workflow_field_values/${recordId}/${encodeURIComponent(fileName)}`
 	);
 </script>
 

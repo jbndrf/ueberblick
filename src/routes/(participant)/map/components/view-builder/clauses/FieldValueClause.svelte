@@ -21,7 +21,7 @@
 
 	const field = $derived(
 		ctx.filterableFields.find(
-			(f) => f.workflow_id === clause.workflow_id && f.field_key === clause.field_key
+			(f) => f.workflow_id === clause.workflow_id && f.field_def_id === clause.field_def_id
 		)
 	);
 
@@ -66,7 +66,8 @@
 		f: FilterableFieldOption,
 		kind: 'in' | 'contains' | 'number_range' | 'date_range'
 	): FieldValueClauseT {
-		const base = { field: 'field_value' as const, workflow_id: f.workflow_id, field_key: f.field_key };
+		// TODO(field-def-redesign): expose `aggregate` selector for observation fields.
+		const base = { field: 'field_value' as const, workflow_id: f.workflow_id, field_def_id: f.field_def_id };
 		if (kind === 'in') return { ...base, op: 'in', values: [] };
 		if (kind === 'contains') return { ...base, op: 'contains', text: '' };
 		if (kind === 'number_range') return { ...base, op: 'number_range', min: null, max: null };
@@ -78,7 +79,7 @@
 	<div class="flex items-start justify-between gap-2">
 		<div class="min-w-0 flex-1">
 			<div class="truncate text-sm font-medium">
-				{field?.field_label ?? clause.field_key}
+				{field?.field_label ?? clause.field_def_id}
 			</div>
 			{#if field}
 				<div class="truncate text-xs text-muted-foreground">{field.workflow_name}</div>

@@ -7,11 +7,41 @@
 	import { Switch } from '$lib/components/ui/switch';
 	import * as Tabs from '$lib/components/ui/tabs';
 	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		propertiesEdgePropertyActionNamePlaceholder,
+		propertiesEdgePropertyAllowedRoles,
+		propertiesEdgePropertyBehavior,
+		propertiesEdgePropertyButtonAppearance,
+		propertiesEdgePropertyButtonColor,
+		propertiesEdgePropertyButtonLabel,
+		propertiesEdgePropertyButtonLabelPlaceholder,
+		propertiesEdgePropertyConfirmationDefault,
+		propertiesEdgePropertyConfirmationMessage,
+		propertiesEdgePropertyConnectedTools,
+		propertiesEdgePropertyDeleteAction,
+		propertiesEdgePropertyDeleteTool,
+		propertiesEdgePropertyEntryInfo,
+		propertiesEdgePropertyNoTools,
+		propertiesEdgePropertyRequiresConfirmation,
+		propertiesEdgePropertyRequiresConfirmationDesc,
+		propertiesEdgePropertyRolesHelp,
+		propertiesEdgePropertyRolesPlaceholder,
+		propertiesEdgePropertySourceFallback,
+		propertiesEdgePropertyTabPermissions,
+		propertiesEdgePropertyTabSettings,
+		propertiesEdgePropertyTabTools,
+		propertiesEdgePropertyTargetFallback,
+		propertiesEdgePropertyTargetStart,
+		propertiesEdgePropertyTypeEdit,
+		propertiesEdgePropertyTypeEntry,
+		propertiesEdgePropertyTypeProgress,
+		propertiesEdgePropertyWorkflowEntry
+	} from '$lib/paraglide/messages';
 
 	import { ArrowRight, LogIn, RotateCcw, Trash2 } from '@lucide/svelte';
 
 	import PropertySection from '../shared/PropertySection.svelte';
+	import SentryEditor from './SentryEditor.svelte';
 
 	import { toolRegistry } from '$lib/workflow-builder/tools';
 	import type {
@@ -20,7 +50,9 @@
 		ToolsProtocol,
 		VisualConfig,
 		ConnectionEdgeData,
-		StageData
+		StageData,
+		SentryClause,
+		WorkflowFieldDef
 	} from '$lib/workflow-builder';
 
 	type Role = {
@@ -43,6 +75,8 @@
 		onDelete?: (edgeId: string) => void;
 		onRolesChange?: (edgeId: string, roleIds: string[]) => void;
 		onSettingsChange?: (edgeId: string, settings: Record<string, any>) => void;
+		onSentryChange?: (edgeId: string, sentry: SentryClause[]) => void;
+		fieldDefs?: WorkflowFieldDef[];
 		/** Callback when a tool is selected */
 		onSelectTool?: (toolType: string, toolId: string) => void;
 		/** Callback when a tool is deleted */
@@ -62,6 +96,8 @@
 		onDelete,
 		onRolesChange,
 		onSettingsChange,
+		onSentryChange,
+		fieldDefs = [],
 		onSelectTool,
 		onDeleteTool,
 		onCreateRole
@@ -89,8 +125,9 @@
 	let buttonColor = $state(edge.data?.visual_config?.button_color || '#3b82f6');
 	let requiresConfirmation = $state(edge.data?.visual_config?.requires_confirmation || false);
 	let confirmationMessage = $state(
-		edge.data?.visual_config?.confirmation_message || (m.propertiesEdgePropertyConfirmationDefault?.() ?? 'Are you sure you want to proceed?')
+		edge.data?.visual_config?.confirmation_message || (propertiesEdgePropertyConfirmationDefault?.() ?? 'Are you sure you want to proceed?')
 	);
+	let sentryClauses = $state<SentryClause[]>(edge.data?.sentry ?? []);
 	let activeTab = $state('permissions');
 
 	// Track current edge ID to detect edge switches
@@ -106,9 +143,15 @@
 			buttonColor = edge.data?.visual_config?.button_color || '#3b82f6';
 			requiresConfirmation = edge.data?.visual_config?.requires_confirmation || false;
 			confirmationMessage =
-				edge.data?.visual_config?.confirmation_message || (m.propertiesEdgePropertyConfirmationDefault?.() ?? 'Are you sure you want to proceed?');
+				edge.data?.visual_config?.confirmation_message || (propertiesEdgePropertyConfirmationDefault?.() ?? 'Are you sure you want to proceed?');
+			sentryClauses = edge.data?.sentry ?? [];
 		}
 	});
+
+	function handleSentryChange(next: SentryClause[]) {
+		sentryClauses = next;
+		onSentryChange?.(edge.id, next);
+	}
 
 	// Sync settings to parent via event handlers (not effects - to avoid infinite loops)
 	function syncSettings() {
@@ -171,25 +214,25 @@
 					bind:value={actionName}
 					onblur={handleNameBlur}
 					class="header-input"
-					placeholder={m.propertiesEdgePropertyActionNamePlaceholder?.() ?? 'Action name...'}
+					placeholder={propertiesEdgePropertyActionNamePlaceholder?.() ?? 'Action name...'}
 				/>
 				<div class="edge-meta">
 					<span class="edge-type-badge" class:edit={isEditAction} class:entry={isEntryConnection}>
 						{#if isEntryConnection}
-							{m.propertiesEdgePropertyTypeEntry?.() ?? 'Entry Action'}
+							{propertiesEdgePropertyTypeEntry?.() ?? 'Entry Action'}
 						{:else if isEditAction}
-							{m.propertiesEdgePropertyTypeEdit?.() ?? 'Edit Action'}
+							{propertiesEdgePropertyTypeEdit?.() ?? 'Edit Action'}
 						{:else}
-							{m.propertiesEdgePropertyTypeProgress?.() ?? 'Progress Action'}
+							{propertiesEdgePropertyTypeProgress?.() ?? 'Progress Action'}
 						{/if}
 					</span>
 					{#if isEntryConnection}
 						<span class="edge-path">
-							{m.propertiesEdgePropertyWorkflowEntry?.() ?? 'Workflow Entry'} -> {targetNode?.data.title || (m.propertiesEdgePropertyTargetStart?.() ?? 'Start')}
+							{propertiesEdgePropertyWorkflowEntry?.() ?? 'Workflow Entry'} -> {targetNode?.data.title || (propertiesEdgePropertyTargetStart?.() ?? 'Start')}
 						</span>
 					{:else if !isEditAction}
 						<span class="edge-path">
-							{sourceNode?.data.title || (m.propertiesEdgePropertySourceFallback?.() ?? 'Source')} -> {targetNode?.data.title || (m.propertiesEdgePropertyTargetFallback?.() ?? 'Target')}
+							{sourceNode?.data.title || (propertiesEdgePropertySourceFallback?.() ?? 'Source')} -> {targetNode?.data.title || (propertiesEdgePropertyTargetFallback?.() ?? 'Target')}
 						</span>
 					{/if}
 				</div>
@@ -200,15 +243,15 @@
 	<!-- Tabs -->
 	<Tabs.Root bind:value={activeTab} class="flex-1 flex flex-col">
 		<Tabs.List class="panel-tabs">
-			<Tabs.Trigger value="permissions">{m.propertiesEdgePropertyTabPermissions?.() ?? 'Permissions'}</Tabs.Trigger>
-			<Tabs.Trigger value="tools">{m.propertiesEdgePropertyTabTools?.() ?? 'Tools'}</Tabs.Trigger>
-			<Tabs.Trigger value="settings">{m.propertiesEdgePropertyTabSettings?.() ?? 'Settings'}</Tabs.Trigger>
+			<Tabs.Trigger value="permissions">{propertiesEdgePropertyTabPermissions?.() ?? 'Permissions'}</Tabs.Trigger>
+			<Tabs.Trigger value="tools">{propertiesEdgePropertyTabTools?.() ?? 'Tools'}</Tabs.Trigger>
+			<Tabs.Trigger value="settings">{propertiesEdgePropertyTabSettings?.() ?? 'Settings'}</Tabs.Trigger>
 		</Tabs.List>
 
 		<div class="panel-content">
 			<!-- Permissions Tab -->
 			<Tabs.Content value="permissions" class="tab-content">
-				<PropertySection title={m.propertiesEdgePropertyAllowedRoles?.() ?? 'Allowed Roles'}>
+				<PropertySection title={propertiesEdgePropertyAllowedRoles?.() ?? 'Allowed Roles'}>
 					<MobileMultiSelect
 						selectedIds={selectedRoleIds}
 						options={roles}
@@ -218,20 +261,20 @@
 						allowCreate={!!onCreateRole}
 						onCreateOption={onCreateRole}
 						onSelectedIdsChange={handleRolesChange}
-						placeholder={m.propertiesEdgePropertyRolesPlaceholder?.() ?? 'Select or search roles...'}
+						placeholder={propertiesEdgePropertyRolesPlaceholder?.() ?? 'Select or search roles...'}
 						class="w-full"
 					/>
 					<p class="help-text">
-						{m.propertiesEdgePropertyRolesHelp?.() ?? 'Only participants with these roles can perform this action. Leave empty to allow all.'}
+						{propertiesEdgePropertyRolesHelp?.() ?? 'Only participants with these roles can perform this action. Leave empty to allow all.'}
 					</p>
 				</PropertySection>
 			</Tabs.Content>
 
 			<!-- Tools Tab -->
 			<Tabs.Content value="tools" class="tab-content">
-				<PropertySection title={m.propertiesEdgePropertyConnectedTools?.() ?? 'Connected Tools'} defaultOpen={true}>
+				<PropertySection title={propertiesEdgePropertyConnectedTools?.() ?? 'Connected Tools'} defaultOpen={true}>
 					{#if !hasConnectedTools}
-						<p class="empty-text">{m.propertiesEdgePropertyNoTools?.() ?? 'No tools attached to this connection.'}</p>
+						<p class="empty-text">{propertiesEdgePropertyNoTools?.() ?? 'No tools attached to this connection.'}</p>
 					{:else}
 						<div class="tools-list">
 							{#each sortedTools as tool (tool.id)}
@@ -254,7 +297,7 @@
 										class="delete-btn"
 										type="button"
 										onclick={() => onDeleteTool?.(tool.type, tool.id)}
-										title={m.propertiesEdgePropertyDeleteTool?.() ?? 'Delete tool'}
+										title={propertiesEdgePropertyDeleteTool?.() ?? 'Delete tool'}
 									>
 										<Trash2 class="h-3.5 w-3.5" />
 									</button>
@@ -268,19 +311,19 @@
 			<!-- Settings Tab -->
 			<Tabs.Content value="settings" class="tab-content">
 				{#if !isEntryConnection}
-				<PropertySection title={m.propertiesEdgePropertyButtonAppearance?.() ?? 'Button Appearance'}>
+				<PropertySection title={propertiesEdgePropertyButtonAppearance?.() ?? 'Button Appearance'}>
 					<div class="form-field">
-						<Label for="button-label">{m.propertiesEdgePropertyButtonLabel?.() ?? 'Button Label'}</Label>
+						<Label for="button-label">{propertiesEdgePropertyButtonLabel?.() ?? 'Button Label'}</Label>
 						<Input
 							id="button-label"
 							bind:value={buttonLabel}
 							oninput={syncSettings}
-							placeholder={m.propertiesEdgePropertyButtonLabelPlaceholder?.() ?? 'e.g., Submit, Approve, Continue'}
+							placeholder={propertiesEdgePropertyButtonLabelPlaceholder?.() ?? 'e.g., Submit, Approve, Continue'}
 						/>
 					</div>
 
 					<div class="form-field">
-						<Label for="button-color">{m.propertiesEdgePropertyButtonColor?.() ?? 'Button Color'}</Label>
+						<Label for="button-color">{propertiesEdgePropertyButtonColor?.() ?? 'Button Color'}</Label>
 						<div class="color-picker">
 							<input
 								type="color"
@@ -299,12 +342,20 @@
 					</div>
 				</PropertySection>
 
-				<PropertySection title={m.propertiesEdgePropertyBehavior?.() ?? 'Behavior'}>
+				<PropertySection title={'Availability'}>
+					<SentryEditor
+						bind:sentry={sentryClauses}
+						{fieldDefs}
+						onChange={handleSentryChange}
+					/>
+				</PropertySection>
+
+				<PropertySection title={propertiesEdgePropertyBehavior?.() ?? 'Behavior'}>
 					<div class="form-field-switch">
 						<div class="switch-info">
-							<Label for="requires-confirmation">{m.propertiesEdgePropertyRequiresConfirmation?.() ?? 'Requires Confirmation'}</Label>
+							<Label for="requires-confirmation">{propertiesEdgePropertyRequiresConfirmation?.() ?? 'Requires Confirmation'}</Label>
 							<p class="switch-description">
-								{m.propertiesEdgePropertyRequiresConfirmationDesc?.() ?? 'Show a confirmation dialog before performing this action'}
+								{propertiesEdgePropertyRequiresConfirmationDesc?.() ?? 'Show a confirmation dialog before performing this action'}
 							</p>
 						</div>
 						<Switch
@@ -319,19 +370,19 @@
 
 					{#if requiresConfirmation}
 						<div class="form-field">
-							<Label for="confirmation-message">{m.propertiesEdgePropertyConfirmationMessage?.() ?? 'Confirmation Message'}</Label>
+							<Label for="confirmation-message">{propertiesEdgePropertyConfirmationMessage?.() ?? 'Confirmation Message'}</Label>
 							<Input
 								id="confirmation-message"
 								bind:value={confirmationMessage}
 								oninput={syncSettings}
-								placeholder={m.propertiesEdgePropertyConfirmationDefault?.() ?? 'Are you sure you want to proceed?'}
+								placeholder={propertiesEdgePropertyConfirmationDefault?.() ?? 'Are you sure you want to proceed?'}
 							/>
 						</div>
 					{/if}
 				</PropertySection>
 				{:else}
 				<p class="text-sm text-muted-foreground text-center py-4">
-					{m.propertiesEdgePropertyEntryInfo?.() ?? 'Entry connections are configured from the workflow settings.'}
+					{propertiesEdgePropertyEntryInfo?.() ?? 'Entry connections are configured from the workflow settings.'}
 				</p>
 				{/if}
 			</Tabs.Content>
@@ -342,7 +393,7 @@
 	<div class="panel-footer">
 		<Button variant="destructive" size="sm" onclick={handleDelete} class="w-full">
 			<Trash2 class="h-4 w-4 mr-2" />
-			{m.propertiesEdgePropertyDeleteAction?.() ?? 'Delete Action'}
+			{propertiesEdgePropertyDeleteAction?.() ?? 'Delete Action'}
 		</Button>
 	</div>
 </div>

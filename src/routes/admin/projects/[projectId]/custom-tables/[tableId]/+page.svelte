@@ -2,7 +2,40 @@
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import { page } from '$app/stores';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		commonCancel,
+		commonClose,
+		commonDelete,
+		csvImportButton,
+		csvImportError,
+		customTableDetailEditMode,
+		customTableDetailUpdateError,
+		customTableEditAddColumn,
+		customTableEditAddRow,
+		customTableEditColumnCreateError,
+		customTableEditColumnCreated,
+		customTableEditColumnDeleteError,
+		customTableEditColumnDeleted,
+		customTableEditColumnName,
+		customTableEditColumnType,
+		customTableEditColumnUpdateError,
+		customTableEditColumnUpdated,
+		customTableEditColumnsDescription,
+		customTableEditDefaultValue,
+		customTableEditDeleteColumnConfirm,
+		customTableEditDeleteError,
+		customTableEditDeleteRow,
+		customTableEditDeleteRowConfirm,
+		customTableEditDeleteSuccess,
+		customTableEditManageColumns,
+		customTableEditNoColumns,
+		customTableEditNoData,
+		customTableEditRefresh,
+		customTableEditRequired,
+		customTableEditRowCreateError,
+		customTableEditRowCreated,
+		rolesActions
+	} from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
@@ -46,23 +79,23 @@
 		updateAction: 'updateColumn',
 		deleteAction: 'deleteColumn',
 		labels: {
-			title: m.customTableEditManageColumns?.() ?? 'Manage Columns',
+			title: customTableEditManageColumns?.() ?? 'Manage Columns',
 			description:
-				m.customTableEditColumnsDescription?.() ?? 'Define the columns for your custom table',
-			addButton: m.customTableEditAddColumn(),
-			fieldName: m.customTableEditColumnName?.() ?? 'Column Name',
-			fieldType: m.customTableEditColumnType?.() ?? 'Column Type',
-			defaultValue: m.customTableEditDefaultValue?.() ?? 'Default Value (Optional)',
-			required: m.customTableEditRequired?.() ?? 'Required field',
-			noFields: m.customTableEditNoColumns(),
-			createSuccess: m.customTableEditColumnCreated?.() ?? 'Column created successfully',
-			createError: m.customTableEditColumnCreateError?.() ?? 'Failed to create column',
-			updateSuccess: m.customTableEditColumnUpdated?.() ?? 'Column updated successfully',
-			updateError: m.customTableEditColumnUpdateError?.() ?? 'Failed to update column',
-			deleteSuccess: m.customTableEditColumnDeleted?.() ?? 'Column deleted successfully',
-			deleteError: m.customTableEditColumnDeleteError?.() ?? 'Failed to delete column',
+				customTableEditColumnsDescription?.() ?? 'Define the columns for your custom table',
+			addButton: customTableEditAddColumn(),
+			fieldName: customTableEditColumnName?.() ?? 'Column Name',
+			fieldType: customTableEditColumnType?.() ?? 'Column Type',
+			defaultValue: customTableEditDefaultValue?.() ?? 'Default Value (Optional)',
+			required: customTableEditRequired?.() ?? 'Required field',
+			noFields: customTableEditNoColumns(),
+			createSuccess: customTableEditColumnCreated?.() ?? 'Column created successfully',
+			createError: customTableEditColumnCreateError?.() ?? 'Failed to create column',
+			updateSuccess: customTableEditColumnUpdated?.() ?? 'Column updated successfully',
+			updateError: customTableEditColumnUpdateError?.() ?? 'Failed to update column',
+			deleteSuccess: customTableEditColumnDeleted?.() ?? 'Column deleted successfully',
+			deleteError: customTableEditColumnDeleteError?.() ?? 'Failed to delete column',
 			deleteConfirm: (columnName: string) =>
-				m.customTableEditDeleteColumnConfirm?.({ columnName }) ??
+				customTableEditDeleteColumnConfirm?.({ columnName }) ??
 				`Are you sure you want to delete the column '${columnName}'? This will permanently remove all data in this column.`
 		}
 	};
@@ -150,7 +183,7 @@
 
 			const result = await response.json();
 			if (result.type !== 'success') {
-				return { success: false, count: imported, error: result.data?.message || m.csvImportError() };
+				return { success: false, count: imported, error: result.data?.message || csvImportError() };
 			}
 			imported += batch.length;
 			onProgress(imported, rows.length);
@@ -174,7 +207,7 @@
 		if (result.type === 'success') {
 			await invalidateAll();
 		} else {
-			toast.error(m.customTableDetailUpdateError?.() ?? 'Failed to update');
+			toast.error(customTableDetailUpdateError?.() ?? 'Failed to update');
 		}
 	}
 </script>
@@ -193,11 +226,11 @@
 		{#snippet actions()}
 			<Button variant="outline" size="sm" onclick={() => (importDialogOpen = true)}>
 				<Upload class="mr-2 h-4 w-4" />
-				{m.csvImportButton()}
+				{csvImportButton()}
 			</Button>
 			<Button variant="outline" size="sm" onclick={() => invalidateAll()}>
 				<RefreshCw class="mr-2 h-4 w-4" />
-				{m.customTableEditRefresh()}
+				{customTableEditRefresh()}
 			</Button>
 		{/snippet}
 	</DataViewerHeader>
@@ -212,10 +245,10 @@
 		enableShiftSelect={true}
 		showToolbar={true}
 		showEditMode={true}
-		editModeLabel={m.customTableDetailEditMode?.() ?? 'Edit mode'}
-		emptyMessage={m.customTableEditNoData()}
+		editModeLabel={customTableDetailEditMode?.() ?? 'Edit mode'}
+		emptyMessage={customTableEditNoData()}
 		rowActions={{
-			header: m.rolesActions(),
+			header: rolesActions(),
 			onDelete: (row) => {
 				selectedRow = row;
 				deleteRowOpen = true;
@@ -234,7 +267,7 @@
 		}}
 		inlineRowCreation={{
 			enabled: true,
-			createButtonLabel: m.customTableEditAddRow?.() ?? 'Add Row',
+			createButtonLabel: customTableEditAddRow?.() ?? 'Add Row',
 			requiredFields: data.columns
 				.filter((col) => col.is_required)
 				.map((col) => col.column_name),
@@ -250,9 +283,9 @@
 				const result = await response.json();
 				if (result.type === 'success') {
 					await invalidateAll();
-					toast.success(m.customTableEditRowCreated?.() ?? 'Row created successfully');
+					toast.success(customTableEditRowCreated?.() ?? 'Row created successfully');
 				} else {
-					toast.error(m.customTableEditRowCreateError?.() ?? 'Failed to create row');
+					toast.error(customTableEditRowCreateError?.() ?? 'Failed to create row');
 					throw new Error(result.data?.message || 'Failed to create row');
 				}
 			},
@@ -275,7 +308,7 @@
 		<CustomFieldManagerGeneric fields={data.columns} config={columnFieldConfig} />
 		<Dialog.Footer>
 			<Button variant="outline" onclick={() => (columnManagerOpen = false)}>
-				{m.commonClose?.() ?? 'Close'}
+				{commonClose?.() ?? 'Close'}
 			</Button>
 		</Dialog.Footer>
 	</Dialog.Content>
@@ -285,23 +318,23 @@
 <AlertDialog.Root bind:open={deleteRowOpen}>
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>{m.customTableEditDeleteRow?.() ?? 'Delete Row'}</AlertDialog.Title>
+			<AlertDialog.Title>{customTableEditDeleteRow?.() ?? 'Delete Row'}</AlertDialog.Title>
 			<AlertDialog.Description>
-				{m.customTableEditDeleteRowConfirm?.() ?? 'Are you sure you want to delete this row? This action cannot be undone.'}
+				{customTableEditDeleteRowConfirm?.() ?? 'Are you sure you want to delete this row? This action cannot be undone.'}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		{#if selectedRow}
 			<AlertDialog.Footer>
-				<AlertDialog.Cancel>{m.commonCancel()}</AlertDialog.Cancel>
+				<AlertDialog.Cancel>{commonCancel()}</AlertDialog.Cancel>
 				<form
 					method="POST"
 					action="?/deleteRow"
 					use:enhance={() => {
 						return async ({ result }) => {
 							if (result.type === 'success') {
-								handleSuccess(m.customTableEditDeleteSuccess?.() ?? 'Row deleted successfully');
+								handleSuccess(customTableEditDeleteSuccess?.() ?? 'Row deleted successfully');
 							} else if (result.type === 'failure') {
-								handleError(m.customTableEditDeleteError?.() ?? 'Failed to delete row');
+								handleError(customTableEditDeleteError?.() ?? 'Failed to delete row');
 							}
 						};
 					}}
@@ -311,7 +344,7 @@
 						type="submit"
 						class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 					>
-						{m.commonDelete()}
+						{commonDelete()}
 					</AlertDialog.Action>
 				</form>
 			</AlertDialog.Footer>

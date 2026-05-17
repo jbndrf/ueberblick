@@ -14,7 +14,7 @@ import {
 	RHYTHMUS_ROOMS_EG,
 	RHYTHMUS_ROOMS_OG
 } from './fixtures/reinigung-data';
-import { PB_URL, generateToken, createParticipantClient, submitEntryForm } from './seed-helpers';
+import { PB_URL, generateToken, createParticipantClient, submitEntryForm, type SeedFieldValue } from './seed-helpers';
 
 export interface ReinigungSeedResult {
 	projectId: string;
@@ -157,7 +157,7 @@ async function createRoomInstances(
 	rooms: Array<{
 		name: string;
 		coordIndex: number;
-		fieldValues: Array<{ key: string; value: string }>;
+		fieldValues: SeedFieldValue[];
 	}>
 ) {
 	const created: Array<{ id: string; roomName: string }> = [];
@@ -203,15 +203,13 @@ export async function seedDemoA(): Promise<ReinigungSeedResult> {
 			description: 'Reinigungstage festlegen'
 		});
 
-		const reinigungstagField = await pb.collection('tools_form_fields').create({
-			form_id: entryForm.id,
-			field_label: 'Reinigungstag',
+		const reinigungstagDef = await pb.collection('workflow_field_defs').create({
+			workflow_id: shell.id,
+			key: 'reinigungstag',
+			label: 'Reinigungstag',
 			field_type: 'multiple_choice',
+			write_mode: 'singleton',
 			is_required: false,
-			field_order: 1,
-			page: 1,
-			row_index: 0,
-			column_position: 'full',
 			field_options: {
 				options: [
 					{ label: 'Mo' },
@@ -222,12 +220,26 @@ export async function seedDemoA(): Promise<ReinigungSeedResult> {
 				]
 			}
 		});
-
-		const raumnummerFieldA = await pb.collection('tools_form_fields').create({
+		await pb.collection('tools_form_field_refs').create({
 			form_id: entryForm.id,
-			field_label: 'Raumnummer',
+			field_def_id: reinigungstagDef.id,
+			field_order: 1,
+			page: 1,
+			row_index: 0,
+			column_position: 'full'
+		});
+
+		const raumnummerDefA = await pb.collection('workflow_field_defs').create({
+			workflow_id: shell.id,
+			key: 'raumnummer',
+			label: 'Raumnummer',
 			field_type: 'short_text',
-			is_required: false,
+			write_mode: 'singleton',
+			is_required: false
+		});
+		await pb.collection('tools_form_field_refs').create({
+			form_id: entryForm.id,
+			field_def_id: raumnummerDefA.id,
 			field_order: 2,
 			page: 1,
 			row_index: 1,
@@ -240,7 +252,7 @@ export async function seedDemoA(): Promise<ReinigungSeedResult> {
 			tag_mappings: [
 				{
 					tagType: 'filterable',
-					fieldId: reinigungstagField.id,
+					fieldId: reinigungstagDef.id,
 					config: { filterBy: 'field' }
 				}
 			]
@@ -254,8 +266,8 @@ export async function seedDemoA(): Promise<ReinigungSeedResult> {
 			name: room.name,
 			coordIndex: room.coordIndex,
 			fieldValues: [
-				{ key: reinigungstagField.id, value: room.reinigungstag },
-				{ key: raumnummerFieldA.id, value: room.name }
+				{ fieldDefId: reinigungstagDef.id, value: room.reinigungstag },
+				{ fieldDefId: raumnummerDefA.id, value: room.name }
 			]
 		}));
 
@@ -339,16 +351,13 @@ export async function seedDemoB(): Promise<ReinigungSeedResult> {
 			description: 'Reinigungsintervall und Zaehler'
 		});
 
-		const intervallField = await pb.collection('tools_form_fields').create({
-			form_id: entryForm.id,
-			field_label: 'Reinigungsintervall',
+		const intervallDef = await pb.collection('workflow_field_defs').create({
+			workflow_id: shell.id,
+			key: 'reinigungsintervall',
+			label: 'Reinigungsintervall',
 			field_type: 'dropdown',
+			write_mode: 'singleton',
 			is_required: false,
-			field_order: 1,
-			page: 1,
-			row_index: 0,
-			column_position: 'left',
-			help_text: 'Intervall in Minuten',
 			field_options: {
 				options: [
 					{ label: '1' },
@@ -358,24 +367,43 @@ export async function seedDemoB(): Promise<ReinigungSeedResult> {
 				]
 			}
 		});
-
-		const counterField = await pb.collection('tools_form_fields').create({
+		await pb.collection('tools_form_field_refs').create({
 			form_id: entryForm.id,
-			field_label: 'Minuten seit Reinigung',
+			field_def_id: intervallDef.id,
+			field_order: 1,
+			page: 1,
+			row_index: 0,
+			column_position: 'left'
+		});
+
+		const counterDef = await pb.collection('workflow_field_defs').create({
+			workflow_id: shell.id,
+			key: 'minuten_seit_reinigung',
+			label: 'Minuten seit Reinigung',
 			field_type: 'number',
-			is_required: false,
+			write_mode: 'singleton',
+			is_required: false
+		});
+		await pb.collection('tools_form_field_refs').create({
+			form_id: entryForm.id,
+			field_def_id: counterDef.id,
 			field_order: 2,
 			page: 1,
 			row_index: 0,
-			column_position: 'right',
-			help_text: 'Automatischer Zaehler'
+			column_position: 'right'
 		});
 
-		const raumnummerFieldB = await pb.collection('tools_form_fields').create({
-			form_id: entryForm.id,
-			field_label: 'Raumnummer',
+		const raumnummerDefB = await pb.collection('workflow_field_defs').create({
+			workflow_id: shell.id,
+			key: 'raumnummer',
+			label: 'Raumnummer',
 			field_type: 'short_text',
-			is_required: false,
+			write_mode: 'singleton',
+			is_required: false
+		});
+		await pb.collection('tools_form_field_refs').create({
+			form_id: entryForm.id,
+			field_def_id: raumnummerDefB.id,
 			field_order: 3,
 			page: 1,
 			row_index: 1,
@@ -390,9 +418,9 @@ export async function seedDemoB(): Promise<ReinigungSeedResult> {
 			name: room.name,
 			coordIndex: room.coordIndex,
 			fieldValues: [
-				{ key: intervallField.id, value: room.reinigungsintervall },
-				{ key: counterField.id, value: String(room.arbeitstage_seit_reinigung) },
-				{ key: raumnummerFieldB.id, value: room.name }
+				{ fieldDefId: intervallDef.id, value: room.reinigungsintervall },
+				{ fieldDefId: counterDef.id, value: String(room.arbeitstage_seit_reinigung) },
+				{ fieldDefId: raumnummerDefB.id, value: room.name }
 			]
 		}));
 
@@ -420,8 +448,8 @@ export async function seedDemoB(): Promise<ReinigungSeedResult> {
 					{
 						type: 'set_field_value',
 						params: {
-							field_key: counterField.id,
-							value: `{${counterField.id}} + 1`,
+							field_key: counterDef.id,
+							value: `{${counterDef.id}} + 1`,
 							stage_id: erledigtStageId
 						}
 					}
@@ -447,9 +475,9 @@ export async function seedDemoB(): Promise<ReinigungSeedResult> {
 						{
 							type: 'field_value',
 							params: {
-								field_key: counterField.id,
+								field_key: counterDef.id,
 								operator: 'gte',
-								compare_field_key: intervallField.id
+								compare_field_key: intervallDef.id
 							}
 						}
 					]
@@ -462,7 +490,7 @@ export async function seedDemoB(): Promise<ReinigungSeedResult> {
 					{
 						type: 'set_field_value',
 						params: {
-							field_key: counterField.id,
+							field_key: counterDef.id,
 							value: '0',
 							stage_id: offenStageId
 						}
@@ -488,7 +516,7 @@ export async function seedDemoB(): Promise<ReinigungSeedResult> {
 					{
 						type: 'set_field_value',
 						params: {
-							field_key: counterField.id,
+							field_key: counterDef.id,
 							value: '0',
 							stage_id: erledigtStageId
 						}

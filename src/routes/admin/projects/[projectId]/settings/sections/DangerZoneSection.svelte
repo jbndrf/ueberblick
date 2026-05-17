@@ -1,7 +1,31 @@
 <script lang="ts">
 	import { deserialize } from '$app/forms';
 	import { goto } from '$app/navigation';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		commonCancel,
+		commonDelete,
+		deleteConfirmPlaceholder,
+		deleteConfirmPrompt,
+		projectsDelete,
+		projectsDeleteAlsoDeleted,
+		projectsDeleteCountCustomTables,
+		projectsDeleteCountInfoPages,
+		projectsDeleteCountInstances,
+		projectsDeleteCountMapLayers,
+		projectsDeleteCountOfflinePackages,
+		projectsDeleteCountParticipants,
+		projectsDeleteCountRoles,
+		projectsDeleteCountWorkflows,
+		projectsDeleteError,
+		projectsDeleteHint,
+		projectsDeleteIntro,
+		projectsDeleteLoadingCounts,
+		projectsDeleteNoDependencies,
+		projectsDeleteSuccess,
+		projectsDeleteTitle,
+		settingsDangerZone,
+		settingsDangerZoneDescription
+	} from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import { AlertTriangle, Trash2 } from '@lucide/svelte';
@@ -100,16 +124,16 @@
 				data?: { message?: string };
 			};
 			if (result.type === 'redirect' && result.location) {
-				toast.success(m.projectsDeleteSuccess?.() ?? 'Project deleted');
+				toast.success(projectsDeleteSuccess?.() ?? 'Project deleted');
 				await goto(result.location);
 			} else {
 				toast.error(
-					result.data?.message || (m.projectsDeleteError?.() ?? 'Failed to delete project')
+					result.data?.message || (projectsDeleteError?.() ?? 'Failed to delete project')
 				);
 			}
 		} catch (err) {
 			console.error('Error deleting project:', err);
-			toast.error(m.projectsDeleteError?.() ?? 'Failed to delete project');
+			toast.error(projectsDeleteError?.() ?? 'Failed to delete project');
 		} finally {
 			deletingProject = false;
 			deleteProjectOpen = false;
@@ -118,24 +142,24 @@
 </script>
 
 <SettingsSection
-	name={m.settingsDangerZone?.() ?? 'Danger Zone'}
-	description={m.settingsDangerZoneDescription?.() ??
+	name={settingsDangerZone?.() ?? 'Danger Zone'}
+	description={settingsDangerZoneDescription?.() ??
 		'Irreversible actions. Deleting the project removes all of its data permanently.'}
 >
 	<div class="flex items-center justify-between gap-4 rounded-md border border-destructive/50 p-4">
 		<div>
 			<div class="flex items-center gap-2 font-medium text-destructive">
 				<AlertTriangle class="h-4 w-4" />
-				{m.projectsDelete?.() ?? 'Delete project'}
+				{projectsDelete?.() ?? 'Delete project'}
 			</div>
 			<div class="mt-1 text-sm text-muted-foreground">
-				{m.projectsDeleteHint?.({ name: data.project.name }) ??
+				{projectsDeleteHint?.({ name: data.project.name }) ??
 					`Permanently delete "${data.project.name}" and everything it contains.`}
 			</div>
 		</div>
 		<Button variant="destructive" onclick={() => (deleteProjectOpen = true)}>
 			<Trash2 class="mr-2 h-4 w-4" />
-			{m.projectsDelete?.() ?? 'Delete project'}
+			{projectsDelete?.() ?? 'Delete project'}
 		</Button>
 	</div>
 </SettingsSection>
@@ -143,16 +167,16 @@
 <AlertDialog.Root bind:open={deleteProjectOpen}>
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>{m.projectsDeleteTitle?.() ?? 'Delete project'}</AlertDialog.Title>
+			<AlertDialog.Title>{projectsDeleteTitle?.() ?? 'Delete project'}</AlertDialog.Title>
 			<AlertDialog.Description>
-				{m.projectsDeleteIntro?.({ name: data.project.name }) ??
+				{projectsDeleteIntro?.({ name: data.project.name }) ??
 					`This permanently deletes "${data.project.name}" and everything inside it. This action cannot be undone.`}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<div class="space-y-3 text-sm">
 			{#if projectDeleteCountsLoading && !projectDeleteCounts}
 				<div class="text-muted-foreground">
-					{m.projectsDeleteLoadingCounts?.() ?? 'Loading dependencies…'}
+					{projectsDeleteLoadingCounts?.() ?? 'Loading dependencies…'}
 				</div>
 			{:else if projectDeleteCounts}
 				{@const c = projectDeleteCounts}
@@ -160,32 +184,32 @@
 					{
 						n: c.workflows,
 						label:
-							m.projectsDeleteCountWorkflows?.({ n: c.workflows }) ?? `${c.workflows} workflows`
+							projectsDeleteCountWorkflows?.({ n: c.workflows }) ?? `${c.workflows} workflows`
 					},
 					{
 						n: c.roles,
-						label: m.projectsDeleteCountRoles?.({ n: c.roles }) ?? `${c.roles} roles`
+						label: projectsDeleteCountRoles?.({ n: c.roles }) ?? `${c.roles} roles`
 					},
 					{
 						n: c.mapLayers,
 						label:
-							m.projectsDeleteCountMapLayers?.({ n: c.mapLayers }) ?? `${c.mapLayers} map layers`
+							projectsDeleteCountMapLayers?.({ n: c.mapLayers }) ?? `${c.mapLayers} map layers`
 					},
 					{
 						n: c.customTables,
 						label:
-							m.projectsDeleteCountCustomTables?.({ n: c.customTables }) ??
+							projectsDeleteCountCustomTables?.({ n: c.customTables }) ??
 							`${c.customTables} custom tables`
 					},
 					{
 						n: c.infoPages,
 						label:
-							m.projectsDeleteCountInfoPages?.({ n: c.infoPages }) ?? `${c.infoPages} info pages`
+							projectsDeleteCountInfoPages?.({ n: c.infoPages }) ?? `${c.infoPages} info pages`
 					},
 					{
 						n: c.offlinePackages,
 						label:
-							m.projectsDeleteCountOfflinePackages?.({ n: c.offlinePackages }) ??
+							projectsDeleteCountOfflinePackages?.({ n: c.offlinePackages }) ??
 							`${c.offlinePackages} offline packages`
 					}
 				].filter((r) => r.n > 0)}
@@ -193,22 +217,22 @@
 					{
 						n: c.participants,
 						label:
-							m.projectsDeleteCountParticipants?.({ n: c.participants }) ??
+							projectsDeleteCountParticipants?.({ n: c.participants }) ??
 							`${c.participants} participants`
 					},
 					{
 						n: c.instances,
 						label:
-							m.projectsDeleteCountInstances?.({ n: c.instances }) ??
+							projectsDeleteCountInstances?.({ n: c.instances }) ??
 							`${c.instances} workflow entries`
 					}
 				].filter((r) => r.n > 0)}
 				{#if configRows.length === 0 && dataRows.length === 0}
 					<div class="text-muted-foreground">
-						{m.projectsDeleteNoDependencies?.() ?? 'No associated data.'}
+						{projectsDeleteNoDependencies?.() ?? 'No associated data.'}
 					</div>
 				{:else}
-					<div class="font-medium">{m.projectsDeleteAlsoDeleted?.() ?? 'Also deleted:'}</div>
+					<div class="font-medium">{projectsDeleteAlsoDeleted?.() ?? 'Also deleted:'}</div>
 					<ul class="list-disc space-y-0.5 pl-5 text-muted-foreground">
 						{#each configRows as r (r.label)}
 							<li>{r.label}</li>
@@ -223,7 +247,7 @@
 				{#if c.instances > 0}
 					<div class="space-y-2 border-t pt-2">
 						<label for="project-delete-confirm" class="block text-sm">
-							{m.deleteConfirmPrompt?.() ??
+							{deleteConfirmPrompt?.() ??
 								'To confirm, type the number of workflow entries (shown above) below:'}
 						</label>
 						<input
@@ -233,7 +257,7 @@
 							pattern="[0-9]*"
 							autocomplete="off"
 							bind:value={projectDeleteConfirmInput}
-							placeholder={m.deleteConfirmPlaceholder?.() ?? 'Number'}
+							placeholder={deleteConfirmPlaceholder?.() ?? 'Number'}
 							class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 						/>
 					</div>
@@ -242,14 +266,14 @@
 		</div>
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel disabled={deletingProject}>
-				{m.commonCancel?.() ?? 'Cancel'}
+				{commonCancel?.() ?? 'Cancel'}
 			</AlertDialog.Cancel>
 			<AlertDialog.Action
 				class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 				onclick={handleDeleteProject}
 				disabled={deletingProject || !projectDeleteConfirmOk}
 			>
-				{m.commonDelete?.() ?? 'Delete'}
+				{commonDelete?.() ?? 'Delete'}
 			</AlertDialog.Action>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>

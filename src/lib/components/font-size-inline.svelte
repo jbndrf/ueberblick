@@ -2,23 +2,23 @@
 	import { fontSizeStore } from '$lib/stores/font-size.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { ALargeSmall } from '@lucide/svelte';
-	import * as m from '$lib/paraglide/messages';
+	import { fontSizeInlineL, fontSizeInlineLabel, fontSizeInlineM, fontSizeInlineS, fontSizeInlineXl, fontSizeInlineXs } from '$lib/paraglide/messages';
 
 	const currentSize = $derived(fontSizeStore.current);
 
 	const options = [
-		{ value: 'xs' as const, label: m.fontSizeInlineXs() },
-		{ value: 'small' as const, label: m.fontSizeInlineS() },
-		{ value: 'medium' as const, label: m.fontSizeInlineM() },
-		{ value: 'large' as const, label: m.fontSizeInlineL() },
-		{ value: 'xl' as const, label: m.fontSizeInlineXl() }
+		{ value: 'xs' as const, label: fontSizeInlineXs() },
+		{ value: 'small' as const, label: fontSizeInlineS() },
+		{ value: 'medium' as const, label: fontSizeInlineM() },
+		{ value: 'large' as const, label: fontSizeInlineL() },
+		{ value: 'xl' as const, label: fontSizeInlineXl() }
 	];
 </script>
 
 <div class="flex items-center justify-between">
 	<div class="flex items-center gap-2 text-sm">
 		<ALargeSmall class="h-4 w-4" />
-		<span>{m.fontSizeInlineLabel()}</span>
+		<span>{fontSizeInlineLabel()}</span>
 	</div>
 	<div class="flex gap-1">
 		{#each options as option}

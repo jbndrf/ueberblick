@@ -19,9 +19,18 @@ export type ToolUsageAction =
 
 export interface ToolUsageMetadata {
 	action?: ToolUsageAction;
-	changes?: Array<{ field_key: string; field_name?: string }>;
+	changes?: Array<{ field_def_id: string; field_name?: string }>;
 	to_stage_name?: string;
 	[key: string]: unknown;
+}
+
+/**
+ * Minimal field-def shape used to label a field by id. The full FieldDef lives
+ * in `$lib/participant-state/types`; we only need id + label here.
+ */
+export interface FieldDefLike {
+	id: string;
+	label?: string;
 }
 
 export interface ToolUsageLabelStrings {
@@ -42,7 +51,7 @@ export interface ToolUsageLabelStrings {
 export function toolUsageLabel(
 	metadata: ToolUsageMetadata | null | undefined,
 	strings: ToolUsageLabelStrings,
-	formFields?: Array<{ id: string; field_label?: string }>
+	fieldDefById?: Map<string, FieldDefLike>
 ): string {
 	if (!metadata?.action) return strings.action;
 	switch (metadata.action) {
@@ -56,8 +65,9 @@ export function toolUsageLabel(
 			if (changes.length === 1) {
 				const change = changes[0];
 				const fromName = change.field_name;
-				const fromDef = formFields?.find((f) => f.id === change.field_key);
-				const label = fromName || fromDef?.field_label || strings.fieldFallback;
+				const fromDef = fieldDefById?.get(change.field_def_id);
+				const label =
+					fromName || fromDef?.label || change.field_def_id || strings.fieldFallback;
 				return `${label} ${strings.updatedSuffix}`;
 			}
 			const count = changes.length || '';

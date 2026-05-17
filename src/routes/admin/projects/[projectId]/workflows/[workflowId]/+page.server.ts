@@ -1,6 +1,28 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import * as m from '$lib/paraglide/messages';
+import {
+	workflowDetailServerFailedToImportCsv,
+	workflowDetailServerFailedToLoad,
+	workflowDetailServerFailedToUpdateFieldValue,
+	workflowDetailServerFailedToUpdateFilterValueIcons,
+	workflowDetailServerFailedToUpdateIconConfig,
+	workflowDetailServerFailedToUpdateStageIconConfig,
+	workflowDetailServerFailedToUpdateWorkflow,
+	workflowDetailServerFieldNameRequired,
+	workflowDetailServerInstanceAndFieldRequired,
+	workflowDetailServerInvalidField,
+	workflowDetailServerInvalidFilterValueIconsJson,
+	workflowDetailServerInvalidIconConfigJson,
+	workflowDetailServerNoDataProvided,
+	workflowDetailServerNoDataRows,
+	workflowDetailServerNoStartStage,
+	workflowDetailServerStageIdRequired,
+	workflowDetailServerWorkflowNotFound,
+	workflowsDeleteError,
+	workflowsServer_duplicate_error,
+	workflowsServer_import_error,
+	workflowsServer_sourceWorkflowId_required
+} from '$lib/paraglide/messages';
 import {
 	ADMIN_INSTANCE_PAGE_SIZE,
 	buildRowsFromInstances,
@@ -19,13 +41,14 @@ export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) 
 		});
 
 		if (!workflow) {
-			throw error(404, m.workflowDetailServerWorkflowNotFound?.() ?? 'Workflow not found');
+			throw error(404, workflowDetailServerWorkflowNotFound?.() ?? 'Workflow not found');
 		}
 
 		// Phase 1: everything that doesn't depend on instance IDs runs in parallel.
-		// formFields is fetched via the relation filter `form_id.workflow_id = "X"`
-		// instead of waiting on the forms query and OR-batching by form id.
-		const [stages, forms, formFields, instancesResult, roles] = await Promise.all([
+		// Field defs come from the workflow-scoped registry; refs only carry
+		// per-form layout. We fetch both so admin tables can keep showing one
+		// column per field definition.
+		const [stages, forms, formFieldRefs, workflowFieldDefs, instancesResult, roles] = await Promise.all([
 			pb.collection('workflow_stages').getFullList({
 				filter: `workflow_id = "${workflowId}"`,
 				fields: 'id,stage_name,stage_type',
@@ -36,10 +59,14 @@ export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) 
 				fields: 'id,stage_id,connection_id',
 				expand: 'connection_id'
 			}),
-			pb.collection('tools_form_fields').getFullList({
+			pb.collection('tools_form_field_refs').getFullList({
 				filter: `form_id.workflow_id = "${workflowId}"`,
-				fields: 'id,field_label,field_type,field_options,form_id',
+				fields: 'id,field_def_id,form_id,field_order',
 				sort: 'field_order'
+			}),
+			pb.collection('workflow_field_defs').getFullList({
+				filter: `workflow_id = "${workflowId}"`,
+				fields: 'id,label,field_type,field_options'
 			}),
 			pb.collection('workflow_instances').getList(1, ADMIN_INSTANCE_PAGE_SIZE, {
 				filter: `workflow_id = "${workflowId}"`,
@@ -55,7 +82,9 @@ export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) 
 		const instances = instancesResult.items;
 		const totalInstances = instancesResult.totalItems;
 
-		// Build fieldStageMap: form_field.id -> stage_id
+		// Build fieldStageMap: field_def_id -> stage_id (first form-stage that
+		// references the def). TODO(field-def-redesign): consider sourcing from
+		// `display_stage_id` on the field def directly.
 		const formStageMap = new Map<string, string>();
 		for (const form of forms) {
 			if (form.stage_id) {
@@ -65,35 +94,34 @@ export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) 
 			}
 		}
 		const fieldStageMap: Record<string, string> = {};
-		for (const ff of formFields) {
-			const stageId = formStageMap.get(ff.form_id);
-			if (stageId) {
-				fieldStageMap[ff.id] = stageId;
+		for (const ref of formFieldRefs) {
+			const stageId = formStageMap.get(ref.form_id);
+			if (stageId && ref.field_def_id) {
+				fieldStageMap[ref.field_def_id] = stageId;
 			}
 		}
 
-		// Build unique field definitions for columns
+		// Build unique field definitions for columns from the workflow-scoped
+		// field-def registry.
 		const fieldDefsMap = new Map<
 			string,
 			{ id: string; label: string; type: string; fieldOptions: any; resolvedEntities?: any[] }
 		>();
-		for (const ff of formFields) {
-			if (!fieldDefsMap.has(ff.id)) {
-				let fieldOptions = ff.field_options;
-				if (typeof fieldOptions === 'string') {
-					try {
-						fieldOptions = JSON.parse(fieldOptions);
-					} catch {
-						fieldOptions = null;
-					}
+		for (const def of workflowFieldDefs) {
+			let fieldOptions = (def as any).field_options;
+			if (typeof fieldOptions === 'string') {
+				try {
+					fieldOptions = JSON.parse(fieldOptions);
+				} catch {
+					fieldOptions = null;
 				}
-				fieldDefsMap.set(ff.id, {
-					id: ff.id,
-					label: ff.field_label,
-					type: ff.field_type,
-					fieldOptions
-				});
 			}
+			fieldDefsMap.set(def.id, {
+				id: def.id,
+				label: (def as any).label ?? '',
+				type: (def as any).field_type ?? 'short_text',
+				fieldOptions
+			});
 		}
 		const fieldDefs = Array.from(fieldDefsMap.values());
 
@@ -207,7 +235,7 @@ export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) 
 	} catch (err: any) {
 		if (err?.status) throw err;
 		console.error('Error loading workflow data:', err);
-		throw error(500, m.workflowDetailServerFailedToLoad?.() ?? 'Failed to load workflow');
+		throw error(500, workflowDetailServerFailedToLoad?.() ?? 'Failed to load workflow');
 	}
 };
 
@@ -222,7 +250,7 @@ export const actions: Actions = {
 		const stageId = formData.get('stage_id') as string;
 
 		if (!instanceId || !fieldKey) {
-			return fail(400, { message: m.workflowDetailServerInstanceAndFieldRequired?.() ?? 'Instance ID and field key are required' });
+			return fail(400, { message: workflowDetailServerInstanceAndFieldRequired?.() ?? 'Instance ID and field key are required' });
 		}
 
 		try {
@@ -238,25 +266,32 @@ export const actions: Actions = {
 				}
 			});
 
-			// Step 2: Update or create field value
+			// Step 2: Update or create field value. `fieldKey` is the field_def_id.
+			// Source `write_mode` from the def so observation-mode fields don't get
+			// silently coerced to singletons on inline admin edits.
 			if (existingRecordId) {
-				await pb.collection('workflow_instance_field_values').update(existingRecordId, {
+				await pb.collection('workflow_field_values').update(existingRecordId, {
 					value: newValue
 				});
 			} else {
-				await pb.collection('workflow_instance_field_values').create({
+				const def = await pb
+					.collection('workflow_field_defs')
+					.getOne(fieldKey, { fields: 'write_mode', requestKey: null });
+				const writeMode = (def as any).write_mode ?? 'singleton';
+				await pb.collection('workflow_field_values').create({
 					instance_id: instanceId,
-					field_key: fieldKey,
-					stage_id: stageId || null,
-					value: newValue,
-					created_by_action: toolUsage.id
+					field_def_id: fieldKey,
+					recorded_at_stage: stageId || null,
+					recorded_by_action: toolUsage.id,
+					write_mode: writeMode,
+					value: newValue
 				});
 			}
 
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating field value:', err);
-			return fail(500, { message: m.workflowDetailServerFailedToUpdateFieldValue?.() ?? 'Failed to update field value' });
+			return fail(500, { message: workflowDetailServerFailedToUpdateFieldValue?.() ?? 'Failed to update field value' });
 		}
 	},
 
@@ -269,7 +304,7 @@ export const actions: Actions = {
 		try {
 			iconConfig = iconConfigJson ? JSON.parse(iconConfigJson) : {};
 		} catch {
-			return fail(400, { message: m.workflowDetailServerInvalidIconConfigJson?.() ?? 'Invalid icon config JSON' });
+			return fail(400, { message: workflowDetailServerInvalidIconConfigJson?.() ?? 'Invalid icon config JSON' });
 		}
 
 		try {
@@ -279,7 +314,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating workflow icon config:', err);
-			return fail(500, { message: m.workflowDetailServerFailedToUpdateIconConfig?.() ?? 'Failed to update icon config' });
+			return fail(500, { message: workflowDetailServerFailedToUpdateIconConfig?.() ?? 'Failed to update icon config' });
 		}
 	},
 
@@ -289,14 +324,14 @@ export const actions: Actions = {
 		const iconConfigJson = formData.get('iconConfig') as string;
 
 		if (!stageId) {
-			return fail(400, { message: m.workflowDetailServerStageIdRequired?.() ?? 'Stage ID is required' });
+			return fail(400, { message: workflowDetailServerStageIdRequired?.() ?? 'Stage ID is required' });
 		}
 
 		let iconConfig: Record<string, unknown> | null;
 		try {
 			iconConfig = iconConfigJson ? JSON.parse(iconConfigJson) : null;
 		} catch {
-			return fail(400, { message: m.workflowDetailServerInvalidIconConfigJson?.() ?? 'Invalid icon config JSON' });
+			return fail(400, { message: workflowDetailServerInvalidIconConfigJson?.() ?? 'Invalid icon config JSON' });
 		}
 
 		try {
@@ -313,7 +348,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating stage icon config:', err);
-			return fail(500, { message: m.workflowDetailServerFailedToUpdateStageIconConfig?.() ?? 'Failed to update stage icon config' });
+			return fail(500, { message: workflowDetailServerFailedToUpdateStageIconConfig?.() ?? 'Failed to update stage icon config' });
 		}
 	},
 
@@ -326,7 +361,7 @@ export const actions: Actions = {
 		try {
 			filterValueIcons = iconsJson ? JSON.parse(iconsJson) : {};
 		} catch {
-			return fail(400, { message: m.workflowDetailServerInvalidFilterValueIconsJson?.() ?? 'Invalid filter value icons JSON' });
+			return fail(400, { message: workflowDetailServerInvalidFilterValueIconsJson?.() ?? 'Invalid filter value icons JSON' });
 		}
 
 		try {
@@ -336,7 +371,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating filter value icons:', err);
-			return fail(500, { message: m.workflowDetailServerFailedToUpdateFilterValueIcons?.() ?? 'Failed to update filter value icons' });
+			return fail(500, { message: workflowDetailServerFailedToUpdateFilterValueIcons?.() ?? 'Failed to update filter value icons' });
 		}
 	},
 
@@ -348,14 +383,14 @@ export const actions: Actions = {
 		const targetStageId = formData.get('targetStageId') as string;
 
 		if (!rowsJson) {
-			return fail(400, { message: m.workflowDetailServerNoDataProvided?.() ?? 'No data provided' });
+			return fail(400, { message: workflowDetailServerNoDataProvided?.() ?? 'No data provided' });
 		}
 
 		try {
 			const rows: Array<Record<string, string>> = JSON.parse(rowsJson);
 
 			if (rows.length === 0) {
-				return fail(400, { message: m.workflowDetailServerNoDataRows?.() ?? 'No data rows to import' });
+				return fail(400, { message: workflowDetailServerNoDataRows?.() ?? 'No data rows to import' });
 			}
 
 			// Fetch stages and resolve target stage
@@ -365,11 +400,11 @@ export const actions: Actions = {
 			});
 			const startStage = stages.find((s) => s.stage_type === 'start');
 			if (!startStage) {
-				return fail(400, { message: m.workflowDetailServerNoStartStage?.() ?? 'Workflow has no start stage' });
+				return fail(400, { message: workflowDetailServerNoStartStage?.() ?? 'Workflow has no start stage' });
 			}
 			const instanceStageId = targetStageId || startStage.id;
 
-			// Build fieldStageMap: field_id -> stage_id (same logic as load function)
+			// Build fieldStageMap: field_def_id -> stage_id (same logic as load function)
 			const forms = await pb.collection('tools_forms').getFullList({
 				filter: `workflow_id = "${workflowId}"`,
 				fields: 'id,stage_id,connection_id',
@@ -384,20 +419,20 @@ export const actions: Actions = {
 				}
 			}
 			const formIds = forms.map((f: any) => f.id);
-			let formFields: any[] = [];
+			let formFieldRefs: any[] = [];
 			if (formIds.length > 0) {
 				const filterParts = formIds.map((id: string) => `form_id = "${id}"`);
-				formFields = await pb.collection('tools_form_fields').getFullList({
+				formFieldRefs = await pb.collection('tools_form_field_refs').getFullList({
 					filter: filterParts.join(' || '),
-					fields: 'id,form_id',
+					fields: 'id,form_id,field_def_id',
 					requestKey: null
 				});
 			}
 			const fieldStageMap: Record<string, string> = {};
-			for (const ff of formFields) {
-				const stageId = formStageMap.get(ff.form_id);
-				if (stageId) {
-					fieldStageMap[ff.id] = stageId;
+			for (const ref of formFieldRefs) {
+				const stageId = formStageMap.get(ref.form_id);
+				if (stageId && ref.field_def_id) {
+					fieldStageMap[ref.field_def_id] = stageId;
 				}
 			}
 
@@ -408,15 +443,26 @@ export const actions: Actions = {
 					fields: 'id'
 				});
 				for (const inst of existing) {
-					const fieldValues = await pb.collection('workflow_instance_field_values').getFullList({
+					const fieldValues = await pb.collection('workflow_field_values').getFullList({
 						filter: `instance_id = "${inst.id}"`,
 						fields: 'id'
 					});
 					for (const fv of fieldValues) {
-						await pb.collection('workflow_instance_field_values').delete(fv.id);
+						await pb.collection('workflow_field_values').delete(fv.id);
 					}
 					await pb.collection('workflow_instances').delete(inst.id);
 				}
+			}
+			// CSV import keys columns by field_def_id. Look up write_mode from the
+			// def per column so observations are created with the right mode.
+			const csvFieldDefs = await pb.collection('workflow_field_defs').getFullList({
+				filter: `workflow_id = "${workflowId}"`,
+				fields: 'id,write_mode',
+				requestKey: null
+			});
+			const writeModeByDefId = new Map<string, string>();
+			for (const d of csvFieldDefs) {
+				writeModeByDefId.set(d.id, (d as any).write_mode ?? 'singleton');
 			}
 
 			// Determine which keys are special (lat, lon) vs form fields.
@@ -448,10 +494,11 @@ export const actions: Actions = {
 				for (const [key, value] of Object.entries(row)) {
 					if (specialKeys.has(key) || !value) continue;
 
-					await pb.collection('workflow_instance_field_values').create({
+					await pb.collection('workflow_field_values').create({
 						instance_id: instance.id,
-						field_key: key,
-						stage_id: fieldStageMap[key] || instanceStageId,
+						field_def_id: key,
+						recorded_at_stage: fieldStageMap[key] || instanceStageId,
+						write_mode: writeModeByDefId.get(key) ?? 'singleton',
 						value: value
 					});
 				}
@@ -463,7 +510,7 @@ export const actions: Actions = {
 		} catch (err) {
 			console.error('Error importing CSV:', err);
 			return fail(500, {
-				message: err instanceof Error ? err.message : (m.workflowDetailServerFailedToImportCsv?.() ?? 'Failed to import CSV')
+				message: err instanceof Error ? err.message : (workflowDetailServerFailedToImportCsv?.() ?? 'Failed to import CSV')
 			});
 		}
 	},
@@ -475,7 +522,7 @@ export const actions: Actions = {
 			return { success: true, duplicatedWorkflowId: newId };
 		} catch (err) {
 			console.error('Error duplicating workflow:', err);
-			return fail(500, { message: m.workflowsServer_duplicate_error?.() ?? 'Failed to duplicate workflow' });
+			return fail(500, { message: workflowsServer_duplicate_error?.() ?? 'Failed to duplicate workflow' });
 		}
 	},
 
@@ -485,7 +532,7 @@ export const actions: Actions = {
 		const sourceWorkflowId = formData.get('sourceWorkflowId') as string;
 
 		if (!sourceWorkflowId) {
-			return fail(400, { message: m.workflowsServer_sourceWorkflowId_required?.() ?? 'Source workflow ID is required' });
+			return fail(400, { message: workflowsServer_sourceWorkflowId_required?.() ?? 'Source workflow ID is required' });
 		}
 
 		try {
@@ -493,7 +540,7 @@ export const actions: Actions = {
 			return { success: true, importedWorkflowId: newId };
 		} catch (err) {
 			console.error('Error importing workflow:', err);
-			return fail(500, { message: m.workflowsServer_import_error?.() ?? 'Failed to import workflow' });
+			return fail(500, { message: workflowsServer_import_error?.() ?? 'Failed to import workflow' });
 		}
 	},
 
@@ -507,7 +554,7 @@ export const actions: Actions = {
 			await pb.collection('workflows').delete(workflowId);
 		} catch (err) {
 			console.error('Error deleting workflow:', err);
-			return fail(500, { message: m.workflowsDeleteError?.() ?? 'Failed to delete workflow' });
+			return fail(500, { message: workflowsDeleteError?.() ?? 'Failed to delete workflow' });
 		}
 		throw redirect(303, `/admin/projects/${projectId}/settings`);
 	},
@@ -519,12 +566,12 @@ export const actions: Actions = {
 		const value = formData.get('value') as string;
 
 		if (!field) {
-			return fail(400, { message: m.workflowDetailServerFieldNameRequired?.() ?? 'Field name is required' });
+			return fail(400, { message: workflowDetailServerFieldNameRequired?.() ?? 'Field name is required' });
 		}
 
 		const allowedFields = ['name', 'description', 'is_active', 'workflow_type', 'geometry_type', 'private_instances', 'visible_to_roles'];
 		if (!allowedFields.includes(field)) {
-			return fail(400, { message: m.workflowDetailServerInvalidField?.() ?? 'Invalid field' });
+			return fail(400, { message: workflowDetailServerInvalidField?.() ?? 'Invalid field' });
 		}
 
 		try {
@@ -557,7 +604,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating workflow metadata:', err);
-			return fail(500, { message: m.workflowDetailServerFailedToUpdateWorkflow?.() ?? 'Failed to update workflow' });
+			return fail(500, { message: workflowDetailServerFailedToUpdateWorkflow?.() ?? 'Failed to update workflow' });
 		}
 	}
 };

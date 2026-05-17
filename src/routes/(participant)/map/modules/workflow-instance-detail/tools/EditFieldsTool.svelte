@@ -2,10 +2,11 @@
 	/**
 	 * EditFieldsTool
 	 *
-	 * Edits existing field values using FormRenderer in edit mode.
-	 * Only shows fields that are marked as editable in the tool config.
-	 * Supports tabbed UI when fields come from multiple stages.
-	 * Designed to be rendered within a ModuleShell.
+	 * TODO(field-def-redesign): tools_edit was dropped. This file is a thin
+	 * legacy wrapper that still renders an edit form from a list of field defs
+	 * but should be replaced by a regular Form tool referencing the same defs.
+	 * Singleton-write_mode field defs will upsert naturally through the unified
+	 * write helper in WorkflowInstanceDetailModule.
 	 */
 	import { onMount } from 'svelte';
 	import { FormRenderer } from '$lib/components/form-renderer';
@@ -15,7 +16,7 @@
 	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
 	import type { FormFieldWithValue } from '$lib/components/form-renderer';
 	import type { ToolEdit, FormField, FieldValue, EditableFieldsByStage } from '../state.svelte';
-	import * as m from '$lib/paraglide/messages';
+	import { commonCancel, commonSave, participantEditFieldsToolFieldRequired, participantEditFieldsToolLoading, participantEditFieldsToolNoFields, participantEditFieldsToolSaving } from '$lib/paraglide/messages';
 
 	// ==========================================================================
 	// Props
@@ -77,7 +78,7 @@
 	function attachValuesToFields(fields: FormField[]): FormFieldWithValue[] {
 		return fields.map(field => {
 			// Get ALL existing values for this field (supports multiple files)
-			const fieldValuesForField = existingFieldValues.filter(fv => fv.field_key === field.id);
+			const fieldValuesForField = existingFieldValues.filter(fv => (fv as any).field_def_id === field.id);
 
 			// Aggregate all file records
 			const storedFiles = fieldValuesForField
@@ -137,13 +138,15 @@
 		// the full instance context. Editability is enforced at save time.
 		for (const fv of existingFieldValues) {
 			if (!fv.value) continue;
+			const key = (fv as any).field_def_id as string | undefined;
+			if (!key) continue;
 			try {
-				initialValues[fv.field_key] =
+				initialValues[key] =
 					fv.value.startsWith('[') || fv.value.startsWith('{')
 						? JSON.parse(fv.value)
 						: fv.value;
 			} catch {
-				initialValues[fv.field_key] = fv.value;
+				initialValues[key] = fv.value;
 			}
 		}
 
@@ -179,11 +182,11 @@
 			// Required check
 			if (field.is_required) {
 				if (value === null || value === undefined || value === '') {
-					newErrors[field.id] = (m.participantEditFieldsToolFieldRequired?.() ?? 'This field is required');
+					newErrors[field.id] = (participantEditFieldsToolFieldRequired?.() ?? 'This field is required');
 					continue;
 				}
 				if (Array.isArray(value) && value.length === 0) {
-					newErrors[field.id] = (m.participantEditFieldsToolFieldRequired?.() ?? 'This field is required');
+					newErrors[field.id] = (participantEditFieldsToolFieldRequired?.() ?? 'This field is required');
 					continue;
 				}
 			}
@@ -231,7 +234,7 @@
 				<div
 					class="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2"
 				></div>
-				<p class="text-sm text-muted-foreground">{m.participantEditFieldsToolLoading?.() ?? 'Loading...'}</p>
+				<p class="text-sm text-muted-foreground">{participantEditFieldsToolLoading?.() ?? 'Loading...'}</p>
 			</div>
 		</div>
 	{:else if hasFields}
@@ -278,7 +281,7 @@
 		{/if}
 	{:else}
 		<div class="flex-1 flex items-center justify-center p-4 py-12">
-			<p class="text-sm text-muted-foreground">{m.participantEditFieldsToolNoFields?.() ?? 'No editable fields configured.'}</p>
+			<p class="text-sm text-muted-foreground">{participantEditFieldsToolNoFields?.() ?? 'No editable fields configured.'}</p>
 		</div>
 	{/if}
 {/snippet}
@@ -293,7 +296,7 @@
 				class="flex-1"
 			>
 				<X class="w-4 h-4 mr-1" />
-				{m.commonCancel?.() ?? 'Cancel'}
+				{commonCancel?.() ?? 'Cancel'}
 			</Button>
 
 			<Button
@@ -303,10 +306,10 @@
 			>
 				{#if isSubmitting}
 					<Loader2 class="w-4 h-4 mr-2 animate-spin" />
-					{m.participantEditFieldsToolSaving?.() ?? 'Saving...'}
+					{participantEditFieldsToolSaving?.() ?? 'Saving...'}
 				{:else}
 					<Save class="w-4 h-4 mr-2" />
-					{m.commonSave?.() ?? 'Save'}
+					{commonSave?.() ?? 'Save'}
 				{/if}
 			</Button>
 		</div>

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Shield, Pencil, ArrowRight } from '@lucide/svelte';
 	import type { AutomationAction } from '$lib/workflow-builder';
-	import * as m from '$lib/paraglide/messages';
+	import { automationActionTypePaletteLabel, automationActionTypePaletteSetField, automationActionTypePaletteSetStage, automationActionTypePaletteSetStatus } from '$lib/paraglide/messages';
 
 	type StageOption = { id: string; name: string };
 
@@ -16,7 +16,7 @@
 	const ACTION_TYPES = [
 		{
 			type: 'set_instance_status' as const,
-			label: m.automationActionTypePaletteSetStatus?.() ?? 'Set Status',
+			label: automationActionTypePaletteSetStatus?.() ?? 'Set Status',
 			icon: Shield,
 			create: (): AutomationAction => ({
 				type: 'set_instance_status',
@@ -25,8 +25,10 @@
 		},
 		{
 			type: 'set_field_value' as const,
-			label: m.automationActionTypePaletteSetField?.() ?? 'Set Field',
+			label: automationActionTypePaletteSetField?.() ?? 'Set Field',
 			icon: Pencil,
+			// TODO(field-def-redesign): rename `field_key` to `field_def_id` once the
+			// AutomationAction storage schema is migrated.
 			create: (): AutomationAction => ({
 				type: 'set_field_value',
 				params: { field_key: '', value: '' }
@@ -34,7 +36,7 @@
 		},
 		{
 			type: 'set_stage' as const,
-			label: m.automationActionTypePaletteSetStage?.() ?? 'Set Stage',
+			label: automationActionTypePaletteSetStage?.() ?? 'Set Stage',
 			icon: ArrowRight,
 			create: (): AutomationAction => ({
 				type: 'set_stage',
@@ -45,7 +47,7 @@
 </script>
 
 <div class="action-palette">
-	<span class="palette-label">{m.automationActionTypePaletteLabel?.() ?? 'Add action'}</span>
+	<span class="palette-label">{automationActionTypePaletteLabel?.() ?? 'Add action'}</span>
 	<div class="palette-buttons">
 		{#each ACTION_TYPES as at}
 			{@const Icon = at.icon}

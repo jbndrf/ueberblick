@@ -1,7 +1,35 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		commonCancel,
+		commonCreate,
+		commonDelete,
+		commonSave,
+		infoPagesContentHint,
+		infoPagesCreate,
+		infoPagesCreateError,
+		infoPagesCreateSuccess,
+		infoPagesDeleteError,
+		infoPagesDeleteSuccess,
+		infoPagesDescription,
+		infoPagesEdit,
+		infoPagesEmpty,
+		infoPagesEmptyDescription,
+		infoPagesFieldContent,
+		infoPagesFieldContentPlaceholder,
+		infoPagesFieldTitle,
+		infoPagesFieldTitlePlaceholder,
+		infoPagesSort,
+		infoPagesTitle,
+		infoPagesUpdateError,
+		infoPagesUpdateSuccess,
+		infoPagesVarLoginLink,
+		infoPagesVarQrLoginLink,
+		infoPagesVarQrToken,
+		infoPagesVarToken,
+		infoPagesVariablesTitle
+	} from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Input } from '$lib/components/ui/input';
@@ -30,23 +58,23 @@
 </script>
 
 <SettingsSection
-	name={m.infoPagesTitle?.() ?? 'Info Pages'}
-	description={m.infoPagesDescription?.() ??
+	name={infoPagesTitle?.() ?? 'Info Pages'}
+	description={infoPagesDescription?.() ??
 		'Manage informational pages shown to participants (e.g. privacy policy, imprint)'}
 >
 	{#snippet actions()}
 		<Button onclick={openCreate}>
 			<Plus class="mr-2 h-4 w-4" />
-			{m.infoPagesCreate?.() ?? 'Add Info Page'}
+			{infoPagesCreate?.() ?? 'Add Info Page'}
 		</Button>
 	{/snippet}
 
 	{#if data.infoPages.length === 0}
 		<div class="rounded-lg border border-dashed p-8 text-center">
 			<FileText class="mx-auto h-12 w-12 text-muted-foreground" />
-			<h3 class="mt-2 text-sm font-semibold">{m.infoPagesEmpty?.() ?? 'No info pages'}</h3>
+			<h3 class="mt-2 text-sm font-semibold">{infoPagesEmpty?.() ?? 'No info pages'}</h3>
 			<p class="mt-1 text-sm text-muted-foreground">
-				{m.infoPagesEmptyDescription?.() ??
+				{infoPagesEmptyDescription?.() ??
 					'Create info pages to display legal or informational content to participants'}
 			</p>
 		</div>
@@ -63,7 +91,7 @@
 									{stripHtml(page.content)}
 								</p>
 								<p class="mt-1 text-xs text-muted-foreground">
-									{m.infoPagesSort?.() ?? 'Sort Order'}: {page.sort_order || 0}
+									{infoPagesSort?.() ?? 'Sort Order'}: {page.sort_order || 0}
 								</p>
 							</div>
 						</div>
@@ -79,19 +107,19 @@
 										return async ({ result }) => {
 											if (result.type === 'success') {
 												toast.success(
-													m.infoPagesDeleteSuccess?.() ?? 'Info page deleted successfully'
+													infoPagesDeleteSuccess?.() ?? 'Info page deleted successfully'
 												);
 												deleteConfirmId = null;
 												await invalidateAll();
 											} else {
-												toast.error(m.infoPagesDeleteError?.() ?? 'Failed to delete info page');
+												toast.error(infoPagesDeleteError?.() ?? 'Failed to delete info page');
 											}
 										};
 									}}
 								>
 									<input type="hidden" name="id" value={page.id} />
 									<Button variant="destructive" size="sm" type="submit">
-										{m.commonDelete?.() ?? 'Delete'}
+										{commonDelete?.() ?? 'Delete'}
 									</Button>
 								</form>
 							{:else}
@@ -112,8 +140,8 @@
 		<Dialog.Header>
 			<Dialog.Title>
 				{editingPage
-					? (m.infoPagesEdit?.() ?? 'Edit Info Page')
-					: (m.infoPagesCreate?.() ?? 'Add Info Page')}
+					? (infoPagesEdit?.() ?? 'Edit Info Page')
+					: (infoPagesCreate?.() ?? 'Add Info Page')}
 			</Dialog.Title>
 		</Dialog.Header>
 
@@ -126,8 +154,8 @@
 					if (result.type === 'success') {
 						toast.success(
 							editingPage
-								? (m.infoPagesUpdateSuccess?.() ?? 'Info page updated successfully')
-								: (m.infoPagesCreateSuccess?.() ?? 'Info page created successfully')
+								? (infoPagesUpdateSuccess?.() ?? 'Info page updated successfully')
+								: (infoPagesCreateSuccess?.() ?? 'Info page created successfully')
 						);
 						dialogOpen = false;
 						editingPage = null;
@@ -135,8 +163,8 @@
 					} else {
 						toast.error(
 							editingPage
-								? (m.infoPagesUpdateError?.() ?? 'Failed to update info page')
-								: (m.infoPagesCreateError?.() ?? 'Failed to create info page')
+								? (infoPagesUpdateError?.() ?? 'Failed to update info page')
+								: (infoPagesCreateError?.() ?? 'Failed to create info page')
 						);
 					}
 				};
@@ -147,51 +175,51 @@
 			{/if}
 
 			<div class="space-y-2">
-				<Label for="title">{m.infoPagesFieldTitle?.() ?? 'Title'}</Label>
+				<Label for="title">{infoPagesFieldTitle?.() ?? 'Title'}</Label>
 				<Input
 					id="title"
 					name="title"
 					required
-					placeholder={m.infoPagesFieldTitlePlaceholder?.() ?? 'e.g. Privacy Policy, Imprint'}
+					placeholder={infoPagesFieldTitlePlaceholder?.() ?? 'e.g. Privacy Policy, Imprint'}
 					value={editingPage?.title ?? ''}
 				/>
 			</div>
 
 			<div class="space-y-2">
-				<Label for="content">{m.infoPagesFieldContent?.() ?? 'Content'}</Label>
+				<Label for="content">{infoPagesFieldContent?.() ?? 'Content'}</Label>
 				<Textarea
 					id="content"
 					name="content"
 					required
 					rows={8}
 					class="max-h-[40vh]"
-					placeholder={m.infoPagesFieldContentPlaceholder?.() ?? 'HTML content of the page...'}
+					placeholder={infoPagesFieldContentPlaceholder?.() ?? 'HTML content of the page...'}
 					value={editingPage?.content ?? ''}
 				/>
 				<p class="text-xs text-muted-foreground">
-					{m.infoPagesContentHint?.() ??
+					{infoPagesContentHint?.() ??
 						'HTML is supported. You can use tags for links, paragraphs, bold, italic, lists, and headings.'}
 				</p>
 				<div class="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
 					<p class="mb-1 font-medium text-foreground">
-						{m.infoPagesVariablesTitle?.() ?? 'Per-participant variables'}
+						{infoPagesVariablesTitle?.() ?? 'Per-participant variables'}
 					</p>
 					<ul class="space-y-1">
 						<li>
 							<code class="font-mono">$token</code> —
-							{m.infoPagesVarToken?.() ?? "the viewer's access token"}
+							{infoPagesVarToken?.() ?? "the viewer's access token"}
 						</li>
 						<li>
 							<code class="font-mono">$loginlink</code> —
-							{m.infoPagesVarLoginLink?.() ?? 'a one-click login URL with the token embedded'}
+							{infoPagesVarLoginLink?.() ?? 'a one-click login URL with the token embedded'}
 						</li>
 						<li>
 							<code class="font-mono">$qrtoken</code> —
-							{m.infoPagesVarQrToken?.() ?? 'QR code of the access token (scan on the login page)'}
+							{infoPagesVarQrToken?.() ?? 'QR code of the access token (scan on the login page)'}
 						</li>
 						<li>
 							<code class="font-mono">$qrloginlink</code> —
-							{m.infoPagesVarQrLoginLink?.() ??
+							{infoPagesVarQrLoginLink?.() ??
 								'QR code of the login URL (camera scan auto-authenticates)'}
 						</li>
 					</ul>
@@ -199,7 +227,7 @@
 			</div>
 
 			<div class="space-y-2">
-				<Label for="sort_order">{m.infoPagesSort?.() ?? 'Sort Order'}</Label>
+				<Label for="sort_order">{infoPagesSort?.() ?? 'Sort Order'}</Label>
 				<Input
 					id="sort_order"
 					name="sort_order"
@@ -211,10 +239,10 @@
 
 			<Dialog.Footer>
 				<Button variant="outline" type="button" onclick={() => (dialogOpen = false)}>
-					{m.commonCancel?.() ?? 'Cancel'}
+					{commonCancel?.() ?? 'Cancel'}
 				</Button>
 				<Button type="submit">
-					{editingPage ? (m.commonSave?.() ?? 'Save') : (m.commonCreate?.() ?? 'Create')}
+					{editingPage ? (commonSave?.() ?? 'Save') : (commonCreate?.() ?? 'Create')}
 				</Button>
 			</Dialog.Footer>
 		</form>

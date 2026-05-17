@@ -2,7 +2,7 @@
 	import { FileText, Camera, ImagePlus, X, ChevronLeft, ChevronRight } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
-	import * as m from '$lib/paraglide/messages';
+	import { mediaGalleryCamera, mediaGalleryFiles } from '$lib/paraglide/messages';
 	import * as Carousel from '$lib/components/ui/carousel';
 	import type { CarouselAPI } from '$lib/components/ui/carousel/context';
 	import type { MediaFile, FormMode } from './types';
@@ -304,12 +304,12 @@
 				{#if acceptsImages}
 					<Button variant="outline" size="sm" class="flex-1" onclick={handleCameraClick}>
 						<Camera class="w-4 h-4 mr-1" />
-						{m.mediaGalleryCamera()}
+						{mediaGalleryCamera()}
 					</Button>
 				{/if}
 				<Button variant="outline" size="sm" class="flex-1" onclick={handleFileClick}>
 					<ImagePlus class="w-4 h-4 mr-1" />
-					{m.mediaGalleryFiles()}
+					{mediaGalleryFiles()}
 				</Button>
 			</div>
 		{/if}

@@ -113,7 +113,7 @@ onRecordAfterCreateSuccess((e) => {
     auto.bumpLastActivity(instanceId);
   }
   e.next();
-}, "workflow_instance_field_values");
+}, "workflow_field_values");
 
 // Bump last_activity_at when a field value is updated
 onRecordAfterUpdateSuccess((e) => {
@@ -123,7 +123,7 @@ onRecordAfterUpdateSuccess((e) => {
     auto.bumpLastActivity(instanceId);
   }
   e.next();
-}, "workflow_instance_field_values");
+}, "workflow_field_values");
 
 // Set last_activity_at when an instance is created
 onRecordAfterCreateSuccess((e) => {
@@ -293,18 +293,15 @@ onRecordAfterUpdateSuccess((e) => {
         }
       } catch (err) { console.warn("[Protocol] Failed to load stages:", err); }
 
+      // Post Phase-1 redesign: labels live on workflow_field_defs (single
+      // registry per workflow); no need to walk through forms anymore.
       var fieldMap = {};
       try {
-        var forms = $app.findRecordsByFilter("tools_forms", "workflow_id = {:wfId}", "", 200, 0, { wfId: workflowId });
-        for (var fi = 0; fi < forms.length; fi++) {
-          try {
-            var formFields = $app.findRecordsByFilter("tools_form_fields", "form_id = {:fId}", "", 200, 0, { fId: forms[fi].id });
-            for (var ff = 0; ff < formFields.length; ff++) {
-              fieldMap[formFields[ff].id] = formFields[ff].get("field_label");
-            }
-          } catch (err) { /* no fields for this form */ }
+        var fieldDefs = $app.findRecordsByFilter("workflow_field_defs", "workflow_id = {:wfId}", "", 500, 0, { wfId: workflowId });
+        for (var fd = 0; fd < fieldDefs.length; fd++) {
+          fieldMap[fieldDefs[fd].id] = fieldDefs[fd].get("label");
         }
-      } catch (err) { console.warn("[Protocol] Failed to load form fields:", err); }
+      } catch (err) { console.warn("[Protocol] Failed to load field defs:", err); }
 
       var participantMap = {};
       // Collect unique participant IDs first, then batch-resolve
@@ -379,7 +376,7 @@ onRecordAfterUpdateSuccess((e) => {
       entry.set("recorded_at", new Date().toISOString());
       entry.set("snapshot", snapshotJson);
       entry.set("snapshot_hash", hashHex);
-      entry.set("field_values", {});
+      // Phase-1 redesign: field_values JSON dropped; values land in workflow_field_values.
       $app.save(entry);
 
       console.log("[Protocol] Global '" + protocol.get("name") + "' on instance " + instanceId + " (" + auditLog.length + " audit entries, entered at " + entryTimestamp + ")");
@@ -397,11 +394,17 @@ onRecordAfterUpdateSuccess((e) => {
 // on_field_change trigger
 // =============================================================================
 
-onRecordAfterCreateSuccess((e) => {
+// Post Phase-1 redesign: the on_field_change trigger fires on writes to
+// workflow_field_values. Field identity is now `field_def_id`. Automation
+// configs continue to use the legacy `field_key` config name (it stores a
+// field_def_id, just hasn't been renamed in the JSON shape — admin editor
+// labels it as "field" for users anyway).
+
+function fireOnFieldChange(e) {
   const auto = require(`${__hooks}/automation.js`);
   const instanceId = e.record.get("instance_id");
-  const fieldKey = e.record.get("field_key");
-  const stageId = e.record.get("stage_id");
+  const fieldDefId = e.record.get("field_def_id");
+  const stageId = e.record.get("recorded_at_stage");
 
   if (!instanceId) { e.next(); return; }
 
@@ -423,7 +426,10 @@ onRecordAfterCreateSuccess((e) => {
       if (!config) continue;
 
       const stageMatch = !config.stage_id || config.stage_id === stageId;
-      const fieldMatch = !config.field_key || config.field_key === fieldKey;
+      // config.field_key now holds a field_def_id (the admin editor writes
+      // the def's id into this slot). Keep the param name for storage
+      // compatibility; semantics moved with the value space.
+      const fieldMatch = !config.field_key || config.field_key === fieldDefId;
 
       if (stageMatch && fieldMatch) {
         auto.runAutomation(automation, instanceId, stageId);
@@ -436,48 +442,10 @@ onRecordAfterCreateSuccess((e) => {
   }
 
   e.next();
-}, "workflow_instance_field_values");
+}
 
-onRecordAfterUpdateSuccess((e) => {
-  const auto = require(`${__hooks}/automation.js`);
-  const instanceId = e.record.get("instance_id");
-  const fieldKey = e.record.get("field_key");
-  const stageId = e.record.get("stage_id");
-
-  if (!instanceId) { e.next(); return; }
-
-  try {
-    const instance = $app.findRecordById("workflow_instances", instanceId);
-    const workflowId = instance.get("workflow_id");
-
-    const automations = $app.findRecordsByFilter(
-      "tools_automation",
-      'workflow_id = {:wfId} && trigger_type = "on_field_change" && is_enabled = true',
-      "",
-      20,
-      0,
-      { wfId: workflowId }
-    );
-
-    for (const automation of automations) {
-      var config = auto.parseJsonField(automation.get("trigger_config"));
-      if (!config) continue;
-
-      const stageMatch = !config.stage_id || config.stage_id === stageId;
-      const fieldMatch = !config.field_key || config.field_key === fieldKey;
-
-      if (stageMatch && fieldMatch) {
-        auto.runAutomation(automation, instanceId, stageId);
-      }
-    }
-  } catch (err) {
-    if (("" + err).indexOf("Missing collection") === -1) {
-      console.error("[Automation] on_field_change error:", err);
-    }
-  }
-
-  e.next();
-}, "workflow_instance_field_values");
+onRecordAfterCreateSuccess(fireOnFieldChange, "workflow_field_values");
+onRecordAfterUpdateSuccess(fireOnFieldChange, "workflow_field_values");
 
 // =============================================================================
 // scheduled trigger (per-automation cron expressions)

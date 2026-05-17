@@ -1,7 +1,19 @@
 <script lang="ts">
 	import { ArrowLeft, ArrowRight, Wrench, Plus } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		stagePreviewAddButtonPickerBack,
+		stagePreviewAddButtonPickerChooseType,
+		stagePreviewAddButtonPickerNewStage,
+		stagePreviewAddButtonPickerNoTools,
+		stagePreviewAddButtonPickerSelectTargetStage,
+		stagePreviewAddButtonPickerSelectToolType,
+		stagePreviewAddButtonPickerStageToolDesc,
+		stagePreviewAddButtonPickerStageToolLabel,
+		stagePreviewAddButtonPickerTitle,
+		stagePreviewAddButtonPickerTransitionDesc,
+		stagePreviewAddButtonPickerTransitionLabel
+	} from '$lib/paraglide/messages';
 	import type { WorkflowStage } from '$lib/workflow-builder';
 	import { toolRegistry } from '$lib/workflow-builder/tools';
 
@@ -49,13 +61,13 @@
 		}}
 	>
 		<ArrowLeft class="w-3.5 h-3.5" />
-		<span>{view === 'pick' ? (m.stagePreviewAddButtonPickerBack?.() ?? 'Back') : (m.stagePreviewAddButtonPickerChooseType?.() ?? 'Choose type')}</span>
+		<span>{view === 'pick' ? (stagePreviewAddButtonPickerBack?.() ?? 'Back') : (stagePreviewAddButtonPickerChooseType?.() ?? 'Choose type')}</span>
 	</button>
 
 	<div class="picker-content">
 		{#if view === 'pick'}
 			<!-- Top-level picker: Transition or Stage Tool -->
-			<h4 class="picker-title">{m.stagePreviewAddButtonPickerTitle?.() ?? 'Add a button'}</h4>
+			<h4 class="picker-title">{stagePreviewAddButtonPickerTitle?.() ?? 'Add a button'}</h4>
 
 			<div class="picker-options">
 				<button class="picker-option" onclick={() => (view = 'transition')}>
@@ -63,8 +75,8 @@
 						<ArrowRight class="w-4 h-4" />
 					</div>
 					<div class="picker-option-text">
-						<span class="picker-option-label">{m.stagePreviewAddButtonPickerTransitionLabel?.() ?? 'Transition'}</span>
-						<span class="picker-option-desc">{m.stagePreviewAddButtonPickerTransitionDesc?.() ?? 'Move to another stage'}</span>
+						<span class="picker-option-label">{stagePreviewAddButtonPickerTransitionLabel?.() ?? 'Transition'}</span>
+						<span class="picker-option-desc">{stagePreviewAddButtonPickerTransitionDesc?.() ?? 'Move to another stage'}</span>
 					</div>
 				</button>
 
@@ -73,19 +85,19 @@
 						<Wrench class="w-4 h-4" />
 					</div>
 					<div class="picker-option-text">
-						<span class="picker-option-label">{m.stagePreviewAddButtonPickerStageToolLabel?.() ?? 'Stage Tool'}</span>
-						<span class="picker-option-desc">{m.stagePreviewAddButtonPickerStageToolDesc?.() ?? 'Use a tool at this stage'}</span>
+						<span class="picker-option-label">{stagePreviewAddButtonPickerStageToolLabel?.() ?? 'Stage Tool'}</span>
+						<span class="picker-option-desc">{stagePreviewAddButtonPickerStageToolDesc?.() ?? 'Use a tool at this stage'}</span>
 					</div>
 				</button>
 			</div>
 		{:else if view === 'transition'}
 			<!-- Target stage selection -->
-			<h4 class="picker-title">{m.stagePreviewAddButtonPickerSelectTargetStage?.() ?? 'Select target stage'}</h4>
+			<h4 class="picker-title">{stagePreviewAddButtonPickerSelectTargetStage?.() ?? 'Select target stage'}</h4>
 
 			<div class="target-list">
 				<button class="target-item target-item-create" onclick={handleCreateNewStage}>
 					<Plus class="w-3.5 h-3.5 text-muted-foreground" />
-					<span class="target-name">{m.stagePreviewAddButtonPickerNewStage?.() ?? 'New Stage'}</span>
+					<span class="target-name">{stagePreviewAddButtonPickerNewStage?.() ?? 'New Stage'}</span>
 				</button>
 				{#each availableTargetStages as target}
 					<button class="target-item" onclick={() => handleSelectTarget(target.id)}>
@@ -97,11 +109,11 @@
 			</div>
 		{:else if view === 'stage-tool'}
 			<!-- Stage tool selection (registry-driven) -->
-			<h4 class="picker-title">{m.stagePreviewAddButtonPickerSelectToolType?.() ?? 'Select tool type'}</h4>
+			<h4 class="picker-title">{stagePreviewAddButtonPickerSelectToolType?.() ?? 'Select tool type'}</h4>
 
 			{#if stageTools.length === 0}
 				<p class="text-xs text-muted-foreground py-4 text-center">
-					{m.stagePreviewAddButtonPickerNoTools?.() ?? 'No stage tools available.'}
+					{stagePreviewAddButtonPickerNoTools?.() ?? 'No stage tools available.'}
 				</p>
 			{:else}
 				<div class="picker-options">

@@ -1,7 +1,23 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		navProjectSettings,
+		settingsGroupDanger,
+		settingsGroupFeatures,
+		settingsGroupGeneral,
+		settingsGroupMap,
+		settingsNavBranding,
+		settingsNavChat,
+		settingsNavCluster,
+		settingsNavDangerZone,
+		settingsNavFieldFilters,
+		settingsNavInfoPages,
+		settingsNavLayers,
+		settingsNavMapDefaults,
+		settingsNavOfflinePacks,
+		settingsNavStartup
+	} from '$lib/paraglide/messages';
 	import {
 		Image,
 		Rocket,
@@ -80,76 +96,76 @@
 
 	const groups = $derived<SidebarGroup[]>([
 		{
-			caption: m.settingsGroupGeneral?.() ?? 'Allgemein',
+			caption: settingsGroupGeneral?.() ?? 'Allgemein',
 			items: [
 				{
 					id: 'branding',
-					label: m.settingsNavBranding?.() ?? 'Branding',
+					label: settingsNavBranding?.() ?? 'Branding',
 					icon: Image
 				},
 				{
 					id: 'startup',
-					label: m.settingsNavStartup?.() ?? 'Erststart',
+					label: settingsNavStartup?.() ?? 'Erststart',
 					icon: Rocket
 				}
 			]
 		},
 		{
-			caption: m.settingsGroupMap?.() ?? 'Karte',
+			caption: settingsGroupMap?.() ?? 'Karte',
 			items: [
 				{
 					id: 'layers',
-					label: m.settingsNavLayers?.() ?? 'Kartenebenen',
+					label: settingsNavLayers?.() ?? 'Kartenebenen',
 					icon: Layers
 				},
 				{
 					id: 'map-defaults',
-					label: m.settingsNavMapDefaults?.() ?? 'Standardansicht',
+					label: settingsNavMapDefaults?.() ?? 'Standardansicht',
 					icon: Map
 				}
 			]
 		},
 		{
-			caption: m.settingsGroupFeatures?.() ?? 'Funktionen',
+			caption: settingsGroupFeatures?.() ?? 'Funktionen',
 			items: [
 				{
 					id: 'chat',
-					label: m.settingsNavChat?.() ?? 'Chat',
+					label: settingsNavChat?.() ?? 'Chat',
 					icon: MessageSquare,
 					status: chatStatus
 				},
 				{
 					id: 'info-pages',
-					label: m.settingsNavInfoPages?.() ?? 'Info-Seiten',
+					label: settingsNavInfoPages?.() ?? 'Info-Seiten',
 					icon: FileText,
 					status: infoPagesStatus
 				},
 				{
 					id: 'offline-packs',
-					label: m.settingsNavOfflinePacks?.() ?? 'Offline-Pakete',
+					label: settingsNavOfflinePacks?.() ?? 'Offline-Pakete',
 					icon: Package,
 					status: offlinePacksStatus
 				},
 				{
 					id: 'field-filters',
-					label: m.settingsNavFieldFilters?.() ?? 'Filter & Felder',
+					label: settingsNavFieldFilters?.() ?? 'Filter & Felder',
 					icon: Filter,
 					status: fieldFiltersStatus
 				},
 				{
 					id: 'cluster',
-					label: m.settingsNavCluster?.() ?? 'Cluster',
+					label: settingsNavCluster?.() ?? 'Cluster',
 					icon: CircleDot,
 					status: clusterStatus
 				}
 			]
 		},
 		{
-			caption: m.settingsGroupDanger?.() ?? 'Gefahrenzone',
+			caption: settingsGroupDanger?.() ?? 'Gefahrenzone',
 			items: [
 				{
 					id: 'danger-zone',
-					label: m.settingsNavDangerZone?.() ?? 'Projekt löschen',
+					label: settingsNavDangerZone?.() ?? 'Projekt löschen',
 					icon: AlertTriangle,
 					tone: 'destructive'
 				}
@@ -161,7 +177,7 @@
 <div class="flex w-full min-w-0 flex-col gap-6">
 	<div>
 		<h1 class="text-3xl font-bold tracking-tight">
-			{m.navProjectSettings?.() ?? 'Project Settings'}
+			{navProjectSettings?.() ?? 'Project Settings'}
 		</h1>
 	</div>
 

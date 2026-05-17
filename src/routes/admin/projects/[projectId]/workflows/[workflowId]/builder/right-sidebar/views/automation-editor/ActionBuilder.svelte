@@ -2,10 +2,23 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Trash2 } from '@lucide/svelte';
 	import { ExpressionInput } from '$lib/components/expression-input';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		automationActionBuilderFieldLabel,
+		automationActionBuilderSelectField,
+		automationActionBuilderSelectStage,
+		automationActionBuilderSetFieldValue,
+		automationActionBuilderSetStage,
+		automationActionBuilderSetStatus,
+		automationActionBuilderStageLabel,
+		automationActionBuilderStatusLabel,
+		automationActionBuilderValueLabel,
+		automationActionBuilderValuePlaceholder
+	} from '$lib/paraglide/messages';
 
 	import type { AutomationAction } from '$lib/workflow-builder';
 
+	// TODO(field-def-redesign): `key` here will need to hold `field_def_id` once
+	// the AutomationAction storage shape is migrated from `field_key`.
 	type FieldOption = { key: string; label: string };
 	type StageOption = { id: string; name: string };
 
@@ -38,17 +51,17 @@
 				<div class="action-fields">
 					<span class="action-type-label">
 						{#if action.type === 'set_instance_status'}
-							{m.automationActionBuilderSetStatus?.() ?? 'Set Status'}
+							{automationActionBuilderSetStatus?.() ?? 'Set Status'}
 						{:else if action.type === 'set_field_value'}
-							{m.automationActionBuilderSetFieldValue?.() ?? 'Set Field Value'}
+							{automationActionBuilderSetFieldValue?.() ?? 'Set Field Value'}
 						{:else if action.type === 'set_stage'}
-							{m.automationActionBuilderSetStage?.() ?? 'Set Stage'}
+							{automationActionBuilderSetStage?.() ?? 'Set Stage'}
 						{/if}
 					</span>
 
 					{#if action.type === 'set_instance_status'}
 						<div class="action-param-row">
-							<span class="param-label">{m.automationActionBuilderStatusLabel?.() ?? 'Status:'}</span>
+							<span class="param-label">{automationActionBuilderStatusLabel?.() ?? 'Status:'}</span>
 							<select
 								class="status-select"
 								value={action.params.status}
@@ -66,7 +79,7 @@
 						</div>
 					{:else if action.type === 'set_field_value'}
 						<div class="action-param-row">
-							<span class="param-label">{m.automationActionBuilderFieldLabel?.() ?? 'Field:'}</span>
+							<span class="param-label">{automationActionBuilderFieldLabel?.() ?? 'Field:'}</span>
 							<select
 								class="field-select"
 								value={action.params.field_key}
@@ -77,14 +90,14 @@
 									});
 								}}
 							>
-								<option value="">{m.automationActionBuilderSelectField?.() ?? 'Select field...'}</option>
+								<option value="">{automationActionBuilderSelectField?.() ?? 'Select field...'}</option>
 								{#each fieldOptions as opt}
 									<option value={opt.key}>{opt.label}</option>
 								{/each}
 							</select>
 						</div>
 						<div class="action-param-row">
-							<span class="param-label">{m.automationActionBuilderValueLabel?.() ?? 'Value:'}</span>
+							<span class="param-label">{automationActionBuilderValueLabel?.() ?? 'Value:'}</span>
 						</div>
 						<ExpressionInput
 							value={action.params.value}
@@ -95,11 +108,11 @@
 									params: { ...action.params, value: v }
 								});
 							}}
-							placeholder={m.automationActionBuilderValuePlaceholder?.() ?? 'Value or expression...'}
+							placeholder={automationActionBuilderValuePlaceholder?.() ?? 'Value or expression...'}
 						/>
 					{:else if action.type === 'set_stage'}
 						<div class="action-param-row">
-							<span class="param-label">{m.automationActionBuilderStageLabel?.() ?? 'Stage:'}</span>
+							<span class="param-label">{automationActionBuilderStageLabel?.() ?? 'Stage:'}</span>
 							<select
 								class="stage-select"
 								value={action.params.stage_id}
@@ -110,7 +123,7 @@
 									});
 								}}
 							>
-								<option value="">{m.automationActionBuilderSelectStage?.() ?? 'Select stage...'}</option>
+								<option value="">{automationActionBuilderSelectStage?.() ?? 'Select stage...'}</option>
 								{#each stageOptions as stage}
 									<option value={stage.id}>{stage.name}</option>
 								{/each}

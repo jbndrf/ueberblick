@@ -6,6 +6,7 @@ module.exports = {
   bumpLastActivity,
   parseJsonField,
   lookupFieldValue,
+  lookupFieldHistory,
   isExpression,
   evaluateExpression,
   evaluateConditions,
@@ -282,6 +283,88 @@ var FUNCTIONS = {
       var diffMs = target.getTime() - today.getTime();
       return Math.round(diffMs / 86400000);
     }
+  },
+
+  // -------------------------------------------------------------------------
+  // Observation-history functions (Phase 2)
+  //
+  // All take a {field_def_id} reference and read from workflow_field_values
+  // for the current instance. Safe to use against singleton/computed fields
+  // too — those just have 1 row of history.
+  //
+  // The arg type "field_ref" tells the parser to extract the field id without
+  // resolving its value, so the function can do its own history query.
+  // -------------------------------------------------------------------------
+
+  obs_count: {
+    minArgs: 1, maxArgs: 1, argTypes: ["field_ref"],
+    fn: function(args, instanceId) {
+      return lookupFieldHistory(instanceId, args[0]).length;
+    }
+  },
+
+  obs_last: {
+    minArgs: 1, maxArgs: 1, argTypes: ["field_ref"],
+    fn: function(args, instanceId) {
+      var h = lookupFieldHistory(instanceId, args[0], 1);
+      if (h.length === 0) throw new Error("obs_last: no observations for field " + args[0]);
+      var n = parseFloat(h[0].value);
+      if (isNaN(n)) throw new Error("obs_last: non-numeric value '" + h[0].value + "'");
+      return n;
+    }
+  },
+
+  obs_first: {
+    minArgs: 1, maxArgs: 1, argTypes: ["field_ref"],
+    fn: function(args, instanceId) {
+      // Newest-first; take the tail.
+      var h = lookupFieldHistory(instanceId, args[0]);
+      if (h.length === 0) throw new Error("obs_first: no observations for field " + args[0]);
+      var v = h[h.length - 1].value;
+      var n = parseFloat(v);
+      if (isNaN(n)) throw new Error("obs_first: non-numeric value '" + v + "'");
+      return n;
+    }
+  },
+
+  obs_avg: {
+    minArgs: 1, maxArgs: 2, argTypes: ["field_ref", "numeric"],
+    fn: function(args, instanceId) {
+      var limit = args.length > 1 ? Math.floor(args[1]) : 0; // 0 = all
+      var h = lookupFieldHistory(instanceId, args[0], limit || 1000);
+      if (h.length === 0) throw new Error("obs_avg: no observations for field " + args[0]);
+      var total = 0; var count = 0;
+      for (var i = 0; i < h.length; i++) {
+        var n = parseFloat(h[i].value);
+        if (!isNaN(n)) { total += n; count++; }
+      }
+      if (count === 0) throw new Error("obs_avg: no numeric observations for field " + args[0]);
+      return total / count;
+    }
+  },
+
+  obs_delta: {
+    minArgs: 1, maxArgs: 1, argTypes: ["field_ref"],
+    fn: function(args, instanceId) {
+      var h = lookupFieldHistory(instanceId, args[0], 2);
+      if (h.length < 2) throw new Error("obs_delta: need ≥2 observations for field " + args[0]);
+      var newest = parseFloat(h[0].value);
+      var previous = parseFloat(h[1].value);
+      if (isNaN(newest) || isNaN(previous)) throw new Error("obs_delta: non-numeric value");
+      return newest - previous;
+    }
+  },
+
+  obs_since: {
+    minArgs: 1, maxArgs: 1, argTypes: ["field_ref"],
+    fn: function(args, instanceId) {
+      var h = lookupFieldHistory(instanceId, args[0], 1);
+      if (h.length === 0) throw new Error("obs_since: no observations for field " + args[0]);
+      var t = new Date(h[0].recorded_at);
+      if (isNaN(t.getTime())) throw new Error("obs_since: invalid recorded_at");
+      var now = new Date();
+      return Math.floor((now.getTime() - t.getTime()) / 86400000);
+    }
   }
 };
 
@@ -302,25 +385,68 @@ function isExpression(value) {
 
 /**
  * Look up a field value for an instance.
+ *
+ * Post Phase-1 redesign: the `fieldKey` parameter is a `workflow_field_defs.id`
+ * (kept the legacy parameter name for API stability across the codebase). The
+ * lookup orders by `recorded_at DESC` so:
+ *   - singleton/computed fields naturally return the (only) row,
+ *   - observation fields return the latest reading.
+ * Use `lookupFieldHistory()` (sibling) for `obs_*` history functions in the
+ * expression engine.
+ *
  * @returns {string} The field value or "" if not found.
  */
 function lookupFieldValue(instanceId, fieldKey) {
   try {
     const records = $app.findRecordsByFilter(
-      "workflow_instance_field_values",
-      'instance_id = {:instId} && field_key = {:fKey}',
-      "-updated",
+      "workflow_field_values",
+      'instance_id = {:instId} && field_def_id = {:fdId}',
+      "-recorded_at",
       1,
       0,
-      { instId: instanceId, fKey: fieldKey }
+      { instId: instanceId, fdId: fieldKey }
     );
     if (records.length > 0) {
       return records[0].get("value") || "";
     }
   } catch (err) {
-    // Field not found
+    // Field def not found, or no value yet — fall through.
   }
   return "";
+}
+
+/**
+ * Look up the observation history for an instance × field def, newest first.
+ * Used by `obs_*` expression functions; safe for singleton/computed fields too
+ * (they'll just return a 1-element array).
+ *
+ * @param {string} instanceId
+ * @param {string} fieldDefId
+ * @param {number} [limit=1000] max rows
+ * @returns {Array<{value: string, recorded_at: string}>}
+ */
+function lookupFieldHistory(instanceId, fieldDefId, limit) {
+  var n = (typeof limit === "number" && limit > 0) ? Math.min(limit, 1000) : 1000;
+  try {
+    var records = $app.findRecordsByFilter(
+      "workflow_field_values",
+      'instance_id = {:instId} && field_def_id = {:fdId}',
+      "-recorded_at",
+      n,
+      0,
+      { instId: instanceId, fdId: fieldDefId }
+    );
+    var out = [];
+    for (var i = 0; i < records.length; i++) {
+      out.push({
+        value: records[i].get("value") || "",
+        recorded_at: records[i].get("recorded_at") || records[i].get("created")
+      });
+    }
+    return out;
+  } catch (err) {
+    return [];
+  }
 }
 
 /**
@@ -402,6 +528,15 @@ function evaluateExpression(expr, instanceId) {
       var numResult = parseAdditive();
       return String(numResult);
     }
+    if (expectedType === "field_ref") {
+      // History-aware functions take a literal {field_def_id} reference and
+      // do their own lookup against workflow_field_values.
+      skipWhitespace();
+      if (peek() !== "{") {
+        throw new Error(funcName + ": argument " + argIndex + " must be a field reference like {field_key}");
+      }
+      return extractFieldKey();
+    }
     return parseAdditive();
   }
 
@@ -454,7 +589,9 @@ function evaluateExpression(expr, instanceId) {
       throw new Error("Function '" + name + "' accepts at most " + funcDef.maxArgs + " argument(s), got " + args.length);
     }
 
-    return funcDef.fn(args);
+    // Pass `instanceId` as a second positional context arg so history
+    // functions can read observations. Pre-existing functions ignore it.
+    return funcDef.fn(args, instanceId);
   }
 
   function parsePrimary() {
@@ -726,54 +863,81 @@ function executeActions(actions, instanceId) {
           }
         }
 
-        let fieldRecords = [];
+        // Post Phase-1 redesign: params.field_key now carries a
+        // workflow_field_defs.id. Look up the def to learn write_mode; route
+        // singletons/computed through upsert, observations through append.
+        const fieldDefId = action.params.field_key;
+        var fieldDef = null;
         try {
-          fieldRecords = $app.findRecordsByFilter(
-            "workflow_instance_field_values",
-            'instance_id = {:instId} && field_key = {:fKey}',
-            "",
-            1,
-            0,
-            { instId: instanceId, fKey: action.params.field_key }
-          );
+          fieldDef = $app.findRecordById("workflow_field_defs", fieldDefId);
         } catch (err) {
-          // Not found
+          // No matching def — likely stale automation referring to deleted field.
         }
+        if (!fieldDef) {
+          results.push({ type: action.type, params: action.params, success: false, error: "Unknown field_def_id: " + fieldDefId });
+          continue;
+        }
+        const writeMode = fieldDef.get("write_mode") || "singleton";
 
-        if (fieldRecords.length > 0) {
-          const record = fieldRecords[0];
-          record.set("value", resolvedValue);
-          noHooksApp.save(record);
-          bumpUpdatedTimestamp("workflow_instance_field_values", record.id);
-        } else {
-          // Resolve stage_id from the field's form attachment, fall back to instance's current stage
-          var stageId = "";
-          try {
-            var fieldRecord = $app.findFirstRecordByFilter("tools_form_fields", 'id = {:fKey}', { fKey: action.params.field_key });
-            if (fieldRecord) {
-              var formRecord = $app.findRecordById("tools_forms", fieldRecord.get("form_id"));
-              if (formRecord.get("stage_id")) {
-                stageId = formRecord.get("stage_id");
-              } else if (formRecord.get("connection_id")) {
-                var conn = $app.findRecordById("workflow_connections", formRecord.get("connection_id"));
-                stageId = conn.get("to_stage_id");
-              }
-            }
-          } catch (err) {
-            // Could not resolve from form, fall back
-          }
-          if (!stageId) {
-            var inst = $app.findRecordById("workflow_instances", instanceId);
-            stageId = inst.get("current_stage_id");
-          }
-          const collection = $app.findCollectionByNameOrId("workflow_instance_field_values");
+        // Stage attribution: prefer the def's display_stage; fall back to the
+        // instance's current stage. Automations don't run "on a connection",
+        // so there's no transition target to borrow.
+        var stageId = fieldDef.get("display_stage_id") || "";
+        if (!stageId) {
+          var inst = $app.findRecordById("workflow_instances", instanceId);
+          stageId = inst.get("current_stage_id");
+        }
+        var nowIso = new Date().toISOString();
+
+        if (writeMode === "observation") {
+          // Always append.
+          const collection = $app.findCollectionByNameOrId("workflow_field_values");
           const record = new Record(collection);
           record.set("instance_id", instanceId);
-          record.set("field_key", action.params.field_key);
+          record.set("field_def_id", fieldDefId);
+          record.set("write_mode", "observation");
           record.set("value", resolvedValue);
-          record.set("stage_id", stageId);
+          record.set("recorded_at", nowIso);
+          record.set("recorded_at_stage", stageId);
           $app.save(record);
+        } else {
+          // singleton / computed: upsert by (instance, field_def). The partial
+          // unique index in 1779000000 enforces uniqueness; we still do the
+          // lookup to keep id stability for `bumpUpdatedTimestamp`.
+          let existing = [];
+          try {
+            existing = $app.findRecordsByFilter(
+              "workflow_field_values",
+              'instance_id = {:instId} && field_def_id = {:fdId}',
+              "",
+              1,
+              0,
+              { instId: instanceId, fdId: fieldDefId }
+            );
+          } catch (err) {
+            // not found
+          }
+
+          if (existing.length > 0) {
+            const record = existing[0];
+            record.set("value", resolvedValue);
+            record.set("recorded_at", nowIso);
+            record.set("recorded_at_stage", stageId);
+            noHooksApp.save(record);
+            bumpUpdatedTimestamp("workflow_field_values", record.id);
+          } else {
+            const collection = $app.findCollectionByNameOrId("workflow_field_values");
+            const record = new Record(collection);
+            record.set("instance_id", instanceId);
+            record.set("field_def_id", fieldDefId);
+            record.set("write_mode", writeMode);
+            record.set("value", resolvedValue);
+            record.set("recorded_at", nowIso);
+            record.set("recorded_at_stage", stageId);
+            $app.save(record);
+          }
         }
+
         var paramsWithResolved = JSON.parse(JSON.stringify(action.params));
         paramsWithResolved.resolved_value = resolvedValue;
         results.push({ type: action.type, params: paramsWithResolved, success: true });

@@ -191,133 +191,135 @@ export async function seedSicherheit(): Promise<SicherheitSeedResult> {
 
 	const fields = new Map<string, string>();
 
+	// Helper to create def + ref in one step
+	async function createFieldDefAndRef(
+		def: Record<string, unknown>,
+		ref: Record<string, unknown>
+	) {
+		const fieldDef = await pb.collection('workflow_field_defs').create({
+			workflow_id: wf.id,
+			write_mode: 'singleton',
+			...def
+		});
+		await pb.collection('tools_form_field_refs').create({
+			form_id: entryForm.id,
+			field_def_id: fieldDef.id,
+			...ref
+		});
+		return fieldDef;
+	}
+
 	// Page 1: Gefaehrdungsermittlung
-	const gefFaktorField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Gefaehrdungsfaktor',
-		field_type: 'dropdown',
-		is_required: true,
-		field_order: 1,
-		page: 1,
-		page_title: 'Gefaehrdungsermittlung',
-		row_index: 0,
-		column_position: 'full',
-		field_options: { options: GEFAEHRDUNGSFAKTOR_OPTIONS }
-	});
-	fields.set('gefaehrdungsfaktor', gefFaktorField.id);
+	const gefFaktorDef = await createFieldDefAndRef(
+		{
+			key: 'gefaehrdungsfaktor',
+			label: 'Gefaehrdungsfaktor',
+			field_type: 'dropdown',
+			is_required: true,
+			field_options: { options: GEFAEHRDUNGSFAKTOR_OPTIONS }
+		},
+		{ field_order: 1, page: 1, page_title: 'Gefaehrdungsermittlung', row_index: 0, column_position: 'full' }
+	);
+	fields.set('gefaehrdungsfaktor', gefFaktorDef.id);
 
 	// smart_dropdown: Detailtyp depends on Gefaehrdungsfaktor
-	const detailtypField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Detailtyp',
-		field_type: 'smart_dropdown',
-		is_required: true,
-		field_order: 2,
-		page: 1,
-		row_index: 1,
-		column_position: 'full',
-		field_options: {
-			source_field: gefFaktorField.id,
-			mappings: DETAILTYP_MAPPINGS
-		}
-	});
-	fields.set('detailtyp', detailtypField.id);
+	const detailtypDef = await createFieldDefAndRef(
+		{
+			key: 'detailtyp',
+			label: 'Detailtyp',
+			field_type: 'smart_dropdown',
+			is_required: true,
+			field_options: {
+				source_field: gefFaktorDef.id,
+				mappings: DETAILTYP_MAPPINGS
+			}
+		},
+		{ field_order: 2, page: 1, row_index: 1, column_position: 'full' }
+	);
+	fields.set('detailtyp', detailtypDef.id);
 
-	const raumField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Raum',
-		field_type: 'short_text',
-		is_required: true,
-		field_order: 3,
-		page: 1,
-		row_index: 2,
-		column_position: 'full'
-	});
-	fields.set('raum', raumField.id);
+	const raumDef = await createFieldDefAndRef(
+		{
+			key: 'raum',
+			label: 'Raum',
+			field_type: 'short_text',
+			is_required: true
+		},
+		{ field_order: 3, page: 1, row_index: 2, column_position: 'full' }
+	);
+	fields.set('raum', raumDef.id);
 
 	// Page 2: Risikobewertung (Nohl)
-	const eintrittsField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Eintrittswahrscheinlichkeit',
-		field_type: 'dropdown',
-		is_required: true,
-		field_order: 4,
-		page: 2,
-		page_title: 'Risikobewertung',
-		row_index: 0,
-		column_position: 'left',
-		help_text: 'Nohl-Skala: 1 (sehr gering) bis 4 (hoch)',
-		field_options: { options: EINTRITTSWAHRSCHEINLICHKEIT_OPTIONS }
-	});
-	fields.set('eintrittswahrscheinlichkeit', eintrittsField.id);
+	const eintrittsDef = await createFieldDefAndRef(
+		{
+			key: 'eintrittswahrscheinlichkeit',
+			label: 'Eintrittswahrscheinlichkeit',
+			field_type: 'dropdown',
+			is_required: true,
+			field_options: { options: EINTRITTSWAHRSCHEINLICHKEIT_OPTIONS }
+		},
+		{ field_order: 4, page: 2, page_title: 'Risikobewertung', row_index: 0, column_position: 'left' }
+	);
+	fields.set('eintrittswahrscheinlichkeit', eintrittsDef.id);
 
-	const schwereField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Schadensschwere',
-		field_type: 'dropdown',
-		is_required: true,
-		field_order: 5,
-		page: 2,
-		row_index: 0,
-		column_position: 'right',
-		help_text: 'Nohl-Skala: 1 (leicht) bis 4 (Tod)',
-		field_options: { options: SCHADENSSCHWERE_OPTIONS }
-	});
-	fields.set('schadensschwere', schwereField.id);
+	const schwereDef = await createFieldDefAndRef(
+		{
+			key: 'schadensschwere',
+			label: 'Schadensschwere',
+			field_type: 'dropdown',
+			is_required: true,
+			field_options: { options: SCHADENSSCHWERE_OPTIONS }
+		},
+		{ field_order: 5, page: 2, row_index: 0, column_position: 'right' }
+	);
+	fields.set('schadensschwere', schwereDef.id);
 
 	// Calculated fields
-	const risikomasszahlField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Risikomasszahl',
-		field_type: 'number',
-		is_required: false,
-		field_order: 6,
-		page: 2,
-		row_index: 1,
-		column_position: 'left',
-		help_text: 'Automatisch: E + S - 1 (Nohl, Spanne 1-7)'
-	});
-	fields.set('risikomasszahl', risikomasszahlField.id);
+	const risikomasszahlDef = await createFieldDefAndRef(
+		{
+			key: 'risikomasszahl',
+			label: 'Risikomasszahl',
+			field_type: 'number',
+			is_required: false
+		},
+		{ field_order: 6, page: 2, row_index: 1, column_position: 'left' }
+	);
+	fields.set('risikomasszahl', risikomasszahlDef.id);
 
-	const risikoklasseField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Risikoklasse',
-		field_type: 'dropdown',
-		is_required: false,
-		field_order: 7,
-		page: 2,
-		row_index: 1,
-		column_position: 'right',
-		help_text: 'Automatisch: Gering / Erheblich / Hoch',
-		field_options: { options: RISIKOKLASSE_OPTIONS }
-	});
-	fields.set('risikoklasse', risikoklasseField.id);
+	const risikoklasseDef = await createFieldDefAndRef(
+		{
+			key: 'risikoklasse',
+			label: 'Risikoklasse',
+			field_type: 'dropdown',
+			is_required: false,
+			field_options: { options: RISIKOKLASSE_OPTIONS }
+		},
+		{ field_order: 7, page: 2, row_index: 1, column_position: 'right' }
+	);
+	fields.set('risikoklasse', risikoklasseDef.id);
 
 	// Page 3: Dokumentation
-	const fotoField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Foto',
-		field_type: 'file',
-		is_required: false,
-		field_order: 8,
-		page: 3,
-		page_title: 'Dokumentation',
-		row_index: 0,
-		column_position: 'full'
-	});
-	fields.set('foto', fotoField.id);
+	const fotoDef = await createFieldDefAndRef(
+		{
+			key: 'foto',
+			label: 'Foto',
+			field_type: 'file',
+			is_required: false
+		},
+		{ field_order: 8, page: 3, page_title: 'Dokumentation', row_index: 0, column_position: 'full' }
+	);
+	fields.set('foto', fotoDef.id);
 
-	const beschreibungField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Beschreibung',
-		field_type: 'long_text',
-		is_required: false,
-		field_order: 9,
-		page: 3,
-		row_index: 1,
-		column_position: 'full'
-	});
-	fields.set('beschreibung', beschreibungField.id);
+	const beschreibungDef = await createFieldDefAndRef(
+		{
+			key: 'beschreibung',
+			label: 'Beschreibung',
+			field_type: 'long_text',
+			is_required: false
+		},
+		{ field_order: 9, page: 3, row_index: 1, column_position: 'full' }
+	);
+	fields.set('beschreibung', beschreibungDef.id);
 
 	// --- Transition form (-> Behoben): T-O-P Massnahmen ---
 	const behobentConnId = connectionIds.get('Massnahme geplant->Behoben')!;
@@ -328,35 +330,52 @@ export async function seedSicherheit(): Promise<SicherheitSeedResult> {
 		description: 'T-O-P Massnahme dokumentieren'
 	});
 
-	await pb.collection('tools_form_fields').create({
-		form_id: transitionForm.id,
-		field_label: 'Massnahmenart',
+	const massnahmenartDef = await pb.collection('workflow_field_defs').create({
+		workflow_id: wf.id,
+		key: 'massnahmenart',
+		label: 'Massnahmenart',
 		field_type: 'dropdown',
+		write_mode: 'singleton',
 		is_required: true,
+		field_options: { options: MASSNAHMENART_OPTIONS }
+	});
+	await pb.collection('tools_form_field_refs').create({
+		form_id: transitionForm.id,
+		field_def_id: massnahmenartDef.id,
 		field_order: 1,
 		page: 1,
 		row_index: 0,
-		column_position: 'full',
-		help_text: 'T-O-P Prinzip nach BetrSichV',
-		field_options: { options: MASSNAHMENART_OPTIONS }
+		column_position: 'full'
 	});
 
-	await pb.collection('tools_form_fields').create({
-		form_id: transitionForm.id,
-		field_label: 'Massnahmenbeschreibung',
+	const massnahmenbeschreibungDef = await pb.collection('workflow_field_defs').create({
+		workflow_id: wf.id,
+		key: 'massnahmenbeschreibung',
+		label: 'Massnahmenbeschreibung',
 		field_type: 'long_text',
-		is_required: true,
+		write_mode: 'singleton',
+		is_required: true
+	});
+	await pb.collection('tools_form_field_refs').create({
+		form_id: transitionForm.id,
+		field_def_id: massnahmenbeschreibungDef.id,
 		field_order: 2,
 		page: 1,
 		row_index: 1,
 		column_position: 'full'
 	});
 
-	await pb.collection('tools_form_fields').create({
-		form_id: transitionForm.id,
-		field_label: 'Nachweisfoto',
+	const nachweisfotoDef = await pb.collection('workflow_field_defs').create({
+		workflow_id: wf.id,
+		key: 'nachweisfoto',
+		label: 'Nachweisfoto',
 		field_type: 'file',
-		is_required: false,
+		write_mode: 'singleton',
+		is_required: false
+	});
+	await pb.collection('tools_form_field_refs').create({
+		form_id: transitionForm.id,
+		field_def_id: nachweisfotoDef.id,
 		field_order: 3,
 		page: 1,
 		row_index: 2,
@@ -369,7 +388,7 @@ export async function seedSicherheit(): Promise<SicherheitSeedResult> {
 		tag_mappings: [
 			{
 				tagType: 'filterable',
-				fieldId: risikoklasseField.id,
+				fieldId: risikoklasseDef.id,
 				config: { filterBy: 'field' }
 			}
 		]
@@ -483,12 +502,12 @@ export async function seedSicherheit(): Promise<SicherheitSeedResult> {
 			participantId,
 			location: { lat: coord.lat, lon: coord.lon },
 			fieldValues: [
-				{ key: fields.get('gefaehrdungsfaktor')!, value: inst.gefaehrdungsfaktor },
-				{ key: fields.get('detailtyp')!, value: inst.detailtyp },
-				{ key: fields.get('raum')!, value: inst.raum },
-				{ key: fields.get('eintrittswahrscheinlichkeit')!, value: inst.eintrittswahrscheinlichkeit },
-				{ key: fields.get('schadensschwere')!, value: inst.schadensschwere },
-				{ key: fields.get('beschreibung')!, value: inst.beschreibung }
+				{ fieldDefId: fields.get('gefaehrdungsfaktor')!, value: inst.gefaehrdungsfaktor },
+				{ fieldDefId: fields.get('detailtyp')!, value: inst.detailtyp },
+				{ fieldDefId: fields.get('raum')!, value: inst.raum },
+				{ fieldDefId: fields.get('eintrittswahrscheinlichkeit')!, value: inst.eintrittswahrscheinlichkeit },
+				{ fieldDefId: fields.get('schadensschwere')!, value: inst.schadensschwere },
+				{ fieldDefId: fields.get('beschreibung')!, value: inst.beschreibung }
 			]
 		});
 

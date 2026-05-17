@@ -142,7 +142,9 @@ const protocolTool: ToolDefinition = {
 
 // Register the built-in tools
 toolRegistry.register(formTool);
-toolRegistry.register(editTool);
+// editTool removed from palette in Phase 1 redesign (tools_edit collection dropped).
+// Use a Form tool referencing existing field defs instead.
+// toolRegistry.register(editTool);
 toolRegistry.register(protocolTool);
 toolRegistry.register(fieldTagTool);
 toolRegistry.register(automationTool);

@@ -2,7 +2,43 @@
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import { page } from '$app/stores';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		commonCancel,
+		commonCreate,
+		commonDelete,
+		commonSave,
+		customTablesCreated,
+		mapLayerVisibleToRoles,
+		markerCategoriesCreateCategory,
+		markerCategoriesCreateError,
+		markerCategoriesCreateSuccess,
+		markerCategoriesCreateYourFirst,
+		markerCategoriesDelete,
+		markerCategoriesDeleteConfirm,
+		markerCategoriesDeleteError,
+		markerCategoriesDeleteSuccess,
+		markerCategoriesDescription,
+		markerCategoriesDescriptionPlaceholder,
+		markerCategoriesDesignIcon,
+		markerCategoriesEdit,
+		markerCategoriesEditFields,
+		markerCategoriesEditInline,
+		markerCategoriesEditRoles,
+		markerCategoriesIcon,
+		markerCategoriesIconSaveError,
+		markerCategoriesIconSaveException,
+		markerCategoriesIconSaveSuccess,
+		markerCategoriesName,
+		markerCategoriesNamePlaceholder,
+		markerCategoriesNoCategories,
+		markerCategoriesNoIcon,
+		markerCategoriesRolesPlaceholder,
+		markerCategoriesTitle,
+		markerCategoriesUpdateError,
+		markerCategoriesUpdateSuccess,
+		rolesActions,
+		rolesDescription_field
+	} from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
@@ -62,7 +98,7 @@
 	const columns = $derived.by((): BaseColumnConfig<MarkerCategory>[] => [
 		{
 			id: 'icon_preview',
-			header: m.markerCategoriesIcon?.() ?? 'Icon',
+			header: markerCategoriesIcon?.() ?? 'Icon',
 			accessorFn: (row) => row.icon_config,
 			cellRenderer: iconCellRenderer,
 			fieldType: 'text',
@@ -74,7 +110,7 @@
 		},
 		{
 			id: 'name',
-			header: m.markerCategoriesName?.() ?? 'Name',
+			header: markerCategoriesName?.() ?? 'Name',
 			accessorKey: 'name',
 			fieldType: 'text',
 			capabilities: {
@@ -103,7 +139,7 @@
 		},
 		{
 			id: 'description',
-			header: m.rolesDescription_field(),
+			header: rolesDescription_field(),
 			accessorKey: 'description',
 			fieldType: 'text',
 			capabilities: {
@@ -132,7 +168,7 @@
 		},
 		{
 			id: 'visible_to_roles',
-			header: m.mapLayerVisibleToRoles?.() ?? 'Visible to Roles',
+			header: mapLayerVisibleToRoles?.() ?? 'Visible to Roles',
 			accessorFn: (row) => {
 				// Return the role IDs directly for entity selector
 				if (!row.visible_to_roles || row.visible_to_roles.length === 0) return [];
@@ -172,7 +208,7 @@
 		},
 		{
 			id: 'created',
-			header: m.customTablesCreated(),
+			header: customTablesCreated(),
 			accessorFn: (row) => {
 				try {
 					const date = new Date(row.created);
@@ -222,12 +258,12 @@
 				iconDesignerOpen = false;
 				selectedCategory = null;
 				await invalidateAll();
-				toast.success(m.markerCategoriesIconSaveSuccess?.() ?? 'Icon configuration saved successfully');
+				toast.success(markerCategoriesIconSaveSuccess?.() ?? 'Icon configuration saved successfully');
 			} else {
-				toast.error(m.markerCategoriesIconSaveError?.() ?? 'Failed to save icon configuration');
+				toast.error(markerCategoriesIconSaveError?.() ?? 'Failed to save icon configuration');
 			}
 		} catch (error) {
-			toast.error(m.markerCategoriesIconSaveException?.() ?? 'Error saving icon configuration');
+			toast.error(markerCategoriesIconSaveException?.() ?? 'Error saving icon configuration');
 		}
 	}
 
@@ -241,19 +277,19 @@
 		editRolesDialogOpen = false;
 		selectedCategory = null;
 		invalidateAll();
-		toast.success(m.markerCategoriesUpdateSuccess?.() ?? 'Roles updated successfully');
+		toast.success(markerCategoriesUpdateSuccess?.() ?? 'Roles updated successfully');
 	}
 
 	function handleRolesUpdateError() {
-		toast.error(m.markerCategoriesUpdateError?.() ?? 'Failed to update roles');
+		toast.error(markerCategoriesUpdateError?.() ?? 'Failed to update roles');
 	}
 </script>
 
 <div class="flex h-full min-h-0 flex-col gap-6 min-w-0 w-full">
 	<!-- Header -->
 	<div>
-		<h1 class="text-3xl font-bold tracking-tight">{m.markerCategoriesTitle?.() ?? 'Marker Categories'}</h1>
-		<p class="text-muted-foreground">{m.markerCategoriesDescription?.() ?? 'Manage marker categories for your project'}</p>
+		<h1 class="text-3xl font-bold tracking-tight">{markerCategoriesTitle?.() ?? 'Marker Categories'}</h1>
+		<p class="text-muted-foreground">{markerCategoriesDescription?.() ?? 'Manage marker categories for your project'}</p>
 	</div>
 
 	<!-- Base Table -->
@@ -267,11 +303,11 @@
 		enableShiftSelect={true}
 		showToolbar={true}
 		showEditMode={true}
-		editModeLabel={m.markerCategoriesEditInline?.() ?? 'Edit categories inline'}
-		emptyMessage={m.markerCategoriesNoCategories?.() ?? 'No marker categories'}
-		emptySubMessage={m.markerCategoriesCreateYourFirst?.() ?? 'Create your first marker category to get started'}
+		editModeLabel={markerCategoriesEditInline?.() ?? 'Edit categories inline'}
+		emptyMessage={markerCategoriesNoCategories?.() ?? 'No marker categories'}
+		emptySubMessage={markerCategoriesCreateYourFirst?.() ?? 'Create your first marker category to get started'}
 		rowActions={{
-			header: m.rolesActions(),
+			header: rolesActions(),
 			onEdit: (category) => {
 				selectedCategory = category;
 				editDialogOpen = true;
@@ -282,12 +318,12 @@
 			},
 			customActions: [
 				{
-					label: m.markerCategoriesEditRoles?.() ?? 'Edit Roles',
+					label: markerCategoriesEditRoles?.() ?? 'Edit Roles',
 					icon: Users,
 					onClick: openEditRoles
 				},
 				{
-					label: m.markerCategoriesDesignIcon?.() ?? 'Design Icon',
+					label: markerCategoriesDesignIcon?.() ?? 'Design Icon',
 					icon: Palette,
 					onClick: (category) => {
 						// Use setTimeout to allow dropdown to close first
@@ -298,7 +334,7 @@
 					}
 				},
 				{
-					label: m.markerCategoriesEditFields?.() ?? 'Edit Fields',
+					label: markerCategoriesEditFields?.() ?? 'Edit Fields',
 					icon: Settings,
 					onClick: (category) => {
 						window.location.href = `/projects/${$page.params.projectId}/marker-categories/${category.id}`;
@@ -308,7 +344,7 @@
 		}}
 		inlineRowCreation={{
 			enabled: true,
-			createButtonLabel: m.markerCategoriesCreateCategory?.() ?? 'Create Category',
+			createButtonLabel: markerCategoriesCreateCategory?.() ?? 'Create Category',
 			requiredFields: ['name'],
 			excludeFields: ['visible_to_roles', 'created', 'updated', 'icon_preview'],
 			onCreateRow: async (rowData) => {
@@ -324,9 +360,9 @@
 				const result = await response.json();
 				if (result.type === 'success') {
 					await invalidateAll();
-					toast.success(m.markerCategoriesCreateSuccess?.() ?? 'Category created successfully');
+					toast.success(markerCategoriesCreateSuccess?.() ?? 'Category created successfully');
 				} else {
-					toast.error(m.markerCategoriesCreateError?.() ?? 'Failed to create category');
+					toast.error(markerCategoriesCreateError?.() ?? 'Failed to create category');
 					throw new Error('Failed to create category');
 				}
 			}
@@ -338,7 +374,7 @@
 <Dialog.Root bind:open={createDialogOpen}>
 	<Dialog.Content>
 		<Dialog.Header>
-			<Dialog.Title>{m.markerCategoriesCreateCategory?.() ?? 'Create Category'}</Dialog.Title>
+			<Dialog.Title>{markerCategoriesCreateCategory?.() ?? 'Create Category'}</Dialog.Title>
 		</Dialog.Header>
 		<form
 			method="POST"
@@ -346,38 +382,38 @@
 			use:enhance={() => {
 				return async ({ result }) => {
 					if (result.type === 'success') {
-						handleSuccess(m.markerCategoriesCreateSuccess?.() ?? 'Category created successfully');
+						handleSuccess(markerCategoriesCreateSuccess?.() ?? 'Category created successfully');
 					} else if (result.type === 'failure') {
-						handleError(m.markerCategoriesCreateError?.() ?? 'Failed to create category');
+						handleError(markerCategoriesCreateError?.() ?? 'Failed to create category');
 					}
 				};
 			}}
 		>
 			<div class="grid gap-4 py-4">
 				<div class="grid gap-2">
-					<Label for="name">{m.markerCategoriesName?.() ?? 'Name'}</Label>
+					<Label for="name">{markerCategoriesName?.() ?? 'Name'}</Label>
 					<Input
 						id="name"
 						name="name"
-						placeholder={m.markerCategoriesNamePlaceholder?.() ?? 'Enter category name'}
+						placeholder={markerCategoriesNamePlaceholder?.() ?? 'Enter category name'}
 						required
 					/>
 				</div>
 				<div class="grid gap-2">
-					<Label for="description">{m.rolesDescription_field()}</Label>
+					<Label for="description">{rolesDescription_field()}</Label>
 					<Textarea
 						id="description"
 						name="description"
-						placeholder={m.markerCategoriesDescriptionPlaceholder?.() ?? 'Enter category description'}
+						placeholder={markerCategoriesDescriptionPlaceholder?.() ?? 'Enter category description'}
 						rows={3}
 					/>
 				</div>
 			</div>
 			<Dialog.Footer>
 				<Button type="button" variant="outline" onclick={() => (createDialogOpen = false)}>
-					{m.commonCancel()}
+					{commonCancel()}
 				</Button>
-				<Button type="submit">{m.commonCreate()}</Button>
+				<Button type="submit">{commonCreate()}</Button>
 			</Dialog.Footer>
 		</form>
 	</Dialog.Content>
@@ -387,7 +423,7 @@
 <Dialog.Root bind:open={editDialogOpen}>
 	<Dialog.Content>
 		<Dialog.Header>
-			<Dialog.Title>{m.markerCategoriesEdit?.() ?? 'Edit Category'}</Dialog.Title>
+			<Dialog.Title>{markerCategoriesEdit?.() ?? 'Edit Category'}</Dialog.Title>
 		</Dialog.Header>
 		{#if selectedCategory}
 			<form
@@ -396,9 +432,9 @@
 				use:enhance={() => {
 					return async ({ result }) => {
 						if (result.type === 'success') {
-							handleSuccess(m.markerCategoriesUpdateSuccess?.() ?? 'Category updated successfully');
+							handleSuccess(markerCategoriesUpdateSuccess?.() ?? 'Category updated successfully');
 						} else if (result.type === 'failure') {
-							handleError(m.markerCategoriesUpdateError?.() ?? 'Failed to update category');
+							handleError(markerCategoriesUpdateError?.() ?? 'Failed to update category');
 						}
 					};
 				}}
@@ -406,31 +442,31 @@
 				<input type="hidden" name="id" value={selectedCategory.id} />
 				<div class="grid gap-4 py-4">
 					<div class="grid gap-2">
-						<Label for="edit-name">{m.markerCategoriesName?.() ?? 'Name'}</Label>
+						<Label for="edit-name">{markerCategoriesName?.() ?? 'Name'}</Label>
 						<Input
 							id="edit-name"
 							name="name"
 							value={selectedCategory.name}
-							placeholder={m.markerCategoriesNamePlaceholder?.() ?? 'Enter category name'}
+							placeholder={markerCategoriesNamePlaceholder?.() ?? 'Enter category name'}
 							required
 						/>
 					</div>
 					<div class="grid gap-2">
-						<Label for="edit-description">{m.rolesDescription_field()}</Label>
+						<Label for="edit-description">{rolesDescription_field()}</Label>
 						<Textarea
 							id="edit-description"
 							name="description"
 							value={selectedCategory.description || ''}
-							placeholder={m.markerCategoriesDescriptionPlaceholder?.() ?? 'Enter category description'}
+							placeholder={markerCategoriesDescriptionPlaceholder?.() ?? 'Enter category description'}
 							rows={3}
 						/>
 					</div>
 				</div>
 				<Dialog.Footer>
 					<Button type="button" variant="outline" onclick={() => (editDialogOpen = false)}>
-						{m.commonCancel()}
+						{commonCancel()}
 					</Button>
-					<Button type="submit">{m.commonSave()}</Button>
+					<Button type="submit">{commonSave()}</Button>
 				</Dialog.Footer>
 			</form>
 		{/if}
@@ -441,23 +477,23 @@
 <AlertDialog.Root bind:open={deleteDialogOpen}>
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>{m.markerCategoriesDelete?.() ?? 'Delete Category'}</AlertDialog.Title>
+			<AlertDialog.Title>{markerCategoriesDelete?.() ?? 'Delete Category'}</AlertDialog.Title>
 			<AlertDialog.Description>
-				{m.markerCategoriesDeleteConfirm?.() ?? 'Are you sure you want to delete this marker category? This action cannot be undone.'}
+				{markerCategoriesDeleteConfirm?.() ?? 'Are you sure you want to delete this marker category? This action cannot be undone.'}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		{#if selectedCategory}
 			<AlertDialog.Footer>
-				<AlertDialog.Cancel>{m.commonCancel()}</AlertDialog.Cancel>
+				<AlertDialog.Cancel>{commonCancel()}</AlertDialog.Cancel>
 				<form
 					method="POST"
 					action="?/delete"
 					use:enhance={() => {
 						return async ({ result }) => {
 							if (result.type === 'success') {
-								handleSuccess(m.markerCategoriesDeleteSuccess?.() ?? 'Category deleted successfully');
+								handleSuccess(markerCategoriesDeleteSuccess?.() ?? 'Category deleted successfully');
 							} else if (result.type === 'failure') {
-								handleError(m.markerCategoriesDeleteError?.() ?? 'Failed to delete category');
+								handleError(markerCategoriesDeleteError?.() ?? 'Failed to delete category');
 							}
 						};
 					}}
@@ -467,7 +503,7 @@
 						type="submit"
 						class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 					>
-						{m.commonDelete()}
+						{commonDelete()}
 					</AlertDialog.Action>
 				</form>
 			</AlertDialog.Footer>
@@ -479,7 +515,7 @@
 <Dialog.Root bind:open={editRolesDialogOpen}>
 	<Dialog.Content>
 		<Dialog.Header>
-			<Dialog.Title>{m.markerCategoriesEditRoles?.() ?? 'Edit Roles'}</Dialog.Title>
+			<Dialog.Title>{markerCategoriesEditRoles?.() ?? 'Edit Roles'}</Dialog.Title>
 		</Dialog.Header>
 		{#if selectedCategory}
 			<form
@@ -506,14 +542,14 @@
 						getOptionDescription={(r: { id: string; name: string; description?: string }) => r.description}
 						allowCreate={true}
 						onCreateOption={createRole}
-						placeholder={m.markerCategoriesRolesPlaceholder?.() ?? 'Select or search roles...'}
+						placeholder={markerCategoriesRolesPlaceholder?.() ?? 'Select or search roles...'}
 					/>
 				</div>
 				<Dialog.Footer>
 					<Button type="button" variant="outline" onclick={() => (editRolesDialogOpen = false)}>
-						{m.commonCancel()}
+						{commonCancel()}
 					</Button>
-					<Button type="submit">{m.commonSave()}</Button>
+					<Button type="submit">{commonSave()}</Button>
 				</Dialog.Footer>
 			</form>
 		{/if}
@@ -550,6 +586,6 @@
 			{@html value.svgContent.replace(/(<svg[^>]*)(>)/, `$1 style="width: ${size * 0.6}px; height: ${size * 0.6}px; fill: ${color};"$2`)}
 		</div>
 	{:else}
-		<span class="text-muted-foreground text-xs">{m.markerCategoriesNoIcon?.() ?? 'No icon'}</span>
+		<span class="text-muted-foreground text-xs">{markerCategoriesNoIcon?.() ?? 'No icon'}</span>
 	{/if}
 {/snippet}

@@ -7,7 +7,24 @@
 <script lang="ts">
 	import * as Sheet from '$lib/components/ui/sheet';
 	import { Badge } from '$lib/components/ui/badge';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		participantMapRecentDescription,
+		participantMapRecentEmpty,
+		participantMapRecentNoLocation,
+		participantMapRecentTitle,
+		participantWorkflowInstanceDetailAdminUpdated,
+		participantWorkflowInstanceDetailEntryAction,
+		participantWorkflowInstanceDetailEntryConflictResolved,
+		participantWorkflowInstanceDetailEntryCreated,
+		participantWorkflowInstanceDetailEntryDataRecorded,
+		participantWorkflowInstanceDetailEntryInspectionRecorded,
+		participantWorkflowInstanceDetailEntryLocationUpdated,
+		participantWorkflowInstanceDetailEntryStageTransition,
+		participantWorkflowInstanceDetailFieldFallback,
+		participantWorkflowInstanceDetailFieldsNoun,
+		participantWorkflowInstanceDetailFieldsUpdated,
+		participantWorkflowInstanceDetailUpdatedSuffix
+	} from '$lib/paraglide/messages';
 	import { instanceLabel } from '$lib/utils/instance-label';
 	import { toolUsageLabel, type ToolUsageLabelStrings } from '$lib/utils/tool-usage-label';
 
@@ -36,7 +53,7 @@
 
 	interface FieldValue {
 		instance_id: string;
-		field_key: string;
+		field_def_id: string;
 		value: string;
 	}
 
@@ -91,18 +108,18 @@
 	}: Props = $props();
 
 	const labelStrings: ToolUsageLabelStrings = $derived({
-		action: m.participantWorkflowInstanceDetailEntryAction?.() ?? 'Action',
-		created: m.participantWorkflowInstanceDetailEntryCreated?.() ?? 'Created',
-		dataRecorded: m.participantWorkflowInstanceDetailEntryDataRecorded?.() ?? 'Data recorded',
-		fieldFallback: m.participantWorkflowInstanceDetailFieldFallback?.() ?? 'Field',
-		updatedSuffix: m.participantWorkflowInstanceDetailUpdatedSuffix?.() ?? 'updated',
-		adminUpdated: m.participantWorkflowInstanceDetailAdminUpdated?.() ?? 'Admin updated',
-		fieldsNoun: m.participantWorkflowInstanceDetailFieldsNoun?.() ?? 'fields',
-		fieldsUpdated: m.participantWorkflowInstanceDetailFieldsUpdated?.() ?? 'fields updated',
-		locationUpdated: m.participantWorkflowInstanceDetailEntryLocationUpdated?.() ?? 'Location updated',
-		inspectionRecorded: m.participantWorkflowInstanceDetailEntryInspectionRecorded?.() ?? 'Inspection recorded',
-		conflictResolved: m.participantWorkflowInstanceDetailEntryConflictResolved?.() ?? 'Sync conflict resolved',
-		stageTransition: m.participantWorkflowInstanceDetailEntryStageTransition?.() ?? 'Stage change'
+		action: participantWorkflowInstanceDetailEntryAction?.() ?? 'Action',
+		created: participantWorkflowInstanceDetailEntryCreated?.() ?? 'Created',
+		dataRecorded: participantWorkflowInstanceDetailEntryDataRecorded?.() ?? 'Data recorded',
+		fieldFallback: participantWorkflowInstanceDetailFieldFallback?.() ?? 'Field',
+		updatedSuffix: participantWorkflowInstanceDetailUpdatedSuffix?.() ?? 'updated',
+		adminUpdated: participantWorkflowInstanceDetailAdminUpdated?.() ?? 'Admin updated',
+		fieldsNoun: participantWorkflowInstanceDetailFieldsNoun?.() ?? 'fields',
+		fieldsUpdated: participantWorkflowInstanceDetailFieldsUpdated?.() ?? 'fields updated',
+		locationUpdated: participantWorkflowInstanceDetailEntryLocationUpdated?.() ?? 'Location updated',
+		inspectionRecorded: participantWorkflowInstanceDetailEntryInspectionRecorded?.() ?? 'Inspection recorded',
+		conflictResolved: participantWorkflowInstanceDetailEntryConflictResolved?.() ?? 'Sync conflict resolved',
+		stageTransition: participantWorkflowInstanceDetailEntryStageTransition?.() ?? 'Stage change'
 	});
 
 	const workflowsById = $derived(new Map(workflows.map((w) => [w.id, w])));
@@ -170,12 +187,12 @@
 				{#if filteredWorkflow}
 					{filteredWorkflow.name}
 				{:else}
-					{m.participantMapRecentTitle?.() ?? 'Zuletzt'}
+					{participantMapRecentTitle?.() ?? 'Zuletzt'}
 				{/if}
 			</Sheet.Title>
 			{#if !filteredWorkflow}
 				<Sheet.Description class="text-xs">
-					{m.participantMapRecentDescription?.() ?? 'Zuletzt bearbeitete Eintraege'}
+					{participantMapRecentDescription?.() ?? 'Zuletzt bearbeitete Eintraege'}
 				</Sheet.Description>
 			{/if}
 		</Sheet.Header>
@@ -187,7 +204,7 @@
 		>
 			{#if recentInstances.length === 0}
 				<div class="py-8 text-center text-xs text-muted-foreground">
-					{m.participantMapRecentEmpty?.() ?? 'Noch keine Eintraege'}
+					{participantMapRecentEmpty?.() ?? 'Noch keine Eintraege'}
 				</div>
 			{:else}
 				<ul class="space-y-2">
@@ -198,10 +215,13 @@
 								? stageById.get(instance.current_stage_id)
 								: undefined}
 							{@const formFields = formFieldsByWorkflow.get(workflow.id) ?? []}
+							{@const fieldDefMap = new Map(
+								formFields.map((f) => [f.id, { id: f.id, label: f.field_label }])
+							)}
 							{@const instanceIcon = iconByInstance.get(instance.id) ?? workflow.icon_config}
 							{@const latestUsage = latestToolUsageByInstance.get(instance.id)}
 							{@const activityText = latestUsage
-								? toolUsageLabel(latestUsage.metadata as any, labelStrings, formFields)
+								? toolUsageLabel(latestUsage.metadata as any, labelStrings, fieldDefMap)
 								: null}
 							{@const instanceFVs = fieldValuesByInstance.get(instance.id) ?? []}
 							{@const fieldLabel = instanceLabel({
@@ -256,7 +276,7 @@
 												{/if}
 												{#if workflow.workflow_type === 'incident' && !instance.centroid}
 													{#if fieldLabel.timeAgo || fieldLabel.stage}<span>·</span>{/if}
-													<span class="italic">{m.participantMapRecentNoLocation?.() ?? 'ohne Ort'}</span>
+													<span class="italic">{participantMapRecentNoLocation?.() ?? 'ohne Ort'}</span>
 												{/if}
 											</div>
 										</div>

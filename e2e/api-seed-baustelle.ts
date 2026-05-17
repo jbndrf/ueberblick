@@ -206,72 +206,77 @@ export async function seedBaustelle(): Promise<BaustelleSeedResult> {
 
 	const fields = new Map<string, string>();
 
-	const bauphaseField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Bauphase',
+	async function createFieldDef(def: Record<string, unknown>) {
+		return await pb.collection('workflow_field_defs').create({
+			workflow_id: wf.id,
+			write_mode: 'singleton',
+			...def
+		});
+	}
+	async function addFieldRef(formId: string, fieldDefId: string, ref: Record<string, unknown>) {
+		await pb.collection('tools_form_field_refs').create({
+			form_id: formId,
+			field_def_id: fieldDefId,
+			...ref
+		});
+	}
+
+	const bauphaseDef = await createFieldDef({
+		key: 'bauphase',
+		label: 'Bauphase',
 		field_type: 'dropdown',
 		is_required: true,
-		field_order: 1,
-		page: 1,
-		page_title: 'Mangel',
-		row_index: 0,
-		column_position: 'left',
 		field_options: { options: BAUPHASE_OPTIONS }
 	});
-	fields.set('bauphase', bauphaseField.id);
+	await addFieldRef(entryForm.id, bauphaseDef.id, {
+		field_order: 1, page: 1, page_title: 'Mangel', row_index: 0, column_position: 'left'
+	});
+	fields.set('bauphase', bauphaseDef.id);
 
 	// smart_dropdown: Gewerk depends on Bauphase
-	const gewerkField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Gewerk',
+	const gewerkDef = await createFieldDef({
+		key: 'gewerk',
+		label: 'Gewerk',
 		field_type: 'smart_dropdown',
 		is_required: true,
-		field_order: 2,
-		page: 1,
-		row_index: 0,
-		column_position: 'right',
 		field_options: {
-			source_field: bauphaseField.id,
+			source_field: bauphaseDef.id,
 			mappings: GEWERK_MAPPINGS
 		}
 	});
-	fields.set('gewerk', gewerkField.id);
+	await addFieldRef(entryForm.id, gewerkDef.id, {
+		field_order: 2, page: 1, row_index: 0, column_position: 'right'
+	});
+	fields.set('gewerk', gewerkDef.id);
 
-	const beschreibungField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Beschreibung',
+	const beschreibungDef = await createFieldDef({
+		key: 'beschreibung',
+		label: 'Beschreibung',
 		field_type: 'long_text',
-		is_required: true,
-		field_order: 3,
-		page: 1,
-		row_index: 1,
-		column_position: 'full'
+		is_required: true
 	});
-	fields.set('beschreibung', beschreibungField.id);
+	await addFieldRef(entryForm.id, beschreibungDef.id, {
+		field_order: 3, page: 1, row_index: 1, column_position: 'full'
+	});
+	fields.set('beschreibung', beschreibungDef.id);
 
-	const fotoField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Foto',
+	const fotoDef = await createFieldDef({
+		key: 'foto',
+		label: 'Foto',
 		field_type: 'file',
-		is_required: false,
-		field_order: 4,
-		page: 1,
-		row_index: 2,
-		column_position: 'full'
+		is_required: false
 	});
-	fields.set('foto', fotoField.id);
+	await addFieldRef(entryForm.id, fotoDef.id, {
+		field_order: 4, page: 1, row_index: 2, column_position: 'full'
+	});
+	fields.set('foto', fotoDef.id);
 
 	// Page 2: Subunternehmer (custom_table_selector)
-	const subunternehmerField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Subunternehmer',
+	const subunternehmerDef = await createFieldDef({
+		key: 'subunternehmer',
+		label: 'Subunternehmer',
 		field_type: 'custom_table_selector',
 		is_required: false,
-		field_order: 5,
-		page: 2,
-		page_title: 'Zuordnung',
-		row_index: 0,
-		column_position: 'full',
 		field_options: {
 			source_type: 'custom_table',
 			custom_table_id: customTable.id,
@@ -279,7 +284,10 @@ export async function seedBaustelle(): Promise<BaustelleSeedResult> {
 			value_field: 'firma'
 		}
 	});
-	fields.set('subunternehmer', subunternehmerField.id);
+	await addFieldRef(entryForm.id, subunternehmerDef.id, {
+		field_order: 5, page: 2, page_title: 'Zuordnung', row_index: 0, column_position: 'full'
+	});
+	fields.set('subunternehmer', subunternehmerDef.id);
 
 	// --- Stage-attached forms for blind evaluation ---
 
@@ -293,33 +301,29 @@ export async function seedBaustelle(): Promise<BaustelleSeedResult> {
 		visual_config: {}
 	});
 
-	const einstufungOueField = await pb.collection('tools_form_fields').create({
-		form_id: oueForm.id,
-		field_label: 'Einstufung OUe',
+	const einstufungOueDef = await createFieldDef({
+		key: 'einstufung_oue',
+		label: 'Einstufung OUe',
 		field_type: 'number',
 		is_required: true,
-		field_order: 1,
-		page: 1,
-		row_index: 0,
-		column_position: 'left',
-		help_text: '0 = unwesentlich, 1 = wesentlich (VOB/B)',
 		validation_rules: { min: 0, max: 1 }
 	});
-	fields.set('einstufung_oue', einstufungOueField.id);
+	await addFieldRef(oueForm.id, einstufungOueDef.id, {
+		field_order: 1, page: 1, row_index: 0, column_position: 'left'
+	});
+	fields.set('einstufung_oue', einstufungOueDef.id);
 
-	const dringlichkeitOueField = await pb.collection('tools_form_fields').create({
-		form_id: oueForm.id,
-		field_label: 'Dringlichkeit OUe',
+	const dringlichkeitOueDef = await createFieldDef({
+		key: 'dringlichkeit_oue',
+		label: 'Dringlichkeit OUe',
 		field_type: 'number',
 		is_required: true,
-		field_order: 2,
-		page: 1,
-		row_index: 0,
-		column_position: 'right',
-		help_text: '1 = sofort, 2 = zeitnah, 3 = vor Abnahme',
 		validation_rules: { min: 1, max: 3 }
 	});
-	fields.set('dringlichkeit_oue', dringlichkeitOueField.id);
+	await addFieldRef(oueForm.id, dringlichkeitOueDef.id, {
+		field_order: 2, page: 1, row_index: 0, column_position: 'right'
+	});
+	fields.set('dringlichkeit_oue', dringlichkeitOueDef.id);
 
 	// PI Bewertung form (stage-attached, allowed_roles: PI only)
 	const piForm = await pb.collection('tools_forms').create({
@@ -331,88 +335,76 @@ export async function seedBaustelle(): Promise<BaustelleSeedResult> {
 		visual_config: {}
 	});
 
-	const einstufungPiField = await pb.collection('tools_form_fields').create({
-		form_id: piForm.id,
-		field_label: 'Einstufung PI',
+	const einstufungPiDef = await createFieldDef({
+		key: 'einstufung_pi',
+		label: 'Einstufung PI',
 		field_type: 'number',
 		is_required: true,
-		field_order: 1,
-		page: 1,
-		row_index: 0,
-		column_position: 'left',
-		help_text: '0 = unwesentlich, 1 = wesentlich (VOB/B)',
 		validation_rules: { min: 0, max: 1 }
 	});
-	fields.set('einstufung_pi', einstufungPiField.id);
+	await addFieldRef(piForm.id, einstufungPiDef.id, {
+		field_order: 1, page: 1, row_index: 0, column_position: 'left'
+	});
+	fields.set('einstufung_pi', einstufungPiDef.id);
 
-	const dringlichkeitPiField = await pb.collection('tools_form_fields').create({
-		form_id: piForm.id,
-		field_label: 'Dringlichkeit PI',
+	const dringlichkeitPiDef = await createFieldDef({
+		key: 'dringlichkeit_pi',
+		label: 'Dringlichkeit PI',
 		field_type: 'number',
 		is_required: true,
-		field_order: 2,
-		page: 1,
-		row_index: 0,
-		column_position: 'right',
-		help_text: '1 = sofort, 2 = zeitnah, 3 = vor Abnahme',
 		validation_rules: { min: 1, max: 3 }
 	});
-	fields.set('dringlichkeit_pi', dringlichkeitPiField.id);
+	await addFieldRef(piForm.id, dringlichkeitPiDef.id, {
+		field_order: 2, page: 1, row_index: 0, column_position: 'right'
+	});
+	fields.set('dringlichkeit_pi', dringlichkeitPiDef.id);
 
 	// --- Calculated fields (on entry form so they're globally visible) ---
-	const einstufungDiffField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Einstufung Differenz',
+	const einstufungDiffDef = await createFieldDef({
+		key: 'einstufung_differenz',
+		label: 'Einstufung Differenz',
 		field_type: 'number',
-		is_required: false,
-		field_order: 10,
-		page: 2,
-		row_index: 1,
-		column_position: 'left',
-		help_text: 'Automatisch: OUe - PI (0 = Einigkeit)'
+		is_required: false
 	});
-	fields.set('einstufung_differenz', einstufungDiffField.id);
+	await addFieldRef(entryForm.id, einstufungDiffDef.id, {
+		field_order: 10, page: 2, row_index: 1, column_position: 'left'
+	});
+	fields.set('einstufung_differenz', einstufungDiffDef.id);
 
-	const dringlichkeitSchnittField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Dringlichkeit Schnitt',
+	const dringlichkeitSchnittDef = await createFieldDef({
+		key: 'dringlichkeit_schnitt',
+		label: 'Dringlichkeit Schnitt',
 		field_type: 'number',
-		is_required: false,
-		field_order: 11,
-		page: 2,
-		row_index: 1,
-		column_position: 'right',
-		help_text: 'Automatisch: Durchschnitt beider Dringlichkeiten'
+		is_required: false
 	});
-	fields.set('dringlichkeit_schnitt', dringlichkeitSchnittField.id);
+	await addFieldRef(entryForm.id, dringlichkeitSchnittDef.id, {
+		field_order: 11, page: 2, row_index: 1, column_position: 'right'
+	});
+	fields.set('dringlichkeit_schnitt', dringlichkeitSchnittDef.id);
 
-	const konsensField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Konsens',
+	const konsensDef = await createFieldDef({
+		key: 'konsens',
+		label: 'Konsens',
 		field_type: 'dropdown',
 		is_required: false,
-		field_order: 12,
-		page: 2,
-		row_index: 2,
-		column_position: 'left',
-		help_text: 'Automatisch: Einig oder Strittig',
 		field_options: { options: KONSENS_OPTIONS }
 	});
-	fields.set('konsens', konsensField.id);
+	await addFieldRef(entryForm.id, konsensDef.id, {
+		field_order: 12, page: 2, row_index: 2, column_position: 'left'
+	});
+	fields.set('konsens', konsensDef.id);
 
-	const prioritaetField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Prioritaet',
+	const prioritaetDef = await createFieldDef({
+		key: 'prioritaet',
+		label: 'Prioritaet',
 		field_type: 'dropdown',
 		is_required: false,
-		field_order: 13,
-		page: 2,
-		row_index: 2,
-		column_position: 'right',
-		help_text: 'Automatisch: Sofort / Zeitnah / Vor Abnahme',
 		field_options: { options: PRIORITAET_OPTIONS }
 	});
-	fields.set('prioritaet', prioritaetField.id);
+	await addFieldRef(entryForm.id, prioritaetDef.id, {
+		field_order: 13, page: 2, row_index: 2, column_position: 'right'
+	});
+	fields.set('prioritaet', prioritaetDef.id);
 
 	// --- Transition form (-> Abgenommen) ---
 	const abgenommenConnId = connectionIds.get('In Nachbesserung->Abgenommen')!;
@@ -423,15 +415,14 @@ export async function seedBaustelle(): Promise<BaustelleSeedResult> {
 		description: 'Abnahmefoto und Bestaetigung'
 	});
 
-	await pb.collection('tools_form_fields').create({
-		form_id: abnahmeForm.id,
-		field_label: 'Abnahme-Foto',
+	const abnahmeFotoDef = await createFieldDef({
+		key: 'abnahme_foto',
+		label: 'Abnahme-Foto',
 		field_type: 'file',
-		is_required: false,
-		field_order: 1,
-		page: 1,
-		row_index: 0,
-		column_position: 'full'
+		is_required: false
+	});
+	await addFieldRef(abnahmeForm.id, abnahmeFotoDef.id, {
+		field_order: 1, page: 1, row_index: 0, column_position: 'full'
 	});
 
 	// --- Filterable tag on Prioritaet ---
@@ -440,7 +431,7 @@ export async function seedBaustelle(): Promise<BaustelleSeedResult> {
 		tag_mappings: [
 			{
 				tagType: 'filterable',
-				fieldId: prioritaetField.id,
+				fieldId: prioritaetDef.id,
 				config: { filterBy: 'field' }
 			}
 		]
@@ -628,9 +619,9 @@ export async function seedBaustelle(): Promise<BaustelleSeedResult> {
 			participantId: oueParticipant.id,
 			location: { lat: coord.lat, lon: coord.lon },
 			fieldValues: [
-				{ key: fields.get('bauphase')!, value: inst.bauphase },
-				{ key: fields.get('gewerk')!, value: inst.gewerk },
-				{ key: fields.get('beschreibung')!, value: inst.beschreibung }
+				{ fieldDefId: fields.get('bauphase')!, value: inst.bauphase },
+				{ fieldDefId: fields.get('gewerk')!, value: inst.gewerk },
+				{ fieldDefId: fields.get('beschreibung')!, value: inst.beschreibung }
 			]
 		});
 
@@ -649,8 +640,8 @@ export async function seedBaustelle(): Promise<BaustelleSeedResult> {
 			stageId: bewertungOueStageId,
 			participantId: oueParticipant.id,
 			fieldValues: [
-				{ key: fields.get('einstufung_oue')!, value: String(inst.einstufung_oue) },
-				{ key: fields.get('dringlichkeit_oue')!, value: String(inst.dringlichkeit_oue) }
+				{ fieldDefId: fields.get('einstufung_oue')!, value: String(inst.einstufung_oue) },
+				{ fieldDefId: fields.get('dringlichkeit_oue')!, value: String(inst.dringlichkeit_oue) }
 			]
 		});
 
@@ -670,8 +661,8 @@ export async function seedBaustelle(): Promise<BaustelleSeedResult> {
 			stageId: bewertungPiStageId,
 			participantId: piParticipant.id,
 			fieldValues: [
-				{ key: fields.get('dringlichkeit_pi')!, value: String(inst.dringlichkeit_pi) },
-				{ key: fields.get('einstufung_pi')!, value: String(inst.einstufung_pi) }
+				{ fieldDefId: fields.get('dringlichkeit_pi')!, value: String(inst.dringlichkeit_pi) },
+				{ fieldDefId: fields.get('einstufung_pi')!, value: String(inst.einstufung_pi) }
 			]
 		});
 

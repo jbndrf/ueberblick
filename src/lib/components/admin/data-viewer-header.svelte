@@ -5,7 +5,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 	import { Pencil, Check, X } from '@lucide/svelte';
-	import * as m from '$lib/paraglide/messages';
+	import { adminDataViewerHeaderAddDescription, adminDataViewerHeaderAll, adminDataViewerHeaderSelectRoles, adminDataViewerHeaderVisibleTo } from '$lib/paraglide/messages';
 
 	type Role = { id: string; name: string };
 
@@ -150,7 +150,7 @@
 				bind:value={editDescriptionValue}
 				onkeydown={handleDescriptionKeydown}
 				class="h-8 text-sm w-96"
-				placeholder={m.adminDataViewerHeaderAddDescription()}
+				placeholder={adminDataViewerHeaderAddDescription()}
 				autofocus
 			/>
 			<Button variant="ghost" size="icon" class="h-7 w-7" onclick={saveDescription}>
@@ -165,7 +165,7 @@
 			class="group flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground/70 transition-colors text-left w-fit"
 			onclick={startEditDescription}
 		>
-			<span>{description || m.adminDataViewerHeaderAddDescription()}</span>
+			<span>{description || adminDataViewerHeaderAddDescription()}</span>
 			<Pencil class="h-3 w-3 opacity-0 group-hover:opacity-50 transition-opacity" />
 		</button>
 	{/if}
@@ -173,7 +173,7 @@
 	<!-- Roles row -->
 	{#if roles.length > 0 && onRolesChange}
 		<div class="flex items-center gap-2 flex-wrap">
-			<span class="text-xs text-muted-foreground">{m.adminDataViewerHeaderVisibleTo()}:</span>
+			<span class="text-xs text-muted-foreground">{adminDataViewerHeaderVisibleTo()}:</span>
 			{#if editingRoles}
 				<div class="flex items-center gap-2">
 					<MobileMultiSelect
@@ -181,7 +181,7 @@
 						options={roles}
 						getOptionId={(r) => r.id}
 						getOptionLabel={(r) => r.name}
-						placeholder={m.adminDataViewerHeaderSelectRoles()}
+						placeholder={adminDataViewerHeaderSelectRoles()}
 						class="min-w-[200px]"
 					/>
 					<Button variant="ghost" size="icon" class="h-7 w-7" onclick={saveRoles}>
@@ -201,7 +201,7 @@
 							<Badge variant="secondary" class="text-xs">{roleName}</Badge>
 						{/each}
 					{:else}
-						<span class="text-xs text-muted-foreground italic">{m.adminDataViewerHeaderAll()}</span>
+						<span class="text-xs text-muted-foreground italic">{adminDataViewerHeaderAll()}</span>
 					{/if}
 					<Pencil class="h-3 w-3 opacity-0 group-hover:opacity-50 transition-opacity ml-1" />
 				</button>

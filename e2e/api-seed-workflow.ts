@@ -120,24 +120,38 @@ export async function seedWorkflow(
 	forms.set('Initial Report Form', entryForm.id);
 	console.log(`Created form: Initial Report Form (${entryForm.id})`);
 
-	// 6. Add form fields
-	await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Report Title',
+	// 6. Add field defs (workflow-scoped registry) + form refs (layout per form).
+	// Phase-1 redesign: definitional bits live on workflow_field_defs; the form
+	// just references them via tools_form_field_refs.
+	const titleDef = await pb.collection('workflow_field_defs').create({
+		workflow_id: workflow.id,
+		key: 'report_title',
+		label: 'Report Title',
 		field_type: 'short_text',
-		is_required: true,
+		write_mode: 'singleton',
+		is_required: true
+	});
+	await pb.collection('tools_form_field_refs').create({
+		form_id: entryForm.id,
+		field_def_id: titleDef.id,
 		field_order: 1
 	});
-	console.log(`Created field: Report Title`);
+	console.log(`Created field def + ref: Report Title`);
 
-	await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Description',
+	const descDef = await pb.collection('workflow_field_defs').create({
+		workflow_id: workflow.id,
+		key: 'description',
+		label: 'Description',
 		field_type: 'long_text',
-		is_required: true,
+		write_mode: 'singleton',
+		is_required: true
+	});
+	await pb.collection('tools_form_field_refs').create({
+		form_id: entryForm.id,
+		field_def_id: descDef.id,
 		field_order: 2
 	});
-	console.log(`Created field: Description`);
+	console.log(`Created field def + ref: Description`);
 
 	return {
 		workflowId: workflow.id,

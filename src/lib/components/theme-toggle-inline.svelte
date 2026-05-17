@@ -2,7 +2,7 @@
 	import { themeStore } from '$lib/stores/theme.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Sun, Moon } from '@lucide/svelte';
-	import * as m from '$lib/paraglide/messages';
+	import { themeToggleInlineDarkLabel, themeToggleInlineLabel, themeToggleInlineLightLabel } from '$lib/paraglide/messages';
 
 	const currentTheme = $derived(themeStore.current);
 </script>
@@ -14,7 +14,7 @@
 		{:else}
 			<Sun class="h-4 w-4" />
 		{/if}
-		<span>{m.themeToggleInlineLabel?.() ?? 'Theme'}</span>
+		<span>{themeToggleInlineLabel?.() ?? 'Theme'}</span>
 	</div>
 	<div class="flex gap-1">
 		<Button
@@ -23,7 +23,7 @@
 			onclick={() => themeStore.set('light')}
 		>
 			<Sun class="h-3 w-3" />
-			{m.themeToggleInlineLightLabel?.() ?? 'Light'}
+			{themeToggleInlineLightLabel?.() ?? 'Light'}
 		</Button>
 		<Button
 			variant={currentTheme === 'dark' ? 'default' : 'outline'}
@@ -31,7 +31,7 @@
 			onclick={() => themeStore.set('dark')}
 		>
 			<Moon class="h-3 w-3" />
-			{m.themeToggleInlineDarkLabel?.() ?? 'Dark'}
+			{themeToggleInlineDarkLabel?.() ?? 'Dark'}
 		</Button>
 	</div>
 </div>

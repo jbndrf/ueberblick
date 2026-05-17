@@ -53,7 +53,23 @@
 	import type { ColumnPosition } from '$lib/workflow-builder';
 	import { deserialize } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		workflowBuilderConnectionFallback,
+		workflowBuilderDefaultEditLabel,
+		workflowBuilderDefaultFormLabel,
+		workflowBuilderDefaultProtocolLabel,
+		workflowBuilderEntryLabel,
+		workflowBuilderFailedToCreateRole,
+		workflowBuilderFailedToSave,
+		workflowBuilderGlobalTools,
+		workflowBuilderHelp,
+		workflowBuilderNewFieldLabel,
+		workflowBuilderPageTitleDefault,
+		workflowBuilderSave,
+		workflowBuilderSaving,
+		workflowBuilderUnnamedForm,
+		workflowBuilderWorkflowNamePlaceholder
+	} from '$lib/paraglide/messages';
 
 	let { data }: { data: PageData } = $props();
 
@@ -112,10 +128,10 @@
 			if (result.type === 'success') {
 				builderState.markAsSaved();
 			} else {
-				saveError = ((result as any).data as any)?.message || (m.workflowBuilderFailedToSave?.() ?? 'Failed to save');
+				saveError = ((result as any).data as any)?.message || (workflowBuilderFailedToSave?.() ?? 'Failed to save');
 			}
 		} catch (err) {
-			saveError = err instanceof Error ? err.message : (m.workflowBuilderFailedToSave?.() ?? 'Failed to save');
+			saveError = err instanceof Error ? err.message : (workflowBuilderFailedToSave?.() ?? 'Failed to save');
 		}
 
 		isSaving = false;
@@ -136,7 +152,7 @@
 			await invalidateAll();
 			return result.data.entity as { id: string; name: string; description?: string };
 		}
-		throw new Error(m.workflowBuilderFailedToCreateRole?.() ?? 'Failed to create role');
+		throw new Error(workflowBuilderFailedToCreateRole?.() ?? 'Failed to create role');
 	}
 
 	// ==========================================================================
@@ -153,7 +169,7 @@
 			config: {
 				toolType: 'form',
 				formId: form.data.id,
-				buttonLabel: form.data.name || (m.workflowBuilderDefaultFormLabel?.() ?? 'Form')
+				buttonLabel: form.data.name || (workflowBuilderDefaultFormLabel?.() ?? 'Form')
 			} as FormToolConfig,
 			order: index
 		}));
@@ -169,7 +185,7 @@
 			config: {
 				toolType: 'edit',
 				editableFields: tool.data.editable_fields,
-				buttonLabel: tool.data.name || (m.workflowBuilderDefaultEditLabel?.() ?? 'Edit')
+				buttonLabel: tool.data.name || (workflowBuilderDefaultEditLabel?.() ?? 'Edit')
 			} as EditToolConfig,
 			order: index + 100 // Offset to keep forms first
 		}));
@@ -184,7 +200,7 @@
 			toolType: 'protocol',
 			config: {
 				toolType: 'protocol',
-				buttonLabel: tool.data.name || (m.workflowBuilderDefaultProtocolLabel?.() ?? 'Protocol')
+				buttonLabel: tool.data.name || (workflowBuilderDefaultProtocolLabel?.() ?? 'Protocol')
 			} as ProtocolToolConfig,
 			order: index + 200 // Offset to keep forms and edit tools first
 		}));
@@ -288,7 +304,7 @@
 					y: targetY + 10 // Slightly below center for visual alignment
 				},
 				data: {
-					label: conn.visual_config?.button_label || conn.action_name || (m.workflowBuilderEntryLabel?.() ?? 'Entry'),
+					label: conn.visual_config?.button_label || conn.action_name || (workflowBuilderEntryLabel?.() ?? 'Entry'),
 					connectionId: conn.id
 				},
 				draggable: false,
@@ -341,7 +357,8 @@
 					onSelectTool: (toolId: string) => handleSelectConnectionTool(conn.id, toolId),
 					onAddTool: () => handleAddProgressToolForEdge(conn.id),
 					allowed_roles: conn.allowed_roles || [],
-					visual_config: conn.visual_config || {}
+					visual_config: conn.visual_config || {},
+					sentry: conn.sentry ?? []
 				}
 			};
 		});
@@ -682,7 +699,7 @@
 			for (const tf of connForms) {
 				const fields = builderState.getFieldsForForm(tf.data.id).map((f) => f.data);
 				incomingForms.push({
-					connectionName: c.data.action_name || (m.workflowBuilderConnectionFallback?.() ?? 'Connection'),
+					connectionName: c.data.action_name || (workflowBuilderConnectionFallback?.() ?? 'Connection'),
 					form: tf.data,
 					fields
 				});
@@ -744,7 +761,7 @@
 			for (const c of incoming) {
 				for (const f of builderState.getFormsForConnection(c.data.id)) {
 					groups.push({
-						formName: f.data.name || (m.workflowBuilderUnnamedForm?.() ?? 'Unnamed form'),
+						formName: f.data.name || (workflowBuilderUnnamedForm?.() ?? 'Unnamed form'),
 						allowedRoles: f.data.allowed_roles || [],
 						fields: builderState.getFieldsForForm(f.data.id).map(ff => ff.data as unknown as FormFieldWithValue)
 					});
@@ -753,7 +770,7 @@
 			// Stage-attached forms
 			for (const f of builderState.getFormsForStage(s.data.id)) {
 				groups.push({
-					formName: f.data.name || (m.workflowBuilderUnnamedForm?.() ?? 'Unnamed form'),
+					formName: f.data.name || (workflowBuilderUnnamedForm?.() ?? 'Unnamed form'),
 					allowedRoles: f.data.allowed_roles || [],
 					fields: builderState.getFieldsForForm(f.data.id).map(ff => ff.data as unknown as FormFieldWithValue)
 				});
@@ -1080,6 +1097,10 @@
 		builderState.updateConnection(edgeId, { allowed_roles: roleIds });
 	}
 
+	function handleEdgeSentryChange(edgeId: string, sentry: import('$lib/workflow-builder').SentryClause[]) {
+		builderState.updateConnection(edgeId, { sentry: sentry.length === 0 ? null : sentry });
+	}
+
 	function handleEdgeSettingsChange(edgeId: string, settings: Record<string, unknown>) {
 		const conn = builderState.getConnectionById(edgeId);
 		if (conn) {
@@ -1144,8 +1165,8 @@
 		const newField = builderState.addFormField(formId, 'short_text', 0, 'full', nextPage);
 		if (newField) {
 			builderState.updateFormField(newField.id, {
-				page_title: (m.workflowBuilderPageTitleDefault?.({ page: nextPage }) ?? `Page ${nextPage}`),
-				field_label: (m.workflowBuilderNewFieldLabel?.() ?? 'New Field')
+				page_title: (workflowBuilderPageTitleDefault?.({ page: nextPage }) ?? `Page ${nextPage}`),
+				field_label: (workflowBuilderNewFieldLabel?.() ?? 'New Field')
 			});
 		}
 	}
@@ -1588,10 +1609,10 @@
 			>
 				{#if isSaving}
 					<Loader2 class="h-4 w-4 mr-2 animate-spin" />
-					{m.workflowBuilderSaving?.() ?? 'Saving...'}
+					{workflowBuilderSaving?.() ?? 'Saving...'}
 				{:else}
 					<Save class="h-4 w-4 mr-2" />
-					{(m.workflowBuilderSave?.() ?? 'Save') + (builderState.isDirty ? '*' : '')}
+					{(workflowBuilderSave?.() ?? 'Save') + (builderState.isDirty ? '*' : '')}
 				{/if}
 			</Button>
 		</div>
@@ -1601,9 +1622,9 @@
 				value={builderState.workflowName}
 				oninput={(e) => (builderState.workflowName = e.currentTarget.value)}
 				class="w-64 h-8"
-				placeholder={m.workflowBuilderWorkflowNamePlaceholder?.() ?? 'Workflow name...'}
+				placeholder={workflowBuilderWorkflowNamePlaceholder?.() ?? 'Workflow name...'}
 			/>
-			<Button variant="ghost" size="icon" class="h-8 w-8" title={m.workflowBuilderHelp?.() ?? 'Help'}>
+			<Button variant="ghost" size="icon" class="h-8 w-8" title={workflowBuilderHelp?.() ?? 'Help'}>
 				<CircleHelp class="h-4 w-4" />
 			</Button>
 		</div>
@@ -1653,7 +1674,7 @@
 
 			<!-- Global Tools - same style as stage/edge toolbars -->
 			<div class="global-tools-bar">
-				<button class="global-tools-label" onclick={handleGlobalToolsLabelClick}>{m.workflowBuilderGlobalTools?.() ?? 'Global Tools'}</button>
+				<button class="global-tools-label" onclick={handleGlobalToolsLabelClick}>{workflowBuilderGlobalTools?.() ?? 'Global Tools'}</button>
 				<ToolBar
 					tools={globalToolInstances}
 					selectedToolId={selectedGlobalToolId}
@@ -1701,6 +1722,8 @@
 			onEdgeDelete={handleDeleteAction}
 			onEdgeRolesChange={handleEdgeRolesChange}
 			onEdgeSettingsChange={handleEdgeSettingsChange}
+			onEdgeSentryChange={handleEdgeSentryChange}
+			fieldDefs={data.fieldDefs}
 			onSelectAction={handleSelectAction}
 			onSelectStage={handleSelectStage}
 			onToolRolesChange={handleToolRolesChange}

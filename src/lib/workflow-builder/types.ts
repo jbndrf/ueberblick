@@ -38,6 +38,25 @@ export interface VisualConfig {
 	confirmation_message?: string;
 }
 
+/**
+ * Phase 3 — CMMN-style sentry clause for conditional connection availability.
+ * AND-ed when multiple clauses live on the same connection.
+ */
+export interface SentryClause {
+	field_def_id: string;
+	op:
+		| 'equals'
+		| 'not_equals'
+		| 'contains'
+		| 'is_empty'
+		| 'is_not_empty'
+		| 'gt'
+		| 'gte'
+		| 'lt'
+		| 'lte';
+	value?: string;
+}
+
 export interface WorkflowConnection {
 	id: string;
 	workflow_id: string;
@@ -46,6 +65,8 @@ export interface WorkflowConnection {
 	action_name: string;
 	allowed_roles?: string[];
 	visual_config?: VisualConfig;
+	/** Phase 3: AND-ed availability clauses. Empty/missing = always available. */
+	sentry?: SentryClause[] | null;
 }
 
 // =============================================================================
@@ -88,7 +109,8 @@ export type FieldType =
 	| 'dropdown'
 	| 'multiple_choice'
 	| 'smart_dropdown'
-	| 'custom_table_selector';
+	| 'custom_table_selector'
+	| 'instance_reference'; // Phase 4 — value holds workflow_instance id(s)
 
 // =============================================================================
 // Field Option Types
@@ -203,22 +225,73 @@ export interface EntitySelectorOptions {
 
 export type ColumnPosition = 'left' | 'right' | 'full';
 
+/**
+ * Workflow-scoped field definition registry entry.
+ * Mirrors the `workflow_field_defs` collection. The builder loads these
+ * alongside `tools_form_field_refs` to render forms.
+ *
+ * TODO(field-def-redesign): builder UI for editing field defs is not yet
+ * wired up; many call-sites still hold combined "field+ref" objects.
+ */
+export interface WorkflowFieldDef {
+	id: string;
+	workflow_id: string;
+	key: string;
+	label: string;
+	field_type: FieldType;
+	write_mode: 'singleton' | 'observation' | 'computed';
+	output_type?: 'text' | 'number' | 'date' | 'json' | '';
+	display_stage_id?: string;
+	view_roles?: string[];
+	placeholder?: string;
+	help_text?: string;
+	is_required?: boolean;
+	validation_rules?: Record<string, unknown> | null;
+	field_options?: Record<string, unknown> | null;
+	compute_expression?: string;
+	/** Phase 2: ids of field defs this computed field references. */
+	compute_depends_on?: string[];
+}
+
+/**
+ * Form field reference — per-form layout/override over a `WorkflowFieldDef`.
+ * Mirrors the `tools_form_field_refs` collection.
+ *
+ * TODO(field-def-redesign): The builder currently treats this as a
+ * combined "field+ref" object (legacy fields kept optional). Callers that
+ * need definitional bits (label, type, options, validation) should look
+ * them up via a `Map<string, WorkflowFieldDef>` keyed by `field_def_id`.
+ */
 export interface ToolsFormField {
 	id: string;
 	form_id: string;
-	field_label: string;
-	field_type: FieldType;
+	field_def_id?: string;
 	field_order?: number;
 	page?: number;
 	page_title?: string;
 	row_index: number; // Which visual row (0-based)
 	column_position: ColumnPosition; // 'left'/'right' = half width, 'full' = full width
+	// Per-ref overrides
+	is_required_override?: boolean | null;
+	placeholder_override?: string;
+	help_text_override?: string;
+	conditional_logic?: Record<string, unknown>;
+	// TODO(field-def-redesign): The following are LEGACY definitional fields
+	// that used to live on `tools_form_fields` rows. The +page.server.ts load
+	// layer DENORMALIZES them onto the ref shape so the existing form-editor UI
+	// continues working unchanged. They remain required because the load layer
+	// always sets them. New code should prefer reading from a
+	// `Map<string, WorkflowFieldDef>` keyed by `field_def_id` instead.
+	field_label: string;
+	field_type: FieldType;
 	is_required?: boolean;
 	placeholder?: string;
 	help_text?: string;
 	validation_rules?: Record<string, unknown>;
 	field_options?: Record<string, unknown>;
-	conditional_logic?: Record<string, unknown>;
+	// Field-def-level props surfaced through the form-editor.
+	write_mode?: 'singleton' | 'observation' | 'computed';
+	compute_expression?: string;
 }
 
 // =============================================================================
@@ -227,6 +300,12 @@ export interface ToolsFormField {
 
 export type EditMode = 'form_fields' | 'location';
 
+/**
+ * TODO(field-def-redesign): tools_edit was removed in the field-def redesign.
+ * A Form referencing existing field defs IS the edit affordance. This
+ * interface is retained temporarily so the workflow builder UI keeps
+ * compiling; convert call sites to Forms in a follow-up pass.
+ */
 export interface ToolsEdit {
 	id: string;
 	connection_id?: string;
@@ -305,6 +384,7 @@ export interface TransitionTriggerConfig {
 
 export interface FieldChangeTriggerConfig {
 	stage_id: string | null;
+	/** TODO(field-def-redesign): rename to field_def_id once trigger storage is migrated. */
 	field_key: string | null;
 }
 
@@ -442,6 +522,8 @@ export interface ConnectionEdgeData {
 	isEntry?: boolean;
 	allowed_roles?: string[];
 	visual_config?: VisualConfig;
+	/** Phase 3: AND-ed availability clauses. */
+	sentry?: SentryClause[] | null;
 	tools?: ToolInstance[];
 	selectedToolId?: string;
 	isSelfLoop?: boolean;

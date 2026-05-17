@@ -181,103 +181,96 @@ async function seedWorkflowA(
 
 	const fields = new Map<string, string>();
 
-	const baumartField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Baumart',
-		field_type: 'dropdown',
-		is_required: true,
-		field_order: 1,
-		page: 1,
-		page_title: 'Standort',
-		row_index: 0,
-		column_position: 'full',
-		field_options: { options: BAUMART_OPTIONS }
-	});
-	fields.set('baumart', baumartField.id);
+	async function createDefAndRef(
+		def: Record<string, unknown>,
+		ref: Record<string, unknown>
+	) {
+		const fieldDef = await pb.collection('workflow_field_defs').create({
+			workflow_id: wf.id,
+			write_mode: 'singleton',
+			...def
+		});
+		await pb.collection('tools_form_field_refs').create({
+			form_id: entryForm.id,
+			field_def_id: fieldDef.id,
+			...ref
+		});
+		return fieldDef;
+	}
 
-	const schadstufeField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Schadstufe',
-		field_type: 'dropdown',
-		is_required: true,
-		field_order: 2,
-		page: 1,
-		row_index: 1,
-		column_position: 'full',
-		help_text: 'Waldzustandserhebung (WZE) -- Kronenverlichtung',
-		field_options: { options: SCHADSTUFE_OPTIONS }
-	});
-	fields.set('schadstufe', schadstufeField.id);
+	const baumartDef = await createDefAndRef(
+		{
+			key: 'baumart',
+			label: 'Baumart',
+			field_type: 'dropdown',
+			is_required: true,
+			field_options: { options: BAUMART_OPTIONS }
+		},
+		{ field_order: 1, page: 1, page_title: 'Standort', row_index: 0, column_position: 'full' }
+	);
+	fields.set('baumart', baumartDef.id);
+
+	const schadstufeDef = await createDefAndRef(
+		{
+			key: 'schadstufe',
+			label: 'Schadstufe',
+			field_type: 'dropdown',
+			is_required: true,
+			field_options: { options: SCHADSTUFE_OPTIONS }
+		},
+		{ field_order: 2, page: 1, row_index: 1, column_position: 'full' }
+	);
+	fields.set('schadstufe', schadstufeDef.id);
 
 	// Page 2: Befallsmerkmale (single multiple_choice field)
-	const befallsmerkmaleField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Befallsmerkmale',
-		field_type: 'multiple_choice',
-		is_required: false,
-		field_order: 3,
-		page: 2,
-		page_title: 'Befallsmerkmale',
-		row_index: 0,
-		column_position: 'full',
-		help_text: 'Alle zutreffenden Merkmale auswaehlen',
-		field_options: { options: BEFALLSMERKMALE_OPTIONS }
-	});
-	fields.set('befallsmerkmale', befallsmerkmaleField.id);
+	const befallsmerkmaleDef = await createDefAndRef(
+		{
+			key: 'befallsmerkmale',
+			label: 'Befallsmerkmale',
+			field_type: 'multiple_choice',
+			is_required: false,
+			field_options: { options: BEFALLSMERKMALE_OPTIONS }
+		},
+		{ field_order: 3, page: 2, page_title: 'Befallsmerkmale', row_index: 0, column_position: 'full' }
+	);
+	fields.set('befallsmerkmale', befallsmerkmaleDef.id);
 
 	// Calculated fields (set by automations)
-	const befallsindexField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Befallsindex',
-		field_type: 'number',
-		is_required: false,
-		field_order: 8,
-		page: 2,
-		row_index: 5,
-		column_position: 'left',
-		help_text: 'Automatisch berechnet (Summe Befallsmerkmale, 0-5)'
-	});
-	fields.set('befallsindex', befallsindexField.id);
+	const befallsindexDef = await createDefAndRef(
+		{ key: 'befallsindex', label: 'Befallsindex', field_type: 'number', is_required: false },
+		{ field_order: 8, page: 2, row_index: 5, column_position: 'left' }
+	);
+	fields.set('befallsindex', befallsindexDef.id);
 
-	const gesamtrisikoField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Gesamtrisiko',
-		field_type: 'number',
-		is_required: false,
-		field_order: 9,
-		page: 2,
-		row_index: 5,
-		column_position: 'right',
-		help_text: 'Automatisch berechnet (Befallsindex * (Schadstufe+1), 0-25)'
-	});
-	fields.set('gesamtrisiko', gesamtrisikoField.id);
+	const gesamtrisikoDef = await createDefAndRef(
+		{ key: 'gesamtrisiko', label: 'Gesamtrisiko', field_type: 'number', is_required: false },
+		{ field_order: 9, page: 2, row_index: 5, column_position: 'right' }
+	);
+	fields.set('gesamtrisiko', gesamtrisikoDef.id);
 
-	const dringlichkeitField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Dringlichkeit',
-		field_type: 'dropdown',
-		is_required: false,
-		field_order: 10,
-		page: 2,
-		row_index: 6,
-		column_position: 'full',
-		help_text: 'Automatisch: A=sofort, B=zeitnah, C=beobachten, D=kein Handlungsbedarf',
-		field_options: { options: DRINGLICHKEIT_OPTIONS }
-	});
-	fields.set('dringlichkeit', dringlichkeitField.id);
+	const dringlichkeitDef = await createDefAndRef(
+		{
+			key: 'dringlichkeit',
+			label: 'Dringlichkeit',
+			field_type: 'dropdown',
+			is_required: false,
+			field_options: { options: DRINGLICHKEIT_OPTIONS }
+		},
+		{ field_order: 10, page: 2, row_index: 6, column_position: 'full' }
+	);
+	fields.set('dringlichkeit', dringlichkeitDef.id);
 
-	// tools_edit: Foerster + Waldarbeiter can edit Befallsmerkmale at Monitoring + Verdacht
-	const monitoringStageId = stages.get('Monitoring')!;
-	const verdachtStageId = stages.get('Verdacht')!;
-
-	await pb.collection('tools_edit').create({
-		name: 'Befallsmerkmale aktualisieren',
-		stage_id: [monitoringStageId, verdachtStageId],
-		editable_fields: [befallsmerkmaleField.id],
-		allowed_roles: [foersterRoleId, waldarbeiterRoleId],
-		edit_mode: 'form_fields',
-		visual_config: {}
-	});
+	// TODO(field-def-redesign): tools_edit removed; convert to Form referencing the same field defs
+	// const monitoringStageId = stages.get('Monitoring')!;
+	// const verdachtStageId = stages.get('Verdacht')!;
+	// await pb.collection('tools_edit').create({
+	// 	name: 'Befallsmerkmale aktualisieren',
+	// 	stage_id: [monitoringStageId, verdachtStageId],
+	// 	editable_fields: [befallsmerkmaleDef.id],
+	// 	allowed_roles: [foersterRoleId, waldarbeiterRoleId],
+	// 	edit_mode: 'form_fields',
+	// 	visual_config: {}
+	// });
 
 	// Filterable tag on Dringlichkeit
 	await pb.collection('tools_field_tags').create({
@@ -285,7 +278,7 @@ async function seedWorkflowA(
 		tag_mappings: [
 			{
 				tagType: 'filterable',
-				fieldId: dringlichkeitField.id,
+				fieldId: dringlichkeitDef.id,
 				config: { filterBy: 'field' }
 			}
 		]
@@ -436,9 +429,9 @@ async function seedWorkflowA(
 			participantId,
 			location: { lat: coord.lat, lon: coord.lon },
 			fieldValues: [
-				{ key: fields.get('baumart')!, value: inst.baumart },
-				{ key: fields.get('schadstufe')!, value: inst.schadstufe },
-				{ key: fields.get('befallsmerkmale')!, value: JSON.stringify(inst.befallsmerkmale) }
+				{ fieldDefId: fields.get('baumart')!, value: inst.baumart },
+				{ fieldDefId: fields.get('schadstufe')!, value: inst.schadstufe },
+				{ fieldDefId: fields.get('befallsmerkmale')!, value: JSON.stringify(inst.befallsmerkmale) }
 			]
 		});
 
@@ -531,35 +524,53 @@ async function seedWorkflowB(
 		description: 'Art, Stadium und Foto erfassen'
 	});
 
-	const kaeferartField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Kaeferart',
+	const kaeferartDef = await pb.collection('workflow_field_defs').create({
+		workflow_id: wf.id,
+		key: 'kaeferart',
+		label: 'Kaeferart',
 		field_type: 'dropdown',
+		write_mode: 'singleton',
 		is_required: true,
+		field_options: { options: KAEFERART_OPTIONS }
+	});
+	await pb.collection('tools_form_field_refs').create({
+		form_id: entryForm.id,
+		field_def_id: kaeferartDef.id,
 		field_order: 1,
 		page: 1,
 		row_index: 0,
-		column_position: 'full',
-		field_options: { options: KAEFERART_OPTIONS }
+		column_position: 'full'
 	});
 
-	const stadiumField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Befallsstadium',
+	const stadiumDef = await pb.collection('workflow_field_defs').create({
+		workflow_id: wf.id,
+		key: 'befallsstadium',
+		label: 'Befallsstadium',
 		field_type: 'dropdown',
+		write_mode: 'singleton',
 		is_required: true,
+		field_options: { options: BEFALLSSTADIUM_OPTIONS }
+	});
+	await pb.collection('tools_form_field_refs').create({
+		form_id: entryForm.id,
+		field_def_id: stadiumDef.id,
 		field_order: 2,
 		page: 1,
 		row_index: 1,
-		column_position: 'full',
-		field_options: { options: BEFALLSSTADIUM_OPTIONS }
+		column_position: 'full'
 	});
 
-	const fotoField = await pb.collection('tools_form_fields').create({
-		form_id: entryForm.id,
-		field_label: 'Foto',
+	const fotoDef = await pb.collection('workflow_field_defs').create({
+		workflow_id: wf.id,
+		key: 'foto',
+		label: 'Foto',
 		field_type: 'file',
-		is_required: false,
+		write_mode: 'singleton',
+		is_required: false
+	});
+	await pb.collection('tools_form_field_refs').create({
+		form_id: entryForm.id,
+		field_def_id: fotoDef.id,
 		field_order: 3,
 		page: 1,
 		row_index: 2,
@@ -572,7 +583,7 @@ async function seedWorkflowB(
 		tag_mappings: [
 			{
 				tagType: 'filterable',
-				fieldId: kaeferartField.id,
+				fieldId: kaeferartDef.id,
 				config: { filterBy: 'stage' }
 			}
 		]
@@ -651,8 +662,8 @@ async function seedWorkflowB(
 			participantId,
 			location: { lat: coord.lat, lon: coord.lon },
 			fieldValues: [
-				{ key: kaeferartField.id, value: inst.kaeferart },
-				{ key: stadiumField.id, value: inst.befallsstadium }
+				{ fieldDefId: kaeferartDef.id, value: inst.kaeferart },
+				{ fieldDefId: stadiumDef.id, value: inst.befallsstadium }
 			]
 		});
 

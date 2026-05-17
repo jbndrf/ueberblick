@@ -4,7 +4,7 @@
 	import { X } from '@lucide/svelte';
 	import type { FilterClause } from '$lib/participant-state/types';
 	import type { BuilderContext } from '../types';
-	import * as m from '$lib/paraglide/messages';
+	import { participantFilterBuilderClauseStage, participantFilterBuilderNoStages, participantFilterBuilderPickWorkflow } from '$lib/paraglide/messages';
 
 	interface Props {
 		clause: Extract<FilterClause, { field: 'stage' }>;
@@ -32,7 +32,7 @@
 <div class="space-y-2 rounded-md border p-3">
 	<div class="flex items-center justify-between gap-2">
 		<span class="text-xs font-semibold uppercase text-muted-foreground">
-			{m.participantFilterBuilderClauseStage?.() ?? 'Stage'}
+			{participantFilterBuilderClauseStage?.() ?? 'Stage'}
 		</span>
 		<Button variant="ghost" size="icon" class="h-6 w-6" onclick={onRemove}>
 			<X class="h-3.5 w-3.5" />
@@ -45,7 +45,7 @@
 		onchange={(e) => setWorkflow((e.currentTarget as HTMLSelectElement).value)}
 	>
 		<option value="" disabled>
-			{m.participantFilterBuilderPickWorkflow?.() ?? 'Pick a workflow…'}
+			{participantFilterBuilderPickWorkflow?.() ?? 'Pick a workflow…'}
 		</option>
 		{#each ctx.workflows as wf}
 			<option value={wf.id}>{wf.name}</option>
@@ -67,7 +67,7 @@
 		</div>
 	{:else if clause.workflow_id}
 		<p class="text-xs text-muted-foreground">
-			{m.participantFilterBuilderNoStages?.() ?? 'No stages for this workflow.'}
+			{participantFilterBuilderNoStages?.() ?? 'No stages for this workflow.'}
 		</p>
 	{/if}
 </div>

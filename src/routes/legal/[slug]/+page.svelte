@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as m from '$lib/paraglide/messages';
+	import { legalBack } from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { ArrowLeft } from '@lucide/svelte';
 	import { sanitizeHtml } from '$lib/sanitize-html';
@@ -15,7 +15,7 @@
 	<div class="mb-6">
 		<Button variant="ghost" size="sm" href="/" class="-ml-2">
 			<ArrowLeft class="mr-1 h-4 w-4" />
-			{m.legalBack?.() ?? 'Back'}
+			{legalBack?.() ?? 'Back'}
 		</Button>
 	</div>
 

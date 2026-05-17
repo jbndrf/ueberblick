@@ -2,7 +2,19 @@
 	import { page } from '$app/stores';
 	import { onMount, onDestroy } from 'svelte';
 	import { browser, dev } from '$app/environment';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		mapFilterLayers,
+		mapFilters,
+		mapMyLocation,
+		participantBottomControlBarSettings,
+		participantBottomControlBarTools,
+		participantLayoutAppName,
+		participantLayoutLoading,
+		participantLayoutNew,
+		participantLayoutSyncingData,
+		participantMapRecentTitle,
+		profileAccount
+	} from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { UserCircle, Layers, Filter, Navigation, Settings, Plus, Wrench, Clock } from '@lucide/svelte';
 	import { mapNavCallbacks, mapNavBadges } from './map/nav-store.svelte';
@@ -423,33 +435,33 @@
 					<img src="/icons/logo-light.png" alt="" class="h-8 w-8 rounded-lg object-contain dark:invert" />
 				{/if}
 				{#if syncStatus.current}
-					<span class="text-sm text-muted-foreground animate-pulse">{(m.participantLayoutSyncingData?.({ done: syncStatus.current.done, total: syncStatus.current.total })) ?? `Syncing data (${syncStatus.current.done}/${syncStatus.current.total})`}</span>
+					<span class="text-sm text-muted-foreground animate-pulse">{(participantLayoutSyncingData?.({ done: syncStatus.current.done, total: syncStatus.current.total })) ?? `Syncing data (${syncStatus.current.done}/${syncStatus.current.total})`}</span>
 				{:else if appLoadingMessage.value}
 					<span class="text-sm text-muted-foreground animate-pulse">{appLoadingMessage.value}</span>
 				{:else}
-					<span class="font-semibold">{data.projectName ?? (m.participantLayoutAppName?.() ?? 'Überblick')}</span>
+					<span class="font-semibold">{data.projectName ?? (participantLayoutAppName?.() ?? 'Überblick')}</span>
 				{/if}
 			</div>
 
 			<!-- Desktop Navigation (hidden on mobile) -->
 			<div class="hidden md:flex items-center gap-1">
-				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onLayersClick?.()} title={m.mapFilterLayers?.() ?? 'Layers'}>
+				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onLayersClick?.()} title={mapFilterLayers?.() ?? 'Layers'}>
 					<Layers class="h-5 w-5" />
 				</Button>
-				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onFiltersClick?.()} title={m.mapFilters?.() ?? 'Filters'}>
+				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onFiltersClick?.()} title={mapFilters?.() ?? 'Filters'}>
 					<Filter class="h-5 w-5" />
 				</Button>
-				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onWorkflowClick?.()} title={m.participantLayoutNew?.() ?? 'New'}>
+				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onWorkflowClick?.()} title={participantLayoutNew?.() ?? 'New'}>
 					<Plus class="h-5 w-5" />
 				</Button>
-				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onRecentsClick?.()} title={m.participantMapRecentTitle?.() ?? 'Recent'}>
+				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onRecentsClick?.()} title={participantMapRecentTitle?.() ?? 'Recent'}>
 					<Clock class="h-5 w-5" />
 				</Button>
-				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onLocationClick?.()} title={m.mapMyLocation?.() ?? 'My Location'}>
+				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onLocationClick?.()} title={mapMyLocation?.() ?? 'My Location'}>
 					<Navigation class="h-5 w-5" />
 				</Button>
 				{#if $mapNavBadges.participantToolsAvailable}
-					<Button variant="ghost" size="icon" class="relative" onclick={() => $mapNavCallbacks.onParticipantToolsClick?.()} title={m.participantBottomControlBarTools?.() ?? 'Tools'}>
+					<Button variant="ghost" size="icon" class="relative" onclick={() => $mapNavCallbacks.onParticipantToolsClick?.()} title={participantBottomControlBarTools?.() ?? 'Tools'}>
 						<Wrench class="h-5 w-5" />
 						{#if $mapNavBadges.participantToolsHard > 0}
 							<span class="absolute right-1 top-1 flex min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[0.625rem] font-semibold leading-4 text-destructive-foreground">
@@ -460,7 +472,7 @@
 						{/if}
 					</Button>
 				{/if}
-				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onToolsClick?.()} title={m.participantBottomControlBarSettings?.() ?? 'Settings'}>
+				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onToolsClick?.()} title={participantBottomControlBarSettings?.() ?? 'Settings'}>
 					<Settings class="h-5 w-5" />
 				</Button>
 			</div>
@@ -468,7 +480,7 @@
 			{#if data.participant || offlineSession}
 				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onToolsClick?.()}>
 					<UserCircle class="h-5 w-5" />
-					<span class="sr-only">{m.profileAccount()}</span>
+					<span class="sr-only">{profileAccount()}</span>
 				</Button>
 			{/if}
 		</header>
@@ -479,7 +491,7 @@
 				{@render children()}
 			{:else}
 				<div class="flex h-full items-center justify-center text-sm text-muted-foreground">
-					<span class="animate-pulse">{m.participantLayoutLoading?.() ?? 'Loading…'}</span>
+					<span class="animate-pulse">{participantLayoutLoading?.() ?? 'Loading…'}</span>
 				</div>
 			{/if}
 		</main>

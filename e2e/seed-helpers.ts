@@ -23,13 +23,27 @@ export async function createParticipantClient(token: string): Promise<PocketBase
 }
 
 /**
+ * Per-field write semantics. Mirrors `WriteMode` from participant-state/types.
+ * Defaults to 'singleton' for callers that don't care.
+ */
+export type SeedWriteMode = 'singleton' | 'observation' | 'computed';
+
+export interface SeedFieldValue {
+	/** field_def_id (workflow_field_defs.id) — caller knows this from when they created the field def */
+	fieldDefId: string;
+	value: string;
+	/** Defaults to 'singleton'. */
+	writeMode?: SeedWriteMode;
+}
+
+/**
  * Replicate the real app's entry flow:
  * 1. Create workflow_instances at the start stage
  * 2. Create workflow_instance_tool_usage with action='instance_created'
- * 3. Create workflow_instance_field_values one by one (triggers on_field_change hooks)
+ * 3. Create workflow_field_values one by one (triggers on_field_change hooks)
  *
- * Field values are created in the order given -- put trigger fields last
- * so dependent automations have their inputs available.
+ * Field values are created in the order given -- put trigger fields last so
+ * dependent automations have their inputs available.
  */
 export async function submitEntryForm(
 	pb: PocketBase,
@@ -38,7 +52,7 @@ export async function submitEntryForm(
 		startStageId: string;
 		participantId: string;
 		location: { lat: number; lon: number };
-		fieldValues: Array<{ key: string; value: string }>;
+		fieldValues: SeedFieldValue[];
 	}
 ): Promise<{ instanceId: string; toolUsageId: string }> {
 	const instance = await pb.collection('workflow_instances').create({
@@ -58,17 +72,19 @@ export async function submitEntryForm(
 		metadata: {
 			action: 'instance_created',
 			location: opts.location,
-			created_fields: opts.fieldValues.map((fv) => fv.key)
+			created_fields: opts.fieldValues.map((fv) => fv.fieldDefId)
 		}
 	});
 
 	for (const fv of opts.fieldValues) {
-		await pb.collection('workflow_instance_field_values').create({
+		await pb.collection('workflow_field_values').create({
 			instance_id: instance.id,
-			field_key: fv.key,
+			field_def_id: fv.fieldDefId,
+			write_mode: fv.writeMode ?? 'singleton',
 			value: fv.value,
-			stage_id: opts.startStageId,
-			created_by_action: toolUsage.id
+			recorded_at: new Date().toISOString(),
+			recorded_at_stage: opts.startStageId,
+			recorded_by_action: toolUsage.id
 		});
 	}
 
@@ -90,7 +106,7 @@ export async function executeTransition(
 		toStageId: string;
 		connectionId: string;
 		participantId: string;
-		formFields?: Array<{ key: string; value: string }>;
+		formFields?: SeedFieldValue[];
 	}
 ): Promise<void> {
 	if (opts.formFields && opts.formFields.length > 0) {
@@ -101,17 +117,19 @@ export async function executeTransition(
 			executed_at: new Date().toISOString(),
 			metadata: {
 				action: 'form_fill',
-				created_fields: opts.formFields.map((fv) => fv.key)
+				created_fields: opts.formFields.map((fv) => fv.fieldDefId)
 			}
 		});
 
 		for (const fv of opts.formFields) {
-			await pb.collection('workflow_instance_field_values').create({
+			await pb.collection('workflow_field_values').create({
 				instance_id: opts.instanceId,
-				field_key: fv.key,
+				field_def_id: fv.fieldDefId,
+				write_mode: fv.writeMode ?? 'singleton',
 				value: fv.value,
-				stage_id: opts.toStageId,
-				created_by_action: formUsage.id
+				recorded_at: new Date().toISOString(),
+				recorded_at_stage: opts.toStageId,
+				recorded_by_action: formUsage.id
 			});
 		}
 	}
@@ -137,7 +155,7 @@ export async function executeTransition(
 /**
  * Replicate the real app's stage form fill (no transition):
  * 1. Create tool_usage with action='form_fill'
- * 2. Create workflow_instance_field_values one by one (triggers on_field_change hooks)
+ * 2. Create workflow_field_values one by one (triggers on_field_change hooks)
  */
 export async function fillStageForm(
 	pb: PocketBase,
@@ -145,7 +163,7 @@ export async function fillStageForm(
 		instanceId: string;
 		stageId: string;
 		participantId: string;
-		fieldValues: Array<{ key: string; value: string }>;
+		fieldValues: SeedFieldValue[];
 	}
 ): Promise<void> {
 	const toolUsage = await pb.collection('workflow_instance_tool_usage').create({
@@ -155,17 +173,19 @@ export async function fillStageForm(
 		executed_at: new Date().toISOString(),
 		metadata: {
 			action: 'form_fill',
-			created_fields: opts.fieldValues.map((fv) => fv.key)
+			created_fields: opts.fieldValues.map((fv) => fv.fieldDefId)
 		}
 	});
 
 	for (const fv of opts.fieldValues) {
-		await pb.collection('workflow_instance_field_values').create({
+		await pb.collection('workflow_field_values').create({
 			instance_id: opts.instanceId,
-			field_key: fv.key,
+			field_def_id: fv.fieldDefId,
+			write_mode: fv.writeMode ?? 'singleton',
 			value: fv.value,
-			stage_id: opts.stageId,
-			created_by_action: toolUsage.id
+			recorded_at: new Date().toISOString(),
+			recorded_at_stage: opts.stageId,
+			recorded_by_action: toolUsage.id
 		});
 	}
 }

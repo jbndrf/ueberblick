@@ -12,7 +12,15 @@
 	import FieldValueClause from './clauses/FieldValueClause.svelte';
 	import DateClause from './clauses/DateClause.svelte';
 	import CreatedByClause from './clauses/CreatedByClause.svelte';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		participantFilterBuilderAddOther,
+		participantFilterBuilderClauseCreated,
+		participantFilterBuilderClauseCreatedBy,
+		participantFilterBuilderClauseStage,
+		participantFilterBuilderClauseUpdated,
+		participantFilterBuilderFieldsLabel,
+		participantFilterBuilderFieldsPlaceholder
+	} from '$lib/paraglide/messages';
 
 	interface Props {
 		clauses: FilterClause[];
@@ -29,17 +37,18 @@
 	 * field_value clause targets that exact (workflow, field_key).
 	 */
 	function fieldKey(f: FilterableFieldOption): string {
-		return `${f.workflow_id}|${f.field_key}`;
+		return `${f.workflow_id}|${f.field_def_id}`;
 	}
 
 	const selectedFieldKeys = $derived(
 		clauses
 			.filter((c): c is Extract<FilterClause, { field: 'field_value' }> => c.field === 'field_value')
-			.map((c) => `${c.workflow_id}|${c.field_key}`)
+			.map((c) => `${c.workflow_id}|${c.field_def_id}`)
 	);
 
 	function defaultFieldClause(f: FilterableFieldOption): FilterClause {
-		const base = { field: 'field_value' as const, workflow_id: f.workflow_id, field_key: f.field_key };
+		// TODO(field-def-redesign): expose `aggregate` selector for observation fields.
+		const base = { field: 'field_value' as const, workflow_id: f.workflow_id, field_def_id: f.field_def_id };
 		switch (f.field_type) {
 			case 'number':
 				return { ...base, op: 'number_range', min: null, max: null };
@@ -70,7 +79,7 @@
 		}
 		const keptClauses = clauses.filter((c) => {
 			if (c.field !== 'field_value') return true;
-			return nextSet.has(`${c.workflow_id}|${c.field_key}`);
+			return nextSet.has(`${c.workflow_id}|${c.field_def_id}`);
 		});
 		const added: FilterClause[] = [];
 		for (const id of nextIds) {
@@ -120,7 +129,7 @@
 	     mobile-multi-select. -->
 	<div>
 		<label class="mb-1 block text-xs font-medium uppercase tracking-wide text-muted-foreground" for="view-field-picker">
-			{m.participantFilterBuilderFieldsLabel?.() ?? 'Filter fields'}
+			{participantFilterBuilderFieldsLabel?.() ?? 'Filter fields'}
 		</label>
 		<MobileMultiSelect
 			options={ctx.filterableFields}
@@ -129,7 +138,7 @@
 			getOptionLabel={(f) => f.field_label}
 			getOptionDescription={(f) => f.workflow_name}
 			onSelectedIdsChange={handleFieldPickerChange}
-			placeholder={m.participantFilterBuilderFieldsPlaceholder?.() ?? 'Add fields to filter by…'}
+			placeholder={participantFilterBuilderFieldsPlaceholder?.() ?? 'Add fields to filter by…'}
 			summarizeMultiple
 			disablePortal
 		/>
@@ -184,7 +193,7 @@
 				onclick={() => (otherPickerOpen = !otherPickerOpen)}
 			>
 				<Plus class="mr-2 h-4 w-4" />
-				{m.participantFilterBuilderAddOther?.() ?? 'Add other condition'}
+				{participantFilterBuilderAddOther?.() ?? 'Add other condition'}
 			</Button>
 
 			{#if otherPickerOpen}
@@ -196,25 +205,25 @@
 						class="block w-full px-3 py-2 text-left text-sm hover:bg-accent"
 						onclick={() => addOtherClause('stage')}
 					>
-						{m.participantFilterBuilderClauseStage?.() ?? 'Stage'}
+						{participantFilterBuilderClauseStage?.() ?? 'Stage'}
 					</button>
 					<button
 						class="block w-full px-3 py-2 text-left text-sm hover:bg-accent"
 						onclick={() => addOtherClause('created')}
 					>
-						{m.participantFilterBuilderClauseCreated?.() ?? 'Created date'}
+						{participantFilterBuilderClauseCreated?.() ?? 'Created date'}
 					</button>
 					<button
 						class="block w-full px-3 py-2 text-left text-sm hover:bg-accent"
 						onclick={() => addOtherClause('updated')}
 					>
-						{m.participantFilterBuilderClauseUpdated?.() ?? 'Updated date'}
+						{participantFilterBuilderClauseUpdated?.() ?? 'Updated date'}
 					</button>
 					<button
 						class="block w-full px-3 py-2 text-left text-sm hover:bg-accent"
 						onclick={() => addOtherClause('created_by')}
 					>
-						{m.participantFilterBuilderClauseCreatedBy?.() ?? 'Created by'}
+						{participantFilterBuilderClauseCreatedBy?.() ?? 'Created by'}
 					</button>
 				</div>
 			{/if}

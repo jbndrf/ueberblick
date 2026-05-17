@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { themeStore } from '$lib/stores/theme.svelte';
-	import * as m from '$lib/paraglide/messages';
+	import { switchToDarkMode, switchToLightMode } from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { Sun, Moon } from '@lucide/svelte';
 
@@ -13,7 +13,7 @@
 	variant="outline"
 	size="icon"
 	onclick={toggleTheme}
-	aria-label={themeStore.isDark ? (m.switchToLightMode?.() ?? 'Switch to light mode') : (m.switchToDarkMode?.() ?? 'Switch to dark mode')}
+	aria-label={themeStore.isDark ? (switchToLightMode?.() ?? 'Switch to light mode') : (switchToDarkMode?.() ?? 'Switch to dark mode')}
 >
 	{#if themeStore.isDark}
 		<Sun class="h-5 w-5" />

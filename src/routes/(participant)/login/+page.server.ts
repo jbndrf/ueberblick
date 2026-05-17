@@ -11,7 +11,7 @@ import {
 	retryAfterMinutes
 } from '$lib/server/rate-limit';
 import { env } from '$env/dynamic/private';
-import * as m from '$lib/paraglide/messages';
+import { participantLoginAccountInactive, participantLoginConsentRequired, participantLoginError, participantLoginInvalidToken, participantLoginRateLimited, participantLoginTokenExpired } from '$lib/paraglide/messages';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async (event) => {
@@ -158,7 +158,7 @@ export const actions: Actions = {
 				return fail(403, {
 					form,
 					message:
-						m.participantLoginConsentRequired?.() ??
+						participantLoginConsentRequired?.() ??
 						'Please accept the cookie consent to continue.'
 				});
 			}
@@ -177,7 +177,7 @@ export const actions: Actions = {
 			return fail(429, {
 				form,
 				message:
-					m.participantLoginRateLimited?.({ minutes }) ??
+					participantLoginRateLimited?.({ minutes }) ??
 					`Too many login attempts. Please try again in ${minutes} minute(s).`
 			});
 		}
@@ -197,7 +197,7 @@ export const actions: Actions = {
 				recordLoginFailure(ipKey);
 				return fail(400, {
 					form,
-					message: m.participantLoginAccountInactive?.() ?? 'This account is inactive'
+					message: participantLoginAccountInactive?.() ?? 'This account is inactive'
 				});
 			}
 
@@ -207,7 +207,7 @@ export const actions: Actions = {
 				recordLoginFailure(ipKey);
 				return fail(400, {
 					form,
-					message: m.participantLoginTokenExpired?.() ?? 'Token has expired'
+					message: participantLoginTokenExpired?.() ?? 'Token has expired'
 				});
 			}
 
@@ -224,13 +224,13 @@ export const actions: Actions = {
 			if (error?.status === 400) {
 				return fail(400, {
 					form,
-					message: m.participantLoginInvalidToken?.() ?? 'Invalid or expired token'
+					message: participantLoginInvalidToken?.() ?? 'Invalid or expired token'
 				});
 			}
 
 			return fail(500, {
 				form,
-				message: m.participantLoginError?.() ?? 'Login failed. Please check your token and try again.'
+				message: participantLoginError?.() ?? 'Login failed. Please check your token and try again.'
 			});
 		}
 

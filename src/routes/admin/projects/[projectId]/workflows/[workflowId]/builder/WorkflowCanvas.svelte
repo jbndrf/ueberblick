@@ -14,7 +14,7 @@
 	} from '@xyflow/svelte';
 
 	import { onMount } from 'svelte';
-	import * as m from '$lib/paraglide/messages';
+	import { workflowBuilderCanvasConnectingIndicator, workflowBuilderCanvasEnd, workflowBuilderCanvasNewStage, workflowBuilderCanvasStart } from '$lib/paraglide/messages';
 	import type { StageData } from './context-sidebar';
 
 	interface Props {
@@ -80,7 +80,7 @@
 			type: 'stage',
 			position,
 			data: {
-				title: type === 'start' ? (m.workflowBuilderCanvasStart?.() ?? 'Start') : type === 'end' ? (m.workflowBuilderCanvasEnd?.() ?? 'End') : (m.workflowBuilderCanvasNewStage?.() ?? 'New Stage'),
+				title: type === 'start' ? (workflowBuilderCanvasStart?.() ?? 'Start') : type === 'end' ? (workflowBuilderCanvasEnd?.() ?? 'End') : (workflowBuilderCanvasNewStage?.() ?? 'New Stage'),
 				key: `${type}_${Date.now()}`,
 				stageType: type,
 				maxHours: null
@@ -101,7 +101,7 @@
 <div class="canvas-wrapper" role="application" ondrop={onDrop} ondragover={onDragOver}>
 	{#if connectingFrom}
 		<div class="connecting-indicator">
-			{m.workflowBuilderCanvasConnectingIndicator?.() ?? 'Connecting from node... Right-click another node to connect, or click canvas to cancel.'}
+			{workflowBuilderCanvasConnectingIndicator?.() ?? 'Connecting from node... Right-click another node to connect, or click canvas to cancel.'}
 		</div>
 	{/if}
 

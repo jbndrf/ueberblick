@@ -3,7 +3,7 @@
 	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { toast } from 'svelte-sonner';
-	import * as m from '$lib/paraglide/messages';
+	import { commonCancel, commonSave } from '$lib/paraglide/messages';
 
 	interface ArrayFieldProps {
 		value: any[];
@@ -81,7 +81,7 @@
 
 		try {
 			await onUpdate(selectedIds);
-			toast.success(m.commonSave());
+			toast.success(commonSave());
 			isEditing = false;
 			entitySelectorLoaded = false;
 		} catch (error) {
@@ -118,7 +118,7 @@
 				disabled={isSaving}
 				class="h-7 px-2 text-xs"
 			>
-				{m.commonSave()}
+				{commonSave()}
 			</Button>
 			<Button
 				variant="ghost"
@@ -127,7 +127,7 @@
 				disabled={isSaving}
 				class="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
 			>
-				{m.commonCancel()}
+				{commonCancel()}
 			</Button>
 		</div>
 	</div>

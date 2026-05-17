@@ -1,4 +1,12 @@
-import * as m from '$lib/paraglide/messages';
+import {
+	customTablesCreated,
+	customTablesDisplayName,
+	customTablesMainColumn,
+	customTablesTableName,
+	customTablesVisibleToRoles,
+	rolesActions,
+	rolesDescription_field
+} from '$lib/paraglide/messages';
 
 export type CustomTable = {
 	id: string;
@@ -14,11 +22,11 @@ export type CustomTable = {
 };
 
 export const customTableColumns = {
-	tableName: m.customTablesTableName?.() ?? 'Table Name',
-	displayName: m.customTablesDisplayName?.() ?? 'Display Name',
-	description: m.rolesDescription_field?.() ?? 'Description',
-	mainColumn: m.customTablesMainColumn?.() ?? 'Main Column',
-	visibleToRoles: m.customTablesVisibleToRoles?.() ?? 'Visible to Roles',
-	created: m.customTablesCreated?.() ?? 'Created',
-	actions: m.rolesActions?.() ?? 'Actions'
+	tableName: customTablesTableName?.() ?? 'Table Name',
+	displayName: customTablesDisplayName?.() ?? 'Display Name',
+	description: rolesDescription_field?.() ?? 'Description',
+	mainColumn: customTablesMainColumn?.() ?? 'Main Column',
+	visibleToRoles: customTablesVisibleToRoles?.() ?? 'Visible to Roles',
+	created: customTablesCreated?.() ?? 'Created',
+	actions: rolesActions?.() ?? 'Actions'
 };

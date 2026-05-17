@@ -4,7 +4,7 @@
 	import { Switch } from '$lib/components/ui/switch';
 	import { Label } from '$lib/components/ui/label';
 	import { X } from '@lucide/svelte';
-	import * as m from '$lib/paraglide/messages';
+	import { commonSearch } from '$lib/paraglide/messages';
 
 	type Props = {
 		searchValue?: string;
@@ -23,7 +23,7 @@
 		onSearchChange,
 		onClearFilters,
 		hasActiveFilters,
-		searchPlaceholder = m.commonSearch(),
+		searchPlaceholder = commonSearch(),
 		showEditMode = false,
 		editMode = $bindable(false),
 		onEditModeChange,

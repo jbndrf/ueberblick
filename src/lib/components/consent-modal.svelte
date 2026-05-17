@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import { ArrowLeft } from '@lucide/svelte';
-	import * as m from '$lib/paraglide/messages';
+	import { consentModalBack, consentModalDefaultBody, consentModalDefaultTitle } from '$lib/paraglide/messages';
 	import { sanitizeHtml } from '$lib/sanitize-html';
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
@@ -50,7 +50,7 @@
 						class="-ml-2"
 					>
 						<ArrowLeft class="mr-1 h-4 w-4" />
-						{m.consentModalBack?.() ?? 'Back'}
+						{consentModalBack?.() ?? 'Back'}
 					</Button>
 				</div>
 				<div class="overflow-y-auto p-6">
@@ -61,7 +61,7 @@
 			{:else}
 				<div class="overflow-y-auto p-6">
 					<h1 id="consent-heading" class="mb-4 text-xl font-semibold">
-						{title || (m.consentModalDefaultTitle?.() ?? 'Cookies & Data Processing')}
+						{title || (consentModalDefaultTitle?.() ?? 'Cookies & Data Processing')}
 					</h1>
 					{#if body}
 						<div class="info-content break-words text-sm">
@@ -69,7 +69,7 @@
 						</div>
 					{:else}
 						<p class="text-sm text-muted-foreground">
-							{m.consentModalDefaultBody?.() ??
+							{consentModalDefaultBody?.() ??
 								'This application uses only technically necessary cookies for login and settings. No tracking or analytics is performed.'}
 						</p>
 					{/if}

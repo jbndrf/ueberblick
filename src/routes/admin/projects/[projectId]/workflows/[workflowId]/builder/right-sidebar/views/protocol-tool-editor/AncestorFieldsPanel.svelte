@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { FileWarning } from '@lucide/svelte';
-	import * as m from '$lib/paraglide/messages';
+	import { editToolAncestorFieldsPanelAvailableFields, editToolAncestorFieldsPanelNoFieldsAvailable, editToolAncestorFieldsPanelNoFieldsHint, editToolAncestorFieldsPanelSelected } from '$lib/paraglide/messages';
 	import AncestorFieldGroup from './AncestorFieldGroup.svelte';
 	import type { ToolsForm, ToolsFormField, WorkflowStage } from '$lib/workflow-builder';
 
@@ -82,8 +82,8 @@
 
 <div class="ancestor-fields-panel">
 	<div class="panel-header">
-		<span class="panel-title">{m.editToolAncestorFieldsPanelAvailableFields?.() ?? 'Available Fields'}</span>
-		<span class="field-count">{selectedFieldIds.length} {m.editToolAncestorFieldsPanelSelected?.() ?? 'selected'}</span>
+		<span class="panel-title">{editToolAncestorFieldsPanelAvailableFields?.() ?? 'Available Fields'}</span>
+		<span class="field-count">{selectedFieldIds.length} {editToolAncestorFieldsPanelSelected?.() ?? 'selected'}</span>
 	</div>
 
 	<div class="panel-content">
@@ -107,9 +107,9 @@
 		{:else}
 			<div class="empty-state">
 				<FileWarning class="h-8 w-8" />
-				<p>{m.editToolAncestorFieldsPanelNoFieldsAvailable?.() ?? 'No form fields in this workflow yet'}</p>
+				<p>{editToolAncestorFieldsPanelNoFieldsAvailable?.() ?? 'No form fields in this workflow yet'}</p>
 				<span class="empty-hint">
-					{m.editToolAncestorFieldsPanelNoFieldsHint?.() ?? 'Add fields to any form in this workflow to make them selectable here.'}
+					{editToolAncestorFieldsPanelNoFieldsHint?.() ?? 'Add fields to any form in this workflow to make them selectable here.'}
 				</span>
 			</div>
 		{/if}

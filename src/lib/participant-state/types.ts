@@ -121,17 +121,27 @@ export interface WorkflowInstance {
 }
 
 /**
- * Field value - matches `workflow_instance_field_values` collection
- * Stores form field responses within a workflow instance
+ * Per-field write semantics — drives whether a submission upserts (singleton),
+ * always appends (observation), or is server-evaluated (computed).
+ */
+export type WriteMode = 'singleton' | 'observation' | 'computed';
+
+/**
+ * Field value - matches `workflow_field_values` collection.
+ * One row per (instance, field_def) for singleton/computed fields (enforced by
+ * a partial unique index); many rows per (instance, field_def) for observation
+ * fields (append-only readings).
  */
 export interface FieldValue {
 	id: string;
 	instance_id: string;
-	field_key: string;
+	field_def_id: string;
+	write_mode: WriteMode;
 	value: string;
 	file_value: string;
-	stage_id: string;
-	created_by_action: string;
+	recorded_at: string;
+	recorded_by_action: string;
+	recorded_at_stage: string;
 	created: string;
 	updated: string;
 }
@@ -301,6 +311,26 @@ export interface WorkflowStage {
 }
 
 /**
+ * Sentry clause — a single boolean check against an instance's field values.
+ * Multiple clauses on a sentry are AND-ed together. Empty/missing sentry
+ * means the connection is always available.
+ */
+export interface SentryClause {
+	field_def_id: string;
+	op:
+		| 'equals'
+		| 'not_equals'
+		| 'contains'
+		| 'is_empty'
+		| 'is_not_empty'
+		| 'gt'
+		| 'gte'
+		| 'lt'
+		| 'lte';
+	value?: string;
+}
+
+/**
  * Workflow connection - matches `workflow_connections` collection
  */
 export interface WorkflowConnection {
@@ -311,6 +341,12 @@ export interface WorkflowConnection {
 	action_name: string;
 	allowed_roles: string[];
 	visual_config: Record<string, unknown> | null;
+	/**
+	 * Phase 3: AND-ed list of sentry clauses. Connection is available only
+	 * when every clause matches the current instance's field values. Empty
+	 * array or null means always available.
+	 */
+	sentry: SentryClause[] | null;
 	created: string;
 	updated: string;
 }
@@ -331,50 +367,88 @@ export interface ToolForm {
 	updated: string;
 }
 
+export type FieldType =
+	| 'short_text'
+	| 'long_text'
+	| 'number'
+	| 'email'
+	| 'date'
+	| 'file'
+	| 'dropdown'
+	| 'multiple_choice'
+	| 'smart_dropdown'
+	| 'custom_table_selector'
+	| 'instance_reference';
+
 /**
- * Form field - matches `tools_form_fields` collection
+ * Phase 4 — instance reference field options.
+ * Stored on `workflow_field_defs.field_options` when `field_type === 'instance_reference'`.
+ *
+ * - `target_workflow_id`: null = any workflow; otherwise restricts the picker.
+ * - `multiplicity`: 'single' = one instance id, 'many' = array of ids.
+ * - `on_delete`: behavior when the target instance is deleted. Foundation
+ *   only this phase — cascade enforcement is deferred to a follow-up.
+ * - `relation_kind`: hint for UI (parent/child = nested rendering; peer = link).
+ *
+ * The value column stores a JSON array of workflow_instance ids regardless
+ * of multiplicity (single = one-element array). One storage path.
  */
-export interface ToolFormField {
+export interface InstanceReferenceOptions {
+	target_workflow_id: string | null;
+	multiplicity: 'single' | 'many';
+	on_delete: 'cascade' | 'nullify' | 'block';
+	relation_kind: 'peer' | 'parent' | 'child';
+}
+
+/**
+ * Field definition - matches `workflow_field_defs` collection.
+ * The workflow-scoped registry: each field is declared once here, then
+ * referenced from any number of forms via `tools_form_field_refs`.
+ */
+export interface FieldDef {
 	id: string;
-	form_id: string;
-	field_label: string;
-	field_type:
-		| 'short_text'
-		| 'long_text'
-		| 'number'
-		| 'email'
-		| 'date'
-		| 'file'
-		| 'dropdown'
-		| 'multiple_choice'
-		| 'smart_dropdown';
-	field_order: number;
-	page: number;
-	page_title: string;
-	is_required: boolean;
+	workflow_id: string;
+	key: string;
+	label: string;
+	field_type: FieldType;
+	write_mode: WriteMode;
+	output_type: 'text' | 'number' | 'date' | 'json' | '';
+	display_stage_id: string;
+	view_roles: string[];
 	placeholder: string;
 	help_text: string;
+	is_required: boolean;
 	validation_rules: Record<string, unknown> | null;
 	field_options: Record<string, unknown> | null;
-	conditional_logic: Record<string, unknown> | null;
-	row_index: number;
-	column_position: string;
+	compute_expression: string;
+	/**
+	 * Phase 2: field def ids this computed field reads from. Populated by the
+	 * admin save layer (parses {field_id} refs in compute_expression).
+	 * Used server-side by computed_fields.js as a forward index for recompute.
+	 */
+	compute_depends_on: string[];
 	created: string;
 	updated: string;
 }
 
 /**
- * Edit tool - matches `tools_edit` collection
+ * Form field reference - matches `tools_form_field_refs` collection.
+ * A form references field defs from the workflow's registry; per-form layout
+ * and override knobs live on the reference, not the definition.
  */
-export interface ToolEdit {
+export interface ToolFormFieldRef {
 	id: string;
-	connection_id: string;
-	stage_id: string;
-	name: string;
-	editable_fields: string[];
-	self_edit_roles: string[];
-	any_edit_roles: string[];
-	visual_config: Record<string, unknown> | null;
+	form_id: string;
+	field_def_id: string;
+	field_order: number;
+	page: number;
+	page_title: string;
+	row_index: number;
+	column_position: number;
+	is_required_override: boolean | null;
+	placeholder_override: string;
+	help_text_override: string;
+	conditional_logic: Record<string, unknown> | null;
 	created: string;
 	updated: string;
 }
@@ -480,10 +554,12 @@ export type OfflineMarker = Marker;
 export type OfflineWorkflow = Workflow;
 
 /**
- * Form data for offline packs
+ * Form data for offline packs. The form's field-refs are resolved against the
+ * workflow's field-def registry; both lists travel together so the participant
+ * can render forms while offline.
  */
 export type OfflineForm = ToolForm & {
-	fields: ToolFormField[];
+	field_refs: ToolFormFieldRef[];
 };
 
 /**
@@ -574,32 +650,44 @@ export interface ToolConfigRecord<T = unknown> {
  * within one `in`-clause, `values` behave as OR.
  *
  * `stage` and `field_value` are scoped to a specific workflow because stage
- * ids and field_keys only make sense in that workflow's context.
+ * ids and field_def_ids only make sense in that workflow's context.
  *
  * `field_value` supports multiple ops so a single clause type covers every
  * form-field flavour: `in` for dropdown/multiple-choice, `contains` for
- * text, `number_range` for numeric fields, and `date_range` for date fields.
+ * text, `number_range` for numeric fields, `date_range` for date fields.
+ *
+ * `aggregate` controls how observation-mode fields are evaluated:
+ *   - `latest` (default): only the most recent observation must match.
+ *   - `any`:    at least one observation in the history must match.
+ *   - `all`:    every observation must match.
+ *   - `count`:  number of matching observations (combined with min/max).
+ * For singleton/computed fields the aggregate is ignored (there's one value).
  */
+export type FieldValueAggregate = 'latest' | 'any' | 'all' | 'count';
+
 export type FilterClause =
 	| { field: 'stage'; workflow_id: string; op: 'in'; values: string[] }
 	| {
 			field: 'field_value';
 			workflow_id: string;
-			field_key: string;
+			field_def_id: string;
+			aggregate?: FieldValueAggregate;
 			op: 'in';
 			values: string[];
 	  }
 	| {
 			field: 'field_value';
 			workflow_id: string;
-			field_key: string;
+			field_def_id: string;
+			aggregate?: FieldValueAggregate;
 			op: 'contains';
 			text: string;
 	  }
 	| {
 			field: 'field_value';
 			workflow_id: string;
-			field_key: string;
+			field_def_id: string;
+			aggregate?: FieldValueAggregate;
 			op: 'number_range';
 			min: number | null;
 			max: number | null;
@@ -607,7 +695,8 @@ export type FilterClause =
 	| {
 			field: 'field_value';
 			workflow_id: string;
-			field_key: string;
+			field_def_id: string;
+			aggregate?: FieldValueAggregate;
 			op: 'date_range';
 			from: string | null;
 			to: string | null;

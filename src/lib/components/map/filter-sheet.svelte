@@ -3,7 +3,6 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Switch } from '$lib/components/ui/switch';
 	import { Separator } from '$lib/components/ui/separator';
-	import * as m from '$lib/paraglide/messages';
 
 	interface TileLayer {
 		id: string;

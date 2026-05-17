@@ -4,7 +4,7 @@
 	import { X } from '@lucide/svelte';
 	import type { FilterClause } from '$lib/participant-state/types';
 	import type { BuilderContext } from '../types';
-	import * as m from '$lib/paraglide/messages';
+	import { participantFilterBuilderClauseCreatedBy, participantFilterBuilderNoCreators } from '$lib/paraglide/messages';
 
 	interface Props {
 		clause: Extract<FilterClause, { field: 'created_by' }>;
@@ -26,7 +26,7 @@
 <div class="space-y-2 rounded-md border p-3">
 	<div class="flex items-center justify-between gap-2">
 		<span class="text-xs font-semibold uppercase text-muted-foreground">
-			{m.participantFilterBuilderClauseCreatedBy?.() ?? 'Created by'}
+			{participantFilterBuilderClauseCreatedBy?.() ?? 'Created by'}
 		</span>
 		<Button variant="ghost" size="icon" class="h-6 w-6" onclick={onRemove}>
 			<X class="h-3.5 w-3.5" />
@@ -35,7 +35,7 @@
 
 	{#if ctx.creators.length === 0}
 		<p class="text-xs text-muted-foreground">
-			{m.participantFilterBuilderNoCreators?.() ?? 'No creators yet.'}
+			{participantFilterBuilderNoCreators?.() ?? 'No creators yet.'}
 		</p>
 	{:else}
 		<div class="max-h-40 space-y-1 overflow-y-auto rounded-md border p-2">

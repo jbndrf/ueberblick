@@ -2,7 +2,27 @@
 	import { superForm } from 'sveltekit-superforms';
 	import { zod4Client } from 'sveltekit-superforms/adapters';
 	import { participantLoginSchema } from '$lib/schemas/auth';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		participantLoginLoading,
+		participantLoginOr,
+		participantLoginQrCameraError,
+		participantLoginQrFileError,
+		participantLoginQrHint,
+		participantLoginQrInitError,
+		participantLoginStartCamera,
+		participantLoginStopCamera,
+		participantLoginSubmit,
+		participantLoginSubmitting,
+		participantLoginSubtitle,
+		participantLoginSwitchToQr,
+		participantLoginSwitchToToken,
+		participantLoginTabQr,
+		participantLoginTabToken,
+		participantLoginTitle,
+		participantLoginTokenLabel,
+		participantLoginTokenPlaceholder,
+		participantLoginUploadQrImage
+	} from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
@@ -52,7 +72,7 @@
 			scannerReady = true;
 		} catch (err) {
 			console.error('Failed to initialize QR scanner:', err);
-			scannerError = m.participantLoginQrInitError?.() ?? 'Failed to initialize QR scanner';
+			scannerError = participantLoginQrInitError?.() ?? 'Failed to initialize QR scanner';
 		}
 	}
 
@@ -71,7 +91,7 @@
 		} catch (err: any) {
 			scanningActive = false;
 			console.error('Camera error:', err);
-			scannerError = err?.message || (m.participantLoginQrCameraError?.() ?? 'Could not access camera. Try uploading an image instead.');
+			scannerError = err?.message || (participantLoginQrCameraError?.() ?? 'Could not access camera. Try uploading an image instead.');
 		}
 	}
 
@@ -97,7 +117,7 @@
 			onQrCodeScanned(result);
 		} catch (err: any) {
 			console.error('File scan error:', err);
-			scannerError = m.participantLoginQrFileError?.() ?? 'Could not read QR code from image. Make sure the image contains a valid QR code.';
+			scannerError = participantLoginQrFileError?.() ?? 'Could not read QR code from image. Make sure the image contains a valid QR code.';
 		}
 		// Reset input so same file can be selected again
 		input.value = '';
@@ -130,7 +150,7 @@
 </script>
 
 <svelte:head>
-	<title>{m.participantLoginTitle()} - Überblick</title>
+	<title>{participantLoginTitle()} - Überblick</title>
 </svelte:head>
 
 <div
@@ -145,8 +165,8 @@
 	<Card.Root class="w-full max-w-md">
 		<Card.Header class="space-y-1 text-center">
 			<img src="/icons/logo-light.png" alt="Überblick" class="mx-auto mb-4 h-16 w-16 object-contain dark:invert" />
-			<Card.Title class="text-2xl font-bold">{m.participantLoginTitle()}</Card.Title>
-			<Card.Description>{m.participantLoginSubtitle()}</Card.Description>
+			<Card.Title class="text-2xl font-bold">{participantLoginTitle()}</Card.Title>
+			<Card.Description>{participantLoginSubtitle()}</Card.Description>
 		</Card.Header>
 
 		<Card.Content>
@@ -154,11 +174,11 @@
 				<Tabs.List class="grid w-full grid-cols-2">
 					<Tabs.Trigger value="token">
 						<KeyRound class="mr-2 h-4 w-4" />
-						{m.participantLoginTabToken()}
+						{participantLoginTabToken()}
 					</Tabs.Trigger>
 					<Tabs.Trigger value="qr">
 						<QrCode class="mr-2 h-4 w-4" />
-						{m.participantLoginTabQr()}
+						{participantLoginTabQr()}
 					</Tabs.Trigger>
 				</Tabs.List>
 
@@ -166,12 +186,12 @@
 				<Tabs.Content value="token" class="mt-4">
 					<form method="POST" action="?/login" use:enhance bind:this={formElement} class="space-y-4">
 						<div class="space-y-2">
-							<Label for="token">{m.participantLoginTokenLabel()}</Label>
+							<Label for="token">{participantLoginTokenLabel()}</Label>
 							<Input
 								id="token"
 								name="token"
 								type="text"
-								placeholder={m.participantLoginTokenPlaceholder()}
+								placeholder={participantLoginTokenPlaceholder()}
 								autocomplete="off"
 								autocapitalize="none"
 								spellcheck="false"
@@ -198,21 +218,21 @@
 						<!-- Submit Button -->
 						<Button type="submit" class="w-full" disabled={$delayed} data-testid="login-button">
 							{#if $delayed}
-								{m.participantLoginSubmitting()}
+								{participantLoginSubmitting()}
 							{:else}
-								{m.participantLoginSubmit()}
+								{participantLoginSubmit()}
 							{/if}
 						</Button>
 					</form>
 
 					<div class="mt-4 text-center text-sm text-muted-foreground">
 						<p>
-							{m.participantLoginOr?.() ?? 'Or'} <button
+							{participantLoginOr?.() ?? 'Or'} <button
 								type="button"
 								class="text-primary hover:underline"
 								onclick={() => (activeTab = 'qr')}
 							>
-								{m.participantLoginSwitchToQr()}
+								{participantLoginSwitchToQr()}
 							</button>
 						</p>
 					</div>
@@ -248,7 +268,7 @@
 									disabled={!scannerReady}
 								>
 									<Camera class="mr-2 h-4 w-4" />
-									{scannerReady ? (m.participantLoginStartCamera?.() ?? 'Start Camera') : (m.participantLoginLoading?.() ?? 'Loading...')}
+									{scannerReady ? (participantLoginStartCamera?.() ?? 'Start Camera') : (participantLoginLoading?.() ?? 'Loading...')}
 								</Button>
 							{:else}
 								<Button
@@ -258,14 +278,14 @@
 									onclick={stopCameraScanning}
 								>
 									<Loader2 class="mr-2 h-4 w-4 animate-spin" />
-									{m.participantLoginStopCamera?.() ?? 'Stop Camera'}
+									{participantLoginStopCamera?.() ?? 'Stop Camera'}
 								</Button>
 							{/if}
 
 							<Button type="button" variant="outline" class="flex-1" disabled={!scannerReady}>
 								<label class="flex cursor-pointer items-center justify-center">
 									<Upload class="mr-2 h-4 w-4" />
-									{m.participantLoginUploadQrImage?.() ?? 'Upload QR Image'}
+									{participantLoginUploadQrImage?.() ?? 'Upload QR Image'}
 									<input
 										type="file"
 										accept="image/*"
@@ -277,17 +297,17 @@
 						</div>
 
 						<p class="text-center text-xs text-muted-foreground">
-							{m.participantLoginQrHint?.() ?? 'Scan a QR code with your camera or upload an image'}
+							{participantLoginQrHint?.() ?? 'Scan a QR code with your camera or upload an image'}
 						</p>
 
 						<div class="text-center text-sm text-muted-foreground">
 							<p>
-								{m.participantLoginOr?.() ?? 'Or'} <button
+								{participantLoginOr?.() ?? 'Or'} <button
 									type="button"
 									class="text-primary hover:underline"
 									onclick={() => (activeTab = 'token')}
 								>
-									{m.participantLoginSwitchToToken()}
+									{participantLoginSwitchToToken()}
 								</button>
 							</p>
 						</div>

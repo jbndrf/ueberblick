@@ -3,7 +3,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { X } from '@lucide/svelte';
 	import type { FilterClause } from '$lib/participant-state/types';
-	import * as m from '$lib/paraglide/messages';
+	import { participantFilterBuilderClauseDate, participantFilterBuilderDateFieldCreated, participantFilterBuilderDateFieldUpdated, participantFilterBuilderOpBetween, participantFilterBuilderOpNewer, participantFilterBuilderOpOlder } from '$lib/paraglide/messages';
 
 	type DateClause = Extract<FilterClause, { field: 'created' | 'updated' }>;
 
@@ -45,7 +45,7 @@
 <div class="space-y-2 rounded-md border p-3">
 	<div class="flex items-center justify-between gap-2">
 		<span class="text-xs font-semibold uppercase text-muted-foreground">
-			{m.participantFilterBuilderClauseDate?.() ?? 'Date'}
+			{participantFilterBuilderClauseDate?.() ?? 'Date'}
 		</span>
 		<Button variant="ghost" size="icon" class="h-6 w-6" onclick={onRemove}>
 			<X class="h-3.5 w-3.5" />
@@ -58,8 +58,8 @@
 			value={clause.field}
 			onchange={(e) => setField((e.currentTarget as HTMLSelectElement).value as 'created' | 'updated')}
 		>
-			<option value="created">{m.participantFilterBuilderDateFieldCreated?.() ?? 'Created'}</option>
-			<option value="updated">{m.participantFilterBuilderDateFieldUpdated?.() ?? 'Updated'}</option>
+			<option value="created">{participantFilterBuilderDateFieldCreated?.() ?? 'Created'}</option>
+			<option value="updated">{participantFilterBuilderDateFieldUpdated?.() ?? 'Updated'}</option>
 		</select>
 
 		<select
@@ -67,9 +67,9 @@
 			value={clause.op}
 			onchange={(e) => setMode((e.currentTarget as HTMLSelectElement).value as Mode)}
 		>
-			<option value="older_than_days">{m.participantFilterBuilderOpOlder?.() ?? 'Older than (days)'}</option>
-			<option value="newer_than_days">{m.participantFilterBuilderOpNewer?.() ?? 'Newer than (days)'}</option>
-			<option value="between">{m.participantFilterBuilderOpBetween?.() ?? 'Between'}</option>
+			<option value="older_than_days">{participantFilterBuilderOpOlder?.() ?? 'Older than (days)'}</option>
+			<option value="newer_than_days">{participantFilterBuilderOpNewer?.() ?? 'Newer than (days)'}</option>
+			<option value="between">{participantFilterBuilderOpBetween?.() ?? 'Between'}</option>
 		</select>
 	</div>
 

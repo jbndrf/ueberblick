@@ -9,7 +9,23 @@
 	import { Plus, Pencil, Trash2, GripVertical, ChevronDown, Check } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { invalidateAll } from '$app/navigation';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		adminCustomFieldManagerDefaultPrefix,
+		adminCustomFieldManagerDefaultValuePlaceholder,
+		adminCustomFieldManagerDeleteTitle,
+		adminCustomFieldManagerEditTitle,
+		adminCustomFieldManagerFieldNameHint,
+		adminCustomFieldManagerRequired,
+		adminCustomFieldManagerSelectType,
+		adminCustomFieldManagerTypeBoolean,
+		adminCustomFieldManagerTypeDate,
+		adminCustomFieldManagerTypeNumber,
+		adminCustomFieldManagerTypeText,
+		commonCancel,
+		commonCreate,
+		commonDelete,
+		commonSave
+	} from '$lib/paraglide/messages';
 
 	export interface FieldConfig {
 		tableName: string;
@@ -235,13 +251,13 @@
 									<span
 										class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset bg-yellow-50 text-yellow-700 ring-yellow-700/10"
 									>
-										{m.adminCustomFieldManagerRequired()}
+										{adminCustomFieldManagerRequired()}
 									</span>
 								{/if}
 							</div>
 							{#if config.defaultValueColumn && field[config.defaultValueColumn]}
 								<p class="text-xs text-muted-foreground mt-1">
-									{m.adminCustomFieldManagerDefaultPrefix({ value: field[config.defaultValueColumn] })}
+									{adminCustomFieldManagerDefaultPrefix({ value: field[config.defaultValueColumn] })}
 								</p>
 							{/if}
 						</div>
@@ -286,7 +302,7 @@
 					required
 				/>
 				<p class="text-xs text-muted-foreground">
-					{m.adminCustomFieldManagerFieldNameHint()}
+					{adminCustomFieldManagerFieldNameHint()}
 				</p>
 			</div>
 			<div class="grid gap-2">
@@ -300,10 +316,10 @@
 								class="w-full justify-between"
 								id="fieldType"
 							>
-								{(formData.fieldType === 'text' ? m.adminCustomFieldManagerTypeText() :
-								 formData.fieldType === 'number' ? m.adminCustomFieldManagerTypeNumber() :
-								 formData.fieldType === 'date' ? m.adminCustomFieldManagerTypeDate() :
-								 formData.fieldType === 'boolean' ? m.adminCustomFieldManagerTypeBoolean() : m.adminCustomFieldManagerSelectType())}
+								{(formData.fieldType === 'text' ? adminCustomFieldManagerTypeText() :
+								 formData.fieldType === 'number' ? adminCustomFieldManagerTypeNumber() :
+								 formData.fieldType === 'date' ? adminCustomFieldManagerTypeDate() :
+								 formData.fieldType === 'boolean' ? adminCustomFieldManagerTypeBoolean() : adminCustomFieldManagerSelectType())}
 								<ChevronDown class="ml-2 h-4 w-4 opacity-50" />
 							</Button>
 						{/snippet}
@@ -315,7 +331,7 @@
 							{:else}
 								<span class="mr-2 h-4 w-4"></span>
 							{/if}
-							{m.adminCustomFieldManagerTypeText()}
+							{adminCustomFieldManagerTypeText()}
 						</DropdownMenu.Item>
 						<DropdownMenu.Item onclick={() => { formData.fieldType = 'number'; }}>
 							{#if formData.fieldType === 'number'}
@@ -323,7 +339,7 @@
 							{:else}
 								<span class="mr-2 h-4 w-4"></span>
 							{/if}
-							{m.adminCustomFieldManagerTypeNumber()}
+							{adminCustomFieldManagerTypeNumber()}
 						</DropdownMenu.Item>
 						<DropdownMenu.Item onclick={() => { formData.fieldType = 'date'; }}>
 							{#if formData.fieldType === 'date'}
@@ -331,7 +347,7 @@
 							{:else}
 								<span class="mr-2 h-4 w-4"></span>
 							{/if}
-							{m.adminCustomFieldManagerTypeDate()}
+							{adminCustomFieldManagerTypeDate()}
 						</DropdownMenu.Item>
 						<DropdownMenu.Item onclick={() => { formData.fieldType = 'boolean'; }}>
 							{#if formData.fieldType === 'boolean'}
@@ -339,7 +355,7 @@
 							{:else}
 								<span class="mr-2 h-4 w-4"></span>
 							{/if}
-							{m.adminCustomFieldManagerTypeBoolean()}
+							{adminCustomFieldManagerTypeBoolean()}
 						</DropdownMenu.Item>
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
@@ -347,7 +363,7 @@
 			{#if config.defaultValueColumn}
 				<div class="grid gap-2">
 					<Label for="defaultValue">{config.labels.defaultValue}</Label>
-					<Input id="defaultValue" bind:value={formData.defaultValue} placeholder={m.adminCustomFieldManagerDefaultValuePlaceholder()} />
+					<Input id="defaultValue" bind:value={formData.defaultValue} placeholder={adminCustomFieldManagerDefaultValuePlaceholder()} />
 				</div>
 			{/if}
 			{#if config.isRequiredColumn}
@@ -361,9 +377,9 @@
 		</div>
 		<Dialog.Footer>
 			<Button type="button" variant="outline" onclick={() => (createDialogOpen = false)}>
-				{m.commonCancel()}
+				{commonCancel()}
 			</Button>
-			<Button type="button" onclick={handleCreate}>{m.commonCreate()}</Button>
+			<Button type="button" onclick={handleCreate}>{commonCreate()}</Button>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>
@@ -372,7 +388,7 @@
 <Dialog.Root bind:open={editDialogOpen}>
 	<Dialog.Content>
 		<Dialog.Header>
-			<Dialog.Title>{m.adminCustomFieldManagerEditTitle({ fieldName: config.labels.fieldName })}</Dialog.Title>
+			<Dialog.Title>{adminCustomFieldManagerEditTitle({ fieldName: config.labels.fieldName })}</Dialog.Title>
 		</Dialog.Header>
 		{#if selectedField}
 			<div class="grid gap-4 py-4">
@@ -396,10 +412,10 @@
 									class="w-full justify-between"
 									id="edit-fieldType"
 								>
-									{(formData.fieldType === 'text' ? m.adminCustomFieldManagerTypeText() :
-									 formData.fieldType === 'number' ? m.adminCustomFieldManagerTypeNumber() :
-									 formData.fieldType === 'date' ? m.adminCustomFieldManagerTypeDate() :
-									 formData.fieldType === 'boolean' ? m.adminCustomFieldManagerTypeBoolean() : m.adminCustomFieldManagerSelectType())}
+									{(formData.fieldType === 'text' ? adminCustomFieldManagerTypeText() :
+									 formData.fieldType === 'number' ? adminCustomFieldManagerTypeNumber() :
+									 formData.fieldType === 'date' ? adminCustomFieldManagerTypeDate() :
+									 formData.fieldType === 'boolean' ? adminCustomFieldManagerTypeBoolean() : adminCustomFieldManagerSelectType())}
 									<ChevronDown class="ml-2 h-4 w-4 opacity-50" />
 								</Button>
 							{/snippet}
@@ -411,7 +427,7 @@
 								{:else}
 									<span class="mr-2 h-4 w-4"></span>
 								{/if}
-								{m.adminCustomFieldManagerTypeText()}
+								{adminCustomFieldManagerTypeText()}
 							</DropdownMenu.Item>
 							<DropdownMenu.Item onclick={() => { formData.fieldType = 'number'; }}>
 								{#if formData.fieldType === 'number'}
@@ -419,7 +435,7 @@
 								{:else}
 									<span class="mr-2 h-4 w-4"></span>
 								{/if}
-								{m.adminCustomFieldManagerTypeNumber()}
+								{adminCustomFieldManagerTypeNumber()}
 							</DropdownMenu.Item>
 							<DropdownMenu.Item onclick={() => { formData.fieldType = 'date'; }}>
 								{#if formData.fieldType === 'date'}
@@ -427,7 +443,7 @@
 								{:else}
 									<span class="mr-2 h-4 w-4"></span>
 								{/if}
-								{m.adminCustomFieldManagerTypeDate()}
+								{adminCustomFieldManagerTypeDate()}
 							</DropdownMenu.Item>
 							<DropdownMenu.Item onclick={() => { formData.fieldType = 'boolean'; }}>
 								{#if formData.fieldType === 'boolean'}
@@ -435,7 +451,7 @@
 								{:else}
 									<span class="mr-2 h-4 w-4"></span>
 								{/if}
-								{m.adminCustomFieldManagerTypeBoolean()}
+								{adminCustomFieldManagerTypeBoolean()}
 							</DropdownMenu.Item>
 						</DropdownMenu.Content>
 					</DropdownMenu.Root>
@@ -446,7 +462,7 @@
 						<Input
 							id="edit-defaultValue"
 							bind:value={formData.defaultValue}
-							placeholder={m.adminCustomFieldManagerDefaultValuePlaceholder()}
+							placeholder={adminCustomFieldManagerDefaultValuePlaceholder()}
 						/>
 					</div>
 				{/if}
@@ -462,9 +478,9 @@
 		{/if}
 		<Dialog.Footer>
 			<Button type="button" variant="outline" onclick={() => (editDialogOpen = false)}>
-				{m.commonCancel()}
+				{commonCancel()}
 			</Button>
-			<Button type="button" onclick={handleUpdate}>{m.commonSave()}</Button>
+			<Button type="button" onclick={handleUpdate}>{commonSave()}</Button>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>
@@ -473,7 +489,7 @@
 <AlertDialog.Root bind:open={deleteDialogOpen}>
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>{m.adminCustomFieldManagerDeleteTitle({ fieldName: config.labels.fieldName })}</AlertDialog.Title>
+			<AlertDialog.Title>{adminCustomFieldManagerDeleteTitle({ fieldName: config.labels.fieldName })}</AlertDialog.Title>
 			<AlertDialog.Description>
 				{#if selectedField}
 					{typeof config.labels.deleteConfirm === 'function'
@@ -483,12 +499,12 @@
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<AlertDialog.Footer>
-			<AlertDialog.Cancel>{m.commonCancel()}</AlertDialog.Cancel>
+			<AlertDialog.Cancel>{commonCancel()}</AlertDialog.Cancel>
 			<AlertDialog.Action
 				onclick={handleDelete}
 				class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 			>
-				{m.commonDelete()}
+				{commonDelete()}
 			</AlertDialog.Action>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>

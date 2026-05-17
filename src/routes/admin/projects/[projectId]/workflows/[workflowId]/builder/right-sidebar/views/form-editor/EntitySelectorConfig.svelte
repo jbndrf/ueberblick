@@ -4,7 +4,15 @@
 	import * as RadioGroup from '$lib/components/ui/radio-group';
 	import { Settings2 } from '@lucide/svelte';
 
-	import * as m from '$lib/paraglide/messages';
+	import {
+		formEditorEntitySelectorConfigConfigureButton,
+		formEditorEntitySelectorConfigConfigured,
+		formEditorEntitySelectorConfigCustomTable,
+		formEditorEntitySelectorConfigMarkers,
+		formEditorEntitySelectorConfigParticipants,
+		formEditorEntitySelectorConfigRoles,
+		formEditorEntitySelectorConfigSelectFrom
+	} from '$lib/paraglide/messages';
 	import type { EntitySourceType, EntitySelectorOptions } from '$lib/workflow-builder';
 	import EntitySelectorModal from './EntitySelectorModal.svelte';
 
@@ -80,10 +88,10 @@
 	// Derived values for summary display
 	// ==========================================================================
 	const sourceTypeLabel = $derived({
-		custom_table: (m.formEditorEntitySelectorConfigCustomTable?.() ?? 'Custom Table'),
-		marker_category: (m.formEditorEntitySelectorConfigMarkers?.() ?? 'Markers'),
-		participants: (m.formEditorEntitySelectorConfigParticipants?.() ?? 'Participants'),
-		roles: (m.formEditorEntitySelectorConfigRoles?.() ?? 'Roles')
+		custom_table: (formEditorEntitySelectorConfigCustomTable?.() ?? 'Custom Table'),
+		marker_category: (formEditorEntitySelectorConfigMarkers?.() ?? 'Markers'),
+		participants: (formEditorEntitySelectorConfigParticipants?.() ?? 'Participants'),
+		roles: (formEditorEntitySelectorConfigRoles?.() ?? 'Roles')
 	}[sourceType]);
 
 	const isConfigured = $derived(() => {
@@ -111,24 +119,24 @@
 <div class="entity-selector-config">
 	<!-- Source Type Selection (vertical stack) -->
 	<div class="config-section">
-		<Label>{m.formEditorEntitySelectorConfigSelectFrom?.() ?? 'Select From'}</Label>
+		<Label>{formEditorEntitySelectorConfigSelectFrom?.() ?? 'Select From'}</Label>
 		<RadioGroup.Root value={sourceType} onValueChange={handleSourceTypeChange}>
 			<div class="source-type-list">
 				<div class="source-type-option">
 					<RadioGroup.Item value="custom_table" id="src-custom-table" />
-					<Label for="src-custom-table">{m.formEditorEntitySelectorConfigCustomTable?.() ?? 'Custom Table'}</Label>
+					<Label for="src-custom-table">{formEditorEntitySelectorConfigCustomTable?.() ?? 'Custom Table'}</Label>
 				</div>
 				<div class="source-type-option">
 					<RadioGroup.Item value="marker_category" id="src-marker" />
-					<Label for="src-marker">{m.formEditorEntitySelectorConfigMarkers?.() ?? 'Markers'}</Label>
+					<Label for="src-marker">{formEditorEntitySelectorConfigMarkers?.() ?? 'Markers'}</Label>
 				</div>
 				<div class="source-type-option">
 					<RadioGroup.Item value="participants" id="src-participants" />
-					<Label for="src-participants">{m.formEditorEntitySelectorConfigParticipants?.() ?? 'Participants'}</Label>
+					<Label for="src-participants">{formEditorEntitySelectorConfigParticipants?.() ?? 'Participants'}</Label>
 				</div>
 				<div class="source-type-option">
 					<RadioGroup.Item value="roles" id="src-roles" />
-					<Label for="src-roles">{m.formEditorEntitySelectorConfigRoles?.() ?? 'Roles'}</Label>
+					<Label for="src-roles">{formEditorEntitySelectorConfigRoles?.() ?? 'Roles'}</Label>
 				</div>
 			</div>
 		</RadioGroup.Root>
@@ -142,9 +150,9 @@
 			onclick={() => (modalOpen = true)}
 		>
 			<Settings2 class="h-4 w-4" />
-			{m.formEditorEntitySelectorConfigConfigureButton?.({ sourceTypeLabel: sourceTypeLabel ?? '' }) ?? `Configure ${sourceTypeLabel}`}
+			{formEditorEntitySelectorConfigConfigureButton?.({ sourceTypeLabel: sourceTypeLabel ?? '' }) ?? `Configure ${sourceTypeLabel}`}
 			{#if isConfigured()}
-				<span class="configured-badge">{m.formEditorEntitySelectorConfigConfigured?.() ?? 'Configured'}</span>
+				<span class="configured-badge">{formEditorEntitySelectorConfigConfigured?.() ?? 'Configured'}</span>
 			{/if}
 		</Button>
 	</div>

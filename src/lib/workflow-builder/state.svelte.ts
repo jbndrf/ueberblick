@@ -513,9 +513,15 @@ export class WorkflowBuilderState {
 	): ToolsFormField {
 		const existingFields = this.visibleFormFields.filter((f) => f.data.form_id === formId);
 
+		// A new ref must point at a `workflow_field_defs` row. We synthesize a
+		// placeholder `_temp_`-prefixed field_def_id here; the save path in
+		// `builder/+page.server.ts saveWorkflow` recognises the prefix and replaces
+		// it with the id of a freshly-created field def. Definitional fields are
+		// kept on the ref shape for the legacy UI; the save action splits them out.
 		const newField: ToolsFormField = {
 			id: generateId(),
 			form_id: formId,
+			field_def_id: `_temp_${generateId()}`,
 			field_label: 'New Field',
 			field_type: fieldType,
 			field_order: existingFields.length,

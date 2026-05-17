@@ -44,8 +44,9 @@ type WorkflowExport = {
 	stages: any[];
 	connections: any[];
 	forms: any[];
-	form_fields: any[];
-	edit_tools: any[];
+	/** Workflow-scoped field-def registry. Each ref points to a row in here. */
+	field_defs: any[];
+	form_field_refs: any[];
 	protocol_tools: any[];
 	automations: any[];
 	field_tags: any[];
@@ -82,7 +83,7 @@ function stripSystemFields(record: any): any {
 export function remapFieldOptions(record: any, idMaps: IdMaps): any {
 	if (record.field_type !== 'smart_dropdown' || !record.field_options) return record;
 	const opts = { ...record.field_options };
-	const fieldMap = idMaps['tools_form_fields'];
+	const fieldMap = idMaps['workflow_field_defs'];
 	const stageMap = idMaps['workflow_stages'];
 	if (opts.source_field && fieldMap?.has(opts.source_field)) {
 		opts.source_field = fieldMap.get(opts.source_field);
@@ -95,7 +96,9 @@ export function remapFieldOptions(record: any, idMaps: IdMaps): any {
 
 export function remapAutomationJson(record: any, idMaps: IdMaps): any {
 	const stageMap = idMaps['workflow_stages'];
-	const fieldMap = idMaps['tools_form_fields'];
+	// TODO(field-def-redesign): automation expressions still reference fields
+	// by `field_key` in their JSON; that key now points at a field-def id.
+	const fieldMap = idMaps['workflow_field_defs'];
 	const r = (id: string | null | undefined, map?: Map<string, string>) =>
 		id && map?.has(id) ? map.get(id) : id;
 
@@ -157,7 +160,7 @@ export function remapAutomationJson(record: any, idMaps: IdMaps): any {
 }
 
 export function remapFieldTagMappings(record: any, idMaps: IdMaps): any {
-	const fieldMap = idMaps['tools_form_fields'];
+	const fieldMap = idMaps['workflow_field_defs'];
 	if (!record.tag_mappings || !fieldMap) return record;
 	return {
 		...record,
@@ -210,34 +213,25 @@ export const WORKFLOW_LAYERS: DuplicationLayer[] = [
 		roleFields: ['allowed_roles'],
 	},
 	{
-		collection: 'tools_form_fields',
+		collection: 'workflow_field_defs',
+		remap: { workflow_id: 'workflow' },
+		roleFields: ['view_roles'],
+		transformRecord: remapFieldOptions,
+	},
+	{
+		collection: 'tools_form_field_refs',
 		sort: 'field_order',
 		loadRecords: async (pb, _wfId, idMaps) => {
 			const formOldIds = new Set(idMaps['tools_forms']?.keys() ?? []);
 			if (formOldIds.size === 0) return [];
-			const all = await pb.collection('tools_form_fields').getFullList({ sort: 'field_order' });
+			const all = await pb
+				.collection('tools_form_field_refs')
+				.getFullList({ sort: 'field_order' });
 			return all.filter((f: any) => formOldIds.has(f.form_id));
 		},
-		remap: { form_id: 'tools_forms' },
-		transformRecord: remapFieldOptions,
+		remap: { form_id: 'tools_forms', field_def_id: 'workflow_field_defs' },
 	},
-	{
-		collection: 'tools_edit',
-		loadRecords: async (pb, _wfId, idMaps) => {
-			const connOldIds = new Set(idMaps['workflow_connections']?.keys() ?? []);
-			const stageOldIds = new Set(idMaps['workflow_stages']?.keys() ?? []);
-			if (connOldIds.size === 0 && stageOldIds.size === 0) return [];
-			const all = await pb.collection('tools_edit').getFullList();
-			return all.filter(
-				(e: any) =>
-					connOldIds.has(e.connection_id) ||
-					(Array.isArray(e.stage_id) && e.stage_id.some((sid: string) => stageOldIds.has(sid)))
-			);
-		},
-		remap: { connection_id: 'workflow_connections' },
-		remapArrays: { stage_id: 'workflow_stages', editable_fields: 'tools_form_fields' },
-		roleFields: ['self_edit_roles', 'any_edit_roles'],
-	},
+	// TODO(field-def-redesign): tools_edit removed; convert if still needed
 	{
 		collection: 'tools_protocol',
 		loadRecords: async (pb, _wfId, idMaps) => {
@@ -252,7 +246,7 @@ export const WORKFLOW_LAYERS: DuplicationLayer[] = [
 			);
 		},
 		remap: { connection_id: 'workflow_connections', protocol_form_id: 'tools_forms' },
-		remapArrays: { stage_id: 'workflow_stages', editable_fields: 'tools_form_fields' },
+		remapArrays: { stage_id: 'workflow_stages', editable_fields: 'workflow_field_defs' },
 		roleFields: ['allowed_roles'],
 	},
 	{
@@ -410,28 +404,24 @@ export async function exportProjectSchema(
 			filter: `workflow_id = "${wf.id}"`,
 		});
 
-		let formFields: any[] = [];
+		const fieldDefs = await pb
+			.collection('workflow_field_defs')
+			.getFullList({ filter: `workflow_id = "${wf.id}"` });
+
+		let formFieldRefs: any[] = [];
 		if (forms.length > 0) {
-			const allFormFields = await pb
-				.collection('tools_form_fields')
+			const allRefs = await pb
+				.collection('tools_form_field_refs')
 				.getFullList({ sort: 'field_order' });
 			const formIds = new Set(forms.map((f: any) => f.id));
-			formFields = allFormFields.filter((f: any) => formIds.has(f.form_id));
+			formFieldRefs = allRefs.filter((f: any) => formIds.has(f.form_id));
 		}
 
-		// Load edit tools by connection/stage references
-		let editTools: any[] = [];
+		// TODO(field-def-redesign): tools_edit removed; convert if still needed
 		let protocolTools: any[] = [];
 		if (connections.length > 0 || stages.length > 0) {
 			const connIds = new Set(connections.map((c: any) => c.id));
 			const stageIds = new Set(stages.map((s: any) => s.id));
-			const allEditTools = await pb.collection('tools_edit').getFullList();
-			editTools = allEditTools.filter(
-				(e: any) =>
-					connIds.has(e.connection_id) ||
-					(Array.isArray(e.stage_id) && e.stage_id.some((sid: string) => stageIds.has(sid)))
-			);
-
 			const allProtocolTools = await pb.collection('tools_protocol').getFullList();
 			protocolTools = allProtocolTools.filter(
 				(p: any) =>
@@ -445,8 +435,8 @@ export async function exportProjectSchema(
 			stages: stages.map(stripSystemFields),
 			connections: connections.map(stripSystemFields),
 			forms: forms.map(stripSystemFields),
-			form_fields: formFields.map(stripSystemFields),
-			edit_tools: editTools.map(stripSystemFields),
+			field_defs: fieldDefs.map(stripSystemFields),
+			form_field_refs: formFieldRefs.map(stripSystemFields),
 			protocol_tools: protocolTools.map(stripSystemFields),
 			automations: automations.map(stripSystemFields),
 			field_tags: fieldTags.map(stripSystemFields),
@@ -697,42 +687,41 @@ export async function importProjectSchema(
 			await pb.collection('tools_forms').create(data);
 		}
 
-		// Form fields
-		const fieldMap = new Map<string, string>();
-		wfIdMaps['tools_form_fields'] = fieldMap;
-		for (const field of wfExport.form_fields) {
+		// Field defs (must come before form-field refs, which reference them).
+		const fieldDefMap = new Map<string, string>();
+		wfIdMaps['workflow_field_defs'] = fieldDefMap;
+		for (const def of (wfExport.field_defs ?? [])) {
 			const newId = generateId();
-			fieldMap.set(field.id, newId);
-			let data = { ...field };
+			fieldDefMap.set(def.id, newId);
+			let data = { ...def };
 			delete data.id;
-			data.form_id = formMap.get(data.form_id) ?? data.form_id;
+			data.workflow_id = newWorkflowId;
+			if (Array.isArray(data.view_roles)) {
+				data.view_roles = data.view_roles.map((id: string) => roleMap.get(id) ?? id);
+			}
+			if (data.display_stage_id) {
+				data.display_stage_id = stageMap.get(data.display_stage_id) ?? data.display_stage_id;
+			}
 			data = remapFieldOptions(data, wfIdMaps);
 			data.id = newId;
-			await pb.collection('tools_form_fields').create(data);
+			await pb.collection('workflow_field_defs').create(data);
 		}
 
-		// Edit tools
-		for (const edit of wfExport.edit_tools) {
+		// Form-field refs
+		const refMap = new Map<string, string>();
+		wfIdMaps['tools_form_field_refs'] = refMap;
+		for (const ref of (wfExport.form_field_refs ?? [])) {
 			const newId = generateId();
-			const data = { ...edit };
+			refMap.set(ref.id, newId);
+			const data = { ...ref };
 			delete data.id;
-			if (data.connection_id) data.connection_id = connMap.get(data.connection_id) ?? data.connection_id;
-			if (Array.isArray(data.stage_id)) {
-				data.stage_id = data.stage_id.map((id: string) => stageMap.get(id) ?? id);
-			}
-			if (Array.isArray(data.editable_fields)) {
-				data.editable_fields = data.editable_fields.map(
-					(id: string) => fieldMap.get(id) ?? id
-				);
-			}
-			for (const field of ['self_edit_roles', 'any_edit_roles'] as const) {
-				if (Array.isArray(data[field])) {
-					data[field] = data[field].map((id: string) => roleMap.get(id) ?? id);
-				}
-			}
+			data.form_id = formMap.get(data.form_id) ?? data.form_id;
+			data.field_def_id = fieldDefMap.get(data.field_def_id) ?? data.field_def_id;
 			data.id = newId;
-			await pb.collection('tools_edit').create(data);
+			await pb.collection('tools_form_field_refs').create(data);
 		}
+
+		// TODO(field-def-redesign): tools_edit removed; convert if still needed
 
 		// Protocol tools
 		for (const proto of (wfExport.protocol_tools || [])) {
@@ -746,7 +735,7 @@ export async function importProjectSchema(
 			}
 			if (Array.isArray(data.editable_fields)) {
 				data.editable_fields = data.editable_fields.map(
-					(id: string) => fieldMap.get(id) ?? id
+					(id: string) => fieldDefMap.get(id) ?? id
 				);
 			}
 			if (Array.isArray(data.allowed_roles)) {

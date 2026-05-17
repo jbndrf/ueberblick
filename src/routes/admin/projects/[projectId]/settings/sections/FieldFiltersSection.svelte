@@ -1,7 +1,32 @@
 <script lang="ts">
 	import { invalidateAll } from '$app/navigation';
 	import { toast } from 'svelte-sonner';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		settingsAdvancedCancel,
+		settingsAdvancedClauseCount,
+		settingsAdvancedDeletePresetConfirm,
+		settingsAdvancedEditPreset,
+		settingsAdvancedFilterConditions,
+		settingsAdvancedName,
+		settingsAdvancedNameMissing,
+		settingsAdvancedNamePlaceholder,
+		settingsAdvancedNew,
+		settingsAdvancedNewPreset,
+		settingsAdvancedNoPresets,
+		settingsAdvancedPresetsDescription,
+		settingsAdvancedPresetsSaved,
+		settingsAdvancedPresetsTitle,
+		settingsAdvancedSave,
+		settingsAdvancedSaveFailed,
+		settingsAdvancedSavingEllipsis,
+		settingsAdvancedStartupSaved,
+		settingsFeatureFieldFiltersDescription,
+		settingsFeatureFieldFiltersEnableHint,
+		settingsFeatureFieldFiltersEnableLabel,
+		settingsFeatureFieldFiltersTitle,
+		settingsFeatureUnavailable,
+		settingsFeatureUnavailableBadge
+	} from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
@@ -58,11 +83,11 @@
 			fd.append('payload', JSON.stringify(payload));
 			const res = await fetch('?/saveStartupDefaults', { method: 'POST', body: fd });
 			if (!res.ok) throw new Error(await res.text());
-			toast.success(m.settingsAdvancedStartupSaved?.() ?? 'Saved');
+			toast.success(settingsAdvancedStartupSaved?.() ?? 'Saved');
 			await invalidateAll();
 		} catch (e) {
 			console.error(e);
-			toast.error(m.settingsAdvancedSaveFailed?.() ?? 'Save failed');
+			toast.error(settingsAdvancedSaveFailed?.() ?? 'Save failed');
 			enabled = !next;
 		} finally {
 			savingToggle = false;
@@ -99,6 +124,11 @@
 		}
 
 		const filterableFields: BuilderContext['filterableFields'] = [];
+		// TODO(field-def-redesign): the settings +page.server.ts still loads
+		// `toolsFormFields` from the legacy `tools_form_fields` collection. Once
+		// the settings loader is migrated to load (refs, defs) separately, switch
+		// this loop to iterate `data.workflowFieldDefs` and resolve the workflow
+		// via field def's `workflow_id` directly.
 		for (const ff of (data.toolsFormFields ?? []) as any[]) {
 			const type = ff.field_type as string | undefined;
 			if (!type || type === 'file') continue;
@@ -129,7 +159,9 @@
 			filterableFields.push({
 				workflow_id: workflowId,
 				workflow_name: workflowNameById.get(workflowId) ?? workflowId,
-				field_key: ff.id,
+				// TODO(field-def-redesign): once toolsFormFields source is migrated,
+				// this should be the row's `field_def_id`, not the ref id.
+				field_def_id: ff.field_def_id ?? ff.id,
 				field_label: ff.field_label ?? ff.id,
 				field_type: type as BuilderContext['filterableFields'][number]['field_type'],
 				options
@@ -176,7 +208,7 @@
 	async function commitPreset() {
 		const trimmed = draftName.trim();
 		if (!trimmed) {
-			toast.error(m.settingsAdvancedNameMissing?.() ?? 'Name missing');
+			toast.error(settingsAdvancedNameMissing?.() ?? 'Name missing');
 			return;
 		}
 		const view: ViewDefinition = {
@@ -206,7 +238,7 @@
 	}
 
 	async function deletePreset(id: string) {
-		if (!confirm(m.settingsAdvancedDeletePresetConfirm?.() ?? 'Delete preset?')) return;
+		if (!confirm(settingsAdvancedDeletePresetConfirm?.() ?? 'Delete preset?')) return;
 		await persistPresets(presets.filter((p) => p.id !== id));
 	}
 
@@ -218,11 +250,11 @@
 			const res = await fetch('?/saveAdminPresets', { method: 'POST', body: fd });
 			if (!res.ok) throw new Error(await res.text());
 			presets = next;
-			toast.success(m.settingsAdvancedPresetsSaved?.() ?? 'Presets saved');
+			toast.success(settingsAdvancedPresetsSaved?.() ?? 'Presets saved');
 			await invalidateAll();
 		} catch (e) {
 			console.error(e);
-			toast.error(m.settingsAdvancedSaveFailed?.() ?? 'Save failed');
+			toast.error(settingsAdvancedSaveFailed?.() ?? 'Save failed');
 		} finally {
 			savingPresets = false;
 		}
@@ -231,17 +263,17 @@
 
 <div class="flex flex-col gap-10">
 	<SettingsSection
-		name={m.settingsFeatureFieldFiltersTitle?.() ?? 'Field filters'}
-		description={m.settingsFeatureFieldFiltersDescription?.() ??
+		name={settingsFeatureFieldFiltersTitle?.() ?? 'Field filters'}
+		description={settingsFeatureFieldFiltersDescription?.() ??
 			'Lets participants filter the map by individual form-field values. Each participant can opt in from their preferences. Configure curated presets below.'}
 	>
 		<div class="flex items-center justify-between gap-4 rounded-md border p-4">
 			<div class="flex flex-col">
 				<span class="font-medium">
-					{m.settingsFeatureFieldFiltersEnableLabel?.() ?? 'Enabled at startup'}
+					{settingsFeatureFieldFiltersEnableLabel?.() ?? 'Enabled at startup'}
 				</span>
 				<span class="text-xs text-muted-foreground">
-					{m.settingsFeatureFieldFiltersEnableHint?.() ??
+					{settingsFeatureFieldFiltersEnableHint?.() ??
 						'Adds the field-filters tab to the participant filter sheet by default for new participants.'}
 				</span>
 			</div>
@@ -249,9 +281,9 @@
 				{#if !available}
 					<span
 						class="rounded-full border px-2 py-0.5 text-xs text-muted-foreground"
-						title={m.settingsFeatureUnavailable?.() ?? 'Coming soon'}
+						title={settingsFeatureUnavailable?.() ?? 'Coming soon'}
 					>
-						{m.settingsFeatureUnavailableBadge?.() ?? 'Soon'}
+						{settingsFeatureUnavailableBadge?.() ?? 'Soon'}
 					</span>
 				{/if}
 				<Switch
@@ -264,21 +296,21 @@
 	</SettingsSection>
 
 	<SettingsSection
-		name={m.settingsAdvancedPresetsTitle?.() ?? 'Filter presets'}
-		description={m.settingsAdvancedPresetsDescription?.() ??
+		name={settingsAdvancedPresetsTitle?.() ?? 'Filter presets'}
+		description={settingsAdvancedPresetsDescription?.() ??
 			'Pre-built filter views that participants can load into their own views with a single click. Once loaded, the preset becomes a regular user view — changes to the admin preset do not affect copies that have already been loaded.'}
 	>
 		{#snippet actions()}
 			<Button size="sm" onclick={openNewPreset}>
 				<Plus class="mr-2 size-4" />
-				{m.settingsAdvancedNew?.() ?? 'New'}
+				{settingsAdvancedNew?.() ?? 'New'}
 			</Button>
 		{/snippet}
 
 		{#if presets.length === 0}
 			<div class="rounded-md border border-dashed p-6 text-center">
 				<p class="text-sm text-muted-foreground">
-					{m.settingsAdvancedNoPresets?.() ?? 'No presets yet.'}
+					{settingsAdvancedNoPresets?.() ?? 'No presets yet.'}
 				</p>
 			</div>
 		{:else}
@@ -288,7 +320,7 @@
 						<div class="flex flex-col">
 							<span class="font-medium">{p.name}</span>
 							<span class="text-xs text-muted-foreground">
-								{m.settingsAdvancedClauseCount?.({
+								{settingsAdvancedClauseCount?.({
 									count: (p.config as any)?.clauses?.length ?? 0
 								}) ?? `${(p.config as any)?.clauses?.length ?? 0} condition(s)`}
 							</span>
@@ -313,22 +345,22 @@
 		<Dialog.Header>
 			<Dialog.Title>
 				{editingPresetId
-					? (m.settingsAdvancedEditPreset?.() ?? 'Edit preset')
-					: (m.settingsAdvancedNewPreset?.() ?? 'New preset')}
+					? (settingsAdvancedEditPreset?.() ?? 'Edit preset')
+					: (settingsAdvancedNewPreset?.() ?? 'New preset')}
 			</Dialog.Title>
 		</Dialog.Header>
 		<div class="flex flex-col gap-4">
 			<div class="flex flex-col gap-1">
-				<Label for="preset-name">{m.settingsAdvancedName?.() ?? 'Name'}</Label>
+				<Label for="preset-name">{settingsAdvancedName?.() ?? 'Name'}</Label>
 				<Input
 					id="preset-name"
 					bind:value={draftName}
-					placeholder={m.settingsAdvancedNamePlaceholder?.() ?? 'e.g. New reports (7 days)'}
+					placeholder={settingsAdvancedNamePlaceholder?.() ?? 'e.g. New reports (7 days)'}
 				/>
 			</div>
 			<Separator />
 			<div class="flex flex-col gap-2">
-				<Label>{m.settingsAdvancedFilterConditions?.() ?? 'Filter conditions'}</Label>
+				<Label>{settingsAdvancedFilterConditions?.() ?? 'Filter conditions'}</Label>
 				<FilterBuilder
 					clauses={draftClauses}
 					ctx={builderCtx}
@@ -338,12 +370,12 @@
 		</div>
 		<Dialog.Footer>
 			<Button variant="outline" onclick={() => (presetDialogOpen = false)}>
-				{m.settingsAdvancedCancel?.() ?? 'Cancel'}
+				{settingsAdvancedCancel?.() ?? 'Cancel'}
 			</Button>
 			<Button onclick={commitPreset} disabled={savingPresets}>
 				{savingPresets
-					? (m.settingsAdvancedSavingEllipsis?.() ?? 'Saving…')
-					: (m.settingsAdvancedSave?.() ?? 'Save')}
+					? (settingsAdvancedSavingEllipsis?.() ?? 'Saving…')
+					: (settingsAdvancedSave?.() ?? 'Save')}
 			</Button>
 		</Dialog.Footer>
 	</Dialog.Content>

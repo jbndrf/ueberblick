@@ -1,4 +1,4 @@
-import * as m from '$lib/paraglide/messages';
+import { customTablesCreated, mapLayerVisibleToRoles, markerCategoriesIcon, markerCategoriesName, rolesDescription_field } from '$lib/paraglide/messages';
 import { formatDistanceToNow } from 'date-fns';
 import type { BaseColumnConfig } from '$lib/components/admin/base-table';
 
@@ -24,7 +24,7 @@ export function getMarkerCategoryColumns(options: {
 	return [
 		{
 			id: 'icon_preview',
-			header: m.markerCategoriesIcon?.() ?? 'Icon',
+			header: markerCategoriesIcon?.() ?? 'Icon',
 			accessorFn: (row) => row.icon_config,
 			cellRenderer: options.iconCellRenderer,
 			fieldType: 'text',
@@ -36,7 +36,7 @@ export function getMarkerCategoryColumns(options: {
 		},
 		{
 			id: 'name',
-			header: m.markerCategoriesName?.() ?? 'Name',
+			header: markerCategoriesName?.() ?? 'Name',
 			accessorKey: 'name',
 			fieldType: 'text',
 			capabilities: {
@@ -48,7 +48,7 @@ export function getMarkerCategoryColumns(options: {
 		},
 		{
 			id: 'description',
-			header: m.rolesDescription_field(),
+			header: rolesDescription_field(),
 			accessorKey: 'description',
 			fieldType: 'text',
 			capabilities: {
@@ -60,7 +60,7 @@ export function getMarkerCategoryColumns(options: {
 		},
 		{
 			id: 'visible_to_roles',
-			header: m.mapLayerVisibleToRoles?.() ?? 'Visible to Roles',
+			header: mapLayerVisibleToRoles?.() ?? 'Visible to Roles',
 			accessorFn: (row) => {
 				if (!row.visible_to_roles || row.visible_to_roles.length === 0) return [];
 				return row.visible_to_roles;
@@ -83,7 +83,7 @@ export function getMarkerCategoryColumns(options: {
 		},
 		{
 			id: 'created',
-			header: m.customTablesCreated(),
+			header: customTablesCreated(),
 			accessorFn: (row) => {
 				try {
 					const date = new Date(row.created);

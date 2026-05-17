@@ -13,7 +13,25 @@
 
 	import { toolRegistry } from '$lib/workflow-builder/tools';
 	import type { ToolsEdit, ToolsAutomation, VisualConfig } from '$lib/workflow-builder';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		commonEdit,
+		editToolAnyRolesLabel,
+		editToolAnyRolesPlaceholder,
+		editToolSelfRolesLabel,
+		editToolSelfRolesPlaceholder,
+		propertiesGlobalToolsAddAutomation,
+		propertiesGlobalToolsNoAutomations,
+		propertiesGlobalToolsNoTools,
+		propertiesGlobalToolsSubtitle,
+		propertiesGlobalToolsTabAutomations,
+		propertiesGlobalToolsTabPermissions,
+		propertiesGlobalToolsTabTools,
+		propertiesGlobalToolsTitle,
+		propertiesGlobalToolsToolPermissions,
+		propertiesGlobalToolsTriggerFieldChange,
+		propertiesGlobalToolsTriggerScheduled,
+		propertiesGlobalToolsTriggerTransition
+	} from '$lib/paraglide/messages';
 
 	type Role = {
 		id: string;
@@ -64,9 +82,9 @@
 	}: Props = $props();
 
 	const TRIGGER_LABELS: Record<string, string> = {
-		on_transition: m.propertiesGlobalToolsTriggerTransition?.() ?? 'Transition',
-		on_field_change: m.propertiesGlobalToolsTriggerFieldChange?.() ?? 'Field Change',
-		scheduled: m.propertiesGlobalToolsTriggerScheduled?.() ?? 'Scheduled'
+		on_transition: propertiesGlobalToolsTriggerTransition?.() ?? 'Transition',
+		on_field_change: propertiesGlobalToolsTriggerFieldChange?.() ?? 'Field Change',
+		scheduled: propertiesGlobalToolsTriggerScheduled?.() ?? 'Scheduled'
 	};
 
 	let activeTab = $state('permissions');
@@ -135,8 +153,8 @@
 				<Globe class="h-4 w-4" />
 			</div>
 			<div class="header-info">
-				<span class="header-title">{m.propertiesGlobalToolsTitle?.() ?? 'Global Tools'}</span>
-				<span class="header-subtitle">{m.propertiesGlobalToolsSubtitle?.() ?? 'Available on all stages'}</span>
+				<span class="header-title">{propertiesGlobalToolsTitle?.() ?? 'Global Tools'}</span>
+				<span class="header-subtitle">{propertiesGlobalToolsSubtitle?.() ?? 'Available on all stages'}</span>
 			</div>
 		</div>
 	</div>
@@ -144,18 +162,18 @@
 	<!-- Tabs -->
 	<Tabs.Root bind:value={activeTab} class="flex-1 flex flex-col">
 		<Tabs.List class="panel-tabs">
-			<Tabs.Trigger value="permissions">{m.propertiesGlobalToolsTabPermissions?.() ?? 'Permissions'}</Tabs.Trigger>
-			<Tabs.Trigger value="tools">{m.propertiesGlobalToolsTabTools?.() ?? 'Tools'}</Tabs.Trigger>
-			<Tabs.Trigger value="automations">{m.propertiesGlobalToolsTabAutomations?.() ?? 'Automations'}</Tabs.Trigger>
+			<Tabs.Trigger value="permissions">{propertiesGlobalToolsTabPermissions?.() ?? 'Permissions'}</Tabs.Trigger>
+			<Tabs.Trigger value="tools">{propertiesGlobalToolsTabTools?.() ?? 'Tools'}</Tabs.Trigger>
+			<Tabs.Trigger value="automations">{propertiesGlobalToolsTabAutomations?.() ?? 'Automations'}</Tabs.Trigger>
 		</Tabs.List>
 
 		<div class="panel-content">
 			<!-- Permissions Tab -->
 			<Tabs.Content value="permissions" class="tab-content">
 				{#if globalEditTools.length === 0}
-					<p class="empty-text">{m.propertiesGlobalToolsNoTools?.() ?? 'No global tools configured.'}</p>
+					<p class="empty-text">{propertiesGlobalToolsNoTools?.() ?? 'No global tools configured.'}</p>
 				{:else}
-					<PropertySection title={m.propertiesGlobalToolsToolPermissions?.() ?? 'Tool Permissions'} defaultOpen={true}>
+					<PropertySection title={propertiesGlobalToolsToolPermissions?.() ?? 'Tool Permissions'} defaultOpen={true}>
 						<div class="tool-permissions-list">
 							{#each globalEditTools as tool (tool.id)}
 								{@const ToolIcon = getToolIcon('edit')}
@@ -171,7 +189,7 @@
 									</div>
 									<div class="tool-permission-roles">
 										<label class="tool-permission-sublabel">
-											{m.editToolAnyRolesLabel?.() ?? "Edit anyone's"}
+											{editToolAnyRolesLabel?.() ?? "Edit anyone's"}
 										</label>
 										<MobileMultiSelect
 											selectedIds={toolAnyRolesMap[tool.id] || []}
@@ -182,11 +200,11 @@
 											getOptionDescription={(r) => r.description}
 											allowCreate={!!onCreateRole}
 											onCreateOption={onCreateRole}
-											placeholder={m.editToolAnyRolesPlaceholder?.() ?? 'Roles that can edit any entry...'}
+											placeholder={editToolAnyRolesPlaceholder?.() ?? 'Roles that can edit any entry...'}
 											class="w-full"
 										/>
 										<label class="tool-permission-sublabel">
-											{m.editToolSelfRolesLabel?.() ?? 'Self-edit only'}
+											{editToolSelfRolesLabel?.() ?? 'Self-edit only'}
 										</label>
 										<MobileMultiSelect
 											selectedIds={toolSelfRolesMap[tool.id] || []}
@@ -197,7 +215,7 @@
 											getOptionDescription={(r) => r.description}
 											allowCreate={!!onCreateRole}
 											onCreateOption={onCreateRole}
-											placeholder={m.editToolSelfRolesPlaceholder?.() ?? 'Roles that can edit only their own...'}
+											placeholder={editToolSelfRolesPlaceholder?.() ?? 'Roles that can edit only their own...'}
 											class="w-full"
 										/>
 									</div>
@@ -210,9 +228,9 @@
 
 			<!-- Tools Tab -->
 			<Tabs.Content value="tools" class="tab-content">
-				<PropertySection title={m.propertiesGlobalToolsTitle?.() ?? 'Global Tools'} defaultOpen={true}>
+				<PropertySection title={propertiesGlobalToolsTitle?.() ?? 'Global Tools'} defaultOpen={true}>
 					{#if globalEditTools.length === 0}
-						<p class="empty-text">{m.propertiesGlobalToolsNoTools?.() ?? 'No global tools configured.'}</p>
+						<p class="empty-text">{propertiesGlobalToolsNoTools?.() ?? 'No global tools configured.'}</p>
 					{:else}
 						<div class="tools-list">
 							{#each globalEditTools as tool (tool.id)}
@@ -223,7 +241,7 @@
 									onVisualConfigChange={(config) => onToolVisualConfigChange?.(tool.id, config)}
 									onSelect={() => onSelectTool?.('edit', tool.id)}
 									onDelete={() => onDeleteTool?.('edit', tool.id)}
-									defaultButtonLabel={m.commonEdit?.() ?? 'Edit'}
+									defaultButtonLabel={commonEdit?.() ?? 'Edit'}
 									defaultButtonColor="#6366F1"
 								/>
 							{/each}
@@ -237,12 +255,12 @@
 				<div class="automations-header">
 					<Button variant="outline" size="sm" onclick={() => onAddAutomation?.()}>
 						<Plus class="h-3.5 w-3.5 mr-1.5" />
-						{m.propertiesGlobalToolsAddAutomation?.() ?? 'Add Automation'}
+						{propertiesGlobalToolsAddAutomation?.() ?? 'Add Automation'}
 					</Button>
 				</div>
 
 				{#if automations.length === 0}
-					<p class="empty-text">{m.propertiesGlobalToolsNoAutomations?.() ?? 'No automations configured. Automations run automatically based on triggers like stage transitions, field changes, or time-based schedules.'}</p>
+					<p class="empty-text">{propertiesGlobalToolsNoAutomations?.() ?? 'No automations configured. Automations run automatically based on triggers like stage transitions, field changes, or time-based schedules.'}</p>
 				{:else}
 					<div class="automations-list">
 						{#each automations as automation (automation.id)}

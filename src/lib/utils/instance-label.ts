@@ -18,12 +18,16 @@ export interface InstanceLabelInput {
 	};
 	/** Field values that belong to `instance` only. */
 	fieldValues?: Array<{
-		field_key: string;
+		field_def_id: string;
 		value: string;
 		created?: string;
 	}>;
-	/** Form fields for the instance's workflow. Visual layout decides which field is primary
-	 *  (page -> row_index -> column_position left<full<right -> field_order). */
+	/**
+	 * Form-field refs for the instance's workflow with their resolved field
+	 * defs. Visual layout decides which field is primary
+	 *  (page -> row_index -> column_position left<full<right -> field_order).
+	 * `id` is the field-def id (matches `field_def_id` on FieldValue rows).
+	 */
 	formFields?: Array<{
 		id: string;
 		field_type?: string;
@@ -32,6 +36,8 @@ export interface InstanceLabelInput {
 		row_index?: number;
 		column_position?: 'left' | 'full' | 'right';
 	}>;
+	/** Optional lookup: field_def_id -> FieldDef (for label resolution). */
+	fieldDefById?: Map<string, { id: string; label?: string; field_type?: string }>;
 	stageName?: string;
 	locale?: 'de' | 'en';
 }
@@ -98,8 +104,8 @@ export function instanceLabel(input: InstanceLabelInput): InstanceLabel {
 	if (formFields.length > 0 && fieldValues.length > 0) {
 		const byKey = new Map<string, { value: string; type?: string }>();
 		for (const fv of fieldValues) {
-			if (fv.value && !byKey.has(fv.field_key)) {
-				byKey.set(fv.field_key, { value: fv.value });
+			if (fv.value && !byKey.has(fv.field_def_id)) {
+				byKey.set(fv.field_def_id, { value: fv.value });
 			}
 		}
 		const colWeight = (c?: string) => (c === 'left' ? 0 : c === 'full' ? 1 : c === 'right' ? 2 : 3);

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { tick, onMount } from 'svelte';
 	import { Loader2, X } from '@lucide/svelte';
-	import * as m from '$lib/paraglide/messages';
+	import { participantChatNotMember, participantChatTitle } from '$lib/paraglide/messages';
 	import MessageList from '$lib/chat/MessageList.svelte';
 	import Composer from '$lib/chat/Composer.svelte';
 	import { createMentionableStore } from '$lib/chat/mentionable.svelte';
@@ -117,11 +117,11 @@
 			style={viewportHeight > 0 ? `height: ${viewportHeight}px;` : 'height: 100vh;'}
 			role="dialog"
 			aria-modal="false"
-			aria-label={m.participantChatTitle?.() ?? 'Project chat'}
+			aria-label={participantChatTitle?.() ?? 'Project chat'}
 		>
 			<header class="h-12 shrink-0 flex flex-row items-center justify-between gap-2 border-b px-3">
 				<h2 class="text-base font-semibold">
-					{m.participantChatTitle?.() ?? 'Project chat'}
+					{participantChatTitle?.() ?? 'Project chat'}
 				</h2>
 				<button
 					type="button"
@@ -139,7 +139,7 @@
 				</div>
 			{:else if !isMember}
 				<div class="flex flex-1 items-center justify-center p-8 text-center text-sm text-muted-foreground">
-					{m.participantChatNotMember?.() ?? 'Project chat is not available for your role.'}
+					{participantChatNotMember?.() ?? 'Project chat is not available for your role.'}
 				</div>
 			{:else if mentionables && unreadStore}
 				<div bind:this={scrollerEl} class="min-h-0 flex-1 overflow-y-auto">

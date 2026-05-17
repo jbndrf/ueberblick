@@ -1,5 +1,74 @@
 <script lang="ts">
-	import * as m from '$lib/paraglide/messages';
+	import {
+		mapLayerDeleteConfirmation,
+		mapLayerDeleteError,
+		mapLayerDeleteSuccess,
+		mapLayerDeleteTitle,
+		mapLayerName,
+		mapLayersEmpty,
+		mapLayersEmptyDescription,
+		mapLayersTitle,
+		mapSettingsActions,
+		mapSettingsAddLayer,
+		mapSettingsAddMapLayerDescription,
+		mapSettingsAddMapLayerTitle,
+		mapSettingsAddTileLayer,
+		mapSettingsAddWmsLayer,
+		mapSettingsAdded,
+		mapSettingsAdding,
+		mapSettingsAttributionOptional,
+		mapSettingsBaseLayer,
+		mapSettingsBaseLayersLabel,
+		mapSettingsCancel,
+		mapSettingsColumnBase,
+		mapSettingsColumnOpacity,
+		mapSettingsColumnType,
+		mapSettingsColumnVisibleToRoles,
+		mapSettingsCustomTilesPlaceholder,
+		mapSettingsDeleteConfirm,
+		mapSettingsEditMode,
+		mapSettingsFieldName,
+		mapSettingsFormat,
+		mapSettingsLayerAddError,
+		mapSettingsLayerAdded,
+		mapSettingsLayerSetAsBase,
+		mapSettingsLayerSetAsOverlay,
+		mapSettingsLayerTypeUpdateError,
+		mapSettingsLayers,
+		mapSettingsNoBaseLayerConfigured,
+		mapSettingsNoLayersDescription,
+		mapSettingsNoLayersYet,
+		mapSettingsPresets,
+		mapSettingsProcessingFailed,
+		mapSettingsProcessingLabel,
+		mapSettingsSetAsBase,
+		mapSettingsSetAsBaseLayer,
+		mapSettingsSetAsOverlay,
+		mapSettingsThisIsBaseLayer,
+		mapSettingsTileFormat,
+		mapSettingsTileLayerAdded,
+		mapSettingsTileLayerPlaceholder,
+		mapSettingsTilePlaceholderHint,
+		mapSettingsTileProcessingComplete,
+		mapSettingsTileUrl,
+		mapSettingsTileUrlTemplate,
+		mapSettingsTiles,
+		mapSettingsTransparent,
+		mapSettingsUpdateFailed,
+		mapSettingsUpload,
+		mapSettingsUploadCompleteProcessing,
+		mapSettingsUploadFailed,
+		mapSettingsUploadTiles,
+		mapSettingsUploadingLabel,
+		mapSettingsVersion,
+		mapSettingsWms,
+		mapSettingsWmsLayerAdded,
+		mapSettingsWmsLayerPlaceholder,
+		mapSettingsWmsUrl,
+		mapSettingsZipFile,
+		mapSettingsZipFileHint,
+		mapSettingsZoomLabel
+	} from '$lib/paraglide/messages';
 	import { toast } from 'svelte-sonner';
 	import { invalidateAll } from '$app/navigation';
 	import * as Dialog from '$lib/components/ui/dialog';
@@ -51,21 +120,21 @@
 	const layerColumns = $derived.by((): BaseColumnConfig<MapLayer>[] => [
 		{
 			id: 'name',
-			header: m.mapLayerName(),
+			header: mapLayerName(),
 			accessorKey: 'name',
 			fieldType: 'text',
 			capabilities: { sortable: true, filterable: true }
 		},
 		{
 			id: 'source_type',
-			header: m.mapSettingsColumnType?.() ?? 'Type',
+			header: mapSettingsColumnType?.() ?? 'Type',
 			accessorFn: (row) => row.source_type.charAt(0).toUpperCase() + row.source_type.slice(1),
 			fieldType: 'text',
 			capabilities: { sortable: true, filterable: true }
 		},
 		{
 			id: 'opacity',
-			header: m.mapSettingsColumnOpacity?.() ?? 'Opacity',
+			header: mapSettingsColumnOpacity?.() ?? 'Opacity',
 			accessorFn: (row) => (row.config as MapLayerConfig)?.opacity ?? 1,
 			fieldType: 'custom',
 			capabilities: { sortable: false },
@@ -73,7 +142,7 @@
 		},
 		{
 			id: 'visible_to_roles',
-			header: m.mapSettingsColumnVisibleToRoles?.() ?? 'Visible to Roles',
+			header: mapSettingsColumnVisibleToRoles?.() ?? 'Visible to Roles',
 			accessorFn: (row) => {
 				if (!row.visible_to_roles || row.visible_to_roles.length === 0) return [];
 				return row.visible_to_roles;
@@ -102,14 +171,14 @@
 					await invalidateAll();
 				} else {
 					throw new Error(
-						result.data?.message || (m.mapSettingsUpdateFailed?.() ?? 'Update failed')
+						result.data?.message || (mapSettingsUpdateFailed?.() ?? 'Update failed')
 					);
 				}
 			}
 		},
 		{
 			id: 'layer_type',
-			header: m.mapSettingsColumnBase?.() ?? 'Base',
+			header: mapSettingsColumnBase?.() ?? 'Base',
 			accessorFn: (row) => row.layer_type === 'base',
 			fieldType: 'boolean',
 			capabilities: { sortable: true, filterable: true }
@@ -131,16 +200,16 @@
 
 			const result = await response.json();
 			if (result.type === 'success') {
-				toast.success(m.mapSettingsLayerAdded?.() ?? 'Layer added');
+				toast.success(mapSettingsLayerAdded?.() ?? 'Layer added');
 				showAddLayerDialog = false;
 				invalidateAll();
 			} else {
 				toast.error(
-					result.data?.message || (m.mapSettingsLayerAddError?.() ?? 'Failed to add layer')
+					result.data?.message || (mapSettingsLayerAddError?.() ?? 'Failed to add layer')
 				);
 			}
 		} catch {
-			toast.error(m.mapSettingsLayerAddError?.() ?? 'Failed to add layer');
+			toast.error(mapSettingsLayerAddError?.() ?? 'Failed to add layer');
 		} finally {
 			isSubmitting = false;
 		}
@@ -163,7 +232,7 @@
 
 			const result = await response.json();
 			if (result.type === 'success') {
-				toast.success(m.mapSettingsTileLayerAdded?.() ?? 'Tile layer added');
+				toast.success(mapSettingsTileLayerAdded?.() ?? 'Tile layer added');
 				showAddLayerDialog = false;
 				tileUrlName = '';
 				tileUrlUrl = '';
@@ -172,11 +241,11 @@
 				invalidateAll();
 			} else {
 				toast.error(
-					result.data?.message || (m.mapSettingsLayerAddError?.() ?? 'Failed to add layer')
+					result.data?.message || (mapSettingsLayerAddError?.() ?? 'Failed to add layer')
 				);
 			}
 		} catch {
-			toast.error(m.mapSettingsLayerAddError?.() ?? 'Failed to add layer');
+			toast.error(mapSettingsLayerAddError?.() ?? 'Failed to add layer');
 		} finally {
 			isSubmitting = false;
 		}
@@ -203,7 +272,7 @@
 
 			const result = await response.json();
 			if (result.type === 'success') {
-				toast.success(m.mapSettingsWmsLayerAdded?.() ?? 'WMS layer added');
+				toast.success(mapSettingsWmsLayerAdded?.() ?? 'WMS layer added');
 				showAddLayerDialog = false;
 				wmsName = '';
 				wmsUrl = '';
@@ -216,11 +285,11 @@
 				invalidateAll();
 			} else {
 				toast.error(
-					result.data?.message || (m.mapSettingsLayerAddError?.() ?? 'Failed to add layer')
+					result.data?.message || (mapSettingsLayerAddError?.() ?? 'Failed to add layer')
 				);
 			}
 		} catch {
-			toast.error(m.mapSettingsLayerAddError?.() ?? 'Failed to add layer');
+			toast.error(mapSettingsLayerAddError?.() ?? 'Failed to add layer');
 		} finally {
 			isSubmitting = false;
 		}
@@ -255,14 +324,14 @@
 			uploadLayerId = layerId;
 
 			toast.success(
-				m.mapSettingsUploadCompleteProcessing?.() ?? 'Upload complete, processing tiles...'
+				mapSettingsUploadCompleteProcessing?.() ?? 'Upload complete, processing tiles...'
 			);
 			uploadProgress = { phase: 'processing', status: 'pending', percent: 0 };
 			pollUploadStatus(layerId);
 		} catch (err) {
 			console.error('Upload error:', err);
 			toast.error(
-				err instanceof Error ? err.message : (m.mapSettingsUploadFailed?.() ?? 'Upload failed')
+				err instanceof Error ? err.message : (mapSettingsUploadFailed?.() ?? 'Upload failed')
 			);
 			uploadProgress = null;
 			isUploading = false;
@@ -281,7 +350,7 @@
 				};
 
 				if (result.status === 'completed') {
-					toast.success(m.mapSettingsTileProcessingComplete?.() ?? 'Tile processing complete');
+					toast.success(mapSettingsTileProcessingComplete?.() ?? 'Tile processing complete');
 					uploadFile = null;
 					uploadName = '';
 					uploadLayerId = null;
@@ -291,7 +360,7 @@
 					invalidateAll();
 				} else if (result.status === 'failed') {
 					toast.error(
-						result.error_message || (m.mapSettingsProcessingFailed?.() ?? 'Processing failed')
+						result.error_message || (mapSettingsProcessingFailed?.() ?? 'Processing failed')
 					);
 					uploadProgress = null;
 					isUploading = false;
@@ -324,15 +393,15 @@
 
 			const result = await response.json();
 			if (result.type === 'success') {
-				toast.success(m.mapLayerDeleteSuccess());
+				toast.success(mapLayerDeleteSuccess());
 				showDeleteLayerDialog = false;
 				selectedLayer = null;
 				invalidateAll();
 			} else {
-				toast.error(m.mapLayerDeleteError());
+				toast.error(mapLayerDeleteError());
 			}
 		} catch {
-			toast.error(m.mapLayerDeleteError());
+			toast.error(mapLayerDeleteError());
 		}
 	}
 
@@ -351,15 +420,15 @@
 				const newType = layer.layer_type === 'base' ? 'overlay' : 'base';
 				toast.success(
 					newType === 'base'
-						? (m.mapSettingsLayerSetAsBase?.() ?? 'Layer set as base')
-						: (m.mapSettingsLayerSetAsOverlay?.() ?? 'Layer set as overlay')
+						? (mapSettingsLayerSetAsBase?.() ?? 'Layer set as base')
+						: (mapSettingsLayerSetAsOverlay?.() ?? 'Layer set as overlay')
 				);
 				invalidateAll();
 			} else {
-				toast.error(m.mapSettingsLayerTypeUpdateError?.() ?? 'Failed to update layer type');
+				toast.error(mapSettingsLayerTypeUpdateError?.() ?? 'Failed to update layer type');
 			}
 		} catch {
-			toast.error(m.mapSettingsLayerTypeUpdateError?.() ?? 'Failed to update layer type');
+			toast.error(mapSettingsLayerTypeUpdateError?.() ?? 'Failed to update layer type');
 		}
 	}
 
@@ -378,10 +447,10 @@
 			if (result.type === 'success') {
 				await invalidateAll();
 			} else {
-				toast.error(result.data?.message || (m.mapSettingsUpdateFailed?.() ?? 'Update failed'));
+				toast.error(result.data?.message || (mapSettingsUpdateFailed?.() ?? 'Update failed'));
 			}
 		} catch {
-			toast.error(m.mapSettingsUpdateFailed?.() ?? 'Update failed');
+			toast.error(mapSettingsUpdateFailed?.() ?? 'Update failed');
 		}
 	}
 
@@ -429,16 +498,16 @@
 {/snippet}
 
 <SettingsSection
-	name={m.mapLayersTitle?.() ?? 'Map Layers'}
+	name={mapLayersTitle?.() ?? 'Map Layers'}
 	description={baseLayers.length > 0
-		? `${m.mapSettingsBaseLayersLabel?.() ?? 'Base layers'}: ${baseLayers.map((l: MapLayer) => l.name).join(', ')}`
-		: (m.mapSettingsNoBaseLayerConfigured?.() ??
+		? `${mapSettingsBaseLayersLabel?.() ?? 'Base layers'}: ${baseLayers.map((l: MapLayer) => l.name).join(', ')}`
+		: (mapSettingsNoBaseLayerConfigured?.() ??
 			'No base layer configured - add a layer and mark it as base')}
 >
 	{#snippet actions()}
 		<Button onclick={() => (showAddLayerDialog = true)}>
 			<Plus class="mr-2 h-4 w-4" />
-			{m.mapSettingsAddLayer?.() ?? 'Add Layer'}
+			{mapSettingsAddLayer?.() ?? 'Add Layer'}
 		</Button>
 	{/snippet}
 
@@ -447,14 +516,14 @@
 			class="flex flex-col items-center justify-center rounded-md border border-dashed py-12 text-center"
 		>
 			<Map class="mb-4 h-12 w-12 text-muted-foreground" />
-			<p class="text-lg font-medium">{m.mapSettingsNoLayersYet?.() ?? 'No layers yet'}</p>
+			<p class="text-lg font-medium">{mapSettingsNoLayersYet?.() ?? 'No layers yet'}</p>
 			<p class="mb-4 text-muted-foreground">
-				{m.mapSettingsNoLayersDescription?.() ??
+				{mapSettingsNoLayersDescription?.() ??
 					'Add a preset, tile URL, WMS, or upload tiles to get started'}
 			</p>
 			<Button onclick={() => (showAddLayerDialog = true)}>
 				<Plus class="mr-2 h-4 w-4" />
-				{m.mapSettingsAddLayer?.() ?? 'Add Layer'}
+				{mapSettingsAddLayer?.() ?? 'Add Layer'}
 			</Button>
 		</div>
 	{:else}
@@ -462,21 +531,21 @@
 			data={data.mapLayers}
 			columns={layerColumns}
 			getRowId={(row) => row.id}
-			emptyMessage={m.mapLayersEmpty?.() ?? 'No map layers configured'}
-			emptySubMessage={m.mapLayersEmptyDescription?.() ??
+			emptyMessage={mapLayersEmpty?.() ?? 'No map layers configured'}
+			emptySubMessage={mapLayersEmptyDescription?.() ??
 				'Map layers will appear here once tile sets are processed'}
 			showToolbar={true}
 			showEditMode={true}
-			editModeLabel={m.mapSettingsEditMode?.() ?? 'Edit mode'}
+			editModeLabel={mapSettingsEditMode?.() ?? 'Edit mode'}
 			rowActions={{
-				header: m.mapSettingsActions?.() ?? 'Actions',
+				header: mapSettingsActions?.() ?? 'Actions',
 				onDelete: openDeleteLayerDialog,
 				customActions: [
 					{
 						label: (row) =>
 							row.layer_type === 'base'
-								? (m.mapSettingsSetAsOverlay?.() ?? 'Set as Overlay')
-								: (m.mapSettingsSetAsBase?.() ?? 'Set as Base'),
+								? (mapSettingsSetAsOverlay?.() ?? 'Set as Overlay')
+								: (mapSettingsSetAsBase?.() ?? 'Set as Base'),
 						icon: Star,
 						onClick: toggleLayerType
 					}
@@ -490,20 +559,20 @@
 <Dialog.Root bind:open={showAddLayerDialog}>
 	<Dialog.Content class="flex max-h-[90vh] max-w-2xl flex-col">
 		<Dialog.Header class="shrink-0">
-			<Dialog.Title>{m.mapSettingsAddMapLayerTitle?.() ?? 'Add Map Layer'}</Dialog.Title>
+			<Dialog.Title>{mapSettingsAddMapLayerTitle?.() ?? 'Add Map Layer'}</Dialog.Title>
 			<Dialog.Description>
-				{m.mapSettingsAddMapLayerDescription?.() ?? 'Choose a preset, enter a URL, or upload tiles'}
+				{mapSettingsAddMapLayerDescription?.() ?? 'Choose a preset, enter a URL, or upload tiles'}
 			</Dialog.Description>
 		</Dialog.Header>
 
 		<Tabs.Root bind:value={addLayerMode} class="flex flex-1 flex-col overflow-hidden">
 			<Tabs.List class="shrink-0">
-				<Tabs.Trigger value="preset">{m.mapSettingsPresets?.() ?? 'Presets'}</Tabs.Trigger>
-				<Tabs.Trigger value="tile">{m.mapSettingsTileUrl?.() ?? 'Tile URL'}</Tabs.Trigger>
-				<Tabs.Trigger value="wms">{m.mapSettingsWms?.() ?? 'WMS'}</Tabs.Trigger>
+				<Tabs.Trigger value="preset">{mapSettingsPresets?.() ?? 'Presets'}</Tabs.Trigger>
+				<Tabs.Trigger value="tile">{mapSettingsTileUrl?.() ?? 'Tile URL'}</Tabs.Trigger>
+				<Tabs.Trigger value="wms">{mapSettingsWms?.() ?? 'WMS'}</Tabs.Trigger>
 				<Tabs.Trigger value="upload">
 					<Upload class="mr-1 h-4 w-4" />
-					{m.mapSettingsUpload?.() ?? 'Upload'}
+					{mapSettingsUpload?.() ?? 'Upload'}
 				</Tabs.Trigger>
 			</Tabs.List>
 
@@ -520,15 +589,15 @@
 									<div class="text-sm font-medium">{preset.name}</div>
 									<div class="text-xs text-muted-foreground">
 										{preset.sourceType === 'wms'
-											? (m.mapSettingsWms?.() ?? 'WMS')
-											: (m.mapSettingsTiles?.() ?? 'Tiles')} -- {m.mapSettingsZoomLabel?.() ??
+											? (mapSettingsWms?.() ?? 'WMS')
+											: (mapSettingsTiles?.() ?? 'Tiles')} -- {mapSettingsZoomLabel?.() ??
 											'Zoom'}
 										{preset.minZoom ?? 0}-{preset.maxZoom ?? 19}
 									</div>
 								</div>
 								{#if addedPresetUrls.has(preset.url)}
 									<Badge variant="outline" class="text-xs"
-										>{m.mapSettingsAdded?.() ?? 'Added'}</Badge
+										>{mapSettingsAdded?.() ?? 'Added'}</Badge
 									>
 								{:else}
 									<Plus class="h-4 w-4 text-muted-foreground" />
@@ -541,16 +610,16 @@
 				<Tabs.Content value="tile">
 					<div class="space-y-4">
 						<div class="space-y-2">
-							<Label for="tile_name">{m.mapSettingsFieldName?.() ?? 'Name'}</Label>
+							<Label for="tile_name">{mapSettingsFieldName?.() ?? 'Name'}</Label>
 							<Input
 								id="tile_name"
 								bind:value={tileUrlName}
-								placeholder={m.mapSettingsTileLayerPlaceholder?.() ?? 'My Tile Layer'}
+								placeholder={mapSettingsTileLayerPlaceholder?.() ?? 'My Tile Layer'}
 								required
 							/>
 						</div>
 						<div class="space-y-2">
-							<Label for="tile_url">{m.mapSettingsTileUrlTemplate?.() ?? 'Tile URL Template'}</Label
+							<Label for="tile_url">{mapSettingsTileUrlTemplate?.() ?? 'Tile URL Template'}</Label
 							>
 							<Input
 								id="tile_url"
@@ -559,19 +628,19 @@
 								required
 							/>
 							<p class="text-xs text-muted-foreground">
-								{m.mapSettingsTilePlaceholderHint?.() ?? 'URL must contain z, x and y placeholders'}
+								{mapSettingsTilePlaceholderHint?.() ?? 'URL must contain z, x and y placeholders'}
 							</p>
 						</div>
 						<div class="space-y-2">
 							<Label for="tile_attribution">
-								{m.mapSettingsAttributionOptional?.() ?? 'Attribution (optional)'}
+								{mapSettingsAttributionOptional?.() ?? 'Attribution (optional)'}
 							</Label>
 							<Input id="tile_attribution" bind:value={tileUrlAttribution} />
 						</div>
 						<div class="flex items-center space-x-2">
 							<Switch id="tile_as_base" bind:checked={tileUrlAsBase} />
 							<Label for="tile_as_base">
-								{m.mapSettingsSetAsBaseLayer?.() ?? 'Set as base layer'}
+								{mapSettingsSetAsBaseLayer?.() ?? 'Set as base layer'}
 							</Label>
 						</div>
 						<Button
@@ -579,8 +648,8 @@
 							disabled={isSubmitting || !tileUrlName.trim() || !tileUrlUrl.trim()}
 						>
 							{isSubmitting
-								? (m.mapSettingsAdding?.() ?? 'Adding...')
-								: (m.mapSettingsAddTileLayer?.() ?? 'Add Tile Layer')}
+								? (mapSettingsAdding?.() ?? 'Adding...')
+								: (mapSettingsAddTileLayer?.() ?? 'Add Tile Layer')}
 						</Button>
 					</div>
 				</Tabs.Content>
@@ -588,16 +657,16 @@
 				<Tabs.Content value="wms">
 					<div class="space-y-4">
 						<div class="space-y-2">
-							<Label for="wms_name">{m.mapSettingsFieldName?.() ?? 'Name'}</Label>
+							<Label for="wms_name">{mapSettingsFieldName?.() ?? 'Name'}</Label>
 							<Input
 								id="wms_name"
 								bind:value={wmsName}
-								placeholder={m.mapSettingsWmsLayerPlaceholder?.() ?? 'My WMS Layer'}
+								placeholder={mapSettingsWmsLayerPlaceholder?.() ?? 'My WMS Layer'}
 								required
 							/>
 						</div>
 						<div class="space-y-2">
-							<Label for="wms_url">{m.mapSettingsWmsUrl?.() ?? 'WMS URL'}</Label>
+							<Label for="wms_url">{mapSettingsWmsUrl?.() ?? 'WMS URL'}</Label>
 							<Input
 								id="wms_url"
 								bind:value={wmsUrl}
@@ -606,33 +675,33 @@
 							/>
 						</div>
 						<div class="space-y-2">
-							<Label for="wms_layers">{m.mapSettingsLayers?.() ?? 'Layers'}</Label>
+							<Label for="wms_layers">{mapSettingsLayers?.() ?? 'Layers'}</Label>
 							<Input id="wms_layers" bind:value={wmsLayers} placeholder="layer_name" required />
 						</div>
 						<div class="grid grid-cols-2 gap-4">
 							<div class="space-y-2">
-								<Label for="wms_format">{m.mapSettingsFormat?.() ?? 'Format'}</Label>
+								<Label for="wms_format">{mapSettingsFormat?.() ?? 'Format'}</Label>
 								<Input id="wms_format" bind:value={wmsFormat} />
 							</div>
 							<div class="space-y-2">
-								<Label for="wms_version">{m.mapSettingsVersion?.() ?? 'Version'}</Label>
+								<Label for="wms_version">{mapSettingsVersion?.() ?? 'Version'}</Label>
 								<Input id="wms_version" bind:value={wmsVersion} />
 							</div>
 						</div>
 						<div class="space-y-2">
 							<Label for="wms_attribution">
-								{m.mapSettingsAttributionOptional?.() ?? 'Attribution (optional)'}
+								{mapSettingsAttributionOptional?.() ?? 'Attribution (optional)'}
 							</Label>
 							<Input id="wms_attribution" bind:value={wmsAttribution} />
 						</div>
 						<div class="flex items-center gap-4">
 							<div class="flex items-center space-x-2">
 								<Switch id="wms_transparent" bind:checked={wmsTransparent} />
-								<Label for="wms_transparent">{m.mapSettingsTransparent?.() ?? 'Transparent'}</Label>
+								<Label for="wms_transparent">{mapSettingsTransparent?.() ?? 'Transparent'}</Label>
 							</div>
 							<div class="flex items-center space-x-2">
 								<Switch id="wms_as_base" bind:checked={wmsAsBase} />
-								<Label for="wms_as_base">{m.mapSettingsBaseLayer?.() ?? 'Base layer'}</Label>
+								<Label for="wms_as_base">{mapSettingsBaseLayer?.() ?? 'Base layer'}</Label>
 							</div>
 						</div>
 						<Button
@@ -640,8 +709,8 @@
 							disabled={isSubmitting || !wmsName.trim() || !wmsUrl.trim() || !wmsLayers.trim()}
 						>
 							{isSubmitting
-								? (m.mapSettingsAdding?.() ?? 'Adding...')
-								: (m.mapSettingsAddWmsLayer?.() ?? 'Add WMS Layer')}
+								? (mapSettingsAdding?.() ?? 'Adding...')
+								: (mapSettingsAddWmsLayer?.() ?? 'Add WMS Layer')}
 						</Button>
 					</div>
 				</Tabs.Content>
@@ -649,16 +718,16 @@
 				<Tabs.Content value="upload">
 					<div class="space-y-4">
 						<div class="space-y-2">
-							<Label for="upload_name">{m.mapSettingsFieldName?.() ?? 'Name'}</Label>
+							<Label for="upload_name">{mapSettingsFieldName?.() ?? 'Name'}</Label>
 							<Input
 								id="upload_name"
 								bind:value={uploadName}
-								placeholder={m.mapSettingsCustomTilesPlaceholder?.() ?? 'My Custom Tiles'}
+								placeholder={mapSettingsCustomTilesPlaceholder?.() ?? 'My Custom Tiles'}
 								required
 							/>
 						</div>
 						<div class="space-y-2">
-							<Label>{m.mapSettingsTileFormat?.() ?? 'Tile Format'}</Label>
+							<Label>{mapSettingsTileFormat?.() ?? 'Tile Format'}</Label>
 							<div class="flex gap-2">
 								{#each ['png', 'jpg', 'webp'] as fmt (fmt)}
 									<Button
@@ -672,7 +741,7 @@
 							</div>
 						</div>
 						<div class="space-y-2">
-							<Label>{m.mapSettingsZipFile?.() ?? 'ZIP File'}</Label>
+							<Label>{mapSettingsZipFile?.() ?? 'ZIP File'}</Label>
 							<Input
 								type="file"
 								accept=".zip"
@@ -685,14 +754,14 @@
 								}}
 							/>
 							<p class="text-xs text-muted-foreground">
-								{m.mapSettingsZipFileHint?.() ?? 'ZIP archive with tiles in z/x/y.ext format'}
+								{mapSettingsZipFileHint?.() ?? 'ZIP archive with tiles in z/x/y.ext format'}
 							</p>
 						</div>
 						{#if uploadProgress}
 							<div class="space-y-1">
 								{#if uploadProgress.phase === 'uploading'}
 									<p class="text-sm">
-										{m.mapSettingsUploadingLabel?.() ?? 'Uploading...'}
+										{mapSettingsUploadingLabel?.() ?? 'Uploading...'}
 										{(uploadProgress.loaded / 1024 / 1024).toFixed(1)} MB / {(
 											uploadProgress.total /
 											1024 /
@@ -701,7 +770,7 @@
 									</p>
 								{:else}
 									<p class="text-sm">
-										{m.mapSettingsProcessingLabel?.() ?? 'Processing...'}
+										{mapSettingsProcessingLabel?.() ?? 'Processing...'}
 										{uploadProgress.percent}%
 									</p>
 								{/if}
@@ -719,10 +788,10 @@
 						>
 							{#if isUploading}
 								<Loader2 class="mr-2 h-4 w-4 animate-spin" />
-								{m.mapSettingsUploadingLabel?.() ?? 'Uploading...'}
+								{mapSettingsUploadingLabel?.() ?? 'Uploading...'}
 							{:else}
 								<Upload class="mr-2 h-4 w-4" />
-								{m.mapSettingsUploadTiles?.() ?? 'Upload Tiles'}
+								{mapSettingsUploadTiles?.() ?? 'Upload Tiles'}
 							{/if}
 						</Button>
 					</div>
@@ -736,23 +805,23 @@
 <AlertDialog.Root bind:open={showDeleteLayerDialog}>
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>{m.mapLayerDeleteTitle()}</AlertDialog.Title>
+			<AlertDialog.Title>{mapLayerDeleteTitle()}</AlertDialog.Title>
 			<AlertDialog.Description>
-				{m.mapLayerDeleteConfirmation()}
+				{mapLayerDeleteConfirmation()}
 				{#if selectedLayer}
 					<strong class="mt-2 block">{selectedLayer.name}</strong>
 					{#if selectedLayer.layer_type === 'base'}
 						<Badge variant="destructive" class="mt-2">
-							{m.mapSettingsThisIsBaseLayer?.() ?? 'This is the base layer'}
+							{mapSettingsThisIsBaseLayer?.() ?? 'This is the base layer'}
 						</Badge>
 					{/if}
 				{/if}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<AlertDialog.Footer>
-			<AlertDialog.Cancel>{m.mapSettingsCancel?.() ?? 'Cancel'}</AlertDialog.Cancel>
+			<AlertDialog.Cancel>{mapSettingsCancel?.() ?? 'Cancel'}</AlertDialog.Cancel>
 			<AlertDialog.Action onclick={handleDeleteLayer}>
-				{m.mapSettingsDeleteConfirm?.() ?? 'Delete'}
+				{mapSettingsDeleteConfirm?.() ?? 'Delete'}
 			</AlertDialog.Action>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>

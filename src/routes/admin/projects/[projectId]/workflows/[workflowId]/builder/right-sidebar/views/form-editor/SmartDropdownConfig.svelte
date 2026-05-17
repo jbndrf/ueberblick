@@ -3,7 +3,19 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		formEditorSmartDropdownConfigBrowseFields,
+		formEditorSmartDropdownConfigConditionalOptionsHint,
+		formEditorSmartDropdownConfigConditionalOptionsLabel,
+		formEditorSmartDropdownConfigConfigureOptions,
+		formEditorSmartDropdownConfigNoFields,
+		formEditorSmartDropdownConfigPickerDescription,
+		formEditorSmartDropdownConfigPickerTitle,
+		formEditorSmartDropdownConfigSourceFieldHint,
+		formEditorSmartDropdownConfigSourceFieldLabel,
+		formEditorSmartDropdownConfigTypeDropdown,
+		formEditorSmartDropdownConfigTypeMultipleChoice
+	} from '$lib/paraglide/messages';
 
 	import type {
 		ToolsFormField,
@@ -181,14 +193,14 @@
 <div class="smart-dropdown-config">
 	<!-- Source Field Selection -->
 	<div class="config-section">
-		<Label>{m.formEditorSmartDropdownConfigSourceFieldLabel?.() ?? 'Source Field'}</Label>
+		<Label>{formEditorSmartDropdownConfigSourceFieldLabel?.() ?? 'Source Field'}</Label>
 		<p class="config-hint">
-			{m.formEditorSmartDropdownConfigSourceFieldHint?.() ?? 'Pick a dropdown, multiple choice, or smart dropdown field. Options will change based on its value.'}
+			{formEditorSmartDropdownConfigSourceFieldHint?.() ?? 'Pick a dropdown, multiple choice, or smart dropdown field. Options will change based on its value.'}
 		</p>
 
 		{#if eligibleFields.length === 0}
 			<p class="no-fields-message">
-				{m.formEditorSmartDropdownConfigNoFields?.() ?? 'No eligible source fields found in earlier stages.'}
+				{formEditorSmartDropdownConfigNoFields?.() ?? 'No eligible source fields found in earlier stages.'}
 			</p>
 		{:else if selectedSource}
 			<div class="selected-source">
@@ -204,7 +216,7 @@
 		{:else}
 			<Button variant="outline" class="picker-trigger" onclick={() => (pickerOpen = true)}>
 				<Search class="h-4 w-4" />
-				{m.formEditorSmartDropdownConfigBrowseFields?.() ?? 'Browse available fields'}
+				{formEditorSmartDropdownConfigBrowseFields?.() ?? 'Browse available fields'}
 			</Button>
 		{/if}
 	</div>
@@ -213,19 +225,19 @@
 	<div class="config-section">
 		<label class="multi-toggle">
 			<input type="checkbox" checked={allowMultiple} onchange={handleAllowMultipleChange} />
-			<span>{m.formEditorSmartDropdownConfigAllowMultiple?.() ?? 'Allow multiple selections'}</span>
+			<span>{'Allow multiple selections'}</span>
 		</label>
 		<p class="config-hint">
-			{m.formEditorSmartDropdownConfigAllowMultipleHint?.() ?? 'Let participants pick more than one option.'}
+			{'Let participants pick more than one option.'}
 		</p>
 	</div>
 
 	<!-- Configure Options Button -->
 	{#if selectedSource && tabOptions.length > 0}
 		<div class="config-section">
-			<Label>{m.formEditorSmartDropdownConfigConditionalOptionsLabel?.() ?? 'Conditional Options'}</Label>
+			<Label>{formEditorSmartDropdownConfigConditionalOptionsLabel?.() ?? 'Conditional Options'}</Label>
 			<p class="config-hint">
-				{m.formEditorSmartDropdownConfigConditionalOptionsHint?.() ?? 'Define which options to show for each source value.'}
+				{formEditorSmartDropdownConfigConditionalOptionsHint?.() ?? 'Define which options to show for each source value.'}
 			</p>
 
 			<Button
@@ -234,7 +246,7 @@
 				onclick={() => (modalOpen = true)}
 			>
 				<Settings2 class="h-4 w-4" />
-				{m.formEditorSmartDropdownConfigConfigureOptions?.() ?? 'Configure Options'}
+				{formEditorSmartDropdownConfigConfigureOptions?.() ?? 'Configure Options'}
 				{#if configuredMappingsCount > 0}
 					<span class="mappings-badge">{configuredMappingsCount}</span>
 				{/if}
@@ -247,9 +259,9 @@
 <Dialog.Root bind:open={pickerOpen}>
 	<Dialog.Content class="source-picker-modal">
 		<Dialog.Header>
-			<Dialog.Title>{m.formEditorSmartDropdownConfigPickerTitle?.() ?? 'Choose a source field'}</Dialog.Title>
+			<Dialog.Title>{formEditorSmartDropdownConfigPickerTitle?.() ?? 'Choose a source field'}</Dialog.Title>
 			<Dialog.Description>
-				{m.formEditorSmartDropdownConfigPickerDescription?.() ?? 'Pick a field from an earlier stage. This dropdown\'s choices will change based on what the participant selects there.'}
+				{formEditorSmartDropdownConfigPickerDescription?.() ?? 'Pick a field from an earlier stage. This dropdown\'s choices will change based on what the participant selects there.'}
 			</Dialog.Description>
 		</Dialog.Header>
 
@@ -267,7 +279,7 @@
 							>
 								<div class="card-header">
 									<span class="card-field-name">{source.field.field_label}</span>
-									<span class="card-field-type">{source.field.field_type === 'multiple_choice' ? (m.formEditorSmartDropdownConfigTypeMultipleChoice?.() ?? 'Multiple choice') : source.field.field_type === 'smart_dropdown' ? (m.formEditorSmartDropdownConfigTypeSmartDropdown?.() ?? 'Smart dropdown') : (m.formEditorSmartDropdownConfigTypeDropdown?.() ?? 'Dropdown')}</span>
+									<span class="card-field-type">{source.field.field_type === 'multiple_choice' ? (formEditorSmartDropdownConfigTypeMultipleChoice?.() ?? 'Multiple choice') : source.field.field_type === 'smart_dropdown' ? 'Smart dropdown' : (formEditorSmartDropdownConfigTypeDropdown?.() ?? 'Dropdown')}</span>
 								</div>
 								<div class="card-options">
 									{#each source.options as opt (opt.label)}

@@ -3,7 +3,17 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { X, ChevronDown, ChevronUp, Calculator, GitCompare, Braces, Hash } from '@lucide/svelte';
 	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		expressionInputAddFields,
+		expressionInputGroupCompare,
+		expressionInputGroupFunc,
+		expressionInputGroupLogic,
+		expressionInputGroupMath,
+		expressionInputHideOperators,
+		expressionInputPlaceholder,
+		expressionInputRemoveField,
+		expressionInputShowOperators
+	} from '$lib/paraglide/messages';
 
 	type FieldOption = { key: string; label: string };
 
@@ -18,7 +28,7 @@
 		placeholder?: string;
 	};
 
-	let { value, fieldOptions = [], onchange, placeholder = m.expressionInputPlaceholder() }: Props = $props();
+	let { value, fieldOptions = [], onchange, placeholder = expressionInputPlaceholder() }: Props = $props();
 
 	// --- Parsing & Serialization ---
 
@@ -355,22 +365,22 @@
 
 	const OPERATOR_GROUPS = $derived([
 		{
-			label: m.expressionInputGroupMath(),
+			label: expressionInputGroupMath(),
 			icon: Calculator,
 			items: ['+', '-', '*', '/', '%', '(', ')']
 		},
 		{
-			label: m.expressionInputGroupCompare(),
+			label: expressionInputGroupCompare(),
 			icon: GitCompare,
 			items: ['>', '<', '=', '!=', '>=', '<=']
 		},
 		{
-			label: m.expressionInputGroupLogic(),
+			label: expressionInputGroupLogic(),
 			icon: Braces,
 			items: ['AND', 'OR', 'NOT']
 		},
 		{
-			label: m.expressionInputGroupFunc(),
+			label: expressionInputGroupFunc(),
 			icon: Hash,
 			items: ['IF()', 'SUM()', 'MIN()', 'MAX()', 'ROUND()']
 		}
@@ -427,7 +437,7 @@
 							type="button"
 							class="badge-remove"
 							onclick={() => removeFieldAtIndex(i)}
-							aria-label={m.expressionInputRemoveField({ label: getFieldLabel(segment.fieldId) })}
+							aria-label={expressionInputRemoveField({ label: getFieldLabel(segment.fieldId) })}
 						>
 							<X class="h-2.5 w-2.5" />
 						</button>
@@ -444,7 +454,7 @@
 			selectedIds={selectedFieldIds}
 			getOptionId={(opt) => opt.key}
 			getOptionLabel={(opt) => opt.label}
-			placeholder={m.expressionInputAddFields()}
+			placeholder={expressionInputAddFields()}
 			onSelectedIdsChange={handleFieldSelectionChange}
 			class="expression-field-select"
 		/>
@@ -454,10 +464,10 @@
 	<button class="operators-toggle" type="button" onclick={() => operatorsOpen = !operatorsOpen}>
 		{#if operatorsOpen}
 			<ChevronUp class="h-3 w-3" />
-			<span>{m.expressionInputHideOperators()}</span>
+			<span>{expressionInputHideOperators()}</span>
 		{:else}
 			<ChevronDown class="h-3 w-3" />
-			<span>{m.expressionInputShowOperators()}</span>
+			<span>{expressionInputShowOperators()}</span>
 		{/if}
 	</button>
 

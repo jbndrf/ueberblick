@@ -13,7 +13,30 @@
 	} from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { invalidateAll } from '$app/navigation';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		commonCancel,
+		commonClose,
+		navProjects,
+		projectsCreateProject,
+		projectsCreatedLabel,
+		projectsEmptyState,
+		projectsExportArchive,
+		projectsExportArchiveError,
+		projectsExportArchiveSuccess,
+		projectsExportDataCsv,
+		projectsExportDataCsvError,
+		projectsExportDataCsvSuccess,
+		projectsExportError,
+		projectsExportSchema,
+		projectsExportSuccess,
+		projectsImportArchive,
+		projectsImportArchiveError,
+		projectsImportArchiveSuccess,
+		projectsImportError,
+		projectsImportFromFile,
+		projectsImportSuccess,
+		projectsOpenProject
+	} from '$lib/paraglide/messages';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Progress } from '$lib/components/ui/progress';
 	import { Input } from '$lib/components/ui/input';
@@ -51,10 +74,10 @@
 			a.download = `${projectName.toLowerCase().replace(/\s+/g, '-')}-schema.json`;
 			a.click();
 			URL.revokeObjectURL(url);
-			toast.success(m.projectsExportSuccess?.() ?? 'Project schema exported');
+			toast.success(projectsExportSuccess?.() ?? 'Project schema exported');
 		} catch (err) {
 			console.error('Error exporting:', err);
-			toast.error(m.projectsExportError?.() ?? 'Failed to export project schema');
+			toast.error(projectsExportError?.() ?? 'Failed to export project schema');
 		} finally {
 			exporting = false;
 		}
@@ -73,13 +96,13 @@
 			const result = await response.json();
 			if (result.type === 'success') {
 				await invalidateAll();
-				toast.success(m.projectsImportSuccess?.() ?? 'Project imported successfully');
+				toast.success(projectsImportSuccess?.() ?? 'Project imported successfully');
 			} else {
-				toast.error(result.data?.message || (m.projectsImportError?.() ?? 'Failed to import project'));
+				toast.error(result.data?.message || (projectsImportError?.() ?? 'Failed to import project'));
 			}
 		} catch (err) {
 			console.error('Error importing:', err);
-			toast.error(m.projectsImportError?.() ?? 'Failed to import project');
+			toast.error(projectsImportError?.() ?? 'Failed to import project');
 		} finally {
 			importing = false;
 		}
@@ -114,10 +137,10 @@
 			a.download = filename;
 			a.click();
 			URL.revokeObjectURL(url);
-			toast.success(m.projectsExportArchiveSuccess?.() ?? 'Project archive exported');
+			toast.success(projectsExportArchiveSuccess?.() ?? 'Project archive exported');
 		} catch (err) {
 			console.error('Error exporting archive:', err);
-			toast.error(m.projectsExportArchiveError?.() ?? 'Failed to export project archive');
+			toast.error(projectsExportArchiveError?.() ?? 'Failed to export project archive');
 		} finally {
 			exportingArchive = false;
 		}
@@ -145,10 +168,10 @@
 			a.download = filename;
 			a.click();
 			URL.revokeObjectURL(url);
-			toast.success(m.projectsExportDataCsvSuccess?.() ?? 'CSV data exported');
+			toast.success(projectsExportDataCsvSuccess?.() ?? 'CSV data exported');
 		} catch (err) {
 			console.error('Error exporting CSV data:', err);
-			toast.error(m.projectsExportDataCsvError?.() ?? 'Failed to export CSV data');
+			toast.error(projectsExportDataCsvError?.() ?? 'Failed to export CSV data');
 		} finally {
 			exportingCsv = false;
 		}
@@ -233,9 +256,9 @@
 
 			if (outcome === 'done') {
 				await invalidateAll();
-				toast.success(m.projectsImportArchiveSuccess?.() ?? 'Project archive imported');
+				toast.success(projectsImportArchiveSuccess?.() ?? 'Project archive imported');
 			} else {
-				toast.error(archiveError || (m.projectsImportArchiveError?.() ?? 'Failed to import project archive'));
+				toast.error(archiveError || (projectsImportArchiveError?.() ?? 'Failed to import project archive'));
 			}
 		} catch (err) {
 			console.error('Error importing archive:', err);
@@ -281,7 +304,7 @@
 >
 	<Dialog.Content>
 		<Dialog.Header>
-			<Dialog.Title>{m.projectsImportArchive?.() ?? 'Import full project (ZIP)'}</Dialog.Title>
+			<Dialog.Title>{projectsImportArchive?.() ?? 'Import full project (ZIP)'}</Dialog.Title>
 		</Dialog.Header>
 		<div class="space-y-4">
 			{#if archiveFile}
@@ -314,10 +337,10 @@
 		<Dialog.Footer>
 			{#if archivePhase === 'idle'}
 				<Button variant="outline" onclick={() => (archiveDialogOpen = false)}>
-					{m.commonCancel?.() ?? 'Cancel'}
+					{commonCancel?.() ?? 'Cancel'}
 				</Button>
 				<Button onclick={handleImportArchive} disabled={!archiveFile || importingArchive}>
-					{m.projectsImportArchive?.() ?? 'Import'}
+					{projectsImportArchive?.() ?? 'Import'}
 				</Button>
 			{:else if archivePhase === 'done' || archivePhase === 'failed'}
 				<Button
@@ -326,7 +349,7 @@
 						resetArchiveDialog();
 					}}
 				>
-					{m.commonClose?.() ?? 'Close'}
+					{commonClose?.() ?? 'Close'}
 				</Button>
 			{/if}
 		</Dialog.Footer>
@@ -335,9 +358,9 @@
 
 <div class="container mx-auto p-6">
 	<div class="mb-6 flex items-center justify-between">
-		<h1 class="text-3xl font-bold">{m.navProjects?.() ?? 'Projects'}</h1>
+		<h1 class="text-3xl font-bold">{navProjects?.() ?? 'Projects'}</h1>
 		<div class="flex">
-			<Button href="/admin/projects/new" class="rounded-r-none">{m.projectsCreateProject?.() ?? 'Create Project'}</Button>
+			<Button href="/admin/projects/new" class="rounded-r-none">{projectsCreateProject?.() ?? 'Create Project'}</Button>
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger>
 					{#snippet child({ props })}
@@ -353,14 +376,14 @@
 				<DropdownMenu.Content align="end">
 					<DropdownMenu.Item onclick={() => fileInput.click()}>
 						<Upload class="mr-2 size-4" />
-						{m.projectsImportFromFile?.() ?? 'Import from File'}
+						{projectsImportFromFile?.() ?? 'Import from File'}
 					</DropdownMenu.Item>
 					<DropdownMenu.Item
 						onclick={() => archiveFileInput.click()}
 						disabled={importingArchive}
 					>
 						<FolderArchive class="mr-2 size-4" />
-						{m.projectsImportArchive?.() ?? 'Import full project (ZIP)'}
+						{projectsImportArchive?.() ?? 'Import full project (ZIP)'}
 					</DropdownMenu.Item>
 				</DropdownMenu.Content>
 			</DropdownMenu.Root>
@@ -378,7 +401,7 @@
 								<Card.Description>{project.description}</Card.Description>
 							{:else if project.created}
 								<Card.Description>
-									{m.projectsCreatedLabel?.() ?? 'Created'}: {new Date(project.created).toLocaleDateString()}
+									{projectsCreatedLabel?.() ?? 'Created'}: {new Date(project.created).toLocaleDateString()}
 								</Card.Description>
 							{/if}
 						</div>
@@ -396,21 +419,21 @@
 									disabled={exporting}
 								>
 									<Download class="mr-2 size-4" />
-									{m.projectsExportSchema?.() ?? 'Export Schema'}
+									{projectsExportSchema?.() ?? 'Export Schema'}
 								</DropdownMenu.Item>
 								<DropdownMenu.Item
 									onclick={() => handleExportArchive(project.id, project.name)}
 									disabled={exportingArchive}
 								>
 									<Package class="mr-2 size-4" />
-									{m.projectsExportArchive?.() ?? 'Export full project (ZIP)'}
+									{projectsExportArchive?.() ?? 'Export full project (ZIP)'}
 								</DropdownMenu.Item>
 								<DropdownMenu.Item
 									onclick={() => handleExportCsvOnly(project.id, project.name)}
 									disabled={exportingCsv}
 								>
 									<FileSpreadsheet class="mr-2 size-4" />
-									{m.projectsExportDataCsv?.() ?? 'Export data (CSV)'}
+									{projectsExportDataCsv?.() ?? 'Export data (CSV)'}
 								</DropdownMenu.Item>
 							</DropdownMenu.Content>
 						</DropdownMenu.Root>
@@ -418,16 +441,16 @@
 				</Card.Header>
 				<Card.Content>
 					<Button href="/admin/projects/{project.id}/participants" class="w-full">
-						{m.projectsOpenProject?.() ?? 'Open Project'}
+						{projectsOpenProject?.() ?? 'Open Project'}
 					</Button>
 				</Card.Content>
 			</Card.Root>
 		{:else}
 			<div class="col-span-full text-center">
 				<p class="mb-4 text-muted-foreground">
-					{m.projectsEmptyState?.() ?? 'No projects found. Create your first project to get started.'}
+					{projectsEmptyState?.() ?? 'No projects found. Create your first project to get started.'}
 				</p>
-				<Button href="/admin/projects/new">{m.projectsCreateProject?.() ?? 'Create Project'}</Button>
+				<Button href="/admin/projects/new">{projectsCreateProject?.() ?? 'Create Project'}</Button>
 			</div>
 		{/each}
 	</div>

@@ -36,9 +36,13 @@ export async function fetchFieldValuesForWorkflow(
 	pb: PocketBase,
 	workflowId: string
 ): Promise<any[]> {
-	return pb.collection('workflow_instance_field_values').getFullList({
+	// TODO(field-def-redesign): rows are now keyed on `field_def_id` and carry
+	// `recorded_at_stage` instead of `stage_id`. The admin rows pipeline still
+	// addresses values by field id, so we alias these into the legacy keys
+	// downstream.
+	return pb.collection('workflow_field_values').getFullList({
 		filter: `instance_id.workflow_id = "${workflowId}"`,
-		fields: 'id,instance_id,field_key,value,file_value,stage_id',
+		fields: 'id,instance_id,field_def_id,value,file_value,recorded_at_stage',
 		requestKey: null
 	});
 }
@@ -84,6 +88,11 @@ export function buildRowsFromInstances(
 	> = {};
 
 	for (const fv of fieldValues) {
+		// TODO(field-def-redesign): switch admin row indexing to field_def_id and
+		// expose `recorded_at_stage` directly. For now we alias to the legacy keys
+		// (`field_key`, `stage_id`) so downstream consumers keep working.
+		const fieldKey = fv.field_def_id ?? fv.field_key;
+		const stageId = fv.recorded_at_stage ?? fv.stage_id ?? '';
 		if (!fieldValuesByInstance[fv.instance_id]) {
 			fieldValuesByInstance[fv.instance_id] = {};
 			fieldValueRecords[fv.instance_id] = {};
@@ -91,16 +100,16 @@ export function buildRowsFromInstances(
 		}
 
 		if (fv.file_value) {
-			if (!filesByInstance[fv.instance_id][fv.field_key]) {
-				filesByInstance[fv.instance_id][fv.field_key] = [];
+			if (!filesByInstance[fv.instance_id][fieldKey]) {
+				filesByInstance[fv.instance_id][fieldKey] = [];
 			}
-			filesByInstance[fv.instance_id][fv.field_key].push({
+			filesByInstance[fv.instance_id][fieldKey].push({
 				recordId: fv.id,
 				fileName: fv.file_value
 			});
-			fieldValueRecords[fv.instance_id][fv.field_key] = {
+			fieldValueRecords[fv.instance_id][fieldKey] = {
 				recordId: fv.id,
-				stageId: fv.stage_id
+				stageId
 			};
 			continue;
 		}
@@ -113,10 +122,10 @@ export function buildRowsFromInstances(
 				// keep as string
 			}
 		}
-		fieldValuesByInstance[fv.instance_id][fv.field_key] = parsed;
-		fieldValueRecords[fv.instance_id][fv.field_key] = {
+		fieldValuesByInstance[fv.instance_id][fieldKey] = parsed;
+		fieldValueRecords[fv.instance_id][fieldKey] = {
 			recordId: fv.id,
-			stageId: fv.stage_id
+			stageId
 		};
 	}
 

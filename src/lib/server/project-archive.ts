@@ -3,7 +3,7 @@
  * single ZIP containing CSVs, a mapping file, and bundled file uploads.
  *
  * Builds on schema-transfer.ts (which handles the configuration layer) and
- * adds workflow_instances, workflow_instance_field_values,
+ * adds workflow_instances, workflow_field_values,
  * workflow_protocol_entries, workflow_instance_tool_usage, markers,
  * custom_table_data, and participants.
  */
@@ -281,10 +281,17 @@ export async function exportProjectArchive(
 		participants_csv: options.includeParticipants ? 'participants.csv' : null
 	};
 
-	// Pre-load form fields keyed by id (used to label instance value columns)
-	const allFormFields = await pb.collection('tools_form_fields').getFullList({ sort: 'field_order' });
-	const fieldById = new Map<string, any>();
-	for (const f of allFormFields) fieldById.set(f.id, f);
+	// Pre-load form-field refs + field defs keyed by id (used to label instance
+	// value columns). The ref carries layout/order; the def carries the label
+	// and type that drive column naming and value formatting.
+	const allFormFieldRefs = await pb
+		.collection('tools_form_field_refs')
+		.getFullList({ sort: 'field_order' });
+	const allFieldDefs = await pb.collection('workflow_field_defs').getFullList();
+	const fieldDefById = new Map<string, any>();
+	for (const d of allFieldDefs) fieldDefById.set(d.id, d);
+	const fieldRefById = new Map<string, any>();
+	for (const r of allFormFieldRefs) fieldRefById.set(r.id, r);
 
 	const stagesByWorkflow = new Map<string, any[]>();
 	for (const wf of schema.workflows) {
@@ -309,9 +316,11 @@ export async function exportProjectArchive(
 			};
 		}
 
-		// Determine fields used by this workflow's forms and order them by stage then field_order
+		// Determine field-refs used by this workflow's forms and order them by
+		// stage then field_order. Each ref points to a workflow_field_defs row
+		// (looked up via fieldDefById) for label/type.
 		const formIds = new Set(wfExport.forms.map((f: any) => f.id));
-		const wfFields = wfExport.form_fields
+		const wfFields = ((wfExport as any).form_field_refs ?? [])
 			.filter((f: any) => formIds.has(f.form_id))
 			.slice()
 			.sort((a: any, b: any) => (a.field_order ?? 0) - (b.field_order ?? 0));
@@ -362,10 +371,13 @@ export async function exportProjectArchive(
 		for (const c of sysCols) colNameTaken.add(c.name);
 
 		const fieldCols: ArchiveColumn[] = [];
-		for (const field of wfFields) {
-			const stageId = formStageId.get(field.form_id) || null;
+		for (const ref of wfFields) {
+			const def = fieldDefById.get(ref.field_def_id);
+			const stageId = formStageId.get(ref.form_id) || null;
 			const stageSlug = stageId && stageInfo[stageId] ? stageInfo[stageId].slug : null;
-			const baseSlug = slugify(field.field_label, field.id);
+			const label: string = def?.label ?? ref.field_def_id;
+			const fieldType: string | undefined = def?.field_type;
+			const baseSlug = slugify(label, ref.field_def_id);
 			let colBase = baseSlug;
 			let colName: string;
 			if (colNameTaken.has(colBase) && stageSlug) {
@@ -376,9 +388,9 @@ export async function exportProjectArchive(
 			fieldCols.push({
 				name: colName,
 				kind: 'field',
-				value_type: field.field_type === 'file' ? 'file_ref' : 'text',
-				field_id: field.id,
-				field_label: field.field_label,
+				value_type: fieldType === 'file' ? 'file_ref' : 'text',
+				field_id: ref.field_def_id,
+				field_label: label,
 				stage_id: stageId || undefined
 			});
 		}
@@ -392,15 +404,15 @@ export async function exportProjectArchive(
 
 		const valuesByInstance = new Map<string, Map<string, any[]>>();
 		if (instances.length > 0) {
-			const vals = await pb.collection('workflow_instance_field_values').getFullList({
+			const vals = await pb.collection('workflow_field_values').getFullList({
 				filter: `instance_id.workflow_id = "${wfRecord.id}"`,
 				requestKey: null
 			});
 			for (const v of vals) {
 				if (!valuesByInstance.has(v.instance_id)) valuesByInstance.set(v.instance_id, new Map());
 				const perField = valuesByInstance.get(v.instance_id)!;
-				if (!perField.has(v.field_key)) perField.set(v.field_key, []);
-				perField.get(v.field_key)!.push(v);
+				if (!perField.has(v.field_def_id)) perField.set(v.field_def_id, []);
+				perField.get(v.field_def_id)!.push(v);
 			}
 		}
 
@@ -480,7 +492,7 @@ export async function exportProjectArchive(
 						}
 						const bytes = await fetchPbFile(
 							pb,
-							'workflow_instance_field_values',
+							'workflow_field_values',
 							v.id,
 							fname
 						);
@@ -958,6 +970,9 @@ export async function importProjectArchive(
 					? idMaps.stages.get(col.stage_id) || col.stage_id
 					: newStageId;
 
+				// TODO(field-def-redesign): write_mode must come from the
+				// workflow_field_defs row; we don't have it on the archived
+				// column, so default to 'singleton' (the common case).
 				if (col.value_type === 'file_ref') {
 					const refs = cell.split(';').filter(Boolean);
 					for (const ref of refs) {
@@ -967,11 +982,13 @@ export async function importProjectArchive(
 						const fd = new FormData();
 						fd.append('id', generateId());
 						fd.append('instance_id', newInstanceId);
-						fd.append('field_key', newFieldId);
-						fd.append('stage_id', newValStageId);
+						fd.append('field_def_id', newFieldId);
+						fd.append('write_mode', 'singleton');
+						fd.append('recorded_at', new Date().toISOString());
+						fd.append('recorded_at_stage', newValStageId);
 						fd.append('value', '');
 						fd.append('file_value', file);
-						await batcher.add('workflow_instance_field_values', fd);
+						await batcher.add('workflow_field_values', fd);
 						valueCount++;
 						instanceHadFiles = true;
 					}
@@ -979,10 +996,12 @@ export async function importProjectArchive(
 					const fd = new FormData();
 					fd.append('id', generateId());
 					fd.append('instance_id', newInstanceId);
-					fd.append('field_key', newFieldId);
-					fd.append('stage_id', newValStageId);
+					fd.append('field_def_id', newFieldId);
+					fd.append('write_mode', 'singleton');
+					fd.append('recorded_at', new Date().toISOString());
+					fd.append('recorded_at_stage', newValStageId);
 					fd.append('value', cell);
-					await batcher.add('workflow_instance_field_values', fd);
+					await batcher.add('workflow_field_values', fd);
 					valueCount++;
 				}
 			}
@@ -1175,7 +1194,11 @@ export async function importProjectArchive(
 type ImportIdMaps = {
 	workflows: Map<string, string>;
 	stages: Map<string, string>;
+	/** Maps old field-def ids to new field-def ids. Field values reference
+	 *  field defs (not form-field refs), so this is what the value importer
+	 *  needs. */
 	formFields: Map<string, string>;
+	formFieldRefs: Map<string, string>;
 	protocolTools: Map<string, string>;
 	roles: Map<string, string>;
 	markerCategories: Map<string, string>;
@@ -1193,6 +1216,7 @@ async function rebuildIdMapsFromImport(
 		workflows: new Map(),
 		stages: new Map(),
 		formFields: new Map(),
+		formFieldRefs: new Map(),
 		protocolTools: new Map(),
 		roles: new Map(),
 		markerCategories: new Map(),
@@ -1261,21 +1285,35 @@ async function rebuildIdMapsFromImport(
 			if (newFormId) oldFormToNewForm.set(oldForm.id, newFormId);
 		}
 
-		// Form fields: match within form by field_order
-		const oldFieldsByForm = new Map<string, any[]>();
-		for (const ff of wfExport.form_fields) {
-			if (!oldFieldsByForm.has(ff.form_id)) oldFieldsByForm.set(ff.form_id, []);
-			oldFieldsByForm.get(ff.form_id)!.push(ff);
+		// Field defs: match by key within workflow (key is unique per workflow).
+		const oldDefs = wfExport.field_defs ?? [];
+		const newDefs = await pb
+			.collection('workflow_field_defs')
+			.getFullList({ filter: `workflow_id = "${newWfId}"` });
+		const newDefByKey = new Map(newDefs.map((d: any) => [d.key, d.id]));
+		for (const od of oldDefs) {
+			const newDefId = newDefByKey.get(od.key);
+			if (newDefId) maps.formFields.set(od.id, newDefId);
 		}
-		for (const [oldFormId, oldFields] of oldFieldsByForm) {
+
+		// Form-field refs: match within form by field_order
+		const oldRefs = (wfExport as any).form_field_refs ?? [];
+		const oldRefsByForm = new Map<string, any[]>();
+		for (const ff of oldRefs) {
+			if (!oldRefsByForm.has(ff.form_id)) oldRefsByForm.set(ff.form_id, []);
+			oldRefsByForm.get(ff.form_id)!.push(ff);
+		}
+		for (const [oldFormId, oldRefsForForm] of oldRefsByForm) {
 			const newFormId = oldFormToNewForm.get(oldFormId);
 			if (!newFormId) continue;
-			const newFields = await pb
-				.collection('tools_form_fields')
+			const newRefs = await pb
+				.collection('tools_form_field_refs')
 				.getFullList({ filter: `form_id = "${newFormId}"`, sort: 'field_order' });
-			const sortedOld = oldFields.slice().sort((a, b) => (a.field_order ?? 0) - (b.field_order ?? 0));
-			for (let i = 0; i < sortedOld.length && i < newFields.length; i++) {
-				maps.formFields.set(sortedOld[i].id, newFields[i].id);
+			const sortedOld = oldRefsForForm
+				.slice()
+				.sort((a, b) => (a.field_order ?? 0) - (b.field_order ?? 0));
+			for (let i = 0; i < sortedOld.length && i < newRefs.length; i++) {
+				maps.formFieldRefs.set(sortedOld[i].id, newRefs[i].id);
 			}
 		}
 

@@ -20,7 +20,33 @@
 	} from '@lucide/svelte';
 	import { isFeatureEnabled } from '$lib/participant-state/enabled-features.svelte';
 	import { createPersistedTab } from '$lib/participant-state/ui-state.svelte';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		participantFilterSheetAdminPresetsHeader,
+		participantFilterSheetAdminPresetsLoad,
+		participantFilterSheetDeactivateView,
+		participantFilterSheetDefaultView,
+		participantFilterSheetDescription,
+		participantFilterSheetMarkers,
+		participantFilterSheetNewView,
+		participantFilterSheetNoContent,
+		participantFilterSheetShowingIndividually,
+		participantFilterSheetTabCluster,
+		participantFilterSheetTabSimple,
+		participantFilterSheetTabViews,
+		participantFilterSheetTitle,
+		participantFilterSheetTooManyClustered,
+		participantFilterSheetUncluster,
+		participantFilterSheetUnclusterDescription,
+		participantFilterSheetUpTo,
+		participantFilterSheetViewOverrideDescription,
+		participantFilterSheetViewOverrideTitle,
+		participantFilterSheetViewsHeader,
+		participantFilterSheetWorkflowInstances,
+		participantSavedViewsDelete,
+		participantSavedViewsNamePlaceholder,
+		participantSavedViewsRename,
+		participantSavedViewsSave
+	} from '$lib/paraglide/messages';
 	import type { FilterClause, ToolConfigRecord, ViewDefinition } from '$lib/participant-state/types';
 	import FilterBuilder from './view-builder/FilterBuilder.svelte';
 	import type { BuilderContext } from './view-builder/types';
@@ -78,7 +104,7 @@
 	interface FieldValue {
 		id: string;
 		instance_id: string;
-		field_key: string;
+		field_def_id: string;
 		value: string;
 	}
 
@@ -323,7 +349,7 @@
 				const filterValueIcons = (wfDef?.filter_value_icons ?? {}) as Record<string, IconConfig>;
 				const countMap = new Map<string, number>();
 				for (const fv of fieldValues) {
-					if (fv.field_key === filterable.fieldId && fv.value && instanceIds.has(fv.instance_id)) {
+					if (fv.field_def_id === filterable.fieldId && fv.value && instanceIds.has(fv.instance_id)) {
 						for (const v of splitMultiValue(fv.value)) {
 							countMap.set(v, (countMap.get(v) ?? 0) + 1);
 						}
@@ -359,20 +385,20 @@
 				     toggles are ignored. Surface that so the UI isn't lying. -->
 				<div class="rounded-md border border-primary/40 bg-primary/5 p-3 text-xs">
 					<div class="mb-2 font-medium">
-						{(m.participantFilterSheetViewOverrideTitle?.({ name: activeView.name }) ?? `"${activeView.name}" is active`)}
+						{(participantFilterSheetViewOverrideTitle?.({ name: activeView.name }) ?? `"${activeView.name}" is active`)}
 					</div>
 					<div class="mb-2 text-muted-foreground">
-						{m.participantFilterSheetViewOverrideDescription?.() ?? 'This view replaces the toggles below — they do nothing while it is on.'}
+						{participantFilterSheetViewOverrideDescription?.() ?? 'This view replaces the toggles below — they do nothing while it is on.'}
 					</div>
 					<Button variant="outline" size="sm" class="h-7 w-full" onclick={() => onClearActiveView?.()}>
-						{m.participantFilterSheetDeactivateView?.() ?? 'Turn view off'}
+						{participantFilterSheetDeactivateView?.() ?? 'Turn view off'}
 					</Button>
 				</div>
 			{/if}
 
 			{#if instancesByWorkflow.length > 0}
 				<div>
-					<h4 class="mb-3 text-sm font-medium">{m.participantFilterSheetWorkflowInstances?.() ?? 'Workflow Instances'}</h4>
+					<h4 class="mb-3 text-sm font-medium">{participantFilterSheetWorkflowInstances?.() ?? 'Workflow Instances'}</h4>
 					<div class="space-y-2">
 						{#each instancesByWorkflow as { workflowId, workflow, count }}
 							{@const filterable = filterableData.get(workflowId)}
@@ -450,7 +476,7 @@
 
 			{#if markersByCategory.length > 0}
 				<div>
-					<h4 class="mb-3 text-sm font-medium">{m.participantFilterSheetMarkers?.() ?? 'Markers'}</h4>
+					<h4 class="mb-3 text-sm font-medium">{participantFilterSheetMarkers?.() ?? 'Markers'}</h4>
 					<div class="space-y-2">
 						{#each markersByCategory as { categoryId, category, count }}
 							<div class="flex items-center justify-between rounded-lg border p-3">
@@ -478,7 +504,7 @@
 
 			{#if instancesByWorkflow.length === 0 && markersByCategory.length === 0}
 				<div class="py-8 text-center text-sm text-muted-foreground">
-					{m.participantFilterSheetNoContent?.() ?? 'No map content available'}
+					{participantFilterSheetNoContent?.() ?? 'No map content available'}
 				</div>
 			{/if}
 	</div>
@@ -489,7 +515,7 @@
 		<!-- Views switcher: Default + each saved view. Exactly one active. -->
 		<div class="space-y-2">
 			<h4 class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-				{m.participantFilterSheetViewsHeader?.() ?? 'View'}
+				{participantFilterSheetViewsHeader?.() ?? 'View'}
 			</h4>
 
 			<button
@@ -502,7 +528,7 @@
 					{/if}
 				</div>
 				<span class="flex-1 truncate text-sm font-medium">
-					{m.participantFilterSheetDefaultView?.() ?? 'Default (Simple filter)'}
+					{participantFilterSheetDefaultView?.() ?? 'Default (Simple filter)'}
 				</span>
 			</button>
 
@@ -539,11 +565,11 @@
 							<span class="truncate text-sm font-medium">{view.name}</span>
 						</button>
 						<Button size="icon" variant="ghost" class="h-7 w-7 shrink-0" onclick={() => startRename(view)}
-							title={m.participantSavedViewsRename?.() ?? 'Rename'}>
+							title={participantSavedViewsRename?.() ?? 'Rename'}>
 							<Pencil class="h-3.5 w-3.5" />
 						</Button>
 						<Button size="icon" variant="ghost" class="h-7 w-7 shrink-0" onclick={() => onSavedViewDelete?.(view.id)}
-							title={m.participantSavedViewsDelete?.() ?? 'Delete'}>
+							title={participantSavedViewsDelete?.() ?? 'Delete'}>
 							<Trash2 class="h-3.5 w-3.5" />
 						</Button>
 					{/if}
@@ -555,7 +581,7 @@
 					<Input
 						type="text"
 						class="h-8 flex-1"
-						placeholder={m.participantSavedViewsNamePlaceholder?.() ?? 'Name this view…'}
+						placeholder={participantSavedViewsNamePlaceholder?.() ?? 'Name this view…'}
 						bind:value={newViewName}
 						autofocus
 						onkeydown={(e) => {
@@ -564,7 +590,7 @@
 						}}
 					/>
 					<Button size="sm" onclick={commitNew} disabled={!newViewName.trim()}>
-						{m.participantSavedViewsSave?.() ?? 'Save'}
+						{participantSavedViewsSave?.() ?? 'Save'}
 					</Button>
 					<Button size="icon" variant="ghost" class="h-8 w-8" onclick={cancelNew}>
 						<X class="h-4 w-4" />
@@ -574,7 +600,7 @@
 				<Button variant="outline" size="sm" class="w-full justify-start"
 					onclick={() => { creatingNew = true; newViewName = ''; }}>
 					<Plus class="mr-2 h-4 w-4" />
-					{m.participantFilterSheetNewView?.() ?? 'New view'}
+					{participantFilterSheetNewView?.() ?? 'New view'}
 				</Button>
 			{/if}
 
@@ -582,7 +608,7 @@
 				<Separator class="my-2" />
 				<div class="flex flex-col gap-1">
 					<div class="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-						{m.participantFilterSheetAdminPresetsHeader?.() ?? 'From the project'}
+						{participantFilterSheetAdminPresetsHeader?.() ?? 'From the project'}
 					</div>
 					{#each adminPresets as preset (preset.id)}
 						<div class="flex items-center gap-2 rounded-md border border-dashed p-2">
@@ -594,7 +620,7 @@
 								class="h-7 shrink-0"
 								onclick={() => onAdminPresetLoad?.({ name: preset.name, config: preset.config })}
 							>
-								{m.participantFilterSheetAdminPresetsLoad?.() ?? 'Load'}
+								{participantFilterSheetAdminPresetsLoad?.() ?? 'Load'}
 							</Button>
 						</div>
 					{/each}
@@ -618,9 +644,9 @@
 		<div class="space-y-3 rounded-lg border p-3">
 			<div class="flex items-center justify-between">
 				<div class="min-w-0 flex-1 pr-3">
-					<div class="text-sm font-medium">{m.participantFilterSheetUncluster?.() ?? 'Uncluster'}</div>
+					<div class="text-sm font-medium">{participantFilterSheetUncluster?.() ?? 'Uncluster'}</div>
 					<div class="text-xs text-muted-foreground">
-						{m.participantFilterSheetUnclusterDescription?.() ?? 'Show individual markers in the current view'}
+						{participantFilterSheetUnclusterDescription?.() ?? 'Show individual markers in the current view'}
 					</div>
 				</div>
 				<Switch checked={uncluster} onCheckedChange={(checked) => onUnclusterToggle?.(checked)} />
@@ -628,16 +654,16 @@
 
 			{#if uncluster}
 				<div class="flex items-center justify-between gap-3">
-					<label for="uncluster-cap" class="text-xs font-medium">{m.participantFilterSheetUpTo?.() ?? 'Up to'}</label>
+					<label for="uncluster-cap" class="text-xs font-medium">{participantFilterSheetUpTo?.() ?? 'Up to'}</label>
 					<Input id="uncluster-cap" type="number" min="1" step="50"
 						class="h-8 w-24 text-right" value={unclusterCap} onchange={handleCapInput} />
 				</div>
 				{#if unclusterStats && unclusterStats.total > 0}
 					<div class="text-xs text-muted-foreground">
 						{#if unclusterStats.rendered > 0}
-							{(m.participantFilterSheetShowingIndividually?.({ count: unclusterStats.total }) ?? `Showing ${unclusterStats.total} individually`)}
+							{(participantFilterSheetShowingIndividually?.({ count: unclusterStats.total }) ?? `Showing ${unclusterStats.total} individually`)}
 						{:else}
-							{(m.participantFilterSheetTooManyClustered?.({ count: unclusterStats.total }) ?? `${unclusterStats.total} in view — too many, still clustered`)}
+							{(participantFilterSheetTooManyClustered?.({ count: unclusterStats.total }) ?? `${unclusterStats.total} in view — too many, still clustered`)}
 						{/if}
 					</div>
 				{/if}
@@ -649,8 +675,8 @@
 <Sheet.Root bind:open>
 	<Sheet.ContentNoOverlay side="left" class="w-80">
 		<Sheet.Header class="relative pr-10">
-			<Sheet.Title>{m.participantFilterSheetTitle?.() ?? 'Map Content'}</Sheet.Title>
-			<Sheet.Description>{m.participantFilterSheetDescription?.() ?? 'Show or hide items on the map'}</Sheet.Description>
+			<Sheet.Title>{participantFilterSheetTitle?.() ?? 'Map Content'}</Sheet.Title>
+			<Sheet.Description>{participantFilterSheetDescription?.() ?? 'Show or hide items on the map'}</Sheet.Description>
 			{#if onManageTabs}
 				<Button variant="ghost" size="icon" class="absolute right-1 top-1 h-7 w-7"
 					title="Manage tabs" onclick={onManageTabs}>
@@ -664,18 +690,18 @@
 				<Tabs.List class="w-full shrink-0">
 					<Tabs.Trigger value="simple">
 						<Sliders class="h-4 w-4" />
-						<span>{m.participantFilterSheetTabSimple?.() ?? 'Simple'}</span>
+						<span>{participantFilterSheetTabSimple?.() ?? 'Simple'}</span>
 					</Tabs.Trigger>
 					{#if showViews}
 						<Tabs.Trigger value="views">
 							<Sparkles class="h-4 w-4" />
-							<span>{m.participantFilterSheetTabViews?.() ?? 'Views'}</span>
+							<span>{participantFilterSheetTabViews?.() ?? 'Views'}</span>
 						</Tabs.Trigger>
 					{/if}
 					{#if showCluster}
 						<Tabs.Trigger value="cluster">
 							<Sparkles class="h-4 w-4" />
-							<span>{m.participantFilterSheetTabCluster?.() ?? 'Cluster'}</span>
+							<span>{participantFilterSheetTabCluster?.() ?? 'Cluster'}</span>
 						</Tabs.Trigger>
 					{/if}
 				</Tabs.List>

@@ -1,4 +1,12 @@
-import * as m from '$lib/paraglide/messages';
+import {
+	participantsEmail,
+	participantsLastActive,
+	participantsName,
+	participantsPhone,
+	participantsRoles,
+	participantsStatus,
+	participantsToken
+} from '$lib/paraglide/messages';
 
 export type Participant = {
 	id: string;
@@ -15,11 +23,11 @@ export type Participant = {
 };
 
 export const participantsColumnHeaders = {
-	name: m.participantsName?.() ?? 'Name',
-	email: m.participantsEmail?.() ?? 'Email',
-	phone: m.participantsPhone?.() ?? 'Phone',
-	token: m.participantsToken?.() ?? 'Access Token',
-	roles: m.participantsRoles?.() ?? 'Roles',
-	status: m.participantsStatus?.() ?? 'Status',
-	lastActive: m.participantsLastActive?.() ?? 'Last Active'
+	name: participantsName?.() ?? 'Name',
+	email: participantsEmail?.() ?? 'Email',
+	phone: participantsPhone?.() ?? 'Phone',
+	token: participantsToken?.() ?? 'Access Token',
+	roles: participantsRoles?.() ?? 'Roles',
+	status: participantsStatus?.() ?? 'Status',
+	lastActive: participantsLastActive?.() ?? 'Last Active'
 };

@@ -2,7 +2,19 @@
 	import { superForm } from 'sveltekit-superforms';
 	import { zod4Client } from 'sveltekit-superforms/adapters';
 	import { loginSchema } from '$lib/schemas/auth';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		loginEmailLabel,
+		loginEmailPlaceholder,
+		loginHidePassword,
+		loginPasswordLabel,
+		loginPasswordPlaceholder,
+		loginRememberMe,
+		loginShowPassword,
+		loginSignIn,
+		loginSigningIn,
+		loginSubtitle,
+		loginTitle
+	} from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
@@ -28,7 +40,7 @@
 </script>
 
 <svelte:head>
-	<title>{m.loginTitle?.() ?? 'Sign In'} - Überblick Sector</title>
+	<title>{loginTitle?.() ?? 'Sign In'} - Überblick Sector</title>
 </svelte:head>
 
 <div class="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-slate-100 to-slate-50 p-4 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
@@ -41,20 +53,20 @@
 	<Card.Root class="w-full max-w-md">
 		<Card.Header class="space-y-1 text-center">
 			<img src="/icons/logo-light.png" alt="Überblick Sector" class="mx-auto mb-4 h-16 w-16 object-contain dark:invert" />
-			<Card.Title class="text-2xl font-bold">{m.loginTitle?.() ?? 'Sign In'}</Card.Title>
-			<Card.Description>{m.loginSubtitle?.() ?? 'Enter your credentials to access the admin interface'}</Card.Description>
+			<Card.Title class="text-2xl font-bold">{loginTitle?.() ?? 'Sign In'}</Card.Title>
+			<Card.Description>{loginSubtitle?.() ?? 'Enter your credentials to access the admin interface'}</Card.Description>
 		</Card.Header>
 
 		<Card.Content>
 			<form method="POST" use:enhance class="space-y-4">
 				<!-- Email Field -->
 				<div class="space-y-2">
-					<Label for="email">{m.loginEmailLabel?.() ?? 'Email'}</Label>
+					<Label for="email">{loginEmailLabel?.() ?? 'Email'}</Label>
 					<Input
 						id="email"
 						name="email"
 						type="email"
-						placeholder={m.loginEmailPlaceholder?.() ?? 'admin@example.com'}
+						placeholder={loginEmailPlaceholder?.() ?? 'admin@example.com'}
 						autocomplete="email"
 						required
 						bind:value={$formData.email}
@@ -67,13 +79,13 @@
 
 				<!-- Password Field -->
 				<div class="space-y-2">
-					<Label for="password">{m.loginPasswordLabel?.() ?? 'Password'}</Label>
+					<Label for="password">{loginPasswordLabel?.() ?? 'Password'}</Label>
 					<div class="relative">
 						<Input
 							id="password"
 							name="password"
 							type={showPassword ? 'text' : 'password'}
-							placeholder={m.loginPasswordPlaceholder?.() ?? 'Enter your password'}
+							placeholder={loginPasswordPlaceholder?.() ?? 'Enter your password'}
 							autocomplete="current-password"
 							required
 							bind:value={$formData.password}
@@ -83,7 +95,7 @@
 							type="button"
 							onclick={togglePasswordVisibility}
 							class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-							aria-label={showPassword ? (m.loginHidePassword?.() ?? 'Hide password') : (m.loginShowPassword?.() ?? 'Show password')}
+							aria-label={showPassword ? (loginHidePassword?.() ?? 'Hide password') : (loginShowPassword?.() ?? 'Show password')}
 						>
 							{#if showPassword}
 								<EyeOff class="h-4 w-4" />
@@ -101,7 +113,7 @@
 				<div class="flex items-center space-x-2">
 					<Checkbox id="remember" name="remember" bind:checked={$formData.remember} />
 					<Label for="remember" class="text-sm font-normal cursor-pointer">
-						{m.loginRememberMe?.() ?? 'Remember me for 30 days'}
+						{loginRememberMe?.() ?? 'Remember me for 30 days'}
 					</Label>
 				</div>
 
@@ -116,9 +128,9 @@
 				<!-- Submit Button -->
 				<Button type="submit" class="w-full" disabled={$delayed}>
 					{#if $delayed}
-						{m.loginSigningIn?.() ?? 'Signing in...'}
+						{loginSigningIn?.() ?? 'Signing in...'}
 					{:else}
-						{m.loginSignIn?.() ?? 'Sign In'}
+						{loginSignIn?.() ?? 'Sign In'}
 					{/if}
 				</Button>
 			</form>

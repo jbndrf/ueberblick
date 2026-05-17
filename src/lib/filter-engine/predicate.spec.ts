@@ -103,20 +103,25 @@ describe('buildPredicate', () => {
 		expect(pred(instance({ current_stage_id: 'stageB' }))).toBe(false);
 	});
 
+	function fv(overrides: Partial<FieldValue>): FieldValue {
+		return {
+			id: 'fv1',
+			instance_id: 'i1',
+			field_def_id: 'fd_damage',
+			write_mode: 'singleton',
+			value: '',
+			file_value: '',
+			recorded_at: '2026-04-10T12:00:00Z',
+			recorded_by_action: '',
+			recorded_at_stage: '',
+			created: '',
+			updated: '',
+			...overrides
+		};
+	}
+
 	it('field_value clause: single + multi-choice', () => {
-		const values: FieldValue[] = [
-			{
-				id: 'fv1',
-				instance_id: 'i1',
-				field_key: 'damage_type',
-				value: '["xyz","abc"]',
-				file_value: '',
-				stage_id: '',
-				created_by_action: '',
-				created: '',
-				updated: ''
-			}
-		];
+		const values: FieldValue[] = [fv({ value: '["xyz","abc"]' })];
 		const map = new Map([['i1', values]]);
 
 		const pred = buildPredicate(
@@ -125,7 +130,7 @@ describe('buildPredicate', () => {
 					{
 						field: 'field_value',
 						workflow_id: 'wf1',
-						field_key: 'damage_type',
+						field_def_id: 'fd_damage',
 						op: 'in',
 						values: ['xyz']
 					}
@@ -141,7 +146,7 @@ describe('buildPredicate', () => {
 					{
 						field: 'field_value',
 						workflow_id: 'wf1',
-						field_key: 'damage_type',
+						field_def_id: 'fd_damage',
 						op: 'in',
 						values: ['other']
 					}
@@ -158,7 +163,7 @@ describe('buildPredicate', () => {
 					{
 						field: 'field_value',
 						workflow_id: 'wf1',
-						field_key: 'damage_type',
+						field_def_id: 'fd_damage',
 						op: 'in',
 						values: ['xyz']
 					}
@@ -167,6 +172,58 @@ describe('buildPredicate', () => {
 			{ now, fieldValuesByInstance: new Map() }
 		);
 		expect(missing(instance())).toBe(false);
+	});
+
+	it('observation aggregate: latest (default) ignores older non-matching rows', () => {
+		const values: FieldValue[] = [
+			fv({
+				id: 'old',
+				write_mode: 'observation',
+				value: 'declined',
+				recorded_at: '2026-04-01T12:00:00Z'
+			}),
+			fv({
+				id: 'new',
+				write_mode: 'observation',
+				value: 'approved',
+				recorded_at: '2026-04-15T12:00:00Z'
+			})
+		];
+		const map = new Map([['i1', values]]);
+
+		const latest = buildPredicate(
+			emptyView({
+				clauses: [
+					{
+						field: 'field_value',
+						workflow_id: 'wf1',
+						field_def_id: 'fd_damage',
+						op: 'in',
+						values: ['approved']
+					}
+				]
+			}),
+			{ now, fieldValuesByInstance: map }
+		);
+		expect(latest(instance())).toBe(true);
+
+		const any = buildPredicate(
+			emptyView({
+				clauses: [
+					{
+						field: 'field_value',
+						workflow_id: 'wf1',
+						field_def_id: 'fd_damage',
+						aggregate: 'any',
+						op: 'in',
+						values: ['declined']
+					}
+				]
+			}),
+			{ now, fieldValuesByInstance: map }
+		);
+		// Default 'latest' would miss; explicit 'any' catches the older 'declined'.
+		expect(any(instance())).toBe(true);
 	});
 
 	it('older_than_days and newer_than_days', () => {

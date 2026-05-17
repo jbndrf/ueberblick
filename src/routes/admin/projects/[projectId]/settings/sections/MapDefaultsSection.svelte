@@ -2,7 +2,23 @@
 	import { superForm } from 'sveltekit-superforms';
 	import { zod4Client } from 'sveltekit-superforms/adapters';
 	import { projectMapDefaultsSchema } from '$lib/schemas/map-settings';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		mapSettingsCenterLabel,
+		mapSettingsCenterLat,
+		mapSettingsCenterLng,
+		mapSettingsDefaultViewDescription,
+		mapSettingsDefaultViewLabel,
+		mapSettingsDefaultViewTitle,
+		mapSettingsDefaultZoom,
+		mapSettingsDefaultsSaveError,
+		mapSettingsDefaultsSaved,
+		mapSettingsDefaultsSourceBaseLayer,
+		mapSettingsMaxZoom,
+		mapSettingsMinZoom,
+		mapSettingsSaveDefaults,
+		mapSettingsSaving,
+		mapSettingsZoomLabel
+	} from '$lib/paraglide/messages';
 	import { toast } from 'svelte-sonner';
 	import { invalidateAll } from '$app/navigation';
 	import { Button } from '$lib/components/ui/button';
@@ -24,12 +40,12 @@
 		onResult: ({ result }) => {
 			isSavingDefaults = false;
 			if (result.type === 'success') {
-				toast.success(m.mapSettingsDefaultsSaved?.() ?? 'Map defaults saved');
+				toast.success(mapSettingsDefaultsSaved?.() ?? 'Map defaults saved');
 				invalidateAll();
 			} else if (result.type === 'failure') {
 				toast.error(
 					(result.data as { message?: string } | undefined)?.message ??
-						m.mapSettingsDefaultsSaveError?.() ??
+						mapSettingsDefaultsSaveError?.() ??
 						'Failed to save map defaults'
 				);
 			}
@@ -52,22 +68,22 @@
 </script>
 
 <SettingsSection
-	name={m.mapSettingsDefaultViewTitle?.() ?? 'Map Default View'}
-	description={m.mapSettingsDefaultViewDescription?.() ??
+	name={mapSettingsDefaultViewTitle?.() ?? 'Map Default View'}
+	description={mapSettingsDefaultViewDescription?.() ??
 		'Fallback settings when no base layer is configured'}
 >
 	<div class="rounded-md border bg-muted/30 px-4 py-3 text-sm">
 		<div class="font-medium">
-			{m.mapSettingsDefaultViewLabel?.() ?? 'Default view'}
+			{mapSettingsDefaultViewLabel?.() ?? 'Default view'}
 		</div>
 		<div class="mt-0.5 text-muted-foreground">
-			{m.mapSettingsZoomLabel?.() ?? 'Zoom'}
-			{effectiveDefaults().zoom}, {m.mapSettingsCenterLabel?.() ?? 'Center'}
+			{mapSettingsZoomLabel?.() ?? 'Zoom'}
+			{effectiveDefaults().zoom}, {mapSettingsCenterLabel?.() ?? 'Center'}
 			{effectiveDefaults().center.lat.toFixed(4)}, {effectiveDefaults().center.lng.toFixed(4)}
 		</div>
 		{#if effectiveDefaults().source === 'base-layer'}
 			<div class="mt-1 text-xs text-muted-foreground">
-				{m.mapSettingsDefaultsSourceBaseLayer?.() ??
+				{mapSettingsDefaultsSourceBaseLayer?.() ??
 					'Using base layer defaults. Edit values below to override when no base layer is set.'}
 			</div>
 		{/if}
@@ -75,7 +91,7 @@
 
 	<form method="POST" action="?/saveDefaults" use:defaultsEnhance class="space-y-4">
 		<div class="space-y-2">
-			<Label for="default_zoom">{m.mapSettingsDefaultZoom?.() ?? 'Default Zoom'}</Label>
+			<Label for="default_zoom">{mapSettingsDefaultZoom?.() ?? 'Default Zoom'}</Label>
 			<Input
 				id="default_zoom"
 				name="zoom"
@@ -88,7 +104,7 @@
 
 		<div class="grid grid-cols-2 gap-4">
 			<div class="space-y-2">
-				<Label for="min_zoom">{m.mapSettingsMinZoom?.() ?? 'Min Zoom'}</Label>
+				<Label for="min_zoom">{mapSettingsMinZoom?.() ?? 'Min Zoom'}</Label>
 				<Input
 					id="min_zoom"
 					name="min_zoom"
@@ -99,7 +115,7 @@
 				/>
 			</div>
 			<div class="space-y-2">
-				<Label for="max_zoom">{m.mapSettingsMaxZoom?.() ?? 'Max Zoom'}</Label>
+				<Label for="max_zoom">{mapSettingsMaxZoom?.() ?? 'Max Zoom'}</Label>
 				<Input
 					id="max_zoom"
 					name="max_zoom"
@@ -113,7 +129,7 @@
 
 		<div class="grid grid-cols-2 gap-4">
 			<div class="space-y-2">
-				<Label for="center_lat">{m.mapSettingsCenterLat?.() ?? 'Center Latitude'}</Label>
+				<Label for="center_lat">{mapSettingsCenterLat?.() ?? 'Center Latitude'}</Label>
 				<Input
 					id="center_lat"
 					name="center.lat"
@@ -125,7 +141,7 @@
 				/>
 			</div>
 			<div class="space-y-2">
-				<Label for="center_lng">{m.mapSettingsCenterLng?.() ?? 'Center Longitude'}</Label>
+				<Label for="center_lng">{mapSettingsCenterLng?.() ?? 'Center Longitude'}</Label>
 				<Input
 					id="center_lng"
 					name="center.lng"
@@ -141,8 +157,8 @@
 		<div>
 			<Button type="submit" disabled={isSavingDefaults}>
 				{isSavingDefaults
-					? (m.mapSettingsSaving?.() ?? 'Saving...')
-					: (m.mapSettingsSaveDefaults?.() ?? 'Save Defaults')}
+					? (mapSettingsSaving?.() ?? 'Saving...')
+					: (mapSettingsSaveDefaults?.() ?? 'Save Defaults')}
 			</Button>
 		</div>
 	</form>

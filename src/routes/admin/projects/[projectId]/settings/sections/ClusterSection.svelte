@@ -1,7 +1,16 @@
 <script lang="ts">
 	import { invalidateAll } from '$app/navigation';
 	import { toast } from 'svelte-sonner';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		settingsAdvancedSaveFailed,
+		settingsAdvancedStartupSaved,
+		settingsFeatureClusterDescription,
+		settingsFeatureClusterEnableHint,
+		settingsFeatureClusterEnableLabel,
+		settingsFeatureClusterTitle,
+		settingsFeatureUnavailable,
+		settingsFeatureUnavailableBadge
+	} from '$lib/paraglide/messages';
 	import { Switch } from '$lib/components/ui/switch';
 	import type { ProjectStartupDefaults } from '$lib/schemas/map-settings';
 	import { FEATURE_REGISTRY } from '$lib/participant-state/enabled-features.svelte';
@@ -46,11 +55,11 @@
 			fd.append('payload', JSON.stringify(payload));
 			const res = await fetch('?/saveStartupDefaults', { method: 'POST', body: fd });
 			if (!res.ok) throw new Error(await res.text());
-			toast.success(m.settingsAdvancedStartupSaved?.() ?? 'Saved');
+			toast.success(settingsAdvancedStartupSaved?.() ?? 'Saved');
 			await invalidateAll();
 		} catch (e) {
 			console.error(e);
-			toast.error(m.settingsAdvancedSaveFailed?.() ?? 'Save failed');
+			toast.error(settingsAdvancedSaveFailed?.() ?? 'Save failed');
 			enabled = !next;
 		} finally {
 			saving = false;
@@ -64,17 +73,17 @@
 </script>
 
 <SettingsSection
-	name={m.settingsFeatureClusterTitle?.() ?? 'Marker clustering'}
-	description={m.settingsFeatureClusterDescription?.() ??
+	name={settingsFeatureClusterTitle?.() ?? 'Marker clustering'}
+	description={settingsFeatureClusterDescription?.() ??
 		'Combine nearby markers on the participant map into clusters at lower zoom levels. Off by default; participants can opt in from their preferences.'}
 >
 	<div class="flex items-center justify-between gap-4 rounded-md border p-4">
 		<div class="flex flex-col">
 			<span class="font-medium">
-				{m.settingsFeatureClusterEnableLabel?.() ?? 'Enabled at startup'}
+				{settingsFeatureClusterEnableLabel?.() ?? 'Enabled at startup'}
 			</span>
 			<span class="text-xs text-muted-foreground">
-				{m.settingsFeatureClusterEnableHint?.() ??
+				{settingsFeatureClusterEnableHint?.() ??
 					'Adds the cluster tool to the map by default for new participants.'}
 			</span>
 		</div>
@@ -82,9 +91,9 @@
 			{#if !available}
 				<span
 					class="rounded-full border px-2 py-0.5 text-xs text-muted-foreground"
-					title={m.settingsFeatureUnavailable?.() ?? 'Coming soon'}
+					title={settingsFeatureUnavailable?.() ?? 'Coming soon'}
 				>
-					{m.settingsFeatureUnavailableBadge?.() ?? 'Soon'}
+					{settingsFeatureUnavailableBadge?.() ?? 'Soon'}
 				</span>
 			{/if}
 			<Switch checked={enabled} disabled={!available || saving} onCheckedChange={onToggle} />

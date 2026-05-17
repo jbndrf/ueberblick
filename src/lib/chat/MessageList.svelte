@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as m from '$lib/paraglide/messages';
+	import { chatEmptyState, chatUnknownUser, chatYou } from '$lib/paraglide/messages';
 	import { segments, type MentionParticipant } from './mentions';
 	import type { MentionableStore } from './mentionable.svelte';
 
@@ -36,8 +36,8 @@
 	});
 
 	function authorName(id: string): string {
-		if (id === selfId) return m.chatYou?.() ?? 'You';
-		return lookup.get(id) ?? (m.chatUnknownUser?.() ?? 'Unknown');
+		if (id === selfId) return chatYou?.() ?? 'You';
+		return lookup.get(id) ?? (chatUnknownUser?.() ?? 'Unknown');
 	}
 
 	function timeLabel(iso: string): string {
@@ -69,7 +69,7 @@
 <div class="flex flex-col gap-4 p-3">
 	{#if ordered.length === 0}
 		<div class="flex flex-col items-center justify-center py-16 text-center text-sm text-muted-foreground">
-			<p>{m.chatEmptyState?.() ?? 'No messages yet. Be the first to say hi.'}</p>
+			<p>{chatEmptyState?.() ?? 'No messages yet. Be the first to say hi.'}</p>
 		</div>
 	{/if}
 

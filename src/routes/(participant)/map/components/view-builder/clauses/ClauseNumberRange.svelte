@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Input } from '$lib/components/ui/input';
 	import type { FilterClause } from '$lib/participant-state/types';
-	import * as m from '$lib/paraglide/messages';
+	import { participantFilterClauseNumberMax, participantFilterClauseNumberMin } from '$lib/paraglide/messages';
 
 	type NumberClause = Extract<FilterClause, { field: 'field_value'; op: 'number_range' }>;
 
@@ -27,14 +27,14 @@
 	<Input
 		type="number"
 		class="h-9"
-		placeholder={m.participantFilterClauseNumberMin?.() ?? 'Min'}
+		placeholder={participantFilterClauseNumberMin?.() ?? 'Min'}
 		value={clause.min ?? ''}
 		oninput={(e) => setBound('min', (e.currentTarget as HTMLInputElement).value)}
 	/>
 	<Input
 		type="number"
 		class="h-9"
-		placeholder={m.participantFilterClauseNumberMax?.() ?? 'Max'}
+		placeholder={participantFilterClauseNumberMax?.() ?? 'Max'}
 		value={clause.max ?? ''}
 		oninput={(e) => setBound('max', (e.currentTarget as HTMLInputElement).value)}
 	/>

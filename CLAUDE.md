@@ -56,7 +56,7 @@ SvelteKit 2 + Svelte 5 (runes: `$state`, `$derived`, `$effect`, `$props`, `$bind
 - `schemas/` — Zod schemas shared by superforms and server actions.
 - `server/` — server-only helpers (auth, tile serving, layer caching).
 - `components/ui/` — shadcn-svelte primitives; higher-level shared components live one level up in `components/`.
-- `paraglide/` — generated; do not edit. Edit `messages/de.json` and `messages/en.json`, then import via `import * as m from '$lib/paraglide/messages'` and call `{m.key()}`.
+- `paraglide/` — generated; do not edit. Edit `messages/de.json` and `messages/en.json`, then import named keys: `import { someKey } from '$lib/paraglide/messages'` and call `{someKey()}`. **Never use `import * as m`** — namespace imports defeat Paraglide's per-message tree-shaking and pull the entire ~8 MB message barrel into the Vite dev module graph of every page (production builds tree-shake it, but `npm run dev` does not).
 - `workers/` — Web Workers (clustering, heavy geo work).
 - `hooks/`, `stores/`, `types/`, `config/`, `utils/`, `upload/`, `sanitize-html.ts` — supporting modules.
 

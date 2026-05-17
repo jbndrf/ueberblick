@@ -1,6 +1,18 @@
 <script lang="ts">
 	import { onMount, onDestroy, untrack } from 'svelte';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		participantMapDefaultName,
+		participantMapDownloadingOfflineData,
+		participantMapLoadingCollection,
+		participantMapLoadingCollectionCount,
+		participantMapLoadingFieldData,
+		participantMapLoadingFieldDataCount,
+		participantMapLoadingMap,
+		participantMapLoadingMarkers,
+		participantMapLoadingMarkersCount,
+		quotaExceededInstances,
+		quotaReachedHint
+	} from '$lib/paraglide/messages';
 	import { getParticipantGateway, resetAllParticipantState } from '$lib/participant-state/context.svelte';
 	import {
 		getDownloadProgress,
@@ -160,13 +172,13 @@
 		// Proactively download every remaining collection into IDB. Runs AFTER
 		// the live queries above have been declared (they registered themselves
 		// synchronously), so downloadAllCollections will skip those names and
-		// only pull collections that aren't otherwise managed -- tools_edit,
-		// tools_protocol, tools_form_fields, tools_forms,
-		// workflow_instance_tool_usage, etc. workflow_instance_field_values is
-		// handled by FieldValueCache so we pass it as externally-managed.
+		// only pull collections that aren't otherwise managed -- tools_protocol,
+		// tools_forms, tools_form_field_refs, workflow_field_defs,
+		// workflow_instance_tool_usage, etc. workflow_field_values is handled by
+		// FieldValueCache so we pass it as externally-managed.
 		// Idempotent: re-logins short-circuit via sync_metadata.
 		const names = data.collectionNames ?? [];
-		downloadAllCollections(names, ['workflow_instance_field_values']).catch((e) =>
+		downloadAllCollections(names, ['workflow_field_values']).catch((e) =>
 			console.warn('Initial collection download failed (non-fatal):', e)
 		);
 
@@ -264,12 +276,15 @@
 	// on first login; realtime + delta sync handle updates. The live query here
 	// is purely to keep an up-to-date reactive mirror in IDB for any consumers.
 	const connectionsLive = gateway!.collection('workflow_connections').live({ priority: 'deferred' });
-	// tools_forms bridges form_id -> workflow_id; tools_form_fields are the
-	// field definitions. Both are already pulled by downloadAllCollections on
-	// first login, but we need a reactive mirror here for the RecentSheet's
-	// instance-label derivation (which picks a "primary" field per instance).
+	// tools_forms bridges form_id -> workflow_id. With the field-def redesign
+	// the field registry lives on `workflow_field_defs` (workflow-scoped) and
+	// forms reference defs via `tools_form_field_refs`. We keep both as live
+	// queries so the RecentSheet's instance-label derivation (which picks a
+	// "primary" field per instance) and the filter builder can resolve labels
+	// and types without server round-trips.
 	const formsLive = gateway!.collection<{ id: string; workflow_id: string }>('tools_forms').live({ priority: 'deferred' });
-	const formFieldsLive = gateway!.collection<{ id: string; form_id: string; field_label?: string; field_type?: string; field_order?: number; page?: number; row_index?: number; column_position?: 'left' | 'full' | 'right' }>('tools_form_fields').live({ priority: 'deferred' });
+	const fieldDefsLive = gateway!.collection<{ id: string; workflow_id: string; key: string; label: string; field_type: string; field_options?: unknown; display_stage_id?: string }>('workflow_field_defs').live({ priority: 'deferred' });
+	const formFieldRefsLive = gateway!.collection<{ id: string; form_id: string; field_def_id: string; field_order?: number; page?: number; row_index?: number; column_position?: 'left' | 'full' | 'right' }>('tools_form_field_refs').live({ priority: 'deferred' });
 	// Tool usage powers the Recent sheet's last-activity label ("Erstellt",
 	// "2 Felder aktualisiert", etc.) so it matches the detail module's Activity tab.
 	const toolUsageLive = gateway!.collection<{ id: string; instance_id: string; executed_at: string; created: string; metadata: Record<string, unknown> }>('workflow_instance_tool_usage').live({ priority: 'deferred' });
@@ -281,20 +296,20 @@
 		const dlProgress = syncDownloadProgress.current;
 		if (instProgress) {
 			if (instProgress.total > 0) {
-				appLoadingMessage.value = (m.participantMapLoadingMarkersCount?.({ loaded: instProgress.loaded.toLocaleString(), total: instProgress.total.toLocaleString() }) ?? `Loading markers (${instProgress.loaded.toLocaleString()}/${instProgress.total.toLocaleString()})...`);
+				appLoadingMessage.value = (participantMapLoadingMarkersCount?.({ loaded: instProgress.loaded.toLocaleString(), total: instProgress.total.toLocaleString() }) ?? `Loading markers (${instProgress.loaded.toLocaleString()}/${instProgress.total.toLocaleString()})...`);
 			} else {
-				appLoadingMessage.value = (m.participantMapLoadingMarkers?.() ?? 'Loading markers...');
+				appLoadingMessage.value = (participantMapLoadingMarkers?.() ?? 'Loading markers...');
 			}
 		} else if (fieldValueCache.loadedCount > 0 && fieldValueCache.loading) {
-			appLoadingMessage.value = (m.participantMapLoadingFieldDataCount?.({ count: fieldValueCache.loadedCount.toLocaleString() }) ?? `Loading field data (${fieldValueCache.loadedCount.toLocaleString()})...`);
+			appLoadingMessage.value = (participantMapLoadingFieldDataCount?.({ count: fieldValueCache.loadedCount.toLocaleString() }) ?? `Loading field data (${fieldValueCache.loadedCount.toLocaleString()})...`);
 		} else if (fieldValueCache.loading) {
-			appLoadingMessage.value = (m.participantMapLoadingFieldData?.() ?? 'Loading field data...');
+			appLoadingMessage.value = (participantMapLoadingFieldData?.() ?? 'Loading field data...');
 		} else if (dlProgress) {
 			const label = dlProgress.currentCollection ?? 'data';
 			if (dlProgress.totalRecords > 0) {
-				appLoadingMessage.value = (m.participantMapLoadingCollectionCount?.({ label, loaded: dlProgress.loadedRecords.toLocaleString(), total: dlProgress.totalRecords.toLocaleString() }) ?? `Loading ${label} (${dlProgress.loadedRecords.toLocaleString()}/${dlProgress.totalRecords.toLocaleString()})...`);
+				appLoadingMessage.value = (participantMapLoadingCollectionCount?.({ label, loaded: dlProgress.loadedRecords.toLocaleString(), total: dlProgress.totalRecords.toLocaleString() }) ?? `Loading ${label} (${dlProgress.loadedRecords.toLocaleString()}/${dlProgress.totalRecords.toLocaleString()})...`);
 			} else {
-				appLoadingMessage.value = (m.participantMapLoadingCollection?.({ label }) ?? `Loading ${label}...`);
+				appLoadingMessage.value = (participantMapLoadingCollection?.({ label }) ?? `Loading ${label}...`);
 			}
 		} else {
 			appLoadingMessage.value = null;
@@ -355,31 +370,40 @@
 	const fieldTags = $derived(fieldTagsLive.records);
 	const fieldValues = $derived(fieldValueCache.records);
 
-	// Resolve tools_form_fields to their workflow via tools_forms. Used by the
-	// RecentSheet to pick a "primary" field per instance (e.g. the Datum field
-	// on an Arbeitszeit entry) so cards are distinguishable.
+	// Resolve field defs to their workflow. With the new shape `workflow_field_defs`
+	// carries `workflow_id` directly, so the per-workflow grouping is a single pass.
+	// The RecentSheet uses this to pick a "primary" field per instance (e.g. the
+	// Datum field on an Arbeitszeit entry) so cards are distinguishable. Layout
+	// (field_order, page, row_index, column_position) lives on tools_form_field_refs;
+	// we join the first ref per def to surface those.
 	const formFieldsByWorkflow = $derived.by(() => {
-		const workflowByFormId = new Map<string, string>();
-		for (const form of formsLive.records as any[]) {
-			if (form?.id && form?.workflow_id) workflowByFormId.set(form.id, form.workflow_id);
+		const refByDefId = new Map<string, { field_order?: number; page?: number; row_index?: number; column_position?: 'left' | 'full' | 'right' }>();
+		for (const ref of formFieldRefsLive.records as any[]) {
+			if (!ref?.field_def_id) continue;
+			if (!refByDefId.has(ref.field_def_id)) {
+				refByDefId.set(ref.field_def_id, {
+					field_order: ref.field_order,
+					page: ref.page,
+					row_index: ref.row_index,
+					column_position: ref.column_position
+				});
+			}
 		}
 		const result = new Map<string, Array<{ id: string; field_label?: string; field_type?: string; field_order?: number; page?: number; row_index?: number; column_position?: 'left' | 'full' | 'right' }>>();
-		for (const ff of formFieldsLive.records as any[]) {
-			const wfId = workflowByFormId.get(ff.form_id);
+		for (const def of fieldDefsLive.records as any[]) {
+			const wfId = def.workflow_id;
 			if (!wfId) continue;
 			let arr = result.get(wfId);
-			if (!arr) {
-				arr = [];
-				result.set(wfId, arr);
-			}
+			if (!arr) { arr = []; result.set(wfId, arr); }
+			const ref = refByDefId.get(def.id) ?? {};
 			arr.push({
-				id: ff.id,
-				field_label: ff.field_label,
-				field_type: ff.field_type,
-				field_order: ff.field_order,
-				page: ff.page,
-				row_index: ff.row_index,
-				column_position: ff.column_position
+				id: def.id,
+				field_label: def.label,
+				field_type: def.field_type,
+				field_order: ref.field_order,
+				page: ref.page,
+				row_index: ref.row_index,
+				column_position: ref.column_position
 			});
 		}
 		return result;
@@ -578,7 +602,8 @@
 		fieldValueCache.destroy();
 		connectionsLive.destroy();
 		formsLive.destroy();
-		formFieldsLive.destroy();
+		fieldDefsLive.destroy();
+		formFieldRefsLive.destroy();
 		toolUsageLive.destroy();
 	});
 
@@ -824,7 +849,7 @@
 		return map;
 	});
 
-	const fieldValuesByKey = $derived(fieldValueCache.fieldValuesByKey);
+	const fieldValuesByKey = $derived(fieldValueCache.fieldValuesByDefId);
 
 	// Initialize tag value visibility - all values visible by default
 	$effect(() => {
@@ -948,7 +973,7 @@
 					}
 				} else if (mapping.fieldId) {
 					for (const fv of fieldValues) {
-						if ((fv as any).field_key === mapping.fieldId && (fv as any).value) {
+						if ((fv as any).field_def_id === mapping.fieldId && (fv as any).value) {
 							map.set((fv as any).instance_id, (fv as any).value);
 						}
 					}
@@ -981,13 +1006,13 @@
 	/**
 	 * Context passed to the FilterBuilder so each clause can render its picker.
 	 *
-	 * Field discovery walks `tools_forms` + `tools_form_fields` and intersects
-	 * with `workflows` (which is already role-scoped to the participant), so
-	 * only fields the participant can see become filterable. The `filterable`
-	 * tag system is intentionally not consulted — all non-file fields are
-	 * offered, per product decision. Field type drives the value editor the
-	 * builder renders (multi-select for select-family, contains for text,
-	 * range editors for number/date).
+	 * Field discovery walks `workflow_field_defs` directly (each def carries
+	 * `workflow_id`) and intersects with `workflows` (which is already
+	 * role-scoped to the participant), so only fields the participant can see
+	 * become filterable. The `filterable` tag system is intentionally not
+	 * consulted -- all non-file fields are offered, per product decision.
+	 * Field type drives the value editor the builder renders (multi-select for
+	 * select-family, contains for text, range editors for number/date).
 	 */
 	const builderCtx = $derived.by<BuilderContext>(() => {
 		const wfList = (workflows as any[]).map((w) => ({ id: w.id, name: w.name }));
@@ -1004,17 +1029,12 @@
 			arr.push({ id: s.id, workflow_id: s.workflow_id, name: s.stage_name ?? s.id });
 		}
 
-		const workflowByFormId = new Map<string, string>();
-		for (const f of formsLive.records as any[]) {
-			if (f?.id && f?.workflow_id) workflowByFormId.set(f.id, f.workflow_id);
-		}
-
 		const filterableFields: BuilderContext['filterableFields'] = [];
-		for (const ff of formFieldsLive.records as any[]) {
+		for (const ff of fieldDefsLive.records as any[]) {
 			const type = ff.field_type as string | undefined;
 			if (!type || type === 'file') continue;
 
-			const workflowId = workflowByFormId.get(ff.form_id);
+			const workflowId = ff.workflow_id as string | undefined;
 			if (!workflowId || !accessibleWorkflowIds.has(workflowId)) continue;
 
 			const options: { id: string; label: string }[] = [];
@@ -1041,8 +1061,8 @@
 			filterableFields.push({
 				workflow_id: workflowId,
 				workflow_name: workflowNameById.get(workflowId) ?? workflowId,
-				field_key: ff.id,
-				field_label: ff.field_label ?? ff.id,
+				field_def_id: ff.id,
+				field_label: ff.label ?? ff.id,
 				field_type: type as BuilderContext['filterableFields'][number]['field_type'],
 				options
 			});
@@ -1572,7 +1592,7 @@
 		geometry?: InstanceGeometry
 	) {
 		if (quotaReached) {
-			alert(m.quotaExceededInstances?.() ?? "You've reached your limit of created entries.");
+			alert(quotaExceededInstances?.() ?? "You've reached your limit of created entries.");
 			return;
 		}
 		console.log('Workflow selected:', workflow, 'Coordinates:', coordinates, 'Geometry:', !!geometry);
@@ -1639,12 +1659,12 @@
 
 			const fieldEntries = Object.entries(formValues).filter(([_, value]) => value !== null && value !== undefined && value !== '');
 
-			// Fetch form field definitions to resolve human-readable names
+			// Fetch field def labels to resolve human-readable names
 			let fieldLabelMap: Record<string, string> = {};
 			try {
-				const allFields = await gateway.collection('tools_form_fields').getFullList({ filter: `form_id.workflow_id = "${workflow.id}"` });
+				const allFields = await gateway.collection('workflow_field_defs').getFullList({ filter: `workflow_id = "${workflow.id}"` });
 				for (const f of allFields) {
-					fieldLabelMap[(f as any).id] = (f as any).field_label;
+					fieldLabelMap[(f as any).id] = (f as any).label;
 				}
 			} catch (err) { console.warn('[Map] Failed to load field labels:', err); }
 
@@ -1670,28 +1690,46 @@
 				}
 			}) as { id: string };
 
+			// Resolve write_mode per def so we route singletons/observations correctly.
+			// Computed fields are server-evaluated; clients skip them.
+			const defWriteMode = new Map<string, string>();
+			try {
+				const defs = await gateway.collection('workflow_field_defs').getFullList({ filter: `workflow_id = "${workflow.id}"` });
+				for (const d of defs) defWriteMode.set((d as any).id, (d as any).write_mode ?? 'singleton');
+			} catch { /* fall through */ }
+
+			const nowIso = new Date().toISOString();
 			for (const [fieldId, value] of fieldEntries) {
+				const writeMode = defWriteMode.get(fieldId) ?? 'singleton';
+				if (writeMode === 'computed') {
+					console.warn('[Map] skipping client write for computed field', fieldId);
+					continue;
+				}
 				if (Array.isArray(value) && value.length > 0 && value[0] instanceof File) {
 					for (const file of value as File[]) {
 						const formData = new FormData();
 						formData.append('instance_id', instance.id);
-						formData.append('field_key', fieldId);
-						formData.append('stage_id', (startStage as any).id);
+						formData.append('field_def_id', fieldId);
+						formData.append('write_mode', writeMode);
+						formData.append('recorded_at', nowIso);
+						formData.append('recorded_at_stage', (startStage as any).id);
+						formData.append('recorded_by_action', toolUsage.id);
 						formData.append('value', '');
 						formData.append('file_value', file);
-						formData.append('created_by_action', toolUsage.id);
 
-						await gateway.collection('workflow_instance_field_values').create(formData);
+						await gateway.collection('workflow_field_values').create(formData);
 					}
 				} else {
 					const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
 
-					await gateway.collection('workflow_instance_field_values').create({
+					await gateway.collection('workflow_field_values').create({
 						instance_id: instance.id,
-						field_key: fieldId,
-						stage_id: (startStage as any).id,
-						value: stringValue,
-						created_by_action: toolUsage.id
+						field_def_id: fieldId,
+						write_mode: writeMode,
+						recorded_at: nowIso,
+						recorded_at_stage: (startStage as any).id,
+						recorded_by_action: toolUsage.id,
+						value: stringValue
 					});
 				}
 			}
@@ -1712,7 +1750,7 @@
 			const data = (error as any)?.response?.data ?? (error as any)?.data ?? null;
 			const dataStr = data ? JSON.stringify(data) : '';
 			if (msg.includes('quota_exceeded:instances') || dataStr.includes('quota_exceeded:instances')) {
-				alert(m.quotaExceededInstances?.() ?? "You've reached your limit of created entries.");
+				alert(quotaExceededInstances?.() ?? "You've reached your limit of created entries.");
 			}
 			throw error;
 		}
@@ -1927,7 +1965,7 @@
 		position={recentSheetOpen ? 'left' : 'center'}
 		onBackdropClose={() => (recentSheetOpen = false)}
 		{quotaReached}
-		quotaHint={quotaReached ? (m.quotaReachedHint?.() ?? "You've reached your limit of created entries. Delete an existing one to make room.") : ''}
+		quotaHint={quotaReached ? (quotaReachedHint?.() ?? "You've reached your limit of created entries. Delete an existing one to make room.") : ''}
 	/>
 
 	<!-- Line / Polygon draw session for incident workflows whose geometry_type
@@ -2087,7 +2125,7 @@
 		bind:open={settingsSheetOpen}
 		participant={data.participant ? {
 			id: data.participant.id,
-			name: String(data.participant.name || data.participant.email || (m.participantMapDefaultName?.() ?? 'Participant')),
+			name: String(data.participant.name || data.participant.email || (participantMapDefaultName?.() ?? 'Participant')),
 			email: data.participant.email ? String(data.participant.email) : undefined,
 			project_id: data.participant.project_id ? String(data.participant.project_id) : undefined
 		} : undefined}
@@ -2107,7 +2145,7 @@
 			<div class="rounded-lg bg-background/95 p-3 shadow-lg backdrop-blur-sm border">
 				<div class="flex items-center gap-2 mb-2">
 					<Loader2 class="h-4 w-4 animate-spin text-blue-600" />
-					<span class="text-sm font-medium">{m.participantMapDownloadingOfflineData?.() ?? 'Downloading offline data...'}</span>
+					<span class="text-sm font-medium">{participantMapDownloadingOfflineData?.() ?? 'Downloading offline data...'}</span>
 				</div>
 				<p class="text-xs text-muted-foreground">{downloadProgress.current_operation}</p>
 			</div>
@@ -2116,7 +2154,7 @@
 
 	{#if isLoading}
 		<div class="absolute inset-0 flex items-center justify-center bg-background/50">
-			<div class="text-muted-foreground">{m.participantMapLoadingMap?.() ?? 'Loading map...'}</div>
+			<div class="text-muted-foreground">{participantMapLoadingMap?.() ?? 'Loading map...'}</div>
 		</div>
 	{/if}
 </div>

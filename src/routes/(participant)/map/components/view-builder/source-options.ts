@@ -26,7 +26,7 @@ export function buildSourceOptions(ctx: BuilderContext): SourceOption[] {
 			kind: 'field_value',
 			workflow_id: f.workflow_id,
 			workflow_name: f.workflow_name,
-			field_key: f.field_key,
+			field_def_id: f.field_def_id,
 			field_label: f.field_label,
 			field_type: f.field_type,
 			options: f.options

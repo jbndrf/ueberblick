@@ -2,7 +2,7 @@
 	import * as Sheet from '$lib/components/ui/sheet';
 	import { Badge } from '$lib/components/ui/badge';
 	import { MessageSquare } from '@lucide/svelte';
-	import * as m from '$lib/paraglide/messages';
+	import { participantToolsChatLabel, participantToolsEmpty, participantToolsSheetTitle } from '$lib/paraglide/messages';
 
 	interface Props {
 		open: boolean;
@@ -29,7 +29,7 @@
 <Sheet.Root bind:open>
 	<Sheet.ContentNoOverlay side="right" class="w-28 md:w-32 p-0 gap-0">
 		<Sheet.Header class="border-b p-2">
-			<Sheet.Title class="text-sm">{m.participantToolsSheetTitle?.() ?? 'Tools'}</Sheet.Title>
+			<Sheet.Title class="text-sm">{participantToolsSheetTitle?.() ?? 'Tools'}</Sheet.Title>
 		</Sheet.Header>
 
 		<div class="flex flex-col gap-2 p-2">
@@ -46,7 +46,7 @@
 						{/if}
 					</div>
 					<span class="text-[0.625rem] font-medium leading-tight">
-						{m.participantToolsChatLabel?.() ?? 'Chat'}
+						{participantToolsChatLabel?.() ?? 'Chat'}
 					</span>
 					{#if chatHard > 0}
 						<Badge variant="destructive" class="absolute right-1 top-1 h-4 min-w-4 px-1 text-[0.5625rem]">
@@ -56,7 +56,7 @@
 				</button>
 			{:else}
 				<div class="rounded-lg border border-dashed p-2 text-center text-[0.625rem] text-muted-foreground">
-					{m.participantToolsEmpty?.() ?? 'No tools active.'}
+					{participantToolsEmpty?.() ?? 'No tools active.'}
 				</div>
 			{/if}
 		</div>

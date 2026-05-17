@@ -3,7 +3,16 @@
 	import { AlertTriangle, Check, RotateCcw } from '@lucide/svelte';
 	import type { SyncConflict } from '$lib/participant-state/db';
 	import { getChangedFields } from '../conflict-diff';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		commonCancel,
+		participantConflictResolutionApply,
+		participantConflictResolutionApplying,
+		participantConflictResolutionCurrentValue,
+		participantConflictResolutionDescription,
+		participantConflictResolutionMultipleOverride,
+		participantConflictResolutionSingleOverride,
+		participantConflictResolutionYourValue
+	} from '$lib/paraglide/messages';
 
 	// ==========================================================================
 	// Props
@@ -56,9 +65,9 @@
 	// ==========================================================================
 
 	function getFieldLabel(conflict: SyncConflict, fieldKey: string): string {
-		if (conflict.collection === 'workflow_instance_field_values') {
-			// Look up the form field label using field_key from the record data
-			const formFieldId = (conflict.localVersion.field_key || conflict.serverVersion.field_key) as string;
+		if (conflict.collection === 'workflow_field_values') {
+			// Look up the form field label using field_def_id from the record data
+			const formFieldId = (conflict.localVersion.field_def_id || conflict.serverVersion.field_def_id) as string;
 			if (formFieldId) {
 				const field = formFields.find((f) => f.id === formFieldId);
 				if (field) return field.field_label;
@@ -115,13 +124,13 @@
 		<AlertTriangle class="h-5 w-5 flex-shrink-0" />
 		<p class="text-sm font-medium">
 			{(conflicts.length === 1
-				? m.participantConflictResolutionSingleOverride?.()
-				: m.participantConflictResolutionMultipleOverride?.({ count: conflicts.length })) ?? (conflicts.length === 1 ? 'One of your changes was overridden by a newer server version.' : `${conflicts.length} of your changes were overridden by newer server versions.`)}
+				? participantConflictResolutionSingleOverride?.()
+				: participantConflictResolutionMultipleOverride?.({ count: conflicts.length })) ?? (conflicts.length === 1 ? 'One of your changes was overridden by a newer server version.' : `${conflicts.length} of your changes were overridden by newer server versions.`)}
 		</p>
 	</div>
 
 	<p class="text-xs text-muted-foreground">
-		{m.participantConflictResolutionDescription?.() ?? 'For each field, choose whether to keep the current server value or re-apply your original value.'}
+		{participantConflictResolutionDescription?.() ?? 'For each field, choose whether to keep the current server value or re-apply your original value.'}
 	</p>
 
 	<!-- Conflict List -->
@@ -154,7 +163,7 @@
 								>
 									<div class="mb-1 flex items-center gap-1 text-xs text-muted-foreground">
 										{#if !isLocal}<Check class="h-3 w-3 text-green-600" />{/if}
-										{m.participantConflictResolutionCurrentValue?.() ?? 'Current value'}
+										{participantConflictResolutionCurrentValue?.() ?? 'Current value'}
 									</div>
 									<div class="text-xs break-all">{formatValue(field.serverValue)}</div>
 								</button>
@@ -170,7 +179,7 @@
 								>
 									<div class="mb-1 flex items-center gap-1 text-xs text-muted-foreground">
 										{#if isLocal}<RotateCcw class="h-3 w-3 text-blue-600" />{/if}
-										{m.participantConflictResolutionYourValue?.() ?? 'Your value'}
+										{participantConflictResolutionYourValue?.() ?? 'Your value'}
 									</div>
 									<div class="text-xs break-all">{formatValue(field.localValue)}</div>
 								</button>
@@ -185,13 +194,13 @@
 	<!-- Action Buttons -->
 	<div class="sticky bottom-0 flex gap-2 bg-background pt-2">
 		<Button variant="outline" class="flex-1" onclick={onCancel} disabled={isSubmitting}>
-			{m.commonCancel?.() ?? 'Cancel'}
+			{commonCancel?.() ?? 'Cancel'}
 		</Button>
 		<Button class="flex-1" onclick={handleApply} disabled={isSubmitting}>
 			{#if isSubmitting}
-				{m.participantConflictResolutionApplying?.() ?? 'Applying...'}
+				{participantConflictResolutionApplying?.() ?? 'Applying...'}
 			{:else}
-				{m.participantConflictResolutionApply?.() ?? 'Apply'}
+				{participantConflictResolutionApply?.() ?? 'Apply'}
 			{/if}
 		</Button>
 	</div>

@@ -10,7 +10,23 @@
 	import FormPreview from './FormPreview.svelte';
 
 	import type { ToolsForm, ToolsFormField, TrackedFormField, WorkflowStage, ColumnPosition, VisualConfig } from '$lib/workflow-builder';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		formEditorViewAllowedRoles,
+		formEditorViewButtonAppearance,
+		formEditorViewButtonColor,
+		formEditorViewButtonLabel,
+		formEditorViewButtonLabelDefault,
+		formEditorViewButtonLabelPlaceholder,
+		formEditorViewButtonRoleSettings,
+		formEditorViewConfirmationMessage,
+		formEditorViewConfirmationMessageDefault,
+		formEditorViewFormName,
+		formEditorViewFormNamePlaceholder,
+		formEditorViewNoRoles,
+		formEditorViewRequiresConfirmation,
+		formEditorViewRequiresConfirmationDesc,
+		formEditorViewRolesHelp
+	} from '$lib/paraglide/messages';
 
 	type AncestorFieldGroup = {
 		stage: WorkflowStage;
@@ -181,13 +197,13 @@
 	<div class="form-editor-header">
 		<div class="header-content">
 			<div class="header-title">
-				<Label for="form-name" class="sr-only">{m.formEditorViewFormName?.() ?? 'Form Name'}</Label>
+				<Label for="form-name" class="sr-only">{formEditorViewFormName?.() ?? 'Form Name'}</Label>
 				<Input
 					id="form-name"
 					bind:value={formName}
 					onblur={handleFormNameBlur}
 					class="form-name-input"
-					placeholder={m.formEditorViewFormNamePlaceholder?.() ?? 'Form name...'}
+					placeholder={formEditorViewFormNamePlaceholder?.() ?? 'Form name...'}
 				/>
 			</div>
 			{#if isStageAttached}
@@ -196,7 +212,7 @@
 					size="icon"
 					onclick={() => showSettings = !showSettings}
 					class="settings-btn"
-					title={m.formEditorViewButtonRoleSettings?.() ?? 'Button & Role Settings'}
+					title={formEditorViewButtonRoleSettings?.() ?? 'Button & Role Settings'}
 				>
 					<Settings2 class="h-4 w-4" />
 				</Button>
@@ -214,24 +230,24 @@
 			<div class="settings-panel">
 				<div class="settings-section">
 					<div class="settings-header">
-						<span class="settings-title">{m.formEditorViewButtonAppearance?.() ?? 'Button Appearance'}</span>
+						<span class="settings-title">{formEditorViewButtonAppearance?.() ?? 'Button Appearance'}</span>
 					</div>
 					<div class="settings-content">
 						<div class="form-field">
-							<Label for="button-label">{m.formEditorViewButtonLabel?.() ?? 'Button Label'}</Label>
+							<Label for="button-label">{formEditorViewButtonLabel?.() ?? 'Button Label'}</Label>
 							<Input
 								id="button-label"
-								value={form.visual_config?.button_label || (m.formEditorViewButtonLabelDefault?.() ?? 'Submit')}
+								value={form.visual_config?.button_label || (formEditorViewButtonLabelDefault?.() ?? 'Submit')}
 								oninput={(e) => onVisualConfigChange?.({
 									...form.visual_config,
 									button_label: e.currentTarget.value
 								})}
-								placeholder={m.formEditorViewButtonLabelPlaceholder?.() ?? 'e.g., Submit, Save, Continue'}
+								placeholder={formEditorViewButtonLabelPlaceholder?.() ?? 'e.g., Submit, Save, Continue'}
 							/>
 						</div>
 
 						<div class="form-field">
-							<Label for="button-color">{m.formEditorViewButtonColor?.() ?? 'Button Color'}</Label>
+							<Label for="button-color">{formEditorViewButtonColor?.() ?? 'Button Color'}</Label>
 							<div class="color-picker">
 								<input
 									type="color"
@@ -257,9 +273,9 @@
 
 						<div class="form-field-switch">
 							<div class="switch-info">
-								<Label for="requires-confirmation">{m.formEditorViewRequiresConfirmation?.() ?? 'Requires Confirmation'}</Label>
+								<Label for="requires-confirmation">{formEditorViewRequiresConfirmation?.() ?? 'Requires Confirmation'}</Label>
 								<p class="switch-description">
-									{m.formEditorViewRequiresConfirmationDesc?.() ?? 'Show a confirmation dialog before submitting'}
+									{formEditorViewRequiresConfirmationDesc?.() ?? 'Show a confirmation dialog before submitting'}
 								</p>
 							</div>
 							<Switch
@@ -274,15 +290,15 @@
 
 						{#if form.visual_config?.requires_confirmation}
 							<div class="form-field">
-								<Label for="confirmation-message">{m.formEditorViewConfirmationMessage?.() ?? 'Confirmation Message'}</Label>
+								<Label for="confirmation-message">{formEditorViewConfirmationMessage?.() ?? 'Confirmation Message'}</Label>
 								<Input
 									id="confirmation-message"
-									value={form.visual_config?.confirmation_message || (m.formEditorViewConfirmationMessageDefault?.() ?? 'Are you sure you want to submit?')}
+									value={form.visual_config?.confirmation_message || (formEditorViewConfirmationMessageDefault?.() ?? 'Are you sure you want to submit?')}
 									oninput={(e) => onVisualConfigChange?.({
 										...form.visual_config,
 										confirmation_message: e.currentTarget.value
 									})}
-									placeholder={m.formEditorViewConfirmationMessageDefault?.() ?? 'Are you sure you want to submit?'}
+									placeholder={formEditorViewConfirmationMessageDefault?.() ?? 'Are you sure you want to submit?'}
 								/>
 							</div>
 						{/if}
@@ -291,7 +307,7 @@
 
 				<div class="settings-section">
 					<div class="settings-header">
-						<span class="settings-title">{m.formEditorViewAllowedRoles?.() ?? 'Allowed Roles'}</span>
+						<span class="settings-title">{formEditorViewAllowedRoles?.() ?? 'Allowed Roles'}</span>
 					</div>
 					<div class="settings-content">
 						<div class="roles-list">
@@ -315,11 +331,11 @@
 									{/if}
 								</label>
 							{:else}
-								<p class="no-roles">{m.formEditorViewNoRoles?.() ?? 'No roles defined for this project.'}</p>
+								<p class="no-roles">{formEditorViewNoRoles?.() ?? 'No roles defined for this project.'}</p>
 							{/each}
 						</div>
 						<p class="help-text">
-							{m.formEditorViewRolesHelp?.() ?? 'Only participants with selected roles can use this form. Leave empty to allow all.'}
+							{formEditorViewRolesHelp?.() ?? 'Only participants with selected roles can use this form. Leave empty to allow all.'}
 						</p>
 					</div>
 				</div>

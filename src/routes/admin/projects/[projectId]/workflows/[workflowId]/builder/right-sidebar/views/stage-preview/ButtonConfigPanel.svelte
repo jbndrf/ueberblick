@@ -6,7 +6,41 @@
 	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 	import { getDefaultButtonColor } from './types';
 	import type { StageAction, Role } from './types';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		editToolAnyRolesLabel,
+		editToolAnyRolesPlaceholder,
+		editToolRolesHelp,
+		editToolSelfRolesLabel,
+		editToolSelfRolesPlaceholder,
+		stagePreviewButtonConfigAllRolesPlaceholder,
+		stagePreviewButtonConfigAllowedRoles,
+		stagePreviewButtonConfigAppearance,
+		stagePreviewButtonConfigAvailableAllStages,
+		stagePreviewButtonConfigBack,
+		stagePreviewButtonConfigColor,
+		stagePreviewButtonConfigDeleteAction,
+		stagePreviewButtonConfigDeleteTool,
+		stagePreviewButtonConfigEditFields,
+		stagePreviewButtonConfigEditFieldsLabel,
+		stagePreviewButtonConfigEditLocation,
+		stagePreviewButtonConfigEditLocationMapPicker,
+		stagePreviewButtonConfigEntryJourney,
+		stagePreviewButtonConfigEntryPoint,
+		stagePreviewButtonConfigFillForm,
+		stagePreviewButtonConfigFormSectionTitle,
+		stagePreviewButtonConfigGlobalToolTitle,
+		stagePreviewButtonConfigLabel,
+		stagePreviewButtonConfigLabelPlaceholder,
+		stagePreviewButtonConfigMovesTo,
+		stagePreviewButtonConfigNoTools,
+		stagePreviewButtonConfigOpenEditor,
+		stagePreviewButtonConfigPreview,
+		stagePreviewButtonConfigPreviewFallback,
+		stagePreviewButtonConfigRolesHelp,
+		stagePreviewButtonConfigToolSectionTitle,
+		stagePreviewButtonConfigUnnamedForm,
+		stagePreviewButtonConfigWhenClicked
+	} from '$lib/paraglide/messages';
 
 	interface Props {
 		action: StageAction;
@@ -73,28 +107,28 @@
 	<!-- Back button -->
 	<button class="back-btn" onclick={() => onClose?.()}>
 		<ArrowLeft class="w-3.5 h-3.5" />
-		<span>{m.stagePreviewButtonConfigBack?.() ?? 'Back'}</span>
+		<span>{stagePreviewButtonConfigBack?.() ?? 'Back'}</span>
 	</button>
 
 	<div class="config-content">
 		<!-- Button Appearance -->
 		<section class="config-section">
-			<h4 class="section-title">{m.stagePreviewButtonConfigAppearance?.() ?? 'Button Appearance'}</h4>
+			<h4 class="section-title">{stagePreviewButtonConfigAppearance?.() ?? 'Button Appearance'}</h4>
 
 			<div class="space-y-3">
 				<div class="space-y-1.5">
-					<label class="text-xs text-muted-foreground" for="btn-label">{m.stagePreviewButtonConfigLabel?.() ?? 'Label'}</label>
+					<label class="text-xs text-muted-foreground" for="btn-label">{stagePreviewButtonConfigLabel?.() ?? 'Label'}</label>
 					<Input
 						id="btn-label"
 						value={labelValue}
 						oninput={handleLabelInput}
-						placeholder={m.stagePreviewButtonConfigLabelPlaceholder?.() ?? 'Button label...'}
+						placeholder={stagePreviewButtonConfigLabelPlaceholder?.() ?? 'Button label...'}
 						class="h-8 text-sm"
 					/>
 				</div>
 
 				<div class="space-y-1.5">
-					<label class="text-xs text-muted-foreground" for="btn-color">{m.stagePreviewButtonConfigColor?.() ?? 'Color'}</label>
+					<label class="text-xs text-muted-foreground" for="btn-color">{stagePreviewButtonConfigColor?.() ?? 'Color'}</label>
 					<div class="flex items-center gap-2">
 						<input
 							id="btn-color"
@@ -114,7 +148,7 @@
 
 				<!-- Live preview -->
 				<div class="space-y-1.5">
-					<div class="text-xs text-muted-foreground">{m.stagePreviewButtonConfigPreview?.() ?? 'Preview'}</div>
+					<div class="text-xs text-muted-foreground">{stagePreviewButtonConfigPreview?.() ?? 'Preview'}</div>
 					<div class="flex justify-center py-2">
 						<div
 							class="inline-flex flex-col items-center justify-center
@@ -122,7 +156,7 @@
 								rounded-xl text-white text-xs font-semibold"
 							style="background-color: {colorValue}"
 						>
-							{labelValue || (m.stagePreviewButtonConfigPreviewFallback?.() ?? 'Button')}
+							{labelValue || (stagePreviewButtonConfigPreviewFallback?.() ?? 'Button')}
 						</div>
 					</div>
 				</div>
@@ -133,10 +167,10 @@
 
 		<!-- Allowed Roles -->
 		<section class="config-section">
-			<h4 class="section-title">{m.stagePreviewButtonConfigAllowedRoles?.() ?? 'Allowed Roles'}</h4>
+			<h4 class="section-title">{stagePreviewButtonConfigAllowedRoles?.() ?? 'Allowed Roles'}</h4>
 			{#if isEditToolAction}
 				<label class="text-xs text-muted-foreground" for="any-edit-roles">
-					{m.editToolAnyRolesLabel?.() ?? "Edit anyone's"}
+					{editToolAnyRolesLabel?.() ?? "Edit anyone's"}
 				</label>
 				<MobileMultiSelect
 					selectedIds={currentAnyRoleIds}
@@ -147,11 +181,11 @@
 					allowCreate={!!onCreateRole}
 					onCreateOption={onCreateRole}
 					onSelectedIdsChange={(ids) => handleRolesChange(ids, 'any')}
-					placeholder={m.editToolAnyRolesPlaceholder?.() ?? 'Roles that can edit any entry...'}
+					placeholder={editToolAnyRolesPlaceholder?.() ?? 'Roles that can edit any entry...'}
 					class="w-full"
 				/>
 				<label class="text-xs text-muted-foreground mt-2 block" for="self-edit-roles">
-					{m.editToolSelfRolesLabel?.() ?? 'Self-edit only'}
+					{editToolSelfRolesLabel?.() ?? 'Self-edit only'}
 				</label>
 				<MobileMultiSelect
 					selectedIds={currentSelfRoleIds}
@@ -162,11 +196,11 @@
 					allowCreate={!!onCreateRole}
 					onCreateOption={onCreateRole}
 					onSelectedIdsChange={(ids) => handleRolesChange(ids, 'self')}
-					placeholder={m.editToolSelfRolesPlaceholder?.() ?? 'Roles that can edit only their own...'}
+					placeholder={editToolSelfRolesPlaceholder?.() ?? 'Roles that can edit only their own...'}
 					class="w-full"
 				/>
 				<p class="help-text">
-					{m.editToolRolesHelp?.() ?? 'A role in both lists is treated as "Edit anyone\'s" and renders one button.'}
+					{editToolRolesHelp?.() ?? 'A role in both lists is treated as "Edit anyone\'s" and renders one button.'}
 				</p>
 			{:else}
 				<MobileMultiSelect
@@ -178,11 +212,11 @@
 					allowCreate={!!onCreateRole}
 					onCreateOption={onCreateRole}
 					onSelectedIdsChange={(ids) => handleRolesChange(ids)}
-					placeholder={m.stagePreviewButtonConfigAllRolesPlaceholder?.() ?? 'All roles...'}
+					placeholder={stagePreviewButtonConfigAllRolesPlaceholder?.() ?? 'All roles...'}
 					class="w-full"
 				/>
 				<p class="help-text">
-					{m.stagePreviewButtonConfigRolesHelp?.() ?? 'Only participants with these roles can use this button. Leave empty to allow all.'}
+					{stagePreviewButtonConfigRolesHelp?.() ?? 'Only participants with these roles can use this button. Leave empty to allow all.'}
 				</p>
 			{/if}
 		</section>
@@ -193,7 +227,7 @@
 		{#if action.type === 'connection'}
 			<section class="config-section">
 				<h4 class="section-title">
-					{action.isEntry ? (m.stagePreviewButtonConfigEntryJourney?.() ?? 'Entry Journey') : (m.stagePreviewButtonConfigWhenClicked?.() ?? 'When clicked')}
+					{action.isEntry ? (stagePreviewButtonConfigEntryJourney?.() ?? 'Entry Journey') : (stagePreviewButtonConfigWhenClicked?.() ?? 'When clicked')}
 				</h4>
 				<div class="journey-list">
 					{#if action.isEntry}
@@ -202,7 +236,7 @@
 								<LogIn class="w-2.5 h-2.5" />
 							</span>
 							<span class="journey-label">
-								{m.stagePreviewButtonConfigEntryPoint?.() ?? 'Workflow entry point'}
+								{stagePreviewButtonConfigEntryPoint?.() ?? 'Workflow entry point'}
 							</span>
 						</div>
 					{/if}
@@ -215,7 +249,7 @@
 						>
 							<span class="journey-number">{i + 1}</span>
 							<FileText class="w-3.5 h-3.5 text-muted-foreground" />
-							<span class="journey-label">{m.stagePreviewButtonConfigFillForm?.({ name: form.name }) ?? `Fill "${form.name}"`}</span>
+							<span class="journey-label">{stagePreviewButtonConfigFillForm?.({ name: form.name }) ?? `Fill "${form.name}"`}</span>
 						</button>
 					{/each}
 
@@ -232,7 +266,7 @@
 								<Pencil class="w-3.5 h-3.5 text-muted-foreground" />
 							{/if}
 							<span class="journey-label">
-								{tool.edit_mode === 'location' ? (m.stagePreviewButtonConfigEditLocation?.() ?? 'Edit location') : (m.stagePreviewButtonConfigEditFields?.({ name: tool.name }) ?? `Edit "${tool.name}"`)}
+								{tool.edit_mode === 'location' ? (stagePreviewButtonConfigEditLocation?.() ?? 'Edit location') : (stagePreviewButtonConfigEditFields?.({ name: tool.name }) ?? `Edit "${tool.name}"`)}
 							</span>
 						</button>
 					{/each}
@@ -245,27 +279,27 @@
 							</span>
 							<ArrowRight class="w-3.5 h-3.5 text-muted-foreground" />
 							<span class="journey-label">
-								{m.stagePreviewButtonConfigMovesTo?.({ stageName: action.targetStage?.stage_name ?? '?' }) ?? `Moves to "${action.targetStage?.stage_name ?? '?'}"`}
+								{stagePreviewButtonConfigMovesTo?.({ stageName: action.targetStage?.stage_name ?? '?' }) ?? `Moves to "${action.targetStage?.stage_name ?? '?'}"`}
 							</span>
 						</div>
 					{/if}
 
 					{#if action.forms.length === 0 && action.editTools.length === 0}
 						<p class="text-xs text-muted-foreground py-2">
-							{m.stagePreviewButtonConfigNoTools?.() ?? 'No tools attached yet. Add forms or edit tools to this connection from the canvas edge menu.'}
+							{stagePreviewButtonConfigNoTools?.() ?? 'No tools attached yet. Add forms or edit tools to this connection from the canvas edge menu.'}
 						</p>
 					{/if}
 				</div>
 			</section>
 		{:else if action.type === 'stage_tool'}
 			<section class="config-section">
-				<h4 class="section-title">{m.stagePreviewButtonConfigToolSectionTitle?.() ?? 'Tool'}</h4>
+				<h4 class="section-title">{stagePreviewButtonConfigToolSectionTitle?.() ?? 'Tool'}</h4>
 				<div class="space-y-2">
 					<div class="text-sm text-muted-foreground">
 						{#if action.tool.edit_mode === 'location'}
-							{m.stagePreviewButtonConfigEditLocationMapPicker?.() ?? 'Edit location (map picker)'}
+							{stagePreviewButtonConfigEditLocationMapPicker?.() ?? 'Edit location (map picker)'}
 						{:else}
-							{m.stagePreviewButtonConfigEditFieldsLabel?.() ?? 'Edit fields'}
+							{stagePreviewButtonConfigEditFieldsLabel?.() ?? 'Edit fields'}
 						{/if}
 					</div>
 					<Button
@@ -273,40 +307,40 @@
 						size="sm"
 						onclick={() => onOpenTool?.('edit', action.tool.id)}
 					>
-						{m.stagePreviewButtonConfigOpenEditor?.() ?? 'Open editor'}
+						{stagePreviewButtonConfigOpenEditor?.() ?? 'Open editor'}
 					</Button>
 				</div>
 			</section>
 		{:else if action.type === 'stage_form'}
 			<section class="config-section">
-				<h4 class="section-title">{m.stagePreviewButtonConfigFormSectionTitle?.() ?? 'Form'}</h4>
+				<h4 class="section-title">{stagePreviewButtonConfigFormSectionTitle?.() ?? 'Form'}</h4>
 				<div class="space-y-2">
 					<div class="text-sm text-muted-foreground">
-						{action.form.name || (m.stagePreviewButtonConfigUnnamedForm?.() ?? 'Unnamed form')}
+						{action.form.name || (stagePreviewButtonConfigUnnamedForm?.() ?? 'Unnamed form')}
 					</div>
 					<Button
 						variant="outline"
 						size="sm"
 						onclick={() => onOpenTool?.('form', action.form.id)}
 					>
-						{m.stagePreviewButtonConfigOpenEditor?.() ?? 'Open editor'}
+						{stagePreviewButtonConfigOpenEditor?.() ?? 'Open editor'}
 					</Button>
 				</div>
 			</section>
 		{:else if action.type === 'global_tool'}
 			<section class="config-section">
-				<h4 class="section-title">{m.stagePreviewButtonConfigGlobalToolTitle?.() ?? 'Global Tool'}</h4>
+				<h4 class="section-title">{stagePreviewButtonConfigGlobalToolTitle?.() ?? 'Global Tool'}</h4>
 				<div class="space-y-2">
 					<div class="flex items-center gap-1.5 text-sm text-muted-foreground">
 						<Globe class="w-3.5 h-3.5" />
-						{m.stagePreviewButtonConfigAvailableAllStages?.() ?? 'Available at all stages'}
+						{stagePreviewButtonConfigAvailableAllStages?.() ?? 'Available at all stages'}
 					</div>
 					<Button
 						variant="outline"
 						size="sm"
 						onclick={() => onOpenTool?.('edit', action.tool.id)}
 					>
-						{m.stagePreviewButtonConfigOpenEditor?.() ?? 'Open editor'}
+						{stagePreviewButtonConfigOpenEditor?.() ?? 'Open editor'}
 					</Button>
 				</div>
 			</section>
@@ -322,7 +356,7 @@
 					onclick={() => onDelete?.()}
 				>
 					<Trash2 class="w-3 h-3" />
-					{action.type === 'connection' ? (m.stagePreviewButtonConfigDeleteAction?.() ?? 'Delete this action') : (m.stagePreviewButtonConfigDeleteTool?.() ?? 'Delete this tool')}
+					{action.type === 'connection' ? (stagePreviewButtonConfigDeleteAction?.() ?? 'Delete this action') : (stagePreviewButtonConfigDeleteTool?.() ?? 'Delete this tool')}
 				</button>
 			</section>
 		{/if}

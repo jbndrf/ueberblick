@@ -2,13 +2,13 @@
 	import { setLocale, getLocale } from '$lib/paraglide/runtime';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { Languages, Check } from '@lucide/svelte';
-	import * as m from '$lib/paraglide/messages';
+	import { languageSelectorDropdownDeutsch, languageSelectorDropdownEnglish, languageSelectorDropdownLanguage } from '$lib/paraglide/messages';
 
 	let currentLocale = $state(getLocale());
 
 	const languageOptions = [
-		{ value: 'en', label: m.languageSelectorDropdownEnglish() },
-		{ value: 'de', label: m.languageSelectorDropdownDeutsch() }
+		{ value: 'en', label: languageSelectorDropdownEnglish() },
+		{ value: 'de', label: languageSelectorDropdownDeutsch() }
 	] as const;
 
 	function handleLocaleChange(value: string) {
@@ -24,7 +24,7 @@
 <DropdownMenu.Sub>
 	<DropdownMenu.SubTrigger>
 		<Languages class="mr-2 h-4 w-4" />
-		<span>{m.languageSelectorDropdownLanguage()}</span>
+		<span>{languageSelectorDropdownLanguage()}</span>
 	</DropdownMenu.SubTrigger>
 	<DropdownMenu.SubContent>
 		{#each languageOptions as option}

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Play, Square, CircleStop, GripVertical } from '@lucide/svelte';
 	import ToolSection from '../shared/ToolSection.svelte';
-	import * as m from '$lib/paraglide/messages';
+	import { workflowBuilderDefaultPanelEnd, workflowBuilderDefaultPanelHint, workflowBuilderDefaultPanelStage, workflowBuilderDefaultPanelStages, workflowBuilderDefaultPanelStart } from '$lib/paraglide/messages';
 
 	type Props = {
 		hasStartStage: boolean;
@@ -17,7 +17,7 @@
 </script>
 
 <div class="panel">
-	<ToolSection title={m.workflowBuilderDefaultPanelStages?.() ?? 'Stages'}>
+	<ToolSection title={workflowBuilderDefaultPanelStages?.() ?? 'Stages'}>
 		<div class="tool-grid">
 			<div
 				class="drag-item drag-item-start border border-border"
@@ -29,7 +29,7 @@
 			>
 				<GripVertical class="drag-handle text-muted-foreground" />
 				<Play class="drag-icon text-foreground" />
-				<span class="drag-label text-foreground">{m.workflowBuilderDefaultPanelStart?.() ?? 'Start'}</span>
+				<span class="drag-label text-foreground">{workflowBuilderDefaultPanelStart?.() ?? 'Start'}</span>
 			</div>
 			<div
 				class="drag-item drag-item-stage border border-border"
@@ -40,7 +40,7 @@
 			>
 				<GripVertical class="drag-handle text-muted-foreground" />
 				<Square class="drag-icon text-foreground" />
-				<span class="drag-label text-foreground">{m.workflowBuilderDefaultPanelStage?.() ?? 'Stage'}</span>
+				<span class="drag-label text-foreground">{workflowBuilderDefaultPanelStage?.() ?? 'Stage'}</span>
 			</div>
 			<div
 				class="drag-item drag-item-end border border-border"
@@ -51,13 +51,13 @@
 			>
 				<GripVertical class="drag-handle text-muted-foreground" />
 				<CircleStop class="drag-icon text-foreground" />
-				<span class="drag-label text-foreground">{m.workflowBuilderDefaultPanelEnd?.() ?? 'End'}</span>
+				<span class="drag-label text-foreground">{workflowBuilderDefaultPanelEnd?.() ?? 'End'}</span>
 			</div>
 		</div>
 	</ToolSection>
 
 	<div class="panel-hint border-t border-border">
-		<p class="text-muted-foreground">{m.workflowBuilderDefaultPanelHint?.() ?? 'Drag stages onto the canvas to add them.'}</p>
+		<p class="text-muted-foreground">{workflowBuilderDefaultPanelHint?.() ?? 'Drag stages onto the canvas to add them.'}</p>
 	</div>
 </div>
 

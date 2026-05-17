@@ -6,7 +6,7 @@
 	import StagePropertyPanel from './panels/StagePropertyPanel.svelte';
 	import EdgePropertyPanel from './panels/EdgePropertyPanel.svelte';
 
-	import type { ToolsEdit, ToolsForm, ToolsProtocol, VisualConfig } from '$lib/workflow-builder';
+	import type { ToolsEdit, ToolsForm, ToolsProtocol, VisualConfig, SentryClause, WorkflowFieldDef } from '$lib/workflow-builder';
 
 	type Role = {
 		id: string;
@@ -34,6 +34,8 @@
 		onEdgeDelete?: (edgeId: string) => void;
 		onEdgeRolesChange?: (edgeId: string, roleIds: string[]) => void;
 		onEdgeSettingsChange?: (edgeId: string, settings: Record<string, any>) => void;
+		onEdgeSentryChange?: (edgeId: string, sentry: SentryClause[]) => void;
+		fieldDefs?: WorkflowFieldDef[];
 		/** Callback when a tool's edit roles change (for stage-attached tools).
 		 *  scope selects which array (self_edit_roles vs any_edit_roles). */
 		onToolRolesChange?: (toolId: string, roleIds: string[], scope: 'self' | 'any') => void;
@@ -63,6 +65,8 @@
 		onEdgeDelete,
 		onEdgeRolesChange,
 		onEdgeSettingsChange,
+		onEdgeSentryChange,
+		fieldDefs = [],
 		onToolRolesChange,
 		onToolVisualConfigChange,
 		onSelectTool,
@@ -126,6 +130,8 @@
 			onDelete={onEdgeDelete}
 			onRolesChange={onEdgeRolesChange}
 			onSettingsChange={onEdgeSettingsChange}
+			onSentryChange={onEdgeSentryChange}
+			{fieldDefs}
 			{onSelectTool}
 			{onDeleteTool}
 			{onCreateRole}

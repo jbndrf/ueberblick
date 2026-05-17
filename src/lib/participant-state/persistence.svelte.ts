@@ -13,8 +13,8 @@ import type {
 	WorkflowStage,
 	WorkflowConnection,
 	ToolForm,
-	ToolFormField,
-	ToolEdit,
+	ToolFormFieldRef,
+	FieldDef,
 	MarkerCategory,
 	Role
 } from './types';
@@ -46,8 +46,8 @@ export async function saveReferenceData(data: {
 	workflowStages?: WorkflowStage[];
 	workflowConnections?: WorkflowConnection[];
 	toolsForms?: ToolForm[];
-	toolsFormFields?: ToolFormField[];
-	toolsEdit?: ToolEdit[];
+	toolsFormFieldRefs?: ToolFormFieldRef[];
+	workflowFieldDefs?: FieldDef[];
 	markerCategories?: MarkerCategory[];
 	roles?: Role[];
 }): Promise<void> {
@@ -72,8 +72,9 @@ export async function saveReferenceData(data: {
 	await saveItems('workflow_stages', data.workflowStages);
 	await saveItems('workflow_connections', data.workflowConnections);
 	await saveItems('tools_forms', data.toolsForms);
-	await saveItems('tools_form_fields', data.toolsFormFields);
-	await saveItems('tools_edit', data.toolsEdit);
+	await saveItems('tools_form_field_refs', data.toolsFormFieldRefs);
+	await saveItems('workflow_field_defs', data.workflowFieldDefs);
+	// TODO(field-def-redesign): tools_edit removed; convert if still needed
 	await saveItems('marker_categories', data.markerCategories);
 	await saveItems('roles', data.roles);
 }
@@ -86,8 +87,8 @@ export async function loadReferenceData(): Promise<{
 	workflowStages: WorkflowStage[];
 	workflowConnections: WorkflowConnection[];
 	toolsForms: ToolForm[];
-	toolsFormFields: ToolFormField[];
-	toolsEdit: ToolEdit[];
+	toolsFormFieldRefs: ToolFormFieldRef[];
+	workflowFieldDefs: FieldDef[];
 	markerCategories: MarkerCategory[];
 	roles: Role[];
 }> {
@@ -104,8 +105,8 @@ export async function loadReferenceData(): Promise<{
 		workflowStages,
 		workflowConnections,
 		toolsForms,
-		toolsFormFields,
-		toolsEdit,
+		toolsFormFieldRefs,
+		workflowFieldDefs,
 		markerCategories,
 		roles
 	] = await Promise.all([
@@ -113,8 +114,8 @@ export async function loadReferenceData(): Promise<{
 		loadItems<WorkflowStage>('workflow_stages'),
 		loadItems<WorkflowConnection>('workflow_connections'),
 		loadItems<ToolForm>('tools_forms'),
-		loadItems<ToolFormField>('tools_form_fields'),
-		loadItems<ToolEdit>('tools_edit'),
+		loadItems<ToolFormFieldRef>('tools_form_field_refs'),
+		loadItems<FieldDef>('workflow_field_defs'),
 		loadItems<MarkerCategory>('marker_categories'),
 		loadItems<Role>('roles')
 	]);
@@ -124,8 +125,8 @@ export async function loadReferenceData(): Promise<{
 		workflowStages,
 		workflowConnections,
 		toolsForms,
-		toolsFormFields,
-		toolsEdit,
+		toolsFormFieldRefs,
+		workflowFieldDefs,
 		markerCategories,
 		roles
 	};

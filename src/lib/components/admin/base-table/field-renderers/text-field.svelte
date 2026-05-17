@@ -4,7 +4,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Copy, Check } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
-	import * as m from '$lib/paraglide/messages';
+	import { commonSave } from '$lib/paraglide/messages';
 
 	interface TextFieldProps {
 		value: any;
@@ -50,7 +50,7 @@
 
 		try {
 			await onUpdate(editingValue);
-			toast.success(m.commonSave());
+			toast.success(commonSave());
 			isEditing = false;
 		} catch (error) {
 			console.error('Error updating cell:', error);

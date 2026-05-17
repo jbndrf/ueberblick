@@ -2,18 +2,47 @@ import { error, fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { z } from 'zod';
 import { normalizeRecords } from '$lib/server/pocketbase-helpers';
-import * as m from '$lib/paraglide/messages';
+import {
+	markerCategoryDetailServer_categoryNotFound,
+	markerCategoryDetailServer_failedCreateField,
+	markerCategoryDetailServer_failedCreateMarker,
+	markerCategoryDetailServer_failedDeleteField,
+	markerCategoryDetailServer_failedDeleteMarker,
+	markerCategoryDetailServer_failedImportCsv,
+	markerCategoryDetailServer_failedLoadMarkerCategory,
+	markerCategoryDetailServer_failedUpdateCategory,
+	markerCategoryDetailServer_failedUpdateField,
+	markerCategoryDetailServer_failedUpdateIconConfig,
+	markerCategoryDetailServer_failedUpdateMarkerField,
+	markerCategoryDetailServer_failedUpdateMarkerProperty,
+	markerCategoryDetailServer_fieldAlreadyExists,
+	markerCategoryDetailServer_fieldNameEmpty,
+	markerCategoryDetailServer_fieldNameRequired,
+	markerCategoryDetailServer_fieldNameValidation,
+	markerCategoryDetailServer_fieldNotFound,
+	markerCategoryDetailServer_fieldTypeRequired,
+	markerCategoryDetailServer_invalidField,
+	markerCategoryDetailServer_invalidFieldData,
+	markerCategoryDetailServer_invalidIconConfigJson,
+	markerCategoryDetailServer_invalidMarkerField,
+	markerCategoryDetailServer_markerIdFieldRequired,
+	markerCategoryDetailServer_markerIdPropertyRequired,
+	markerCategoryDetailServer_markerNotFound,
+	markerCategoryDetailServer_noDataProvided,
+	markerCategoryDetailServer_noDataRows,
+	markerCategoryDetailServer_titleRequired
+} from '$lib/paraglide/messages';
 
 const fieldSchema = z.object({
 	field_name: z
 		.string()
-		.min(1, m.markerCategoryDetailServer_fieldNameRequired?.() ?? 'Field name is required')
+		.min(1, markerCategoryDetailServer_fieldNameRequired?.() ?? 'Field name is required')
 		.regex(
 			/^[a-z][a-z0-9_]*$/,
-			m.markerCategoryDetailServer_fieldNameValidation?.() ?? 'Field name must start with a letter and contain only lowercase letters, numbers, and underscores'
+			markerCategoryDetailServer_fieldNameValidation?.() ?? 'Field name must start with a letter and contain only lowercase letters, numbers, and underscores'
 		),
 	field_type: z.enum(['text', 'number', 'date', 'boolean'], {
-		error: m.markerCategoryDetailServer_fieldTypeRequired?.() ?? 'Field type is required'
+		error: markerCategoryDetailServer_fieldTypeRequired?.() ?? 'Field type is required'
 	}),
 	is_required: z.boolean().optional(),
 	default_value: z.string().optional().nullable()
@@ -29,7 +58,7 @@ export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) 
 		});
 
 		if (!category) {
-			throw error(404, m.markerCategoryDetailServer_categoryNotFound?.() ?? 'Category not found');
+			throw error(404, markerCategoryDetailServer_categoryNotFound?.() ?? 'Category not found');
 		}
 
 		// Parse fields from JSONB array
@@ -59,7 +88,7 @@ export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) 
 		};
 	} catch (err) {
 		console.error('Error fetching marker category:', err);
-		throw error(500, m.markerCategoryDetailServer_failedLoadMarkerCategory?.() ?? 'Failed to load marker category');
+		throw error(500, markerCategoryDetailServer_failedLoadMarkerCategory?.() ?? 'Failed to load marker category');
 	}
 };
 
@@ -71,12 +100,12 @@ export const actions: Actions = {
 		const value = formData.get('value') as string;
 
 		if (!field) {
-			return fail(400, { message: m.markerCategoryDetailServer_fieldNameEmpty?.() ?? 'Field name is required' });
+			return fail(400, { message: markerCategoryDetailServer_fieldNameEmpty?.() ?? 'Field name is required' });
 		}
 
 		const allowedFields = ['name', 'description', 'visible_to_roles'];
 		if (!allowedFields.includes(field)) {
-			return fail(400, { message: m.markerCategoryDetailServer_invalidField?.() ?? 'Invalid field' });
+			return fail(400, { message: markerCategoryDetailServer_invalidField?.() ?? 'Invalid field' });
 		}
 
 		try {
@@ -90,7 +119,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating category metadata:', err);
-			return fail(500, { message: m.markerCategoryDetailServer_failedUpdateCategory?.() ?? 'Failed to update category' });
+			return fail(500, { message: markerCategoryDetailServer_failedUpdateCategory?.() ?? 'Failed to update category' });
 		}
 	},
 
@@ -103,7 +132,7 @@ export const actions: Actions = {
 		try {
 			iconConfig = iconConfigJson ? JSON.parse(iconConfigJson) : {};
 		} catch {
-			return fail(400, { message: m.markerCategoryDetailServer_invalidIconConfigJson?.() ?? 'Invalid icon config JSON' });
+			return fail(400, { message: markerCategoryDetailServer_invalidIconConfigJson?.() ?? 'Invalid icon config JSON' });
 		}
 
 		try {
@@ -113,7 +142,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating icon config:', err);
-			return fail(500, { message: m.markerCategoryDetailServer_failedUpdateIconConfig?.() ?? 'Failed to update icon config' });
+			return fail(500, { message: markerCategoryDetailServer_failedUpdateIconConfig?.() ?? 'Failed to update icon config' });
 		}
 	},
 
@@ -132,7 +161,7 @@ export const actions: Actions = {
 		const validationResult = fieldSchema.safeParse(fieldData);
 		if (!validationResult.success) {
 			return fail(400, {
-				message: validationResult.error.issues[0]?.message || (m.markerCategoryDetailServer_invalidFieldData?.() ?? 'Invalid field data')
+				message: validationResult.error.issues[0]?.message || (markerCategoryDetailServer_invalidFieldData?.() ?? 'Invalid field data')
 			});
 		}
 
@@ -144,7 +173,7 @@ export const actions: Actions = {
 			// Check if field name already exists
 			if (currentFields.some((field: any) => field.field_name === fieldData.field_name)) {
 				return fail(400, {
-					message: m.markerCategoryDetailServer_fieldAlreadyExists?.() ?? 'A field with that name already exists'
+					message: markerCategoryDetailServer_fieldAlreadyExists?.() ?? 'A field with that name already exists'
 				});
 			}
 
@@ -162,7 +191,7 @@ export const actions: Actions = {
 		} catch (err) {
 			console.error('Error creating field:', err);
 			return fail(500, {
-				message: m.markerCategoryDetailServer_failedCreateField?.() ?? 'Failed to create field'
+				message: markerCategoryDetailServer_failedCreateField?.() ?? 'Failed to create field'
 			});
 		}
 	},
@@ -183,7 +212,7 @@ export const actions: Actions = {
 		const validationResult = fieldSchema.safeParse(fieldData);
 		if (!validationResult.success) {
 			return fail(400, {
-				message: validationResult.error.issues[0]?.message || (m.markerCategoryDetailServer_invalidFieldData?.() ?? 'Invalid field data')
+				message: validationResult.error.issues[0]?.message || (markerCategoryDetailServer_invalidFieldData?.() ?? 'Invalid field data')
 			});
 		}
 
@@ -195,7 +224,7 @@ export const actions: Actions = {
 			// Find the field to update and get its old name
 			const fieldIndex = currentFields.findIndex((field: any) => field.id === fieldId);
 			if (fieldIndex === -1) {
-				return fail(404, { message: m.markerCategoryDetailServer_fieldNotFound?.() ?? 'Field not found' });
+				return fail(404, { message: markerCategoryDetailServer_fieldNotFound?.() ?? 'Field not found' });
 			}
 
 			const originalName = currentFields[fieldIndex].field_name;
@@ -207,7 +236,7 @@ export const actions: Actions = {
 				)
 			) {
 				return fail(400, {
-					message: m.markerCategoryDetailServer_fieldAlreadyExists?.() ?? 'A field with that name already exists'
+					message: markerCategoryDetailServer_fieldAlreadyExists?.() ?? 'A field with that name already exists'
 				});
 			}
 
@@ -254,7 +283,7 @@ export const actions: Actions = {
 		} catch (err) {
 			console.error('Error updating field:', err);
 			return fail(500, {
-				message: m.markerCategoryDetailServer_failedUpdateField?.() ?? 'Failed to update field'
+				message: markerCategoryDetailServer_failedUpdateField?.() ?? 'Failed to update field'
 			});
 		}
 	},
@@ -265,7 +294,7 @@ export const actions: Actions = {
 		const fieldId = formData.get('fieldId') as string;
 
 		if (!fieldId) {
-			return fail(400, { message: m.markerCategoryDetailServer_fieldNameEmpty?.() ?? 'Field ID is required' });
+			return fail(400, { message: markerCategoryDetailServer_fieldNameEmpty?.() ?? 'Field ID is required' });
 		}
 
 		try {
@@ -276,7 +305,7 @@ export const actions: Actions = {
 			// Find the field to delete
 			const fieldToDelete = currentFields.find((field: any) => field.id === fieldId);
 			if (!fieldToDelete) {
-				return fail(404, { message: m.markerCategoryDetailServer_fieldNotFound?.() ?? 'Field not found' });
+				return fail(404, { message: markerCategoryDetailServer_fieldNotFound?.() ?? 'Field not found' });
 			}
 
 			const fieldName = fieldToDelete.field_name;
@@ -309,7 +338,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error deleting field:', err);
-			return fail(500, { message: m.markerCategoryDetailServer_failedDeleteField?.() ?? 'Failed to delete field' });
+			return fail(500, { message: markerCategoryDetailServer_failedDeleteField?.() ?? 'Failed to delete field' });
 		}
 	},
 
@@ -321,16 +350,16 @@ export const actions: Actions = {
 		const value = formData.get('value') as string;
 
 		if (!markerId || !field) {
-			return fail(400, { message: m.markerCategoryDetailServer_markerIdFieldRequired?.() ?? 'Marker ID and field are required' });
+			return fail(400, { message: markerCategoryDetailServer_markerIdFieldRequired?.() ?? 'Marker ID and field are required' });
 		}
 
 		// Validate allowed standard fields
 		if (!['title', 'description'].includes(field)) {
-			return fail(400, { message: m.markerCategoryDetailServer_invalidMarkerField?.() ?? 'Invalid field' });
+			return fail(400, { message: markerCategoryDetailServer_invalidMarkerField?.() ?? 'Invalid field' });
 		}
 
 		if (field === 'title' && (!value || value.trim().length < 1)) {
-			return fail(400, { message: m.markerCategoryDetailServer_titleRequired?.() ?? 'Title is required' });
+			return fail(400, { message: markerCategoryDetailServer_titleRequired?.() ?? 'Title is required' });
 		}
 
 		const updateData: Record<string, string | null> = {
@@ -342,7 +371,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating marker field:', err);
-			return fail(500, { message: m.markerCategoryDetailServer_failedUpdateMarkerField?.() ?? 'Failed to update marker field' });
+			return fail(500, { message: markerCategoryDetailServer_failedUpdateMarkerField?.() ?? 'Failed to update marker field' });
 		}
 	},
 
@@ -354,7 +383,7 @@ export const actions: Actions = {
 		const value = formData.get('value') as string;
 
 		if (!markerId || !propertyName) {
-			return fail(400, { message: m.markerCategoryDetailServer_markerIdPropertyRequired?.() ?? 'Marker ID and property name are required' });
+			return fail(400, { message: markerCategoryDetailServer_markerIdPropertyRequired?.() ?? 'Marker ID and property name are required' });
 		}
 
 		try {
@@ -364,7 +393,7 @@ export const actions: Actions = {
 			});
 
 			if (!currentMarker) {
-				return fail(404, { message: m.markerCategoryDetailServer_markerNotFound?.() ?? 'Marker not found' });
+				return fail(404, { message: markerCategoryDetailServer_markerNotFound?.() ?? 'Marker not found' });
 			}
 
 			// Update the specific property value
@@ -379,7 +408,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating marker property:', err);
-			return fail(500, { message: m.markerCategoryDetailServer_failedUpdateMarkerProperty?.() ?? 'Failed to update marker property' });
+			return fail(500, { message: markerCategoryDetailServer_failedUpdateMarkerProperty?.() ?? 'Failed to update marker property' });
 		}
 	},
 
@@ -391,7 +420,7 @@ export const actions: Actions = {
 		const propertiesJson = formData.get('properties') as string;
 
 		if (!title || title.trim().length < 1) {
-			return fail(400, { message: m.markerCategoryDetailServer_titleRequired?.() ?? 'Title is required' });
+			return fail(400, { message: markerCategoryDetailServer_titleRequired?.() ?? 'Title is required' });
 		}
 
 		let properties: Record<string, any> = {};
@@ -399,7 +428,7 @@ export const actions: Actions = {
 			try {
 				properties = JSON.parse(propertiesJson);
 			} catch (e) {
-				return fail(400, { message: m.markerCategoryDetailServer_invalidFieldData?.() ?? 'Invalid properties format' });
+				return fail(400, { message: markerCategoryDetailServer_invalidFieldData?.() ?? 'Invalid properties format' });
 			}
 		}
 
@@ -418,7 +447,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error creating marker:', err);
-			return fail(500, { message: m.markerCategoryDetailServer_failedCreateMarker?.() ?? 'Failed to create marker' });
+			return fail(500, { message: markerCategoryDetailServer_failedCreateMarker?.() ?? 'Failed to create marker' });
 		}
 	},
 
@@ -428,7 +457,7 @@ export const actions: Actions = {
 		const markerId = formData.get('marker_id') as string;
 
 		if (!markerId) {
-			return fail(400, { message: m.markerCategoryDetailServer_markerIdFieldRequired?.() ?? 'Marker ID is required' });
+			return fail(400, { message: markerCategoryDetailServer_markerIdFieldRequired?.() ?? 'Marker ID is required' });
 		}
 
 		try {
@@ -437,7 +466,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error deleting marker:', err);
-			return fail(500, { message: m.markerCategoryDetailServer_failedDeleteMarker?.() ?? 'Failed to delete marker' });
+			return fail(500, { message: markerCategoryDetailServer_failedDeleteMarker?.() ?? 'Failed to delete marker' });
 		}
 	},
 
@@ -448,14 +477,14 @@ export const actions: Actions = {
 		const replaceData = formData.get('replaceData') === 'true';
 
 		if (!rowsJson) {
-			return fail(400, { message: m.markerCategoryDetailServer_noDataProvided?.() ?? 'No data provided' });
+			return fail(400, { message: markerCategoryDetailServer_noDataProvided?.() ?? 'No data provided' });
 		}
 
 		try {
 			const rows: Array<Record<string, string>> = JSON.parse(rowsJson);
 
 			if (rows.length === 0) {
-				return fail(400, { message: m.markerCategoryDetailServer_noDataRows?.() ?? 'No data rows to import' });
+				return fail(400, { message: markerCategoryDetailServer_noDataRows?.() ?? 'No data rows to import' });
 			}
 
 			// Replace existing data if requested
@@ -508,7 +537,7 @@ export const actions: Actions = {
 		} catch (err) {
 			console.error('Error importing CSV:', err);
 			return fail(500, {
-				message: err instanceof Error ? err.message : (m.markerCategoryDetailServer_failedImportCsv?.() ?? 'Failed to import CSV')
+				message: err instanceof Error ? err.message : (markerCategoryDetailServer_failedImportCsv?.() ?? 'Failed to import CSV')
 			});
 		}
 	}

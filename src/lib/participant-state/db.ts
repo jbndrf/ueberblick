@@ -200,7 +200,7 @@ interface ParticipantStateDB extends DBSchema {
 // so upgrades can remove the old global DB on first boot after this change.
 const LEGACY_DB_NAME = 'participant-state';
 const DB_NAME_PREFIX = 'participant-state__';
-const DB_VERSION = 10;
+const DB_VERSION = 11;
 
 function participantDbName(participantId: string): string {
 	return `${DB_NAME_PREFIX}${participantId}`;
@@ -418,6 +418,57 @@ function upgradeSchema(
 			}
 		} catch (err) {
 			console.warn('[DB v10] Failed to purge stale workflow_instance family:', err);
+		}
+	}
+
+	// v11: Phase-1 field redesign. workflow_instance_field_values, tools_form_fields,
+	// tools_edit are gone (replaced by workflow_field_values, workflow_field_defs,
+	// tools_form_field_refs). Purge cached rows so the new pull lands clean.
+	if (oldVersion >= 3 && oldVersion < 11 && upgradeTransaction) {
+		try {
+			const tx = upgradeTransaction as unknown as IDBTransaction;
+			const removedCollections = [
+				'workflow_instance_field_values',
+				'tools_form_fields',
+				'tools_edit'
+			];
+
+			const recordsStore = tx.objectStore('records');
+			const collectionIdx = recordsStore.index('by_collection');
+			for (const name of removedCollections) {
+				const cursorReq = collectionIdx.openCursor(IDBKeyRange.only(name));
+				cursorReq.onsuccess = () => {
+					const cursor = cursorReq.result;
+					if (cursor) {
+						cursor.delete();
+						cursor.continue();
+					}
+				};
+			}
+
+			const syncMeta = tx.objectStore('sync_metadata');
+			for (const name of removedCollections) {
+				syncMeta.delete(name);
+			}
+
+			if (tx.objectStoreNames.contains('operation_log')) {
+				const opLog = tx.objectStore('operation_log');
+				if (opLog.indexNames.contains('by-collection')) {
+					const byCollection = opLog.index('by-collection');
+					for (const name of removedCollections) {
+						const req = byCollection.openCursor(IDBKeyRange.only(name));
+						req.onsuccess = () => {
+							const cursor = req.result;
+							if (cursor) {
+								cursor.delete();
+								cursor.continue();
+							}
+						};
+					}
+				}
+			}
+		} catch (err) {
+			console.warn('[DB v11] Failed to purge removed-collection cache:', err);
 		}
 	}
 }

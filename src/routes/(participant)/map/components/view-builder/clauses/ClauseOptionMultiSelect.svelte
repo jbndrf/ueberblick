@@ -1,7 +1,7 @@
 <script lang="ts">
 	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 	import type { FilterClause } from '$lib/participant-state/types';
-	import * as m from '$lib/paraglide/messages';
+	import { participantFilterClauseNoOptions, participantFilterClauseOptionsPlaceholder } from '$lib/paraglide/messages';
 
 	type InClause = Extract<FilterClause, { field: 'field_value'; op: 'in' }>;
 
@@ -25,7 +25,7 @@
 
 {#if options.length === 0}
 	<p class="text-xs text-muted-foreground">
-		{m.participantFilterClauseNoOptions?.() ?? 'No options to pick from.'}
+		{participantFilterClauseNoOptions?.() ?? 'No options to pick from.'}
 	</p>
 {:else}
 	<MobileMultiSelect
@@ -34,7 +34,7 @@
 		getOptionId={(o) => o.id}
 		getOptionLabel={(o) => o.label}
 		onSelectedIdsChange={handleIdsChange}
-		placeholder={m.participantFilterClauseOptionsPlaceholder?.() ?? 'Any value'}
+		placeholder={participantFilterClauseOptionsPlaceholder?.() ?? 'Any value'}
 		disablePortal
 	/>
 {/if}

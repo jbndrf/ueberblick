@@ -164,115 +164,108 @@ export async function seedGebaeude(): Promise<GebaeudeSeedResult> {
 
 		const fields = new Map<string, string>();
 
-		// Page 1: Raum
-		const raumnummerField = await pb.collection('tools_form_fields').create({
-			form_id: entryForm.id,
-			field_label: 'Raumnummer',
-			field_type: 'short_text',
-			is_required: true,
-			field_order: 1,
-			page: 1,
-			page_title: 'Raum',
-			row_index: 0,
-			column_position: 'left'
-		});
-		fields.set('raumnummer', raumnummerField.id);
+		async function createDefAndRef(
+			def: Record<string, unknown>,
+			ref: Record<string, unknown>
+		) {
+			const fieldDef = await pb.collection('workflow_field_defs').create({
+				workflow_id: wf.id,
+				write_mode: 'singleton',
+				...def
+			});
+			await pb.collection('tools_form_field_refs').create({
+				form_id: entryForm.id,
+				field_def_id: fieldDef.id,
+				...ref
+			});
+			return fieldDef;
+		}
 
-		const nutzungsartField = await pb.collection('tools_form_fields').create({
-			form_id: entryForm.id,
-			field_label: 'Nutzungsart',
-			field_type: 'dropdown',
-			is_required: true,
-			field_order: 2,
-			page: 1,
-			row_index: 0,
-			column_position: 'right',
-			field_options: { options: NUTZUNGSART_OPTIONS }
-		});
-		fields.set('nutzungsart', nutzungsartField.id);
+		// Page 1: Raum
+		const raumnummerDef = await createDefAndRef(
+			{ key: 'raumnummer', label: 'Raumnummer', field_type: 'short_text', is_required: true },
+			{ field_order: 1, page: 1, page_title: 'Raum', row_index: 0, column_position: 'left' }
+		);
+		fields.set('raumnummer', raumnummerDef.id);
+
+		const nutzungsartDef = await createDefAndRef(
+			{
+				key: 'nutzungsart',
+				label: 'Nutzungsart',
+				field_type: 'dropdown',
+				is_required: true,
+				field_options: { options: NUTZUNGSART_OPTIONS }
+			},
+			{ field_order: 2, page: 1, row_index: 0, column_position: 'right' }
+		);
+		fields.set('nutzungsart', nutzungsartDef.id);
 
 		// Page 2: Zustandsbewertung
-		const baukonstruktionField = await pb.collection('tools_form_fields').create({
-			form_id: entryForm.id,
-			field_label: 'Baukonstruktion',
-			field_type: 'number',
-			is_required: true,
-			field_order: 3,
-			page: 2,
-			page_title: 'Zustandsbewertung',
-			row_index: 0,
-			column_position: 'full',
-			help_text: 'Waende, Decken, Boeden, Fenster -- Note 1 (sehr gut) bis 4 (ungenuegend)',
-			validation_rules: { min: 1, max: 4 }
-		});
-		fields.set('baukonstruktion', baukonstruktionField.id);
+		const baukonstruktionDef = await createDefAndRef(
+			{
+				key: 'baukonstruktion',
+				label: 'Baukonstruktion',
+				field_type: 'number',
+				is_required: true,
+				validation_rules: { min: 1, max: 4 }
+			},
+			{ field_order: 3, page: 2, page_title: 'Zustandsbewertung', row_index: 0, column_position: 'full' }
+		);
+		fields.set('baukonstruktion', baukonstruktionDef.id);
 
-		const tgaField = await pb.collection('tools_form_fields').create({
-			form_id: entryForm.id,
-			field_label: 'TGA',
-			field_type: 'number',
-			is_required: true,
-			field_order: 4,
-			page: 2,
-			row_index: 1,
-			column_position: 'full',
-			help_text: 'Heizung, Elektro, Sanitaer-Installationen, Lueftung -- Note 1-4',
-			validation_rules: { min: 1, max: 4 }
-		});
-		fields.set('tga', tgaField.id);
+		const tgaDef = await createDefAndRef(
+			{
+				key: 'tga',
+				label: 'TGA',
+				field_type: 'number',
+				is_required: true,
+				validation_rules: { min: 1, max: 4 }
+			},
+			{ field_order: 4, page: 2, row_index: 1, column_position: 'full' }
+		);
+		fields.set('tga', tgaDef.id);
 
-		const raumausstattungField = await pb.collection('tools_form_fields').create({
-			form_id: entryForm.id,
-			field_label: 'Raumausstattung',
-			field_type: 'number',
-			is_required: true,
-			field_order: 5,
-			page: 2,
-			row_index: 2,
-			column_position: 'full',
-			help_text: 'Moeblierung, Oberflaechen, Beschilderung -- Note 1-4',
-			validation_rules: { min: 1, max: 4 }
-		});
-		fields.set('raumausstattung', raumausstattungField.id);
+		const raumausstattungDef = await createDefAndRef(
+			{
+				key: 'raumausstattung',
+				label: 'Raumausstattung',
+				field_type: 'number',
+				is_required: true,
+				validation_rules: { min: 1, max: 4 }
+			},
+			{ field_order: 5, page: 2, row_index: 2, column_position: 'full' }
+		);
+		fields.set('raumausstattung', raumausstattungDef.id);
 
 		// Calculated fields
-		const zustandsindexField = await pb.collection('tools_form_fields').create({
-			form_id: entryForm.id,
-			field_label: 'Zustandsindex',
-			field_type: 'number',
-			is_required: false,
-			field_order: 6,
-			page: 2,
-			row_index: 3,
-			column_position: 'left',
-			help_text: 'Automatisch: Durchschnitt der 3 Bewertungen'
-		});
-		fields.set('zustandsindex', zustandsindexField.id);
+		const zustandsindexDef = await createDefAndRef(
+			{ key: 'zustandsindex', label: 'Zustandsindex', field_type: 'number', is_required: false },
+			{ field_order: 6, page: 2, row_index: 3, column_position: 'left' }
+		);
+		fields.set('zustandsindex', zustandsindexDef.id);
 
-		const zustandsklasseField = await pb.collection('tools_form_fields').create({
-			form_id: entryForm.id,
-			field_label: 'Zustandsklasse',
-			field_type: 'dropdown',
-			is_required: false,
-			field_order: 7,
-			page: 2,
-			row_index: 3,
-			column_position: 'right',
-			help_text: 'Automatisch: A/B/C/D',
-			field_options: { options: ZUSTANDSKLASSE_OPTIONS }
-		});
-		fields.set('zustandsklasse', zustandsklasseField.id);
+		const zustandsklasseDef = await createDefAndRef(
+			{
+				key: 'zustandsklasse',
+				label: 'Zustandsklasse',
+				field_type: 'dropdown',
+				is_required: false,
+				field_options: { options: ZUSTANDSKLASSE_OPTIONS }
+			},
+			{ field_order: 7, page: 2, row_index: 3, column_position: 'right' }
+		);
+		fields.set('zustandsklasse', zustandsklasseDef.id);
 
-		// tools_edit: Inspekteure can update ratings at all stages
-		const allStageIds = Array.from(stages.values());
-		await pb.collection('tools_edit').create({
-			name: 'Bewertung aktualisieren',
-			stage_id: allStageIds,
-			editable_fields: [baukonstruktionField.id, tgaField.id, raumausstattungField.id],
-			allowed_roles: allRoleIds,
-			edit_mode: 'form_fields',
-			visual_config: {}
-		});
+		// TODO(field-def-redesign): tools_edit removed; convert to Form referencing the same field defs
+		// const allStageIds = Array.from(stages.values());
+		// await pb.collection('tools_edit').create({
+		// 	name: 'Bewertung aktualisieren',
+		// 	stage_id: allStageIds,
+		// 	editable_fields: [baukonstruktionDef.id, tgaDef.id, raumausstattungDef.id],
+		// 	allowed_roles: allRoleIds,
+		// 	edit_mode: 'form_fields',
+		// 	visual_config: {}
+		// });
 
 		// Filterable tag on Zustandsklasse
 		await pb.collection('tools_field_tags').create({
@@ -280,7 +273,7 @@ export async function seedGebaeude(): Promise<GebaeudeSeedResult> {
 			tag_mappings: [
 				{
 					tagType: 'filterable',
-					fieldId: zustandsklasseField.id,
+					fieldId: zustandsklasseDef.id,
 					config: { filterBy: 'field' }
 				}
 			]
@@ -437,11 +430,11 @@ export async function seedGebaeude(): Promise<GebaeudeSeedResult> {
 				participantId,
 				location: { lat: coord.lat, lon: coord.lon },
 				fieldValues: [
-					{ key: fields.get('raumnummer')!, value: room.raumnummer },
-					{ key: fields.get('nutzungsart')!, value: room.nutzungsart },
-					{ key: fields.get('baukonstruktion')!, value: String(room.baukonstruktion) },
-					{ key: fields.get('tga')!, value: String(room.tga) },
-					{ key: fields.get('raumausstattung')!, value: String(room.raumausstattung) }
+					{ fieldDefId: fields.get('raumnummer')!, value: room.raumnummer },
+					{ fieldDefId: fields.get('nutzungsart')!, value: room.nutzungsart },
+					{ fieldDefId: fields.get('baukonstruktion')!, value: String(room.baukonstruktion) },
+					{ fieldDefId: fields.get('tga')!, value: String(room.tga) },
+					{ fieldDefId: fields.get('raumausstattung')!, value: String(room.raumausstattung) }
 				]
 			});
 

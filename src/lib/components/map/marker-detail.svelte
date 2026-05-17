@@ -11,7 +11,6 @@
 		Edit,
 		Trash2
 	} from '@lucide/svelte';
-	import * as m from '$lib/paraglide/messages';
 	import type { Marker as GatewayMarker, MarkerCategory } from '$lib/participant-state/types';
 
 	interface Props {

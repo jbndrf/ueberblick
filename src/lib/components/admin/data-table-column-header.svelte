@@ -5,7 +5,7 @@
 	import * as Command from '$lib/components/ui/command';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { ArrowUpDown, ArrowUp, ArrowDown, ListFilter } from '@lucide/svelte';
-	import * as m from '$lib/paraglide/messages';
+	import { participantsNoRoles } from '$lib/paraglide/messages';
 
 	type Props = {
 		column: Column<TData, TValue>;
@@ -26,7 +26,7 @@
 	// Helper function to get display value for filter options
 	function getDisplayValue(value: any): string {
 		if (value === '__empty__') {
-			return m.participantsNoRoles();
+			return participantsNoRoles();
 		}
 		return String(value || '-');
 	}
@@ -35,7 +35,7 @@
 	function getFilterValueForSelection(value: any): any {
 		// If the display shows "No roles assigned", we need to filter by the __empty__ key
 		if (value === '__empty__') {
-			return m.participantsNoRoles();
+			return participantsNoRoles();
 		}
 		return value;
 	}

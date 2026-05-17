@@ -1,6 +1,16 @@
 <script lang="ts">
 	import { Layers, Filter, Navigation, Settings, Plus, Wrench } from '@lucide/svelte';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		mapCloseMenu,
+		mapFilters,
+		mapMyLocation,
+		mapTools,
+		participantBottomControlBarLayers,
+		participantBottomControlBarLocation,
+		participantBottomControlBarNewWorkflow,
+		participantBottomControlBarSettings,
+		participantBottomControlBarTools
+	} from '$lib/paraglide/messages';
 
 	interface Props {
 		onLayersClick: () => void;
@@ -60,19 +70,19 @@
 		<button
 			onclick={onLayersClick}
 			class="flex h-16 w-14 flex-col items-center justify-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
-			title={m.participantBottomControlBarLayers?.() ?? 'Layers'}
+			title={participantBottomControlBarLayers?.() ?? 'Layers'}
 		>
 			<Layers class="h-5 w-5" />
-			<span class="text-[0.625rem]">{m.participantBottomControlBarLayers?.() ?? 'Layers'}</span>
+			<span class="text-[0.625rem]">{participantBottomControlBarLayers?.() ?? 'Layers'}</span>
 		</button>
 
 		<button
 			onclick={onFiltersClick ?? (() => {})}
 			class="flex h-16 w-14 flex-col items-center justify-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
-			title={m.mapFilters?.() ?? 'Filters'}
+			title={mapFilters?.() ?? 'Filters'}
 		>
 			<Filter class="h-5 w-5" />
-			<span class="text-[0.625rem]">{m.mapFilters?.() ?? 'Filters'}</span>
+			<span class="text-[0.625rem]">{mapFilters?.() ?? 'Filters'}</span>
 		</button>
 
 		<div class="relative flex items-center justify-center">
@@ -80,7 +90,7 @@
 				onclick={handleCenterClick}
 				class="center-button -mt-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-lg active:scale-95"
 				style:transform="rotate({fabRotation}deg)"
-				aria-label={workflowSelectorOpen ? (m.mapCloseMenu?.() ?? 'Close menu') : (m.participantBottomControlBarNewWorkflow?.() ?? 'New workflow')}
+				aria-label={workflowSelectorOpen ? (mapCloseMenu?.() ?? 'Close menu') : (participantBottomControlBarNewWorkflow?.() ?? 'New workflow')}
 			>
 				<Plus class="h-6 w-6" />
 			</button>
@@ -89,17 +99,17 @@
 		<button
 			onclick={onLocationClick ?? (() => {})}
 			class="flex h-16 w-14 flex-col items-center justify-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
-			title={m.mapMyLocation?.() ?? 'My Location'}
+			title={mapMyLocation?.() ?? 'My Location'}
 		>
 			<Navigation class="h-5 w-5" />
-			<span class="text-[0.625rem]">{m.participantBottomControlBarLocation?.() ?? 'Location'}</span>
+			<span class="text-[0.625rem]">{participantBottomControlBarLocation?.() ?? 'Location'}</span>
 		</button>
 
 		{#if participantToolsAvailable}
 			<button
 				onclick={onParticipantToolsClick ?? (() => {})}
 				class="relative flex h-16 w-14 flex-col items-center justify-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
-				title={m.participantBottomControlBarTools?.() ?? 'Tools'}
+				title={participantBottomControlBarTools?.() ?? 'Tools'}
 			>
 				<div class="relative">
 					<Wrench class="h-5 w-5" />
@@ -111,17 +121,17 @@
 						<span class="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-muted-foreground"></span>
 					{/if}
 				</div>
-				<span class="text-[0.625rem]">{m.participantBottomControlBarTools?.() ?? 'Tools'}</span>
+				<span class="text-[0.625rem]">{participantBottomControlBarTools?.() ?? 'Tools'}</span>
 			</button>
 		{/if}
 
 		<button
 			onclick={onToolsClick ?? (() => {})}
 			class="flex h-16 w-14 flex-col items-center justify-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
-			title={m.mapTools?.() ?? 'Tools'}
+			title={mapTools?.() ?? 'Tools'}
 		>
 			<Settings class="h-5 w-5" />
-			<span class="text-[0.625rem]">{m.participantBottomControlBarSettings?.() ?? 'Settings'}</span>
+			<span class="text-[0.625rem]">{participantBottomControlBarSettings?.() ?? 'Settings'}</span>
 		</button>
 	</div>
 {/if}

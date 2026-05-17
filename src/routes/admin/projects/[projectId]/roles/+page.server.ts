@@ -6,7 +6,7 @@ import { superValidate } from 'sveltekit-superforms';
 import { zod4 } from 'sveltekit-superforms/adapters';
 import { createUpdateFieldAction, createDeleteAction } from '$lib/server/crud-actions';
 import type PocketBase from 'pocketbase';
-import * as m from '$lib/paraglide/messages';
+import { rolesServerCreateError, rolesServerCreateParticipantError, rolesServerLoadError, rolesServerNameMinLength, rolesServerUpdateError, rolesServerUpdateParticipantsError } from '$lib/paraglide/messages';
 
 function generateJoinSlug(): string {
 	return randomBytes(12).toString('base64url');
@@ -335,7 +335,7 @@ export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) 
 		};
 	} catch (err) {
 		console.error('Error loading roles:', err);
-		throw error(500, m.rolesServerLoadError?.() ?? 'Failed to load roles');
+		throw error(500, rolesServerLoadError?.() ?? 'Failed to load roles');
 	}
 };
 
@@ -360,7 +360,7 @@ export const actions: Actions = {
 			console.error('Error creating role:', err);
 			return fail(500, {
 				form,
-				message: m.rolesServerCreateError?.() ?? 'Failed to create role'
+				message: rolesServerCreateError?.() ?? 'Failed to create role'
 			});
 		}
 	},
@@ -386,7 +386,7 @@ export const actions: Actions = {
 			console.error('Error updating role:', err);
 			return fail(500, {
 				form,
-				message: m.rolesServerUpdateError?.() ?? 'Failed to update role'
+				message: rolesServerUpdateError?.() ?? 'Failed to update role'
 			});
 		}
 	},
@@ -398,7 +398,7 @@ export const actions: Actions = {
 			validators: {
 				name: (value) => ({
 					valid: value.trim().length >= 2,
-					error: m.rolesServerNameMinLength?.() ?? 'Name must be at least 2 characters'
+					error: rolesServerNameMinLength?.() ?? 'Name must be at least 2 characters'
 				})
 			}
 		})(request);
@@ -459,7 +459,7 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating participant roles:', err);
-			return fail(500, { message: m.rolesServerUpdateParticipantsError?.() ?? 'Failed to update participant roles' });
+			return fail(500, { message: rolesServerUpdateParticipantsError?.() ?? 'Failed to update participant roles' });
 		}
 	},
 
@@ -615,7 +615,7 @@ export const actions: Actions = {
 			return { success: true, entity: newParticipant };
 		} catch (error) {
 			console.error('Error creating participant:', error);
-			return fail(500, { message: m.rolesServerCreateParticipantError?.() ?? 'Failed to create participant' });
+			return fail(500, { message: rolesServerCreateParticipantError?.() ?? 'Failed to create participant' });
 		}
 	}
 };

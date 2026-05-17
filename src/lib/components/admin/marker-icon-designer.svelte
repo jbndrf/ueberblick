@@ -5,7 +5,29 @@
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { toast } from 'svelte-sonner';
 	import { X, Upload, FileCode, Shapes } from '@lucide/svelte';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		adminMarkerIconDesignerBadgeLabel,
+		adminMarkerIconDesignerBadgeNone,
+		adminMarkerIconDesignerCancel,
+		adminMarkerIconDesignerChooseIcon,
+		adminMarkerIconDesignerIconColor,
+		adminMarkerIconDesignerInvalidSvg,
+		adminMarkerIconDesignerNoIconSelected,
+		adminMarkerIconDesignerPastePlaceholder,
+		adminMarkerIconDesignerPreview,
+		adminMarkerIconDesignerPreviewEmpty,
+		adminMarkerIconDesignerSave,
+		adminMarkerIconDesignerSaveError,
+		adminMarkerIconDesignerSaveSuccess,
+		adminMarkerIconDesignerSize,
+		adminMarkerIconDesignerSubtitle,
+		adminMarkerIconDesignerTabCustomSvg,
+		adminMarkerIconDesignerTabTemplates,
+		adminMarkerIconDesignerTitle,
+		adminMarkerIconDesignerUploadButton,
+		adminMarkerIconDesignerUploadSuccess,
+		adminMarkerIconDesignerUploadSvgOnly
+	} from '$lib/paraglide/messages';
 	import {
 		ICON_TEMPLATES,
 		BADGE_TEMPLATES,
@@ -121,7 +143,7 @@
 		if (!file) return;
 
 		if (!file.name.endsWith('.svg')) {
-			toast.error(m.adminMarkerIconDesignerUploadSvgOnly());
+			toast.error(adminMarkerIconDesignerUploadSvgOnly());
 			return;
 		}
 
@@ -130,9 +152,9 @@
 		if (result.valid) {
 			customSvgContent = text.trim();
 			customFilename = file.name;
-			toast.success(m.adminMarkerIconDesignerUploadSuccess());
+			toast.success(adminMarkerIconDesignerUploadSuccess());
 		} else {
-			toast.error(result.error || m.adminMarkerIconDesignerInvalidSvg());
+			toast.error(result.error || adminMarkerIconDesignerInvalidSvg());
 		}
 	}
 
@@ -146,7 +168,7 @@
 
 	async function handleSave() {
 		if (!hasIcon || !previewSvg) {
-			toast.error(m.adminMarkerIconDesignerNoIconSelected());
+			toast.error(adminMarkerIconDesignerNoIconSelected());
 			return;
 		}
 
@@ -181,9 +203,9 @@
 		if (onSave) {
 			try {
 				await onSave(config);
-				toast.success(m.adminMarkerIconDesignerSaveSuccess());
+				toast.success(adminMarkerIconDesignerSaveSuccess());
 			} catch {
-				toast.error(m.adminMarkerIconDesignerSaveError());
+				toast.error(adminMarkerIconDesignerSaveError());
 			}
 		}
 	}
@@ -193,8 +215,8 @@
 	<!-- Header -->
 	<div class="flex items-center justify-between">
 		<div>
-			<h2 class="text-xl font-semibold">{m.adminMarkerIconDesignerTitle()}</h2>
-			<p class="text-sm text-muted-foreground">{m.adminMarkerIconDesignerSubtitle()}</p>
+			<h2 class="text-xl font-semibold">{adminMarkerIconDesignerTitle()}</h2>
+			<p class="text-sm text-muted-foreground">{adminMarkerIconDesignerSubtitle()}</p>
 		</div>
 		{#if onCancel}
 			<Button variant="ghost" size="icon" onclick={onCancel}>
@@ -215,7 +237,7 @@
 					onclick={() => (sourceTab = 'templates')}
 				>
 					<Shapes class="mr-2 h-4 w-4" />
-					{m.adminMarkerIconDesignerTabTemplates()}
+					{adminMarkerIconDesignerTabTemplates()}
 				</Button>
 				<Button
 					variant={sourceTab === 'custom' ? 'default' : 'outline'}
@@ -223,14 +245,14 @@
 					onclick={() => (sourceTab = 'custom')}
 				>
 					<FileCode class="mr-2 h-4 w-4" />
-					{m.adminMarkerIconDesignerTabCustomSvg()}
+					{adminMarkerIconDesignerTabCustomSvg()}
 				</Button>
 			</div>
 
 			<!-- Templates grid -->
 			{#if sourceTab === 'templates'}
 				<div class="space-y-2">
-					<Label>{m.adminMarkerIconDesignerChooseIcon()}</Label>
+					<Label>{adminMarkerIconDesignerChooseIcon()}</Label>
 					<div class="grid grid-cols-5 gap-2">
 						{#each ICON_TEMPLATES as template}
 							<button
@@ -265,7 +287,7 @@
 						/>
 						<Button variant="outline" size="sm" onclick={() => fileInput?.click()}>
 							<Upload class="mr-2 h-4 w-4" />
-							{m.adminMarkerIconDesignerUploadButton()}
+							{adminMarkerIconDesignerUploadButton()}
 						</Button>
 						{#if customFilename}
 							<span class="flex items-center text-xs text-muted-foreground">
@@ -276,7 +298,7 @@
 					<Textarea
 						bind:value={customSvgContent}
 						onpaste={handlePaste}
-						placeholder={m.adminMarkerIconDesignerPastePlaceholder()}
+						placeholder={adminMarkerIconDesignerPastePlaceholder()}
 						class="font-mono text-xs"
 						rows={6}
 					/>
@@ -285,7 +307,7 @@
 
 			<!-- Icon Color -->
 			<div class="space-y-2">
-				<Label>{m.adminMarkerIconDesignerIconColor()}</Label>
+				<Label>{adminMarkerIconDesignerIconColor()}</Label>
 				<div class="flex items-center gap-2">
 					<input
 						type="color"
@@ -303,7 +325,7 @@
 
 			<!-- Size -->
 			<div class="space-y-2">
-				<Label>{m.adminMarkerIconDesignerSize()}</Label>
+				<Label>{adminMarkerIconDesignerSize()}</Label>
 				<Input
 					type="number"
 					bind:value={iconSize}
@@ -315,7 +337,7 @@
 
 			<!-- Badge -->
 			<div class="space-y-2">
-				<Label>{m.adminMarkerIconDesignerBadgeLabel()}</Label>
+				<Label>{adminMarkerIconDesignerBadgeLabel()}</Label>
 				<div class="flex flex-wrap gap-1.5">
 					<button
 						type="button"
@@ -325,7 +347,7 @@
 							? 'border-primary bg-primary text-primary-foreground'
 							: 'border-border hover:border-primary/50'}"
 					>
-						{m.adminMarkerIconDesignerBadgeNone()}
+						{adminMarkerIconDesignerBadgeNone()}
 					</button>
 					{#each BADGE_TEMPLATES as badge}
 						<button
@@ -349,14 +371,14 @@
 
 		<!-- Right: Preview -->
 		<div class="flex w-48 flex-col gap-3">
-			<Label>{m.adminMarkerIconDesignerPreview()}</Label>
+			<Label>{adminMarkerIconDesignerPreview()}</Label>
 			<div
 				class="flex flex-1 items-center justify-center rounded-lg border-2 border-dashed bg-muted/20 p-4"
 			>
 				{#if previewSvg}
 					{@html previewSvg}
 				{:else}
-					<p class="text-center text-xs text-muted-foreground">{m.adminMarkerIconDesignerPreviewEmpty()}</p>
+					<p class="text-center text-xs text-muted-foreground">{adminMarkerIconDesignerPreviewEmpty()}</p>
 				{/if}
 			</div>
 		</div>
@@ -365,8 +387,8 @@
 	<!-- Footer -->
 	<div class="flex justify-end gap-3 border-t pt-3">
 		{#if onCancel}
-			<Button variant="outline" onclick={onCancel}>{m.adminMarkerIconDesignerCancel()}</Button>
+			<Button variant="outline" onclick={onCancel}>{adminMarkerIconDesignerCancel()}</Button>
 		{/if}
-		<Button onclick={handleSave} disabled={!hasIcon}>{m.adminMarkerIconDesignerSave()}</Button>
+		<Button onclick={handleSave} disabled={!hasIcon}>{adminMarkerIconDesignerSave()}</Button>
 	</div>
 </div>

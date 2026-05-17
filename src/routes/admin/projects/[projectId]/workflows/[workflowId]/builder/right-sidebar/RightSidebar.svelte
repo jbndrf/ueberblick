@@ -6,7 +6,6 @@
 	import PropertyView from './views/properties/PropertyView.svelte';
 	import GlobalToolsPanel from './views/properties/panels/GlobalToolsPanel.svelte';
 	import { FormEditorView } from './views/form-editor';
-	import { EditToolEditorView } from './views/edit-tool-editor';
 	import { ProtocolToolEditorView } from './views/protocol-tool-editor';
 	import { FieldTagEditorView } from './views/field-tag-editor';
 	import { AutomationEditorView } from './views/automation-editor';
@@ -15,7 +14,7 @@
 	import type {
 		ToolsForm, ToolsFormField, TrackedFormField, WorkflowStage, ColumnPosition, ToolsEdit, ToolsProtocol, VisualConfig,
 		ToolsAutomation, AutomationStep, TriggerType, TriggerConfig, ExecutionMode,
-		TagMapping
+		TagMapping, SentryClause, WorkflowFieldDef
 	} from '$lib/workflow-builder';
 	import type { FormFieldWithValue } from '$lib/components/form-renderer';
 
@@ -82,6 +81,8 @@
 		onEdgeDelete?: (edgeId: string) => void;
 		onEdgeRolesChange?: (edgeId: string, roleIds: string[]) => void;
 		onEdgeSettingsChange?: (edgeId: string, settings: Record<string, any>) => void;
+		onEdgeSentryChange?: (edgeId: string, sentry: SentryClause[]) => void;
+		fieldDefs?: WorkflowFieldDef[];
 		onSelectAction?: (edge: Edge) => void;
 		onSelectStage?: (node: Node) => void;
 		// Tool handlers (for stage property panel)
@@ -184,6 +185,8 @@
 		onEdgeDelete,
 		onEdgeRolesChange,
 		onEdgeSettingsChange,
+		onEdgeSentryChange,
+		fieldDefs = [],
 		onSelectAction,
 		onSelectStage,
 		onToolRolesChange,
@@ -247,9 +250,6 @@
 	// Form editor mode
 	const isFormEditor = $derived(context.type === 'form');
 
-	// Edit tool editor mode
-	const isEditToolEditor = $derived(context.type === 'editTool');
-
 	// Protocol tool editor mode
 	const isProtocolToolEditor = $derived(context.type === 'protocolTool');
 
@@ -274,7 +274,7 @@
 	);
 </script>
 
-<aside class="right-sidebar" class:wide={isFormEditor || isEditToolEditor || isProtocolToolEditor || isStagePreview} class:expanded={isFormEditor && paletteExpanded}>
+<aside class="right-sidebar" class:wide={isFormEditor || isProtocolToolEditor || isStagePreview} class:expanded={isFormEditor && paletteExpanded}>
 	{#if isFormEditor && selectedForm}
 		<FormEditorView
 			form={selectedForm}
@@ -293,16 +293,6 @@
 			onPaletteExpandedChange={(expanded) => paletteExpanded = expanded}
 			onRolesChange={(roleIds) => onFormRolesChange?.(selectedForm.id, roleIds)}
 			onVisualConfigChange={(config) => onFormVisualConfigChange?.(selectedForm.id, config)}
-		/>
-	{:else if isEditToolEditor && selectedEditTool}
-		<EditToolEditorView
-			editTool={selectedEditTool}
-			ancestorFields={editToolAncestorFields}
-			onNameChange={(name) => onEditToolNameChange?.(selectedEditTool.id, name)}
-			onFieldsChange={(fieldIds) => onEditToolFieldsChange?.(selectedEditTool.id, fieldIds)}
-			onEditModeChange={(editMode) => onEditToolEditModeChange?.(selectedEditTool.id, editMode)}
-			onDelete={() => onEditToolDelete?.(selectedEditTool.id)}
-			onClose={onEditToolClose}
 		/>
 	{:else if isProtocolToolEditor && selectedProtocolTool}
 		<ProtocolToolEditorView
@@ -400,6 +390,8 @@
 			{onEdgeDelete}
 			{onEdgeRolesChange}
 			{onEdgeSettingsChange}
+			{onEdgeSentryChange}
+			{fieldDefs}
 			{onToolRolesChange}
 			{onToolVisualConfigChange}
 			{onSelectTool}

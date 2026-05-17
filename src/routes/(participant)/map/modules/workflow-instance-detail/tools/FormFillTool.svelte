@@ -10,7 +10,18 @@
 	import { FormRenderer } from '$lib/components/form-renderer';
 	import { Button } from '$lib/components/ui/button';
 	import { ChevronLeft, ChevronRight, Send, Loader2 } from '@lucide/svelte';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		commonCancel,
+		participantFormFillToolBack,
+		participantFormFillToolCreateEntry,
+		participantFormFillToolError,
+		participantFormFillToolGoToPage,
+		participantFormFillToolLoading,
+		participantFormFillToolNext,
+		participantFormFillToolNoFields,
+		participantFormFillToolSubmit,
+		participantFormFillToolSubmitting
+	} from '$lib/paraglide/messages';
 	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
 	import {
 		loadConnectionForm,
@@ -73,13 +84,15 @@
 		const out: Record<string, unknown> = {};
 		for (const fv of existingFieldValues ?? []) {
 			if (!fv.value) continue;
+			const key = (fv as any).field_def_id as string | undefined;
+			if (!key) continue;
 			try {
-				out[fv.field_key] =
+				out[key] =
 					fv.value.startsWith('[') || fv.value.startsWith('{')
 						? JSON.parse(fv.value)
 						: fv.value;
 			} catch {
-				out[fv.field_key] = fv.value;
+				out[key] = fv.value;
 			}
 		}
 		return out;
@@ -226,13 +239,13 @@
 				<div
 					class="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2"
 				></div>
-				<p class="text-sm text-muted-foreground">{m.participantFormFillToolLoading?.() ?? 'Loading form...'}</p>
+				<p class="text-sm text-muted-foreground">{participantFormFillToolLoading?.() ?? 'Loading form...'}</p>
 			</div>
 		</div>
 	{:else if formState?.loadError}
 		<div class="flex-1 flex items-center justify-center p-4 py-12">
 			<div class="text-center">
-				<p class="text-sm text-destructive font-medium mb-1">{m.participantFormFillToolError?.() ?? 'Error'}</p>
+				<p class="text-sm text-destructive font-medium mb-1">{participantFormFillToolError?.() ?? 'Error'}</p>
 				<p class="text-xs text-muted-foreground">{formState.loadError}</p>
 			</div>
 		</div>
@@ -252,7 +265,7 @@
 		</div>
 	{:else if formState}
 		<div class="flex-1 flex flex-col items-center justify-center p-4 py-12">
-			<p class="text-sm text-muted-foreground mb-4">{m.participantFormFillToolNoFields?.() ?? 'No additional information required.'}</p>
+			<p class="text-sm text-muted-foreground mb-4">{participantFormFillToolNoFields?.() ?? 'No additional information required.'}</p>
 		</div>
 	{/if}
 {/snippet}
@@ -266,7 +279,7 @@
 					<button
 						class="w-2 h-2 rounded-full transition-colors {currentPage === i + 1 ? 'bg-primary' : 'bg-muted-foreground/30'}"
 						onclick={() => handlePageChange(i + 1)}
-						aria-label={(m.participantFormFillToolGoToPage?.({ page: i + 1 }) ?? `Go to page ${i + 1}`)}
+						aria-label={(participantFormFillToolGoToPage?.({ page: i + 1 }) ?? `Go to page ${i + 1}`)}
 					></button>
 				{/each}
 			</div>
@@ -282,7 +295,7 @@
 					class="flex-1"
 				>
 					<ChevronLeft class="w-4 h-4 mr-1" />
-					{m.participantFormFillToolBack?.() ?? 'Back'}
+					{participantFormFillToolBack?.() ?? 'Back'}
 				</Button>
 			{:else}
 				<Button
@@ -291,7 +304,7 @@
 					disabled={isSubmitting}
 					class="flex-1"
 				>
-					{m.commonCancel?.() ?? 'Cancel'}
+					{commonCancel?.() ?? 'Cancel'}
 				</Button>
 			{/if}
 
@@ -301,7 +314,7 @@
 					disabled={isSubmitting}
 					class="flex-1"
 				>
-					{m.participantFormFillToolNext?.() ?? 'Next'}
+					{participantFormFillToolNext?.() ?? 'Next'}
 					<ChevronRight class="w-4 h-4 ml-1" />
 				</Button>
 			{:else}
@@ -312,10 +325,10 @@
 				>
 					{#if isSubmitting}
 						<Loader2 class="w-4 h-4 mr-2 animate-spin" />
-						{m.participantFormFillToolSubmitting?.() ?? 'Submitting...'}
+						{participantFormFillToolSubmitting?.() ?? 'Submitting...'}
 					{:else}
 						<Send class="w-4 h-4 mr-2" />
-						{hasFields ? (m.participantFormFillToolSubmit?.() ?? 'Submit') : (m.participantFormFillToolCreateEntry?.() ?? 'Create Entry')}
+						{hasFields ? (participantFormFillToolSubmit?.() ?? 'Submit') : (participantFormFillToolCreateEntry?.() ?? 'Create Entry')}
 					{/if}
 				</Button>
 			{/if}

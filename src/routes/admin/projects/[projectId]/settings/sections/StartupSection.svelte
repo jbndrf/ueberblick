@@ -1,7 +1,23 @@
 <script lang="ts">
 	import { invalidateAll } from '$app/navigation';
 	import { toast } from 'svelte-sonner';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		settingsAdvancedAll,
+		settingsAdvancedBaseLayer,
+		settingsAdvancedFirstActiveBaseLayer,
+		settingsAdvancedNoOverlays,
+		settingsAdvancedNoWorkflows,
+		settingsAdvancedOverlaysOnAtStart,
+		settingsAdvancedSaveFailed,
+		settingsAdvancedSaveStartupDefaults,
+		settingsAdvancedSavingEllipsis,
+		settingsAdvancedStagesVisibleAtStart,
+		settingsAdvancedStartupDescription,
+		settingsAdvancedStartupSaved,
+		settingsAdvancedStartupTitle,
+		settingsAdvancedValuesVisibleAtStart,
+		settingsAdvancedVisibleWorkflows
+	} from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { Label } from '$lib/components/ui/label';
 	import { Switch } from '$lib/components/ui/switch';
@@ -198,11 +214,11 @@
 			fd.append('payload', JSON.stringify(payload));
 			const res = await fetch('?/saveStartupDefaults', { method: 'POST', body: fd });
 			if (!res.ok) throw new Error(await res.text());
-			toast.success(m.settingsAdvancedStartupSaved?.() ?? 'Startup defaults saved');
+			toast.success(settingsAdvancedStartupSaved?.() ?? 'Startup defaults saved');
 			await invalidateAll();
 		} catch (e) {
 			console.error(e);
-			toast.error(m.settingsAdvancedSaveFailed?.() ?? 'Save failed');
+			toast.error(settingsAdvancedSaveFailed?.() ?? 'Save failed');
 		} finally {
 			savingStartup = false;
 		}
@@ -210,14 +226,14 @@
 </script>
 
 <SettingsSection
-	name={m.settingsAdvancedStartupTitle?.() ?? 'Startup defaults'}
-	description={m.settingsAdvancedStartupDescription?.() ??
+	name={settingsAdvancedStartupTitle?.() ?? 'Startup defaults'}
+	description={settingsAdvancedStartupDescription?.() ??
 		'State the first time the project is opened: which layers and workflows are visible. Only applies on the first visit — later changes by users are preserved.'}
 >
 	<div class="flex flex-col gap-6">
 		<!-- Base layer -->
 		<section class="flex flex-col gap-2">
-			<Label>{m.settingsAdvancedBaseLayer?.() ?? 'Base layer'}</Label>
+			<Label>{settingsAdvancedBaseLayer?.() ?? 'Base layer'}</Label>
 			<div class="flex flex-col gap-1">
 				<label class="flex items-center gap-2 text-sm">
 					<input
@@ -227,7 +243,7 @@
 						onchange={() => (startup.base_layer_id = undefined)}
 					/>
 					<span class="text-muted-foreground">
-						{m.settingsAdvancedFirstActiveBaseLayer?.() ?? '(first active base layer)'}
+						{settingsAdvancedFirstActiveBaseLayer?.() ?? '(first active base layer)'}
 					</span>
 				</label>
 				{#each baseLayers as l (l.id)}
@@ -246,10 +262,10 @@
 
 		<!-- Overlays -->
 		<section class="flex flex-col gap-2">
-			<Label>{m.settingsAdvancedOverlaysOnAtStart?.() ?? 'Overlay layers (on at start)'}</Label>
+			<Label>{settingsAdvancedOverlaysOnAtStart?.() ?? 'Overlay layers (on at start)'}</Label>
 			{#if overlayLayers.length === 0}
 				<p class="text-sm text-muted-foreground">
-					{m.settingsAdvancedNoOverlays?.() ?? 'No overlay layers available.'}
+					{settingsAdvancedNoOverlays?.() ?? 'No overlay layers available.'}
 				</p>
 			{:else}
 				<div class="flex flex-col gap-1">
@@ -270,15 +286,15 @@
 		<!-- Workflows -->
 		<section class="flex flex-col gap-2">
 			<div class="flex items-center justify-between">
-				<Label>{m.settingsAdvancedVisibleWorkflows?.() ?? 'Visible workflows'}</Label>
+				<Label>{settingsAdvancedVisibleWorkflows?.() ?? 'Visible workflows'}</Label>
 				<label class="flex items-center gap-2 text-sm">
 					<Switch bind:checked={allWorkflowsVisible} />
-					{m.settingsAdvancedAll?.() ?? 'All'}
+					{settingsAdvancedAll?.() ?? 'All'}
 				</label>
 			</div>
 			{#if workflows.length === 0}
 				<p class="text-sm text-muted-foreground">
-					{m.settingsAdvancedNoWorkflows?.() ?? 'No workflows.'}
+					{settingsAdvancedNoWorkflows?.() ?? 'No workflows.'}
 				</p>
 			{:else}
 				<div class="flex flex-col gap-1">
@@ -314,8 +330,8 @@
 								<div class="flex flex-col gap-1 border-t px-2 py-2 pl-10">
 									<p class="text-xs text-muted-foreground">
 										{tagInfo.mode === 'stage'
-											? (m.settingsAdvancedStagesVisibleAtStart?.() ?? 'Stages visible at start')
-											: (m.settingsAdvancedValuesVisibleAtStart?.() ?? 'Values visible at start')}
+											? (settingsAdvancedStagesVisibleAtStart?.() ?? 'Stages visible at start')
+											: (settingsAdvancedValuesVisibleAtStart?.() ?? 'Values visible at start')}
 									</p>
 									{#each tagInfo.options as opt (opt.value)}
 										<label class="flex items-center gap-2 text-xs">
@@ -338,8 +354,8 @@
 		<div>
 			<Button onclick={saveStartup} disabled={savingStartup}>
 				{savingStartup
-					? (m.settingsAdvancedSavingEllipsis?.() ?? 'Saving…')
-					: (m.settingsAdvancedSaveStartupDefaults?.() ?? 'Save startup defaults')}
+					? (settingsAdvancedSavingEllipsis?.() ?? 'Saving…')
+					: (settingsAdvancedSaveStartupDefaults?.() ?? 'Save startup defaults')}
 			</Button>
 		</div>
 	</div>

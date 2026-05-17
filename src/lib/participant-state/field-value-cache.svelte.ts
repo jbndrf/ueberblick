@@ -1,5 +1,5 @@
 /**
- * FieldValueCache - In-memory index for workflow_instance_field_values
+ * FieldValueCache - In-memory index for workflow_field_values
  *
  * Replaces the generic live() query for field values on the map page.
  * Loads all records from IndexedDB once, then patches incrementally when
@@ -7,6 +7,10 @@
  * Falls back to a full reload on bulk changes (sync).
  *
  * IDB remains the source of truth -- this is a read-through materialized view.
+ *
+ * Records are keyed by `field_def_id`. For observation-mode fields, multiple
+ * rows per (instance, field_def) coexist; for singleton/computed there is one
+ * row per (instance, field_def) enforced by a partial unique index server-side.
  */
 
 import { getDB, type CachedRecord } from './db';
@@ -21,7 +25,7 @@ function splitMultiValue(value: string): string[] {
 	return [value];
 }
 
-const COLLECTION = 'workflow_instance_field_values';
+const COLLECTION = 'workflow_field_values';
 
 export class FieldValueCache {
 	// In-memory store: record.id -> cleaned record
@@ -38,7 +42,8 @@ export class FieldValueCache {
 	// Reactive state consumed by components
 	records = $state<any[]>([]);
 	byInstanceId = $state<Map<string, any[]>>(new Map());
-	fieldValuesByKey = $state<Map<string, Set<string>>>(new Map());
+	/** field_def_id -> set of distinct string values ever seen on that field. */
+	fieldValuesByDefId = $state<Map<string, Set<string>>>(new Map());
 	loading = $state(true);
 	/** Live counter updated during background fetch so the UI can show progress */
 	loadedCount = $state(0);
@@ -207,13 +212,12 @@ export class FieldValueCache {
 
 	private rebuildIndexes(): void {
 		const byInst = new Map<string, any[]>();
-		const byKey = new Map<string, Set<string>>();
+		const byDef = new Map<string, Set<string>>();
 		const allRecords: any[] = [];
 
 		for (const fv of this.store.values()) {
 			allRecords.push(fv);
 
-			// byInstanceId
 			const instId = fv.instance_id;
 			if (instId) {
 				let arr = byInst.get(instId);
@@ -221,10 +225,9 @@ export class FieldValueCache {
 				arr.push(fv);
 			}
 
-			// fieldValuesByKey (unique values per field)
-			if (fv.field_key && fv.value) {
-				let set = byKey.get(fv.field_key);
-				if (!set) { set = new Set(); byKey.set(fv.field_key, set); }
+			if (fv.field_def_id && fv.value) {
+				let set = byDef.get(fv.field_def_id);
+				if (!set) { set = new Set(); byDef.set(fv.field_def_id, set); }
 				for (const v of splitMultiValue(fv.value)) {
 					set.add(v);
 				}
@@ -233,7 +236,7 @@ export class FieldValueCache {
 
 		this.records = allRecords;
 		this.byInstanceId = byInst;
-		this.fieldValuesByKey = byKey;
+		this.fieldValuesByDefId = byDef;
 	}
 
 	/** Lookup by instance ID -- reads directly from store (always fresh) */
@@ -245,6 +248,28 @@ export class FieldValueCache {
 			}
 		}
 		return results;
+	}
+
+	/**
+	 * Return the latest value row for an (instance, field_def) pair.
+	 * TODO(field-def-redesign): observation-mode fields can have many rows per
+	 * (instance, field_def) -- callers will eventually need an array form. For
+	 * now we treat every field as singleton-style and return the single
+	 * most-recent row by `recorded_at` (falling back to `updated`).
+	 */
+	getLatestForInstanceAndField(instanceId: string, fieldDefId: string): any | null {
+		let latest: any | null = null;
+		for (const fv of this.store.values()) {
+			if (fv.instance_id !== instanceId || fv.field_def_id !== fieldDefId) continue;
+			if (!latest) {
+				latest = fv;
+				continue;
+			}
+			const a = (fv.recorded_at as string) || (fv.updated as string) || '';
+			const b = (latest.recorded_at as string) || (latest.updated as string) || '';
+			if (a > b) latest = fv;
+		}
+		return latest;
 	}
 
 	destroy(): void {

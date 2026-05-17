@@ -1,7 +1,35 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
-	import * as m from '$lib/paraglide/messages';
+	import {
+		instanceSettingsAcceptLabel,
+		instanceSettingsAddPage,
+		instanceSettingsBannerBody,
+		instanceSettingsBannerTitle,
+		instanceSettingsConsentDesc,
+		instanceSettingsConsentTitle,
+		instanceSettingsCreate,
+		instanceSettingsCreateError,
+		instanceSettingsCreateSuccess,
+		instanceSettingsDelete,
+		instanceSettingsDeleteConfirm,
+		instanceSettingsDescription,
+		instanceSettingsFieldContent,
+		instanceSettingsFieldShowInFooter,
+		instanceSettingsFieldSlug,
+		instanceSettingsFieldSlugHint,
+		instanceSettingsFieldSortOrder,
+		instanceSettingsFieldTitle,
+		instanceSettingsPagesDesc,
+		instanceSettingsPagesTitle,
+		instanceSettingsRejectLabel,
+		instanceSettingsRequireConsent,
+		instanceSettingsRequireConsentHint,
+		instanceSettingsSave,
+		instanceSettingsSaveError,
+		instanceSettingsSaveSuccess,
+		instanceSettingsTitle
+	} from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
@@ -28,10 +56,10 @@
 <div class="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
 	<div>
 		<h1 class="text-2xl font-semibold">
-			{m.instanceSettingsTitle?.() ?? 'Instance Settings'}
+			{instanceSettingsTitle?.() ?? 'Instance Settings'}
 		</h1>
 		<p class="mt-1 text-sm text-muted-foreground">
-			{m.instanceSettingsDescription?.() ??
+			{instanceSettingsDescription?.() ??
 				'These pages apply instance-wide and are publicly visible. Only the instance owner can edit them.'}
 		</p>
 	</div>
@@ -39,9 +67,9 @@
 	<!-- Consent gate + banner configuration -->
 	<Card.Root>
 		<Card.Header>
-			<Card.Title>{m.instanceSettingsConsentTitle?.() ?? 'Cookie Consent Banner'}</Card.Title>
+			<Card.Title>{instanceSettingsConsentTitle?.() ?? 'Cookie Consent Banner'}</Card.Title>
 			<Card.Description>
-				{m.instanceSettingsConsentDesc?.() ??
+				{instanceSettingsConsentDesc?.() ??
 					'Configure the consent modal shown before participants log in. Pages marked "Show in consent footer" appear as clickable links inside the modal with a back button.'}
 			</Card.Description>
 		</Card.Header>
@@ -53,10 +81,10 @@
 				use:enhance={() => {
 					return async ({ result }) => {
 						if (result.type === 'success') {
-							savedToast('success', m.instanceSettingsSaveSuccess?.() ?? 'Saved.');
+							savedToast('success', instanceSettingsSaveSuccess?.() ?? 'Saved.');
 							await invalidateAll();
 						} else {
-							savedToast('error', m.instanceSettingsSaveError?.() ?? 'Save failed.');
+							savedToast('error', instanceSettingsSaveError?.() ?? 'Save failed.');
 						}
 					};
 				}}
@@ -71,10 +99,10 @@
 					/>
 					<div class="space-y-1">
 						<Label for="require_consent_before_login">
-							{m.instanceSettingsRequireConsent?.() ?? 'Require cookie consent before login'}
+							{instanceSettingsRequireConsent?.() ?? 'Require cookie consent before login'}
 						</Label>
 						<p class="text-xs text-muted-foreground">
-							{m.instanceSettingsRequireConsentHint?.() ??
+							{instanceSettingsRequireConsentHint?.() ??
 								'When off, the login page is shown directly (useful for internal deployments).'}
 						</p>
 					</div>
@@ -82,7 +110,7 @@
 
 				<div class="space-y-2">
 					<Label for="consent_banner_title">
-						{m.instanceSettingsBannerTitle?.() ?? 'Banner heading'}
+						{instanceSettingsBannerTitle?.() ?? 'Banner heading'}
 					</Label>
 					<Input
 						id="consent_banner_title"
@@ -94,7 +122,7 @@
 
 				<div class="space-y-2">
 					<Label for="consent_banner_body">
-						{m.instanceSettingsBannerBody?.() ?? 'Banner body (HTML allowed)'}
+						{instanceSettingsBannerBody?.() ?? 'Banner body (HTML allowed)'}
 					</Label>
 					<Textarea
 						id="consent_banner_body"
@@ -108,7 +136,7 @@
 				<div class="grid gap-4 sm:grid-cols-2">
 					<div class="space-y-2">
 						<Label for="consent_accept_label">
-							{m.instanceSettingsAcceptLabel?.() ?? 'Accept button label'}
+							{instanceSettingsAcceptLabel?.() ?? 'Accept button label'}
 						</Label>
 						<Input
 							id="consent_accept_label"
@@ -118,7 +146,7 @@
 					</div>
 					<div class="space-y-2">
 						<Label for="consent_reject_label">
-							{m.instanceSettingsRejectLabel?.() ?? 'Reject button label'}
+							{instanceSettingsRejectLabel?.() ?? 'Reject button label'}
 						</Label>
 						<Input
 							id="consent_reject_label"
@@ -129,7 +157,7 @@
 				</div>
 
 				<div class="flex justify-end">
-					<Button type="submit">{m.instanceSettingsSave?.() ?? 'Save'}</Button>
+					<Button type="submit">{instanceSettingsSave?.() ?? 'Save'}</Button>
 				</div>
 			</form>
 		</Card.Content>
@@ -138,10 +166,10 @@
 	<!-- Existing legal pages -->
 	<div>
 		<h2 class="text-lg font-semibold">
-			{m.instanceSettingsPagesTitle?.() ?? 'Legal Pages'}
+			{instanceSettingsPagesTitle?.() ?? 'Legal Pages'}
 		</h2>
 		<p class="mt-1 text-sm text-muted-foreground">
-			{m.instanceSettingsPagesDesc?.() ??
+			{instanceSettingsPagesDesc?.() ??
 				'Each page is reachable at /legal/<slug>. Pages marked "Show in consent footer" appear as links inside the consent modal.'}
 		</p>
 	</div>
@@ -170,10 +198,10 @@
 					use:enhance={() => {
 						return async ({ result }) => {
 							if (result.type === 'success') {
-								savedToast('success', m.instanceSettingsSaveSuccess?.() ?? 'Saved.');
+								savedToast('success', instanceSettingsSaveSuccess?.() ?? 'Saved.');
 								await invalidateAll();
 							} else {
-								savedToast('error', m.instanceSettingsSaveError?.() ?? 'Save failed.');
+								savedToast('error', instanceSettingsSaveError?.() ?? 'Save failed.');
 							}
 						};
 					}}
@@ -183,7 +211,7 @@
 					<div class="grid gap-4 sm:grid-cols-[2fr_1fr_auto]">
 						<div class="space-y-2">
 							<Label for={`title-${page.id}`}>
-								{m.instanceSettingsFieldTitle?.() ?? 'Title'}
+								{instanceSettingsFieldTitle?.() ?? 'Title'}
 							</Label>
 							<Input
 								id={`title-${page.id}`}
@@ -195,7 +223,7 @@
 
 						<div class="space-y-2">
 							<Label for={`slug-${page.id}`}>
-								{m.instanceSettingsFieldSlug?.() ?? 'Slug (URL)'}
+								{instanceSettingsFieldSlug?.() ?? 'Slug (URL)'}
 							</Label>
 							<Input
 								id={`slug-${page.id}`}
@@ -207,7 +235,7 @@
 
 						<div class="space-y-2">
 							<Label for={`sort-${page.id}`}>
-								{m.instanceSettingsFieldSortOrder?.() ?? 'Order'}
+								{instanceSettingsFieldSortOrder?.() ?? 'Order'}
 							</Label>
 							<Input
 								id={`sort-${page.id}`}
@@ -226,13 +254,13 @@
 							checked={page.show_in_consent_footer}
 						/>
 						<Label for={`footer-${page.id}`}>
-							{m.instanceSettingsFieldShowInFooter?.() ?? 'Show in consent footer'}
+							{instanceSettingsFieldShowInFooter?.() ?? 'Show in consent footer'}
 						</Label>
 					</div>
 
 					<div class="space-y-2">
 						<Label for={`content-${page.id}`}>
-							{m.instanceSettingsFieldContent?.() ?? 'Content (HTML allowed)'}
+							{instanceSettingsFieldContent?.() ?? 'Content (HTML allowed)'}
 						</Label>
 						<Textarea
 							id={`content-${page.id}`}
@@ -250,17 +278,17 @@
 							class="text-destructive"
 							formaction="?/deletePage"
 							onclick={(e) => {
-								if (!confirm(m.instanceSettingsDeleteConfirm?.() ?? 'Delete this page?')) {
+								if (!confirm(instanceSettingsDeleteConfirm?.() ?? 'Delete this page?')) {
 									e.preventDefault();
 								}
 							}}
 						>
 							<Trash2 class="mr-1 h-4 w-4" />
-							{m.instanceSettingsDelete?.() ?? 'Delete'}
+							{instanceSettingsDelete?.() ?? 'Delete'}
 						</Button>
 
 						<Button type="submit">
-							{m.instanceSettingsSave?.() ?? 'Save'}
+							{instanceSettingsSave?.() ?? 'Save'}
 						</Button>
 					</div>
 				</form>
@@ -273,7 +301,7 @@
 		<Card.Header>
 			<Card.Title>
 				<Plus class="inline h-5 w-5" />
-				{m.instanceSettingsAddPage?.() ?? 'Add legal page'}
+				{instanceSettingsAddPage?.() ?? 'Add legal page'}
 			</Card.Title>
 		</Card.Header>
 		<Card.Content>
@@ -284,31 +312,31 @@
 				use:enhance={() => {
 					return async ({ result }) => {
 						if (result.type === 'success') {
-							savedToast('success', m.instanceSettingsCreateSuccess?.() ?? 'Created.');
+							savedToast('success', instanceSettingsCreateSuccess?.() ?? 'Created.');
 							newTitle = '';
 							newSlug = '';
 							newContent = '';
 							newShowInFooter = true;
 							await invalidateAll();
 						} else {
-							savedToast('error', m.instanceSettingsCreateError?.() ?? 'Create failed.');
+							savedToast('error', instanceSettingsCreateError?.() ?? 'Create failed.');
 						}
 					};
 				}}
 			>
 				<div class="grid gap-4 sm:grid-cols-2">
 					<div class="space-y-2">
-						<Label for="new-title">{m.instanceSettingsFieldTitle?.() ?? 'Title'}</Label>
+						<Label for="new-title">{instanceSettingsFieldTitle?.() ?? 'Title'}</Label>
 						<Input id="new-title" name="title" required bind:value={newTitle} />
 					</div>
 					<div class="space-y-2">
 						<Label for="new-slug">
-							{m.instanceSettingsFieldSlug?.() ?? 'Slug (URL)'}
+							{instanceSettingsFieldSlug?.() ?? 'Slug (URL)'}
 						</Label>
 						<Input
 							id="new-slug"
 							name="slug"
-							placeholder={m.instanceSettingsFieldSlugHint?.() ?? 'auto from title if empty'}
+							placeholder={instanceSettingsFieldSlugHint?.() ?? 'auto from title if empty'}
 							bind:value={newSlug}
 						/>
 					</div>
@@ -321,13 +349,13 @@
 						bind:checked={newShowInFooter}
 					/>
 					<Label for="new-footer">
-						{m.instanceSettingsFieldShowInFooter?.() ?? 'Show in consent footer'}
+						{instanceSettingsFieldShowInFooter?.() ?? 'Show in consent footer'}
 					</Label>
 				</div>
 
 				<div class="space-y-2">
 					<Label for="new-content">
-						{m.instanceSettingsFieldContent?.() ?? 'Content (HTML allowed)'}
+						{instanceSettingsFieldContent?.() ?? 'Content (HTML allowed)'}
 					</Label>
 					<Textarea
 						id="new-content"
@@ -340,7 +368,7 @@
 
 				<div class="flex justify-end">
 					<Button type="submit">
-						{m.instanceSettingsCreate?.() ?? 'Create page'}
+						{instanceSettingsCreate?.() ?? 'Create page'}
 					</Button>
 				</div>
 			</form>

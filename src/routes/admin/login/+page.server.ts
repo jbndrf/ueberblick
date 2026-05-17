@@ -10,7 +10,7 @@ import {
 	retryAfterMinutes
 } from '$lib/server/rate-limit';
 import type { Actions, PageServerLoad } from './$types';
-import * as m from '$lib/paraglide/messages';
+import { loginInvalidCredentials, loginRateLimited } from '$lib/paraglide/messages';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	if (locals.user) {
@@ -41,7 +41,7 @@ export const actions: Actions = {
 			return fail(429, {
 				form,
 				message:
-					m.loginRateLimited?.({ minutes }) ??
+					loginRateLimited?.({ minutes }) ??
 					`Too many login attempts. Please try again in ${minutes} minute(s).`
 			});
 		}
@@ -57,7 +57,7 @@ export const actions: Actions = {
 			recordLoginFailure(ipKey);
 			return fail(400, {
 				form,
-				message: m.loginInvalidCredentials?.() ?? 'Invalid email or password'
+				message: loginInvalidCredentials?.() ?? 'Invalid email or password'
 			});
 		}
 

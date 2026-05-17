@@ -177,147 +177,142 @@ export async function seedBrandschutz(): Promise<BrandschutzSeedResult> {
 
 	const fields = new Map<string, string>();
 
-	const bezeichnungField = await pb.collection('tools_form_fields').create({
-		form_id: fEntryForm.id,
-		field_label: 'Abschnitt-Bezeichnung',
-		field_type: 'short_text',
-		is_required: true,
-		field_order: 1,
-		page: 1,
-		row_index: 0,
-		column_position: 'full',
-		placeholder: 'z.B. EG Flur Nord Abschnitt 3'
-	});
-	fields.set('bezeichnung', bezeichnungField.id);
+	async function createFluchtwegField(
+		def: Record<string, unknown>,
+		ref: Record<string, unknown>
+	) {
+		const fieldDef = await pb.collection('workflow_field_defs').create({
+			workflow_id: wfFlucht.id,
+			write_mode: 'singleton',
+			...def
+		});
+		await pb.collection('tools_form_field_refs').create({
+			form_id: fEntryForm.id,
+			field_def_id: fieldDef.id,
+			...ref
+		});
+		return fieldDef;
+	}
 
-	const typField = await pb.collection('tools_form_fields').create({
-		form_id: fEntryForm.id,
-		field_label: 'Fluchtweg-Typ',
-		field_type: 'dropdown',
-		is_required: true,
-		field_order: 2,
-		page: 1,
-		row_index: 1,
-		column_position: 'left',
-		field_options: { options: FLUCHTWEG_TYP_OPTIONS }
-	});
-	fields.set('fluchtweg_typ', typField.id);
+	const bezeichnungDef = await createFluchtwegField(
+		{
+			key: 'bezeichnung',
+			label: 'Abschnitt-Bezeichnung',
+			field_type: 'short_text',
+			is_required: true
+		},
+		{ field_order: 1, page: 1, row_index: 0, column_position: 'full' }
+	);
+	fields.set('bezeichnung', bezeichnungDef.id);
 
-	const personenField = await pb.collection('tools_form_fields').create({
-		form_id: fEntryForm.id,
-		field_label: 'Personen im Einzugsgebiet',
-		field_type: 'number',
-		is_required: true,
-		field_order: 3,
-		page: 1,
-		row_index: 1,
-		column_position: 'right',
-		help_text: 'ASR A2.3: Anzahl Personen, die diesen Weg nutzen muessen'
-	});
-	fields.set('personen_einzugsgebiet', personenField.id);
+	const typDef = await createFluchtwegField(
+		{
+			key: 'fluchtweg_typ',
+			label: 'Fluchtweg-Typ',
+			field_type: 'dropdown',
+			is_required: true,
+			field_options: { options: FLUCHTWEG_TYP_OPTIONS }
+		},
+		{ field_order: 2, page: 1, row_index: 1, column_position: 'left' }
+	);
+	fields.set('fluchtweg_typ', typDef.id);
 
-	const sollBreiteField = await pb.collection('tools_form_fields').create({
-		form_id: fEntryForm.id,
-		field_label: 'Soll-Breite Meter',
-		field_type: 'number',
-		is_required: true,
-		field_order: 4,
-		page: 1,
-		row_index: 2,
-		column_position: 'full',
-		help_text: 'Lichte Mindestbreite nach ASR A2.3 Tabelle 1'
-	});
-	fields.set('soll_breite', sollBreiteField.id);
+	const personenDef = await createFluchtwegField(
+		{
+			key: 'personen_einzugsgebiet',
+			label: 'Personen im Einzugsgebiet',
+			field_type: 'number',
+			is_required: true
+		},
+		{ field_order: 3, page: 1, row_index: 1, column_position: 'right' }
+	);
+	fields.set('personen_einzugsgebiet', personenDef.id);
+
+	const sollBreiteDef = await createFluchtwegField(
+		{
+			key: 'soll_breite',
+			label: 'Soll-Breite Meter',
+			field_type: 'number',
+			is_required: true
+		},
+		{ field_order: 4, page: 1, row_index: 2, column_position: 'full' }
+	);
+	fields.set('soll_breite', sollBreiteDef.id);
 
 	// tools_edit fields (editable at Konform + Eingeschraenkt stages)
-	const gemesseneBreiteField = await pb.collection('tools_form_fields').create({
-		form_id: fEntryForm.id,
-		field_label: 'Gemessene Breite',
-		field_type: 'number',
-		is_required: false,
-		field_order: 5,
-		page: 1,
-		row_index: 3,
-		column_position: 'left',
-		help_text: 'Aktuelle lichte Breite in Metern'
-	});
-	fields.set('gemessene_breite', gemesseneBreiteField.id);
+	const gemesseneBreiteDef = await createFluchtwegField(
+		{
+			key: 'gemessene_breite',
+			label: 'Gemessene Breite',
+			field_type: 'number',
+			is_required: false
+		},
+		{ field_order: 5, page: 1, row_index: 3, column_position: 'left' }
+	);
+	fields.set('gemessene_breite', gemesseneBreiteDef.id);
 
-	const hindernisField = await pb.collection('tools_form_fields').create({
-		form_id: fEntryForm.id,
-		field_label: 'Hindernis',
-		field_type: 'dropdown',
-		is_required: false,
-		field_order: 6,
-		page: 1,
-		row_index: 3,
-		column_position: 'right',
-		field_options: { options: HINDERNIS_OPTIONS }
-	});
-	fields.set('hindernis', hindernisField.id);
+	const hindernisDef = await createFluchtwegField(
+		{
+			key: 'hindernis',
+			label: 'Hindernis',
+			field_type: 'dropdown',
+			is_required: false,
+			field_options: { options: HINDERNIS_OPTIONS }
+		},
+		{ field_order: 6, page: 1, row_index: 3, column_position: 'right' }
+	);
+	fields.set('hindernis', hindernisDef.id);
 
-	const editFotoField = await pb.collection('tools_form_fields').create({
-		form_id: fEntryForm.id,
-		field_label: 'Foto',
-		field_type: 'file',
-		is_required: false,
-		field_order: 7,
-		page: 1,
-		row_index: 4,
-		column_position: 'full'
-	});
-	fields.set('foto', editFotoField.id);
+	const editFotoDef = await createFluchtwegField(
+		{ key: 'foto', label: 'Foto', field_type: 'file', is_required: false },
+		{ field_order: 7, page: 1, row_index: 4, column_position: 'full' }
+	);
+	fields.set('foto', editFotoDef.id);
 
 	// Calculated fields
-	const kapQuoteField = await pb.collection('tools_form_fields').create({
-		form_id: fEntryForm.id,
-		field_label: 'Kapazitaetsquote',
-		field_type: 'number',
-		is_required: false,
-		field_order: 8,
-		page: 1,
-		row_index: 5,
-		column_position: 'left',
-		help_text: 'Automatisch: (Gemessene Breite * 100) / Soll-Breite (%)'
-	});
-	fields.set('kapazitaetsquote', kapQuoteField.id);
+	const kapQuoteDef = await createFluchtwegField(
+		{
+			key: 'kapazitaetsquote',
+			label: 'Kapazitaetsquote',
+			field_type: 'number',
+			is_required: false
+		},
+		{ field_order: 8, page: 1, row_index: 5, column_position: 'left' }
+	);
+	fields.set('kapazitaetsquote', kapQuoteDef.id);
 
-	const evakKapField = await pb.collection('tools_form_fields').create({
-		form_id: fEntryForm.id,
-		field_label: 'Evakuierungskapazitaet',
-		field_type: 'number',
-		is_required: false,
-		field_order: 9,
-		page: 1,
-		row_index: 5,
-		column_position: 'right',
-		help_text: 'Automatisch: Wie viele Personen koennen aktuell diesen Abschnitt nutzen'
-	});
-	fields.set('evak_kapazitaet', evakKapField.id);
+	const evakKapDef = await createFluchtwegField(
+		{
+			key: 'evak_kapazitaet',
+			label: 'Evakuierungskapazitaet',
+			field_type: 'number',
+			is_required: false
+		},
+		{ field_order: 9, page: 1, row_index: 5, column_position: 'right' }
+	);
+	fields.set('evak_kapazitaet', evakKapDef.id);
 
-	const ampelField = await pb.collection('tools_form_fields').create({
-		form_id: fEntryForm.id,
-		field_label: 'Ampel',
-		field_type: 'dropdown',
-		is_required: false,
-		field_order: 10,
-		page: 1,
-		row_index: 6,
-		column_position: 'full',
-		help_text: 'Automatisch: Rot/Gelb/Gruen',
-		field_options: { options: AMPEL_OPTIONS }
-	});
-	fields.set('ampel', ampelField.id);
+	const ampelDef = await createFluchtwegField(
+		{
+			key: 'ampel',
+			label: 'Ampel',
+			field_type: 'dropdown',
+			is_required: false,
+			field_options: { options: AMPEL_OPTIONS }
+		},
+		{ field_order: 10, page: 1, row_index: 6, column_position: 'full' }
+	);
+	fields.set('ampel', ampelDef.id);
 
-	// tools_edit: BSB + SiB can edit measurement fields at Konform + Eingeschraenkt
-	await pb.collection('tools_edit').create({
-		name: 'Messung aktualisieren',
-		stage_id: [fStages.get('Konform')!, fStages.get('Eingeschraenkt')!],
-		editable_fields: [gemesseneBreiteField.id, hindernisField.id, editFotoField.id],
-		allowed_roles: [bsbRoleId, sibRoleId],
-		edit_mode: 'form_fields',
-		visual_config: {}
-	});
+	// TODO(field-def-redesign): tools_edit removed; convert to Form referencing the same field defs
+	// await pb.collection('tools_edit').create({
+	// 	name: 'Messung aktualisieren',
+	// 	stage_id: [fStages.get('Konform')!, fStages.get('Eingeschraenkt')!],
+	// 	editable_fields: [gemesseneBreiteDef.id, hindernisDef.id, editFotoDef.id],
+	// 	allowed_roles: [bsbRoleId, sibRoleId],
+	// 	edit_mode: 'form_fields',
+	// 	visual_config: {}
+	// });
 
 	// Filterable tag on Ampel
 	await pb.collection('tools_field_tags').create({
@@ -325,7 +320,7 @@ export async function seedBrandschutz(): Promise<BrandschutzSeedResult> {
 		tag_mappings: [
 			{
 				tagType: 'filterable',
-				fieldId: ampelField.id,
+				fieldId: ampelDef.id,
 				config: { filterBy: 'field' }
 			}
 		]
@@ -451,12 +446,12 @@ export async function seedBrandschutz(): Promise<BrandschutzSeedResult> {
 			participantId,
 			location: { lat: coord.lat, lon: coord.lon },
 			fieldValues: [
-				{ key: fields.get('bezeichnung')!, value: inst.bezeichnung },
-				{ key: fields.get('fluchtweg_typ')!, value: inst.fluchtweg_typ },
-				{ key: fields.get('personen_einzugsgebiet')!, value: String(inst.personen_einzugsgebiet) },
-				{ key: fields.get('soll_breite')!, value: String(inst.soll_breite) },
-				{ key: fields.get('gemessene_breite')!, value: String(inst.gemessene_breite) },
-				{ key: fields.get('hindernis')!, value: inst.hindernis }
+				{ fieldDefId: fields.get('bezeichnung')!, value: inst.bezeichnung },
+				{ fieldDefId: fields.get('fluchtweg_typ')!, value: inst.fluchtweg_typ },
+				{ fieldDefId: fields.get('personen_einzugsgebiet')!, value: String(inst.personen_einzugsgebiet) },
+				{ fieldDefId: fields.get('soll_breite')!, value: String(inst.soll_breite) },
+				{ fieldDefId: fields.get('gemessene_breite')!, value: String(inst.gemessene_breite) },
+				{ fieldDefId: fields.get('hindernis')!, value: inst.hindernis }
 			]
 		});
 
@@ -522,23 +517,35 @@ export async function seedBrandschutz(): Promise<BrandschutzSeedResult> {
 		description: 'Typ und Standort der Einrichtung'
 	});
 
-	const typEinrField = await pb.collection('tools_form_fields').create({
-		form_id: eEntryForm.id,
-		field_label: 'Typ',
+	const typEinrDef = await pb.collection('workflow_field_defs').create({
+		workflow_id: wfEinr.id,
+		key: 'typ',
+		label: 'Typ',
 		field_type: 'dropdown',
+		write_mode: 'singleton',
 		is_required: true,
+		field_options: { options: EINRICHTUNG_TYP_OPTIONS }
+	});
+	await pb.collection('tools_form_field_refs').create({
+		form_id: eEntryForm.id,
+		field_def_id: typEinrDef.id,
 		field_order: 1,
 		page: 1,
 		row_index: 0,
-		column_position: 'full',
-		field_options: { options: EINRICHTUNG_TYP_OPTIONS }
+		column_position: 'full'
 	});
 
-	const standortField = await pb.collection('tools_form_fields').create({
-		form_id: eEntryForm.id,
-		field_label: 'Standort',
+	const standortDef = await pb.collection('workflow_field_defs').create({
+		workflow_id: wfEinr.id,
+		key: 'standort',
+		label: 'Standort',
 		field_type: 'short_text',
-		is_required: true,
+		write_mode: 'singleton',
+		is_required: true
+	});
+	await pb.collection('tools_form_field_refs').create({
+		form_id: eEntryForm.id,
+		field_def_id: standortDef.id,
 		field_order: 2,
 		page: 1,
 		row_index: 1,
@@ -558,8 +565,8 @@ export async function seedBrandschutz(): Promise<BrandschutzSeedResult> {
 			participantId,
 			location: { lat: coord.lat, lon: coord.lon },
 			fieldValues: [
-				{ key: typEinrField.id, value: inst.typ },
-				{ key: standortField.id, value: inst.standort }
+				{ fieldDefId: typEinrDef.id, value: inst.typ },
+				{ fieldDefId: standortDef.id, value: inst.standort }
 			]
 		});
 

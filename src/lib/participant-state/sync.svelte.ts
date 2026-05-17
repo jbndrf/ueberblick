@@ -176,9 +176,17 @@ const SYNC_RULES: Record<string, SyncRule> = {
 		priority: 20,
 		parentRef: { collection: 'workflow_instances', foreignKey: 'instance_id' }
 	},
-	workflow_instance_field_values: {
+	// Phase-1 redesign: field defs are reference data (pulled before instances
+	// so renderer lookups resolve); field values are children of instances.
+	workflow_field_defs: {
+		priority: 5
+	},
+	workflow_field_values: {
 		priority: 30,
 		parentRef: { collection: 'workflow_instances', foreignKey: 'instance_id' }
+	},
+	tools_form_field_refs: {
+		priority: 5
 	}
 };
 

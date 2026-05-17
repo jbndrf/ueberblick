@@ -20,7 +20,7 @@ export type ClauseSource =
 			kind: 'field_value';
 			workflow_id: string;
 			workflow_name: string;
-			field_key: string;
+			field_def_id: string;
 			field_label: string;
 			field_type: FilterableFieldType;
 			options: { id: string; label: string }[];
@@ -84,7 +84,7 @@ export const emptyTree = (): FilterTree => ({
 export function sourceKey(s: ClauseSource): string {
 	switch (s.kind) {
 		case 'field_value':
-			return `fv|${s.workflow_id}|${s.field_key}`;
+			return `fv|${s.workflow_id}|${s.field_def_id}`;
 		case 'stage':
 			return `stage|${s.workflow_id}`;
 		case 'created':
@@ -176,13 +176,13 @@ function legacyToClause(
 		};
 	}
 	if (c.field === 'field_value') {
-		const f = fields.find((x) => x.workflow_id === c.workflow_id && x.field_key === c.field_key);
+		const f = fields.find((x) => x.workflow_id === c.workflow_id && x.field_def_id === c.field_def_id);
 		const source: ClauseSource = {
 			kind: 'field_value',
 			workflow_id: c.workflow_id,
 			workflow_name: f?.workflow_name ?? workflowName(c.workflow_id),
-			field_key: c.field_key,
-			field_label: f?.field_label ?? c.field_key,
+			field_def_id: c.field_def_id,
+			field_label: f?.field_label ?? c.field_def_id,
 			field_type: f?.field_type ?? 'short_text',
 			options: f?.options ?? []
 		};
@@ -261,7 +261,8 @@ function clauseToLegacy(c: Clause): FilterClause | null {
 		return { field: 'stage', workflow_id: source.workflow_id, op: 'in', values: value.values };
 	}
 	if (source.kind === 'field_value') {
-		const base = { field: 'field_value' as const, workflow_id: source.workflow_id, field_key: source.field_key };
+		// TODO(field-def-redesign): plumb `aggregate` UI; until then the predicate engine defaults to 'latest'.
+		const base = { field: 'field_value' as const, workflow_id: source.workflow_id, field_def_id: source.field_def_id };
 		if (op === 'in' && value.type === 'values')
 			return { ...base, op: 'in', values: value.values };
 		if (op === 'contains' && value.type === 'text')
