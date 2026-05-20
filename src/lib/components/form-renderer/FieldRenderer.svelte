@@ -5,6 +5,8 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 	import MediaGallery from './MediaGallery.svelte';
+	import CmmnFieldChrome from './CmmnFieldChrome.svelte';
+	import InstanceReferenceField from './InstanceReferenceField.svelte';
 	import { getPocketBase } from '$lib/pocketbase';
 	import { POCKETBASE_URL } from '$lib/config/pocketbase';
 	import { getCachedFileUrlByRecord } from '$lib/participant-state/file-cache';
@@ -47,7 +49,7 @@
 		onValueChange,
 		onFileChange,
 		context = { values: {}, fields: [] },
-		fileCollection = 'workflow_instance_field_values',
+		fileCollection = 'workflow_field_values',
 		disabled = false
 	}: Props = $props();
 
@@ -511,7 +513,16 @@
 	<!-- VIEW MODE - Read-only display -->
 	<!-- ============================================================== -->
 	{#if isViewMode}
-		{#if field.field_type === 'file'}
+		<CmmnFieldChrome writeMode={field.write_mode} valueHistory={field.valueHistory}>
+		{#if field.field_type === 'instance_reference'}
+			{@const refOpts = (field.field_options ?? {}) as Record<string, any>}
+			<InstanceReferenceField
+				{value}
+				targetWorkflowId={refOpts.target_workflow_id ?? null}
+				relationKind={refOpts.relation_kind ?? 'peer'}
+				mode="view"
+			/>
+		{:else if field.field_type === 'file'}
 			{#if mediaFiles.length > 0}
 				<MediaGallery mode="view" files={mediaFiles} columnPosition={mediaGalleryColumnPosition} />
 			{:else}
@@ -563,11 +574,32 @@
 				{/if}
 			</div>
 		{/if}
+		</CmmnFieldChrome>
 
 	<!-- ============================================================== -->
 	<!-- FILL/EDIT MODE - Interactive inputs -->
 	<!-- ============================================================== -->
 	{:else}
+		{#if field.write_mode === 'computed'}
+			<!-- Computed fields are server-evaluated; never editable. -->
+			<CmmnFieldChrome writeMode="computed">
+				<div class="rounded-md border border-input bg-muted/30 px-3 py-2 text-sm">
+					{#if hasValue}
+						{value}
+					{:else}
+						<span class="text-muted-foreground italic">Will compute on save</span>
+					{/if}
+				</div>
+			</CmmnFieldChrome>
+		{:else if field.field_type === 'instance_reference'}
+			{@const refOpts = (field.field_options ?? {}) as Record<string, any>}
+			<InstanceReferenceField
+				{value}
+				targetWorkflowId={refOpts.target_workflow_id ?? null}
+				relationKind={refOpts.relation_kind ?? 'peer'}
+				mode="edit"
+			/>
+		{:else}
 		{#if field.field_type === 'short_text'}
 			<Input
 				id={field.id}
@@ -695,6 +727,7 @@
 					onSelectedIdsChange={handleDropdownChange}
 				/>
 			{/if}
+		{/if}
 		{/if}
 	{/if}
 

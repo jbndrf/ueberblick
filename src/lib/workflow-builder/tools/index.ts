@@ -36,4 +36,4 @@ export type {
 } from './schemas';
 
 // Registry
-export { toolRegistry, formTool, editTool, protocolTool, fieldTagTool, automationTool } from './registry';
+export { toolRegistry, formTool, protocolTool, fieldTagTool, automationTool } from './registry';

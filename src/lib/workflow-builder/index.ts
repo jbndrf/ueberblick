@@ -17,6 +17,7 @@ export type {
 	SentryClause,
 	WorkflowFieldDef,
 	ToolsForm,
+	ProtocolLocalFieldDef,
 	ToolsFormField,
 	ToolsEdit,
 	VisualConfig,
@@ -50,6 +51,7 @@ export type {
 	TagMapping,
 	ToolsFieldTag,
 	TrackedFieldTag,
+	TrackedFieldDef,
 	// Automation types
 	ToolsAutomation,
 	AutomationStep,
@@ -69,10 +71,6 @@ export type {
 	ConnectionEdgeData,
 	RegionInfo
 } from './types';
-
-// Save
-export { saveWorkflow, saveWorkflowMetadata } from './save';
-export type { SaveResult } from './save';
 
 // Utilities
 export { generateId, arraysEqual, deepEqual } from './utils';

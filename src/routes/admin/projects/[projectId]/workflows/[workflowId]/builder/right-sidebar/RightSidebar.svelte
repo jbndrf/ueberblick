@@ -8,6 +8,7 @@
 	import { FormEditorView } from './views/form-editor';
 	import { ProtocolToolEditorView } from './views/protocol-tool-editor';
 	import { FieldTagEditorView } from './views/field-tag-editor';
+	import { FieldLibraryView } from './views/field-library';
 	import { AutomationEditorView } from './views/automation-editor';
 	import { StagePreviewView, type StageAction, type TimelineStage, type IncomingFormGroup } from './views/stage-preview';
 
@@ -52,6 +53,8 @@
 		connectionForms?: ToolsForm[];
 		connectionEditTools?: ToolsEdit[];
 		connectionProtocolTools?: ToolsProtocol[];
+		/** All protocol tools in the workflow — used to detect whether the selected form backs a protocol. */
+		allProtocolTools?: ToolsProtocol[];
 		globalEditTools?: ToolsEdit[];
 		// Automation props
 		automations?: ToolsAutomation[];
@@ -95,6 +98,7 @@
 		// Form editor handlers
 		onFormNameChange?: (formId: string, name: string) => void;
 		onAddFormField?: (formId: string, fieldType: string, page: number, rowIndex: number, columnPosition: ColumnPosition) => void;
+		onAddFormFieldRef?: (formId: string, fieldDefId: string, page: number, rowIndex: number, columnPosition: ColumnPosition) => void;
 		onFormFieldUpdate?: (fieldId: string, updates: Partial<ToolsFormField>) => void;
 		onFormFieldDelete?: (fieldId: string) => void;
 		onFormFieldsReorder?: (formId: string, fieldIds: string[]) => void;
@@ -104,6 +108,7 @@
 		onFormClose?: () => void;
 		onFormRolesChange?: (formId: string, roleIds: string[]) => void;
 		onFormVisualConfigChange?: (formId: string, config: VisualConfig) => void;
+		onFormLocalFieldsChange?: (formId: string, next: import('$lib/workflow-builder').ProtocolLocalFieldDef[]) => void;
 		// Edit tool editor handlers
 		onEditToolNameChange?: (editToolId: string, name: string) => void;
 		onEditToolFieldsChange?: (editToolId: string, fieldIds: string[]) => void;
@@ -114,6 +119,7 @@
 		allStages?: WorkflowStage[];
 		onProtocolToolNameChange?: (toolId: string, name: string) => void;
 		onProtocolToolFieldsChange?: (toolId: string, fieldIds: string[]) => void;
+		onProtocolOnlyFieldsChange?: (toolId: string, defIds: string[]) => void;
 		onProtocolToolPrefillConfigChange?: (toolId: string, config: Record<string, boolean>) => void;
 		onProtocolToolStageIdsChange?: (toolId: string, stageIds: string[]) => void;
 		onEditProtocolForm?: (toolId: string) => void;
@@ -147,6 +153,14 @@
 		// PreviewView stage fields (grouped by form with role info)
 		stageFields?: Map<string, { formName: string; allowedRoles: string[]; fields: FormFieldWithValue[] }[]>;
 		onDeselect?: () => void;
+		// Field library
+		trackedFieldDefs?: import('$lib/workflow-builder').TrackedFieldDef[];
+		// Registry + transient synth (for cross-form pickers; never persisted)
+		effectiveFieldDefs?: import('$lib/workflow-builder').TrackedFieldDef[];
+		projectWorkflows?: { id: string; name: string }[];
+		onFieldDefAdd?: () => string;
+		onFieldDefUpdate?: (id: string, updates: Partial<WorkflowFieldDef>) => void;
+		onFieldDefDelete?: (id: string) => void;
 	};
 
 	let {
@@ -167,6 +181,7 @@
 		connectionForms = [],
 		connectionEditTools = [],
 		connectionProtocolTools = [],
+		allProtocolTools = [],
 		globalEditTools = [],
 		automations = [],
 		selectedAutomation = null,
@@ -196,6 +211,7 @@
 		onCreateRole,
 		onFormNameChange,
 		onAddFormField,
+		onAddFormFieldRef,
 		onFormFieldUpdate,
 		onFormFieldDelete,
 		onFormFieldsReorder,
@@ -205,6 +221,7 @@
 		onFormClose,
 		onFormRolesChange,
 		onFormVisualConfigChange,
+		onFormLocalFieldsChange,
 		onEditToolNameChange,
 		onEditToolFieldsChange,
 		onEditToolEditModeChange,
@@ -213,6 +230,7 @@
 		allStages = [],
 		onProtocolToolNameChange,
 		onProtocolToolFieldsChange,
+		onProtocolOnlyFieldsChange,
 		onProtocolToolPrefillConfigChange,
 		onProtocolToolStageIdsChange,
 		onEditProtocolForm,
@@ -241,7 +259,13 @@
 		onHighlightEdge,
 		onHighlightStageTool,
 		stageFields,
-		onDeselect
+		onDeselect,
+		trackedFieldDefs = [],
+		effectiveFieldDefs = trackedFieldDefs,
+		projectWorkflows = [],
+		onFieldDefAdd,
+		onFieldDefUpdate,
+		onFieldDefDelete
 	}: Props = $props();
 
 	// Track palette expanded state for sidebar width
@@ -249,6 +273,9 @@
 
 	// Form editor mode
 	const isFormEditor = $derived(context.type === 'form');
+	const formBacksProtocolTool = $derived(
+		!!selectedForm && allProtocolTools.some((p) => p.protocol_form_id === selectedForm.id)
+	);
 
 	// Protocol tool editor mode
 	const isProtocolToolEditor = $derived(context.type === 'protocolTool');
@@ -258,6 +285,9 @@
 
 	// Field tag editor mode
 	const isFieldTagEditor = $derived(context.type === 'fieldTags');
+
+	// Field library mode
+	const isFieldLibrary = $derived(context.type === 'fieldLibrary');
 
 	// Automation editor mode
 	const isAutomationEditor = $derived(context.type === 'automation' && selectedAutomation != null);
@@ -270,7 +300,7 @@
 
 	// Any other selection that isn't handled by dedicated views
 	const hasSelection = $derived(
-		context.type !== 'none' && context.type !== 'form' && context.type !== 'editTool' && context.type !== 'protocolTool' && context.type !== 'globalTools' && context.type !== 'automation' && context.type !== 'fieldTags' && !isStagePreview
+		context.type !== 'none' && context.type !== 'form' && context.type !== 'editTool' && context.type !== 'protocolTool' && context.type !== 'globalTools' && context.type !== 'automation' && context.type !== 'fieldTags' && context.type !== 'fieldLibrary' && !isStagePreview
 	);
 </script>
 
@@ -283,6 +313,8 @@
 			{roles}
 			onFormNameChange={(name) => onFormNameChange?.(selectedForm.id, name)}
 			onAddField={(fieldType, page, rowIndex, columnPosition) => onAddFormField?.(selectedForm.id, fieldType, page, rowIndex, columnPosition)}
+			fieldDefs={effectiveFieldDefs.filter((d) => d.status !== 'deleted').map((d) => d.data)}
+			onAddFieldRef={(defId, page, rowIndex, columnPosition) => onAddFormFieldRef?.(selectedForm.id, defId, page, rowIndex, columnPosition)}
 			onFieldUpdate={onFormFieldUpdate}
 			onFieldDelete={onFormFieldDelete}
 			onFieldsReorder={(fieldIds) => onFormFieldsReorder?.(selectedForm.id, fieldIds)}
@@ -293,20 +325,31 @@
 			onPaletteExpandedChange={(expanded) => paletteExpanded = expanded}
 			onRolesChange={(roleIds) => onFormRolesChange?.(selectedForm.id, roleIds)}
 			onVisualConfigChange={(config) => onFormVisualConfigChange?.(selectedForm.id, config)}
+			showLocalFields={formBacksProtocolTool}
+			localFields={selectedForm.local_fields ?? []}
+			onLocalFieldsChange={(next) => onFormLocalFieldsChange?.(selectedForm.id, next)}
 		/>
 	{:else if isProtocolToolEditor && selectedProtocolTool}
 		<ProtocolToolEditorView
 			protocolTool={selectedProtocolTool}
-			ancestorFields={protocolToolAncestorFields}
 			formFieldCount={protocolFormFieldCount}
 			{allStages}
 			onNameChange={(name) => onProtocolToolNameChange?.(selectedProtocolTool.id, name)}
-			onFieldsChange={(fieldIds) => onProtocolToolFieldsChange?.(selectedProtocolTool.id, fieldIds)}
-			onPrefillConfigChange={(config) => onProtocolToolPrefillConfigChange?.(selectedProtocolTool.id, config)}
 			onStageIdsChange={(stageIds) => onProtocolToolStageIdsChange?.(selectedProtocolTool.id, stageIds)}
 			onEditForm={() => onEditProtocolForm?.(selectedProtocolTool.id)}
 			onDelete={() => onProtocolToolDelete?.(selectedProtocolTool.id)}
 			onClose={onProtocolToolClose}
+		/>
+	{:else if isFieldLibrary}
+		<FieldLibraryView
+			fieldDefs={trackedFieldDefs}
+			stages={allStages}
+			{roles}
+			{projectWorkflows}
+			onAdd={() => onFieldDefAdd?.() ?? ''}
+			onUpdate={(id, updates) => onFieldDefUpdate?.(id, updates)}
+			onDelete={(id) => onFieldDefDelete?.(id)}
+			onClose={onDeselect}
 		/>
 	{:else if isFieldTagEditor}
 		<FieldTagEditorView

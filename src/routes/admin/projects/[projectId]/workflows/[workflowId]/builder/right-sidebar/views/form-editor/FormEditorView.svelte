@@ -6,10 +6,11 @@
 	import { Switch } from '$lib/components/ui/switch';
 
 	import FieldTypesPalette from './FieldTypesPalette.svelte';
+	import LibraryFieldsPalette from './LibraryFieldsPalette.svelte';
 	import FieldConfigPanel from './FieldConfigPanel.svelte';
 	import FormPreview from './FormPreview.svelte';
 
-	import type { ToolsForm, ToolsFormField, TrackedFormField, WorkflowStage, ColumnPosition, VisualConfig } from '$lib/workflow-builder';
+	import type { ToolsForm, ToolsFormField, TrackedFormField, WorkflowStage, ColumnPosition, VisualConfig, WorkflowFieldDef, ProtocolLocalFieldDef, FieldType } from '$lib/workflow-builder';
 	import {
 		formEditorViewAllowedRoles,
 		formEditorViewButtonAppearance,
@@ -25,7 +26,9 @@
 		formEditorViewNoRoles,
 		formEditorViewRequiresConfirmation,
 		formEditorViewRequiresConfirmationDesc,
-		formEditorViewRolesHelp
+		formEditorViewRolesHelp,
+		formEditorScopeLifecycle,
+		formEditorScopeLocal
 	} from '$lib/paraglide/messages';
 
 	type AncestorFieldGroup = {
@@ -51,8 +54,12 @@
 		roles?: Role[];
 		/** Callback when form name changes */
 		onFormNameChange?: (name: string) => void;
-		/** Callback when a field is added */
+		/** Callback when a field is added (legacy: creates a fresh def + ref) */
 		onAddField?: (fieldType: string, page: number, rowIndex: number, columnPosition: ColumnPosition) => void;
+		/** Workflow-scoped field-def registry */
+		fieldDefs?: WorkflowFieldDef[];
+		/** Callback when an existing field def is dropped onto the form (creates a ref only) */
+		onAddFieldRef?: (fieldDefId: string, page: number, rowIndex: number, columnPosition: ColumnPosition) => void;
 		/** Callback when a field is updated */
 		onFieldUpdate?: (fieldId: string, updates: Partial<ToolsFormField>) => void;
 		/** Callback when a field is deleted */
@@ -73,6 +80,12 @@
 		onRolesChange?: (roleIds: string[]) => void;
 		/** Callback when visual config changes (only for stage-attached forms) */
 		onVisualConfigChange?: (config: VisualConfig) => void;
+		/** Show the protocol-local fields panel (true when this form backs a protocol tool). */
+		showLocalFields?: boolean;
+		/** Current local fields (only when showLocalFields=true). */
+		localFields?: ProtocolLocalFieldDef[];
+		/** Persist changes to local fields. */
+		onLocalFieldsChange?: (next: ProtocolLocalFieldDef[]) => void;
 	};
 
 	let {
@@ -91,11 +104,133 @@
 		onClose,
 		onPaletteExpandedChange,
 		onRolesChange,
-		onVisualConfigChange
+		onVisualConfigChange,
+		fieldDefs = [],
+		onAddFieldRef,
+		showLocalFields = false,
+		localFields = [],
+		onLocalFieldsChange
 	}: Props = $props();
+
+	function uniqueLocalKey(base: string): string {
+		const taken = new Set((localFields ?? []).map((f) => f.key));
+		if (!taken.has(base)) return base;
+		let i = 2;
+		while (taken.has(`${base}_${i}`)) i++;
+		return `${base}_${i}`;
+	}
+
+	const usedDefIds = $derived(new Set(fields.filter((f) => f.status !== 'deleted' && f.data.field_def_id).map((f) => f.data.field_def_id as string)));
 
 	// Determine if this is a stage-attached form (has its own config)
 	const isStageAttached = $derived(!!form.stage_id && !form.connection_id);
+
+	/**
+	 * Local fields are rendered in the same FormPreview as library refs by
+	 * synthesizing TrackedFormField rows with `id = "local:<key>"`. All edit
+	 * paths (config panel, drag-reorder, delete) detect the prefix and route
+	 * back into `onLocalFieldsChange` instead of mutating real refs.
+	 */
+	const LOCAL_ID_PREFIX = 'local:';
+	const syntheticLocalFields = $derived.by((): TrackedFormField[] => {
+		if (!showLocalFields) return [];
+		return (localFields ?? []).map((lf) => ({
+			data: {
+				id: `${LOCAL_ID_PREFIX}${lf.key}`,
+				form_id: form.id,
+				field_def_id: undefined,
+				field_order: 0,
+				page: lf.page,
+				row_index: lf.row_index,
+				column_position: lf.column_position,
+				field_label: lf.label,
+				field_type: lf.field_type,
+				is_required: lf.required,
+				placeholder: lf.placeholder ?? undefined,
+				help_text: lf.help_text ?? undefined,
+				field_options: lf.field_options ?? undefined
+			} as ToolsFormField,
+			original: null,
+			status: 'unchanged'
+		})) as unknown as TrackedFormField[];
+	});
+
+	const mergedFields = $derived.by((): TrackedFormField[] => {
+		if (!showLocalFields) return fields;
+		return [...fields, ...syntheticLocalFields];
+	});
+
+	function isLocalId(id: string): boolean {
+		return id.startsWith(LOCAL_ID_PREFIX);
+	}
+	function localKeyFromId(id: string): string {
+		return id.slice(LOCAL_ID_PREFIX.length);
+	}
+
+	function patchLocalField(key: string, updates: Partial<ToolsFormField>) {
+		const list = localFields ?? [];
+		const next = list.map((lf) => {
+			if (lf.key !== key) return lf;
+			return {
+				...lf,
+				label: updates.field_label ?? lf.label,
+				field_type:
+					(updates.field_type as Exclude<FieldType, 'instance_reference'> | undefined) ??
+					lf.field_type,
+				required: updates.is_required ?? lf.required,
+				placeholder:
+					updates.placeholder !== undefined ? updates.placeholder ?? null : lf.placeholder,
+				help_text: updates.help_text !== undefined ? updates.help_text ?? null : lf.help_text,
+				field_options:
+					updates.field_options !== undefined ? updates.field_options ?? null : lf.field_options,
+				page: updates.page ?? lf.page,
+				row_index: updates.row_index ?? lf.row_index,
+				column_position:
+					(updates.column_position as ProtocolLocalFieldDef['column_position'] | undefined) ??
+					lf.column_position
+			};
+		});
+		onLocalFieldsChange?.(next);
+	}
+
+	function deleteLocalField(key: string) {
+		onLocalFieldsChange?.((localFields ?? []).filter((lf) => lf.key !== key));
+	}
+
+	function handleFieldUpdateRouted(fieldId: string, updates: Partial<ToolsFormField>) {
+		if (isLocalId(fieldId)) {
+			patchLocalField(localKeyFromId(fieldId), updates);
+			return;
+		}
+		onFieldUpdate?.(fieldId, updates);
+	}
+
+	function handleFieldDeleteRouted(fieldId: string) {
+		if (isLocalId(fieldId)) {
+			deleteLocalField(localKeyFromId(fieldId));
+			return;
+		}
+		onFieldDelete?.(fieldId);
+	}
+
+	function handleFieldsReorderRouted(fieldIds: string[]) {
+		// Library and local fields share the canvas. Reorder writes positional
+		// hints to whichever store each id belongs to.
+		const libraryOrder = fieldIds.filter((id) => !isLocalId(id));
+		if (libraryOrder.length > 0) onFieldsReorder?.(libraryOrder);
+
+		const localOrder = fieldIds.filter(isLocalId).map(localKeyFromId);
+		if (localOrder.length > 0 && (localFields?.length ?? 0) > 0) {
+			const byKey = new Map((localFields ?? []).map((lf) => [lf.key, lf]));
+			const next = localOrder
+				.map((k, idx) => {
+					const lf = byKey.get(k);
+					return lf ? { ...lf, row_index: idx } : null;
+				})
+				.filter((x): x is ProtocolLocalFieldDef => x !== null);
+			if (next.length > 0) onLocalFieldsChange?.(next);
+		}
+	}
 
 	// Settings panel visibility (only for stage-attached forms)
 	let showSettings = $state(false);
@@ -106,9 +241,9 @@
 	// Currently selected field for editing
 	let selectedFieldId = $state<string | null>(null);
 
-	// Get selected field data
+	// Get selected field data (library + synthesized local fields)
 	const selectedField = $derived(
-		selectedFieldId ? fields.find((f) => f.data.id === selectedFieldId)?.data : null
+		selectedFieldId ? mergedFields.find((f) => f.data.id === selectedFieldId)?.data : null
 	);
 
 	// Compute available source fields for smart dropdown:
@@ -162,7 +297,40 @@
 	}
 
 	function handleFieldDrop(fieldType: string, page: number, rowIndex: number, columnPosition: ColumnPosition) {
+		// In protocol mode, the field-types palette doesn't create new
+		// workflow_field_defs — it creates protocol-local fields stored on
+		// tools_forms.local_fields. Anything else (library palette) stays
+		// unchanged: those drops go through onAddFieldRef on the FormPreview.
+		if (showLocalFields) {
+			addLocalFieldAt(fieldType as Exclude<FieldType, 'instance_reference'>, page, rowIndex, columnPosition);
+			return;
+		}
 		onAddField?.(fieldType, page, rowIndex, columnPosition);
+	}
+
+	function addLocalFieldAt(
+		fieldType: Exclude<FieldType, 'instance_reference'>,
+		page: number,
+		rowIndex: number,
+		columnPosition: ColumnPosition
+	) {
+		const key = uniqueLocalKey('field');
+		const next: ProtocolLocalFieldDef[] = [
+			...(localFields ?? []),
+			{
+				key,
+				label: 'New field',
+				field_type: fieldType,
+				field_options: null,
+				required: false,
+				placeholder: null,
+				help_text: null,
+				page,
+				row_index: rowIndex,
+				column_position: columnPosition
+			}
+		];
+		onLocalFieldsChange?.(next);
 	}
 
 	function handleFieldSelect(fieldId: string) {
@@ -176,13 +344,13 @@
 
 	function handleFieldConfigUpdate(updates: Partial<ToolsFormField>) {
 		if (selectedFieldId) {
-			onFieldUpdate?.(selectedFieldId, updates);
+			handleFieldUpdateRouted(selectedFieldId, updates);
 		}
 	}
 
 	function handleFieldConfigDelete() {
 		if (selectedFieldId) {
-			onFieldDelete?.(selectedFieldId);
+			handleFieldDeleteRouted(selectedFieldId);
 			selectedFieldId = null;
 		}
 	}
@@ -362,32 +530,64 @@
 							<ChevronLeft class="h-4 w-4" />
 						{/if}
 					</button>
-					<FieldTypesPalette
-						expanded={paletteExpanded}
-						onFieldDrag={(fieldType) => handleFieldDrop(fieldType, 0, 0, 'left')}
-					/>
+					<div class="palettes-stack">
+						<LibraryFieldsPalette
+							expanded={paletteExpanded}
+							{fieldDefs}
+							{usedDefIds}
+							onPick={(defId) => {
+								const pages = fields.map((f) => f.data.page ?? 1);
+								const targetPage = pages.length ? Math.max(...pages) : 1;
+								const pageRows = fields
+									.filter((f) => (f.data.page ?? 1) === targetPage)
+									.map((f) => f.data.row_index ?? 0);
+								const nextRow = pageRows.length ? Math.max(...pageRows) + 1 : 0;
+								onAddFieldRef?.(defId, targetPage, nextRow, 'full');
+							}}
+						/>
+						<FieldTypesPalette
+							expanded={paletteExpanded}
+							onFieldDrag={(fieldType) => handleFieldDrop(fieldType, 0, 0, 'left')}
+						/>
+					</div>
 				{/if}
 			</div>
 
 			<!-- Form Preview (main area) -->
 			<div class="preview-container">
+				{#if showLocalFields}
+					<div class="scope-legend">
+						<span class="scope-legend-item">
+							<span class="scope-swatch scope-swatch-lifecycle"></span>
+							{formEditorScopeLifecycle?.() ?? 'Lifecycle field (case data)'}
+						</span>
+						<span class="scope-legend-item">
+							<span class="scope-swatch scope-swatch-local"></span>
+							{formEditorScopeLocal?.() ?? 'Protocol-only field'}
+						</span>
+					</div>
+				{/if}
 				<FormPreview
-					{fields}
+					fields={mergedFields}
 					{selectedFieldId}
 					onFieldSelect={handleFieldSelect}
-					onFieldsReorder={onFieldsReorder}
+					onFieldsReorder={handleFieldsReorderRouted}
 					onFieldDrop={handleFieldDrop}
-					{onFieldUpdate}
+					onFieldRefDrop={(defId, page, rowIndex, columnPosition) => onAddFieldRef?.(defId, page, rowIndex, columnPosition)}
+					onFieldUpdate={handleFieldUpdateRouted}
 					{onAddPage}
 					{onDeletePage}
 					{onPageTitleChange}
+					scopeTinted={showLocalFields}
 				/>
 			</div>
 		{/if}
 	</div>
+
 </div>
 
 <style>
+
 	.form-editor {
 		display: flex;
 		flex-direction: column;
@@ -447,6 +647,14 @@
 		border-right-color: oklch(1 0 0 / 20%);
 	}
 
+	.palettes-stack {
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+		flex: 1;
+		overflow-y: auto;
+	}
+
 	.palette-toggle {
 		width: 20px;
 		height: 100%;
@@ -471,13 +679,57 @@
 		flex: 1;
 		overflow: auto;
 		display: flex;
-		justify-content: center;
+		flex-direction: column;
+		align-items: center;
 		padding: 1rem;
 		background: oklch(0.95 0.005 250);
 	}
 
 	:global(.dark) .preview-container {
 		background: oklch(0.15 0.02 260);
+	}
+
+	.scope-legend {
+		display: flex;
+		gap: 1rem;
+		flex-wrap: wrap;
+		justify-content: center;
+		margin-bottom: 0.75rem;
+		font-size: 0.6875rem;
+		color: hsl(var(--muted-foreground));
+	}
+
+	.scope-legend-item {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+	}
+
+	.scope-swatch {
+		width: 0.75rem;
+		height: 0.75rem;
+		border-radius: 0.25rem;
+		border: 1px solid;
+	}
+
+	.scope-swatch-lifecycle {
+		background: oklch(0.97 0.025 240);
+		border-color: oklch(0.85 0.05 240);
+	}
+
+	.scope-swatch-local {
+		background: oklch(0.97 0.04 150);
+		border-color: oklch(0.85 0.06 150);
+	}
+
+	:global(.dark) .scope-swatch-lifecycle {
+		background: oklch(0.28 0.04 240);
+		border-color: oklch(0.42 0.06 240);
+	}
+
+	:global(.dark) .scope-swatch-local {
+		background: oklch(0.28 0.05 150);
+		border-color: oklch(0.42 0.07 150);
 	}
 
 	/* Settings button */

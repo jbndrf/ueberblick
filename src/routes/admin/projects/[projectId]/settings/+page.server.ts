@@ -157,7 +157,7 @@ export const load: PageServerLoad = async ({ locals: { pbAdmin: pb }, params }) 
 		// Data needed to build a filter preset editor on the Advanced tab.
 		// Mirrors the participant map's `builderCtx` (+page.svelte ~line 714) so
 		// the admin sees the same filterable fields the participant will.
-		const [workflows, workflowStages, toolsForms, toolsFormFields, toolsFieldTags] = await Promise.all([
+		const [workflows, workflowStages, toolsForms, workflowFieldDefs, toolsFieldTags] = await Promise.all([
 			pb.collection('workflows').getFullList({
 				filter: `project_id = "${projectId}" && is_active = true`,
 				fields: 'id, name',
@@ -169,8 +169,8 @@ export const load: PageServerLoad = async ({ locals: { pbAdmin: pb }, params }) 
 			pb.collection('tools_forms').getFullList({
 				fields: 'id, workflow_id'
 			}),
-			pb.collection('tools_form_fields').getFullList({
-				fields: 'id, form_id, field_label, field_type, field_options'
+			pb.collection('workflow_field_defs').getFullList({
+				fields: 'id, workflow_id, key, label, field_type, field_options'
 			}),
 			// Filterable-tag mappings per workflow. Used to render the per-value
 			// default-visibility toggles inside the "Sichtbare Workflows" section.
@@ -200,7 +200,7 @@ export const load: PageServerLoad = async ({ locals: { pbAdmin: pb }, params }) 
 			workflows,
 			workflowStages,
 			toolsForms,
-			toolsFormFields,
+			workflowFieldDefs,
 			toolsFieldTags
 		};
 	} catch (err) {

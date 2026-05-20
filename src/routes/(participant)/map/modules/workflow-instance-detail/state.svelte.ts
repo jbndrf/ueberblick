@@ -62,6 +62,7 @@ export interface ToolForm {
 	tool_order?: number;
 	allowed_roles: string[];
 	visual_config?: Record<string, unknown>;
+	local_fields?: import('$lib/participant-state/types').ProtocolLocalField[] | null;
 }
 
 /**
@@ -114,14 +115,40 @@ export interface ToolEdit {
 	visual_config?: Record<string, unknown>;
 }
 
+/**
+ * Past protocol-entry view. Built by hydrating workflow_protocol_entries with
+ * their canonical snapshot shape (see ProtocolEntrySnapshot in participant-state).
+ * Labels are read from the snapshot, never re-resolved from the live field defs.
+ */
+export interface ProtocolEntryView {
+	id: string;
+	tool_id: string;
+	tool_name: string | null;
+	stage_id: string;
+	recorded_at: string;
+	recorded_by: string;
+	kind: 'manual' | 'global_autolog';
+	case_fields: Array<{
+		field_def_id: string;
+		key: string;
+		label: string;
+		value: unknown;
+		write_mode: string;
+	}>;
+	local_fields: Array<{ key: string; label: string; value: unknown }>;
+	autolog: {
+		from: string;
+		to: string;
+		entries: Array<Record<string, unknown>>;
+	} | null;
+}
+
 export interface ToolProtocol {
 	id: string;
 	connection_id?: string;
 	stage_id: string[];
 	is_global: boolean;
 	name: string;
-	/** Field defs that go ONLY into the protocol snapshot, never into workflow_field_values. */
-	protocol_only_field_defs?: string[];
 	prefill_config?: Record<string, boolean>;
 	protocol_form_id?: string;
 	tool_order?: number;
@@ -169,8 +196,12 @@ export interface ToolUsageRecord {
 		stage_name?: string;
 		centroid?: { lat: number; lon: number } | null;
 		geometry_type?: 'Point' | 'LineString' | 'Polygon' | null;
-		created_fields?: Array<{ field_key: string; field_name?: string; value: string }>;
-		changes?: Array<{ field_key: string; field_name?: string; before: string | null; after: string }>;
+		// INVARIANT: tool_usage.metadata must NEVER carry raw field values.
+		// Values live exclusively in workflow_field_values (gated row-by-row by
+		// workflow_field_defs.view_roles). Only identifiers go here, so the
+		// audit UI cannot leak role-restricted values through this collection.
+		created_fields?: Array<{ field_key: string; field_name?: string }>;
+		changes?: Array<{ field_key: string; field_name?: string }>;
 		before?: { lat: number; lon: number } | null;
 		after?: { lat: number; lon: number };
 		from_stage_id?: string;
@@ -215,6 +246,8 @@ export class WorkflowInstanceDetailState {
 	editTools = $state<ToolEdit[]>([]);
 	protocolTools = $state<ToolProtocol[]>([]);
 	toolUsageHistory = $state<ToolUsageRecord[]>([]);
+	/** Past protocol entries for this instance (manual + global_autolog). Loaded by load(). */
+	protocolEntries = $state<ProtocolEntryView[]>([]);
 
 	isLoading = $state(true);
 	loadError = $state<string | null>(null);
@@ -257,7 +290,26 @@ export class WorkflowInstanceDetailState {
 
 	private fieldValueCache: FieldValueCache | null;
 	private unsubscribeFieldValues: (() => void) | null = null;
+	private unsubscribeMetadata: (() => void) | null = null;
 	private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+	private metadataRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+	/**
+	 * Collections whose changes affect role/sentry gating, button visibility,
+	 * form composition, or the instance's current stage. A change to any of
+	 * these triggers a silent metadata reload so $derived (e.g.
+	 * availableConnections) recomputes against fresh data.
+	 */
+	private static METADATA_COLLECTIONS: ReadonlySet<string> = new Set([
+		'workflow_instances',
+		'workflow_stages',
+		'workflow_connections',
+		'workflow_field_defs',
+		'tools_forms',
+		'tools_form_field_refs',
+		'tools_protocol',
+		'workflow_role_assignments'
+	]);
 
 	constructor(instanceId: string, gateway: ParticipantGateway, fieldValueCache?: FieldValueCache) {
 		this.instanceId = instanceId;
@@ -271,6 +323,18 @@ export class WorkflowInstanceDetailState {
 				this.refreshTimer = null;
 				void this.reloadFieldValues();
 			}, 100);
+		});
+
+		this.unsubscribeMetadata = onDataChange((detail) => {
+			if (!WorkflowInstanceDetailState.METADATA_COLLECTIONS.has(detail.collection)) return;
+			// For per-record events on workflow_instances, only react to our row.
+			const detailId = (detail as { id?: string }).id;
+			if (detail.collection === 'workflow_instances' && detailId && detailId !== this.instanceId) return;
+			if (this.metadataRefreshTimer) clearTimeout(this.metadataRefreshTimer);
+			this.metadataRefreshTimer = setTimeout(() => {
+				this.metadataRefreshTimer = null;
+				void this.load({ silent: true });
+			}, 200);
 		});
 	}
 
@@ -304,19 +368,74 @@ export class WorkflowInstanceDetailState {
 		}
 	}
 
+	/**
+	 * Page older workflow_field_values from the server beyond the offline cache
+	 * (which is bounded by OFFLINE_HISTORY_LIMIT). Merges into `fieldValues`
+	 * by id (de-duped). Does NOT persist to IndexedDB — view-only.
+	 * Returns the number of new rows added.
+	 */
+	hasMoreOlderValues = $state(true);
+	loadingOlderValues = $state(false);
+	async loadOlderFieldValues(perPage = 50): Promise<number> {
+		if (this.loadingOlderValues) return 0;
+		this.loadingOlderValues = true;
+		try {
+			let beforeIso: string | null = null;
+			for (const fv of this.fieldValues) {
+				const t = (fv as any).recorded_at as string | undefined;
+				if (!t) continue;
+				if (!beforeIso || t < beforeIso) beforeIso = t;
+			}
+			const filterParts = [`instance_id = "${this.instanceId}"`];
+			if (beforeIso) filterParts.push(`recorded_at < "${beforeIso}"`);
+			const page = await this.gateway.collection('workflow_field_values').getList(1, perPage, {
+				filter: filterParts.join(' && '),
+				sort: '-recorded_at'
+			});
+			const items = (page.items ?? []) as unknown as FieldValue[];
+			if (items.length === 0) {
+				this.hasMoreOlderValues = false;
+				return 0;
+			}
+			const existing = new Set(this.fieldValues.map((fv) => fv.id));
+			const additions = items.filter((fv) => !existing.has(fv.id));
+			if (additions.length === 0) {
+				this.hasMoreOlderValues = false;
+				return 0;
+			}
+			this.fieldValues = [...this.fieldValues, ...additions];
+			this.fieldValuesByDefId = this.indexFieldValues(this.fieldValues);
+			if (items.length < perPage) this.hasMoreOlderValues = false;
+			return additions.length;
+		} catch (error) {
+			console.error('[DetailState] loadOlderFieldValues failed:', error);
+			return 0;
+		} finally {
+			this.loadingOlderValues = false;
+		}
+	}
+
 	dispose(): void {
 		if (this.refreshTimer) {
 			clearTimeout(this.refreshTimer);
 			this.refreshTimer = null;
 		}
+		if (this.metadataRefreshTimer) {
+			clearTimeout(this.metadataRefreshTimer);
+			this.metadataRefreshTimer = null;
+		}
 		if (this.unsubscribeFieldValues) {
 			this.unsubscribeFieldValues();
 			this.unsubscribeFieldValues = null;
 		}
+		if (this.unsubscribeMetadata) {
+			this.unsubscribeMetadata();
+			this.unsubscribeMetadata = null;
+		}
 	}
 
-	async load(): Promise<void> {
-		this.isLoading = true;
+	async load(opts: { silent?: boolean } = {}): Promise<void> {
+		if (!opts.silent) this.isLoading = true;
 		this.loadError = null;
 		const t0 = performance.now();
 
@@ -437,17 +556,51 @@ export class WorkflowInstanceDetailState {
 				return false;
 			});
 
+			// Load protocol-entry history for this instance (manual + global_autolog).
+			try {
+				const entriesResult = await this.gateway.collection('workflow_protocol_entries').getFullList({
+					filter: `instance_id = "${this.instanceId}"`,
+					sort: '-recorded_at'
+				});
+				this.protocolEntries = (entriesResult as unknown as Array<Record<string, unknown>>).map((row) => {
+					let snapshot: any = {};
+					const raw = row.snapshot;
+					if (typeof raw === 'string') {
+						try { snapshot = JSON.parse(raw); } catch { snapshot = {}; }
+					} else if (raw && typeof raw === 'object') {
+						snapshot = raw;
+					}
+					const toolId = row.tool_id as string;
+					const tool = this.protocolTools.find((t) => t.id === toolId);
+					return {
+						id: row.id as string,
+						tool_id: toolId,
+						tool_name: tool?.name ?? null,
+						stage_id: row.stage_id as string,
+						recorded_at: row.recorded_at as string,
+						recorded_by: row.recorded_by as string,
+						kind: (snapshot.kind as 'manual' | 'global_autolog') ?? 'manual',
+						case_fields: Array.isArray(snapshot.case_fields) ? snapshot.case_fields : [],
+						local_fields: Array.isArray(snapshot.local_fields) ? snapshot.local_fields : [],
+						autolog: snapshot.autolog ?? null
+					};
+				});
+			} catch (error) {
+				console.warn('[DetailState] failed to load protocol entries:', error);
+				this.protocolEntries = [];
+			}
+
 			if (this.stages.length > 0 && !this.activeStageTab) {
 				const firstWithData = this.stages.find(s => this.stageHasData(s.id));
 				this.activeStageTab = firstWithData?.id || this.stages[0].id;
 			}
 
 			console.log(`[DetailLoad] TOTAL: ${(performance.now() - t0).toFixed(1)}ms`);
-			this.isLoading = false;
+			if (!opts.silent) this.isLoading = false;
 		} catch (error) {
 			console.error('Failed to load workflow instance:', error);
 			this.loadError = error instanceof Error ? error.message : 'Failed to load workflow instance';
-			this.isLoading = false;
+			if (!opts.silent) this.isLoading = false;
 		}
 	}
 
@@ -465,13 +618,24 @@ export class WorkflowInstanceDetailState {
 		const def = this.fieldDefsById.get(defId);
 		if (def?.display_stage_id) return def.display_stage_id;
 		const refs = this.formFieldRefs.filter(r => r.field_def_id === defId);
-		if (refs.length !== 1) return null;
-		const form = this.forms.find(f => f.id === refs[0].form_id);
-		if (!form) return null;
-		if (form.stage_id) return form.stage_id;
-		if (form.connection_id) {
-			const conn = this.connections.find(c => c.id === form.connection_id);
-			if (conn) return conn.to_stage_id;
+		if (refs.length === 1) {
+			const form = this.forms.find(f => f.id === refs[0].form_id);
+			if (form) {
+				if (form.stage_id) return form.stage_id;
+				if (form.connection_id) {
+					const conn = this.connections.find(c => c.id === form.connection_id);
+					if (conn) return conn.to_stage_id;
+				}
+			}
+		}
+		// Fallback: stage where the value was actually recorded. Keeps data
+		// visible for defs that have no display_stage_id and are referenced
+		// by 0 or >1 forms (e.g. shared across connections).
+		const stageIds = new Set(this.stages.map(s => s.id));
+		const values = this.fieldValuesByDefId.get(defId) ?? [];
+		for (const v of values) {
+			const stageId = (v as any).recorded_at_stage as string | undefined;
+			if (stageId && stageIds.has(stageId)) return stageId;
 		}
 		return null;
 	}
@@ -518,9 +682,7 @@ export class WorkflowInstanceDetailState {
 	}
 
 	private normalizeColumnPosition(v: unknown): 'left' | 'right' | 'full' {
-		if (v === 'left' || v === 'right' || v === 'full') return v;
-		// Numeric column_position from refs collapses to 'full' as a sensible default.
-		return 'full';
+		return v === 'left' || v === 'right' ? v : 'full';
 	}
 
 	private parseFieldValue(value: string | undefined): unknown {
@@ -536,9 +698,9 @@ export class WorkflowInstanceDetailState {
 	 * Iterates field defs displayed on the stage, prefilling from the latest
 	 * value (singleton row, or newest observation).
 	 */
-	getFieldsForFormRenderer(stageId: string): Array<FormField & { value?: unknown; fileValue?: string; fileRecordId?: string; storedFiles?: Array<{ recordId: string; fileName: string }> }> {
+	getFieldsForFormRenderer(stageId: string): Array<FormField & { value?: unknown; fileValue?: string; fileRecordId?: string; storedFiles?: Array<{ recordId: string; fileName: string }>; valueHistory?: Array<{ id: string; value: unknown; recorded_at: string }> }> {
 		const defIds = this.getFieldDefIdsForStage(stageId);
-		const out: Array<FormField & { value?: unknown; fileValue?: string; fileRecordId?: string; storedFiles?: Array<{ recordId: string; fileName: string }> }> = [];
+		const out: Array<FormField & { value?: unknown; fileValue?: string; fileRecordId?: string; storedFiles?: Array<{ recordId: string; fileName: string }>; valueHistory?: Array<{ id: string; value: unknown; recorded_at: string }> }> = [];
 		for (const defId of defIds) {
 			// Pick the first form-field row for this def (layout/labels). If no form
 			// references this def we fabricate a minimal row from the def itself.
@@ -572,16 +734,29 @@ export class WorkflowInstanceDetailState {
 				display_stage_id: def.display_stage_id || undefined
 			};
 
+			// History is available for every field now (workflow_field_values is
+			// append-only). The renderer decides whether to surface the expander
+			// based on row count, not write_mode.
+			const valueHistory = values
+				.filter((v) => v.value !== undefined && v.value !== null && v.value !== '')
+				.map((v) => ({
+					id: v.id,
+					value: this.parseFieldValue(v.value),
+					recorded_at: (v.recorded_at || (v as any).created || (v as any).updated || '') as string
+				}));
+
 			out.push({
 				...base,
 				field_options: this.parseFieldOptions(base.field_options),
 				page: base.page ?? 1,
 				row_index: base.row_index ?? 0,
 				column_position: base.column_position ?? 'full',
+				write_mode: def.write_mode,
 				value: this.parseFieldValue(firstValue?.value),
 				fileValue: storedFiles[0]?.fileName || undefined,
 				fileRecordId: storedFiles[0]?.recordId || undefined,
-				storedFiles: storedFiles.length > 0 ? storedFiles : undefined
+				storedFiles: storedFiles.length > 0 ? storedFiles : undefined,
+				valueHistory
 			});
 		}
 
@@ -691,6 +866,19 @@ export class WorkflowInstanceDetailState {
 			console.warn(`[detailState] No form fields found for protocol_form_id=${protocolFormId}`);
 		}
 		return fields;
+	}
+
+	/** Inline `local_fields` from the protocol's backing form. Empty if the form has none. */
+	getProtocolLocalFields(protocolFormId: string | undefined): import('$lib/participant-state/types').ProtocolLocalField[] {
+		if (!protocolFormId) return [];
+		const form = this.forms.find((f) => f.id === protocolFormId);
+		const list = (form?.local_fields ?? []) as import('$lib/participant-state/types').ProtocolLocalField[];
+		return list
+			.slice()
+			.sort((a, b) => {
+				if ((a.page ?? 0) !== (b.page ?? 0)) return (a.page ?? 0) - (b.page ?? 0);
+				return (a.row_index ?? 0) - (b.row_index ?? 0);
+			});
 	}
 
 	getToolsForConnection(connectionId: string): ToolQueueItem[] {

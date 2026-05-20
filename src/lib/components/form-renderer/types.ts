@@ -12,7 +12,8 @@ export type FieldType =
 	| 'dropdown'
 	| 'multiple_choice'
 	| 'smart_dropdown'
-	| 'custom_table_selector';
+	| 'custom_table_selector'
+	| 'instance_reference';
 
 export type ColumnPosition = 'left' | 'right' | 'full';
 
@@ -87,6 +88,9 @@ export interface FormField {
 	validation_rules?: ValidationRules | null;
 	field_options?: DateFieldOptions | FileFieldOptions | DropdownFieldOptions | SmartDropdownFieldOptions | CustomTableSelectorOptions | null;
 	conditional_logic?: Record<string, unknown> | null;
+	/** Phase 1 write modes. Drives CMMN-style rendering of observation history
+	 *  and computed-readonly badges in view mode. */
+	write_mode?: 'singleton' | 'observation' | 'computed';
 }
 
 export interface Form {
@@ -153,6 +157,8 @@ export interface FormFieldWithValue extends FormField {
 	fileValue?: string; // For file fields - the filename (single file, legacy)
 	fileRecordId?: string; // Record ID for constructing file URLs (single file, legacy)
 	storedFiles?: StoredFile[]; // For file fields - all stored files (multi-file support)
+	/** Full reading history for observation fields, newest first. */
+	valueHistory?: Array<{ id: string; value: unknown; recorded_at: string }>;
 }
 
 /**
@@ -168,7 +174,7 @@ export interface FormRendererProps {
 	currentPage?: number;
 	onPageChange?: (page: number) => void;
 	errors?: Record<string, string>;
-	/** Collection name for file URL construction (default: 'workflow_instance_field_values') */
+	/** Collection name for file URL construction (default: 'workflow_field_values') */
 	fileCollection?: string;
 }
 

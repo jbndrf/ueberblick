@@ -864,8 +864,8 @@ function executeActions(actions, instanceId) {
         }
 
         // Post Phase-1 redesign: params.field_key now carries a
-        // workflow_field_defs.id. Look up the def to learn write_mode; route
-        // singletons/computed through upsert, observations through append.
+        // workflow_field_defs.id. Look up the def to learn write_mode — it's
+        // recorded on the value row as a render hint (storage is append-only).
         const fieldDefId = action.params.field_key;
         var fieldDef = null;
         try {
@@ -889,58 +889,22 @@ function executeActions(actions, instanceId) {
         }
         var nowIso = new Date().toISOString();
 
-        if (writeMode === "observation") {
-          // Always append.
-          const collection = $app.findCollectionByNameOrId("workflow_field_values");
-          const record = new Record(collection);
-          record.set("instance_id", instanceId);
-          record.set("field_def_id", fieldDefId);
-          record.set("write_mode", "observation");
-          record.set("value", resolvedValue);
-          record.set("recorded_at", nowIso);
-          record.set("recorded_at_stage", stageId);
-          $app.save(record);
-        } else {
-          // singleton / computed: upsert by (instance, field_def). The partial
-          // unique index in 1779000000 enforces uniqueness; we still do the
-          // lookup to keep id stability for `bumpUpdatedTimestamp`.
-          let existing = [];
-          try {
-            existing = $app.findRecordsByFilter(
-              "workflow_field_values",
-              'instance_id = {:instId} && field_def_id = {:fdId}',
-              "",
-              1,
-              0,
-              { instId: instanceId, fdId: fieldDefId }
-            );
-          } catch (err) {
-            // not found
-          }
+        // workflow_field_values is append-only — every write_mode just inserts
+        // a new row. "Current value" is the latest by recorded_at; write_mode
+        // is stored only so the read layer knows how to render it.
+        const collection = $app.findCollectionByNameOrId("workflow_field_values");
+        const record = new Record(collection);
+        record.set("instance_id", instanceId);
+        record.set("field_def_id", fieldDefId);
+        record.set("write_mode", writeMode);
+        record.set("value", resolvedValue);
+        record.set("recorded_at", nowIso);
+        record.set("recorded_at_stage", stageId);
+        $app.save(record);
 
-          if (existing.length > 0) {
-            const record = existing[0];
-            record.set("value", resolvedValue);
-            record.set("recorded_at", nowIso);
-            record.set("recorded_at_stage", stageId);
-            noHooksApp.save(record);
-            bumpUpdatedTimestamp("workflow_field_values", record.id);
-          } else {
-            const collection = $app.findCollectionByNameOrId("workflow_field_values");
-            const record = new Record(collection);
-            record.set("instance_id", instanceId);
-            record.set("field_def_id", fieldDefId);
-            record.set("write_mode", writeMode);
-            record.set("value", resolvedValue);
-            record.set("recorded_at", nowIso);
-            record.set("recorded_at_stage", stageId);
-            $app.save(record);
-          }
-        }
-
-        var paramsWithResolved = JSON.parse(JSON.stringify(action.params));
-        paramsWithResolved.resolved_value = resolvedValue;
-        results.push({ type: action.type, params: paramsWithResolved, success: true });
+        // Drop resolved_value from the action log — it would leak into
+        // tool_usage.metadata where field-level view_roles don't apply.
+        results.push({ type: action.type, params: action.params, success: true });
 
       } else if (action.type === "set_stage") {
         // Read-only lookup for the audit trail, then apply the transition

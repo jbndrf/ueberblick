@@ -29,6 +29,12 @@ export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) 
 	try {
 		// Load the workflow
 		const workflow = await pb.collection('workflows').getOne(workflowId);
+		// All project workflows — used by instance_reference field UI to pick a target.
+		const projectWorkflows = await pb.collection('workflows').getFullList({
+			filter: `project_id = "${projectId}" && is_active = true`,
+			fields: 'id, name',
+			sort: 'name'
+		});
 
 		// Verify workflow belongs to this project
 		if (workflow.project_id !== projectId) {
@@ -57,9 +63,8 @@ export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) 
 			safeGetFullList(pb, 'workflow_field_defs', {
 				filter: `workflow_id = "${workflowId}"`
 			}),
-			safeGetFullList(pb, 'tools_edit', {
-				sort: 'tool_order'
-			}),
+			Promise.resolve([]), // tools_edit removed in Phase 1 redesign
+
 			safeGetFullList(pb, 'tools_protocol', {
 				filter: `workflow_id = "${workflowId}"`,
 				sort: 'tool_order'
@@ -79,6 +84,43 @@ export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) 
 		// Filter form field refs to only those belonging to this workflow's forms
 		const formIds = forms.map((f: any) => f.id);
 		const workflowFormFieldRefs = formFieldRefs.filter((f: any) => formIds.includes(f.form_id));
+
+		// Compute formulas live in tools_automation, not on the field def.
+		// For UI editing, surface the formula + deps back onto each computed
+		// def so the field-config panel can render its textbox as if compute
+		// were a def-level property. The persisted shape stays clean.
+		const computeAutomationByTargetId = new Map<string, any>();
+		for (const a of automations) {
+			if (a.trigger_type !== 'on_field_change') continue;
+			let steps: any;
+			try { steps = typeof a.steps === 'string' ? JSON.parse(a.steps) : a.steps; }
+			catch { continue; }
+			const action = steps?.[0]?.actions?.[0];
+			if (action?.type !== 'set_field_value') continue;
+			const targetId = action?.params?.field_key;
+			if (typeof targetId === 'string') computeAutomationByTargetId.set(targetId, a);
+		}
+		for (const def of fieldDefs) {
+			if (def.write_mode !== 'computed') continue;
+			const auto = computeAutomationByTargetId.get(def.id);
+			if (!auto) {
+				def.compute_expression = '';
+				def.compute_depends_on = [];
+				def.compute_automation_id = null;
+				continue;
+			}
+			let steps: any;
+			try { steps = typeof auto.steps === 'string' ? JSON.parse(auto.steps) : auto.steps; }
+			catch { steps = null; }
+			let trigger: any;
+			try { trigger = typeof auto.trigger_config === 'string' ? JSON.parse(auto.trigger_config) : auto.trigger_config; }
+			catch { trigger = null; }
+			def.compute_expression = steps?.[0]?.actions?.[0]?.params?.value ?? '';
+			def.compute_depends_on = Array.isArray(trigger?.field_keys)
+				? trigger.field_keys
+				: (trigger?.field_key ? [trigger.field_key] : []);
+			def.compute_automation_id = auto.id;
+		}
 
 		// TODO(field-def-redesign): denormalize def -> ref into the legacy combined
 		// shape so the existing builder UI keeps rendering. Replace with a proper
@@ -120,7 +162,8 @@ export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) 
 			protocolTools,
 			automations,
 			fieldTags,
-			roles
+			roles,
+			projectWorkflows
 		};
 	} catch (err: any) {
 		if (err?.status === 404) {
@@ -172,6 +215,7 @@ export const actions: Actions = {
 			protocolTools?: { new: any[]; modified: any[]; deleted: string[] };
 			automations: { new: any[]; modified: any[]; deleted: string[] };
 			fieldTags?: { new: any[]; modified: any[]; deleted: string[] };
+			fieldDefs?: { new: any[]; modified: any[]; deleted: string[] };
 		};
 
 		try {
@@ -182,6 +226,25 @@ export const actions: Actions = {
 
 		try {
 			const batch = pb.createBatch();
+			// Count requests actually queued so we can skip batch.send() when empty
+			// (PocketBase rejects empty batches with 400 "Invalid batch request data.").
+			// Some change-groups (e.g. fieldDefs.new/modified) are written outside the
+			// batch, so a save can leave the batch empty even when `changes` is not.
+			let batchOps = 0;
+			const _origCollection = batch.collection.bind(batch);
+			batch.collection = (name: string) => {
+				const sub = _origCollection(name);
+				for (const method of ['create', 'update', 'delete', 'upsert'] as const) {
+					const orig = (sub as any)[method]?.bind(sub);
+					if (orig) {
+						(sub as any)[method] = (...args: any[]) => {
+							batchOps++;
+							return orig(...args);
+						};
+					}
+				}
+				return sub;
+			};
 
 			// 1. Stages
 			for (const stage of changes.stages.new) {
@@ -214,6 +277,131 @@ export const actions: Actions = {
 			}
 			for (const formId of changes.forms.deleted) {
 				batch.collection('tools_forms').delete(formId);
+			}
+
+			// Compute helpers — used by section 3b (direct def edits) and
+			// section 4 (denormalized form-field saves). Hoisted here so both
+			// paths can call them. The {field_def_id} regex matches the
+			// expression parser in pb_hooks/automation.js.
+			const PB_ID_RE_COMPUTE = /^[a-zA-Z0-9]{15}$/;
+			const extractDeps = (expr: string): string[] => {
+				if (!expr || typeof expr !== 'string') return [];
+				const out: string[] = [];
+				const seen = new Set<string>();
+				const re = /\{([^}]+)\}/g;
+				let m: RegExpExecArray | null;
+				while ((m = re.exec(expr)) !== null) {
+					const candidate = m[1].trim();
+					if (PB_ID_RE_COMPUTE.test(candidate) && !seen.has(candidate)) {
+						seen.add(candidate);
+						out.push(candidate);
+					}
+				}
+				return out;
+			};
+			const upsertComputeAutomation = async (
+				def: { id: string; label?: string },
+				workflowId: string,
+				expression: string,
+			) => {
+				const deps = extractDeps(expression);
+				const existing = await pb.collection('tools_automation').getFullList({
+					filter: `workflow_id = "${workflowId}" && trigger_type = "on_field_change"`,
+					requestKey: null,
+				});
+				const match = existing.find((a: any) => {
+					try {
+						const steps = typeof a.steps === 'string' ? JSON.parse(a.steps) : a.steps;
+						return steps?.[0]?.actions?.[0]?.params?.field_key === def.id;
+					} catch {
+						return false;
+					}
+				});
+				const payload = {
+					workflow_id: workflowId,
+					name: `Compute: ${def.label ?? 'field'}`,
+					trigger_type: 'on_field_change',
+					trigger_config: { field_keys: deps },
+					steps: [{
+						name: 'Compute',
+						actions: [{
+							type: 'set_field_value',
+							params: { field_key: def.id, value: expression },
+						}],
+					}],
+					execution_mode: 'run_all',
+					is_enabled: true,
+				};
+				if (match) {
+					await pb.collection('tools_automation').update(match.id, payload, { requestKey: null });
+				} else {
+					await pb.collection('tools_automation').create(payload, { requestKey: null });
+				}
+			};
+			const deleteComputeAutomation = async (defId: string, workflowId: string) => {
+				const existing = await pb.collection('tools_automation').getFullList({
+					filter: `workflow_id = "${workflowId}" && trigger_type = "on_field_change"`,
+					requestKey: null,
+				});
+				const match = existing.find((a: any) => {
+					try {
+						const steps = typeof a.steps === 'string' ? JSON.parse(a.steps) : a.steps;
+						return steps?.[0]?.actions?.[0]?.params?.field_key === defId;
+					} catch {
+						return false;
+					}
+				});
+				if (match) {
+					await pb.collection('tools_automation').delete(match.id, { requestKey: null });
+				}
+			};
+
+			// 3b. Field Defs (workflow_field_defs) — created BEFORE form-field refs
+			// so refs can FK to real def ids. Sync writes outside the batch.
+			// Compute formulas piggyback on the def payload (compute_expression /
+			// compute_depends_on are UI conveniences, not columns); strip before
+			// sending to PB and re-route into a companion tools_automation row.
+			const stripComputeAuxFields = (def: any) => {
+				const { compute_expression: expr, compute_depends_on, compute_automation_id, ...rest } = def;
+				return { rest, expr: typeof expr === 'string' ? expr.trim() : '' };
+			};
+			if (changes.fieldDefs) {
+				for (const def of changes.fieldDefs.new) {
+					const { rest, expr } = stripComputeAuxFields(def);
+					const created = await pb.collection('workflow_field_defs').create(rest, { requestKey: null });
+					if (rest.write_mode === 'computed' && expr) {
+						await upsertComputeAutomation(
+							{ id: created.id, label: rest.label },
+							rest.workflow_id,
+							expr,
+						);
+					}
+				}
+				for (const def of changes.fieldDefs.modified) {
+					const { rest, expr } = stripComputeAuxFields(def);
+					await pb.collection('workflow_field_defs').update(def.id, rest, { requestKey: null });
+					if (rest.write_mode === 'computed' && expr) {
+						await upsertComputeAutomation(
+							{ id: def.id, label: rest.label },
+							rest.workflow_id,
+							expr,
+						);
+					} else {
+						await deleteComputeAutomation(def.id, rest.workflow_id);
+					}
+				}
+				for (const defId of changes.fieldDefs.deleted) {
+					// Companion automation has no DB FK to the def; remove it
+					// explicitly before the def deletion lands.
+					try {
+						const existing = await pb.collection('workflow_field_defs').getOne(defId, {
+							fields: 'workflow_id',
+							requestKey: null,
+						});
+						await deleteComputeAutomation(defId, (existing as any).workflow_id);
+					} catch { /* def already gone */ }
+					batch.collection('workflow_field_defs').delete(defId);
+				}
 			}
 
 			// 4. Form Fields
@@ -282,30 +470,8 @@ export const actions: Actions = {
 				return candidate;
 			};
 
-			// Extract {field_def_id} refs from a compute expression. Matches the
-			// pattern used in pb_hooks/automation.js's expression parser.
-			const extractDeps = (expr: string): string[] => {
-				if (!expr || typeof expr !== 'string') return [];
-				const out: string[] = [];
-				const seen = new Set<string>();
-				const re = /\{([^}]+)\}/g;
-				let m: RegExpExecArray | null;
-				while ((m = re.exec(expr)) !== null) {
-					const candidate = m[1].trim();
-					if (PB_ID_RE.test(candidate) && !seen.has(candidate)) {
-						seen.add(candidate);
-						out.push(candidate);
-					}
-				}
-				return out;
-			};
-
 			const buildDefPayload = (field: any, workflowId: string, key: string) => {
 				const writeMode = field.write_mode ?? 'singleton';
-				const computeExpression =
-					writeMode === 'computed' ? (field.compute_expression ?? '') : '';
-				const computeDependsOn =
-					writeMode === 'computed' ? extractDeps(computeExpression) : [];
 				return {
 					workflow_id: workflowId,
 					key,
@@ -317,8 +483,6 @@ export const actions: Actions = {
 					validation_rules: field.validation_rules ?? null,
 					placeholder: field.placeholder ?? '',
 					help_text: field.help_text ?? '',
-					compute_expression: computeExpression,
-					compute_depends_on: computeDependsOn
 				};
 			};
 
@@ -329,7 +493,7 @@ export const actions: Actions = {
 				page: field.page ?? 1,
 				page_title: field.page_title ?? '',
 				row_index: field.row_index ?? 0,
-				column_position: field.column_position ?? 0,
+				column_position: field.column_position ?? 'full',
 				is_required_override: field.is_required_override ?? null,
 				placeholder_override: field.placeholder_override ?? '',
 				help_text_override: field.help_text_override ?? '',
@@ -339,6 +503,25 @@ export const actions: Actions = {
 			// Upsert field defs first (outside batch) so we have real ids for refs.
 			// Map of incoming temp/placeholder field_def_id -> real id.
 			const defIdResolution = new Map<string, string>();
+
+			// Sync the computed-field companion automation after its def upsert.
+			const syncCompanionAutomation = async (
+				field: any,
+				workflowId: string,
+				defId: string,
+			) => {
+				const writeMode = field.write_mode ?? 'singleton';
+				const expression = (field.compute_expression ?? '').trim();
+				if (writeMode === 'computed' && expression) {
+					await upsertComputeAutomation(
+						{ id: defId, label: field.field_label },
+						workflowId,
+						expression,
+					);
+				} else {
+					await deleteComputeAutomation(defId, workflowId);
+				}
+			};
 
 			// NEW fields: create a def, capture id.
 			for (const field of changes.formFields.new) {
@@ -380,6 +563,7 @@ export const actions: Actions = {
 						field.field_def_id = created.id;
 					}
 				}
+				await syncCompanionAutomation(field, workflowId, field.field_def_id);
 				batch.collection('tools_form_field_refs').create(buildRefPayload(field, field.field_def_id));
 			}
 
@@ -422,6 +606,7 @@ export const actions: Actions = {
 						field.field_def_id = defId;
 					}
 				}
+				await syncCompanionAutomation(field, workflowId, defId!);
 				batch.collection('tools_form_field_refs').update(field.id, buildRefPayload(field, defId!));
 			}
 
@@ -429,16 +614,7 @@ export const actions: Actions = {
 				batch.collection('tools_form_field_refs').delete(fieldId);
 			}
 
-			// 5. Edit Tools
-			for (const tool of changes.editTools.new) {
-				batch.collection('tools_edit').create(tool);
-			}
-			for (const tool of changes.editTools.modified) {
-				batch.collection('tools_edit').update(tool.id, tool);
-			}
-			for (const toolId of changes.editTools.deleted) {
-				batch.collection('tools_edit').delete(toolId);
-			}
+			// 5. Edit Tools removed in Phase 1 redesign.
 
 			// 6. Protocol Tools
 			if (changes.protocolTools) {
@@ -479,8 +655,8 @@ export const actions: Actions = {
 				}
 			}
 
-			// Execute batch
-			await batch.send();
+			// Execute batch only if any operations were queued.
+			if (batchOps > 0) await batch.send();
 
 			// Sync entry connection's allowed_roles to workflow.entry_allowed_roles
 			// Find entry connection among new + modified connections, or existing ones

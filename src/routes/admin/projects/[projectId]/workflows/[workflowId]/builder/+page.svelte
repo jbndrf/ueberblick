@@ -90,7 +90,8 @@
 			editTools: data.editTools,
 			protocolTools: data.protocolTools,
 			automations: data.automations,
-			fieldTags: data.fieldTags
+			fieldTags: data.fieldTags,
+			fieldDefs: data.fieldDefs
 		});
 	});
 
@@ -968,7 +969,7 @@
 			builderState.addEditTool({ stageId: selectedStageId });
 		} else if (toolType === 'protocol') {
 			const tool = builderState.addProtocolTool({ stageId: selectedStageId });
-			selectionContext = createContext.protocolTool(tool.id, { type: 'stage', stageId: selectedStageId });
+			openProtocolTool(tool.id, { type: 'stage', stageId: selectedStageId });
 		}
 	}
 
@@ -994,7 +995,7 @@
 				builderState.addEditTool({ connectionId });
 			} else if (toolType === 'protocol') {
 				const tool = builderState.addProtocolTool({ connectionId });
-				selectionContext = createContext.protocolTool(tool.id, { type: 'connection', connectionId });
+				openProtocolTool(tool.id, { type: 'connection', connectionId });
 			}
 		}
 	}
@@ -1030,7 +1031,7 @@
 
 		const protocolTool = protocolTools.find(p => p.data.id === toolId);
 		if (protocolTool) {
-			selectionContext = createContext.protocolTool(toolId, { type: 'stage', stageId });
+			openProtocolTool(toolId, { type: 'stage', stageId });
 		}
 	}
 
@@ -1057,7 +1058,7 @@
 
 		const protocolTool = protocolTools.find(p => p.data.id === toolId);
 		if (protocolTool) {
-			selectionContext = createContext.protocolTool(toolId, { type: 'connection', connectionId });
+			openProtocolTool(toolId, { type: 'connection', connectionId });
 		}
 	}
 
@@ -1140,6 +1141,10 @@
 		);
 	}
 
+	function handleAddFormFieldRef(formId: string, fieldDefId: string, page: number, rowIndex: number, columnPosition: ColumnPosition) {
+		builderState.addFormFieldRef(formId, fieldDefId, rowIndex, columnPosition, page);
+	}
+
 	function handleFormFieldUpdate(fieldId: string, updates: Partial<ToolsFormField>) {
 		builderState.updateFormField(fieldId, updates);
 	}
@@ -1205,6 +1210,10 @@
 		builderState.updateForm(formId, { visual_config: config });
 	}
 
+	function handleFormLocalFieldsChange(formId: string, next: import('$lib/workflow-builder').ProtocolLocalFieldDef[]) {
+		builderState.updateForm(formId, { local_fields: next });
+	}
+
 	// Edit tool editor handlers
 	function handleEditToolNameChange(editToolId: string, name: string) {
 		builderState.updateEditTool(editToolId, { name });
@@ -1232,16 +1241,23 @@
 		builderState.updateProtocolTool(toolId, { name });
 	}
 
-	function handleProtocolToolFieldsChange(toolId: string, fieldIds: string[]) {
-		builderState.updateProtocolTool(toolId, { editable_fields: fieldIds });
-	}
-
-	function handleProtocolToolPrefillConfigChange(toolId: string, config: Record<string, boolean>) {
-		builderState.updateProtocolTool(toolId, { prefill_config: config });
-	}
-
 	function handleProtocolToolStageIdsChange(toolId: string, stageIds: string[]) {
 		builderState.updateProtocolTool(toolId, { stage_id: stageIds });
+	}
+
+	/**
+	 * Selecting a manual protocol tool opens its form editor directly — the
+	 * protocol IS a form, so the intermediate "edit form" shell would just be
+	 * a redundant click. Global/region protocols have no form and still use
+	 * the dedicated region editor.
+	 */
+	function openProtocolTool(toolId: string, attach: { type: 'stage'; stageId: string } | { type: 'connection'; connectionId: string }) {
+		const tool = builderState.getProtocolToolById(toolId);
+		if (tool && tool.data.is_global) {
+			selectionContext = createContext.protocolTool(toolId, attach);
+			return;
+		}
+		handleEditProtocolForm(toolId);
 	}
 
 	function handleEditProtocolForm(toolId: string) {
@@ -1291,7 +1307,7 @@
 			} else if (toolType === 'form') {
 				selectionContext = createContext.form(toolId, { type: 'stage', stageId: selectionContext.stageId });
 			} else if (toolType === 'protocol') {
-				selectionContext = createContext.protocolTool(toolId, { type: 'stage', stageId: selectionContext.stageId });
+				openProtocolTool(toolId, { type: 'stage', stageId: selectionContext.stageId });
 			}
 		} else if (selectionContext.type === 'action') {
 			// Tool on a connection
@@ -1300,7 +1316,7 @@
 			} else if (toolType === 'form') {
 				selectionContext = createContext.form(toolId, { type: 'connection', connectionId: selectionContext.actionId });
 			} else if (toolType === 'protocol') {
-				selectionContext = createContext.protocolTool(toolId, { type: 'connection', connectionId: selectionContext.actionId });
+				openProtocolTool(toolId, { type: 'connection', connectionId: selectionContext.actionId });
 			}
 		}
 	}
@@ -1502,7 +1518,7 @@
 			builderState.addEditTool({ stageId });
 		} else if (toolType === 'protocol') {
 			const tool = builderState.addProtocolTool({ stageId });
-			selectionContext = createContext.protocolTool(tool.id, { type: 'stage', stageId });
+			openProtocolTool(tool.id, { type: 'stage', stageId });
 		}
 	}
 
@@ -1591,7 +1607,7 @@
 			} else if (toolType === 'edit') {
 				selectionContext = createContext.editTool(toolId, { type: 'stage', stageId: selectionContext.stageId });
 			} else if (toolType === 'protocol') {
-				selectionContext = createContext.protocolTool(toolId, { type: 'stage', stageId: selectionContext.stageId });
+				openProtocolTool(toolId, { type: 'stage', stageId: selectionContext.stageId });
 			}
 		}
 	}
@@ -1681,6 +1697,13 @@
 					onSelectTool={handleSelectGlobalTool}
 					onAddTool={handleOpenGlobalToolPicker}
 				/>
+				<button
+					class="global-tools-label"
+					onclick={() => (selectionContext = createContext.fieldLibrary())}
+					title="Workflow-scoped field definitions"
+				>
+					Fields
+				</button>
 			</div>
 		</div>
 
@@ -1733,6 +1756,7 @@
 			onCreateRole={createRole}
 			onFormNameChange={handleFormNameChange}
 			onAddFormField={handleAddFormField}
+			onAddFormFieldRef={handleAddFormFieldRef}
 			onFormFieldUpdate={handleFormFieldUpdate}
 			onFormFieldDelete={handleFormFieldDelete}
 			onFormFieldsReorder={handleFormFieldsReorder}
@@ -1742,6 +1766,8 @@
 			onFormClose={handleFormClose}
 			onFormRolesChange={handleFormRolesChange}
 			onFormVisualConfigChange={handleFormVisualConfigChange}
+			onFormLocalFieldsChange={handleFormLocalFieldsChange}
+			allProtocolTools={builderState.visibleProtocolTools.map((p) => p.data)}
 			onEditToolNameChange={handleEditToolNameChange}
 			onEditToolFieldsChange={handleEditToolFieldsChange}
 			onEditToolEditModeChange={handleEditToolEditModeChange}
@@ -1749,8 +1775,6 @@
 			onEditToolClose={handleEditToolClose}
 			allStages={builderState.visibleStages.map(s => s.data)}
 			onProtocolToolNameChange={handleProtocolToolNameChange}
-			onProtocolToolFieldsChange={handleProtocolToolFieldsChange}
-			onProtocolToolPrefillConfigChange={handleProtocolToolPrefillConfigChange}
 			onProtocolToolStageIdsChange={handleProtocolToolStageIdsChange}
 			onEditProtocolForm={handleEditProtocolForm}
 			onProtocolToolDelete={handleProtocolToolDelete}
@@ -1777,6 +1801,12 @@
 			onHighlightEdge={handleHighlightEdge}
 			onHighlightStageTool={handleHighlightStageTool}
 			onDeselect={() => (selectionContext = createContext.none())}
+			trackedFieldDefs={builderState.fieldDefs}
+			effectiveFieldDefs={builderState.effectiveFieldDefs}
+			projectWorkflows={(data.projectWorkflows ?? []).map((w: any) => ({ id: String(w.id), name: String(w.name ?? '') }))}
+			onFieldDefAdd={() => builderState.addFieldDef().id}
+			onFieldDefUpdate={(id, updates) => builderState.updateFieldDef(id, updates)}
+			onFieldDefDelete={(id) => builderState.deleteFieldDef(id)}
 		/>
 	</div>
 </div>

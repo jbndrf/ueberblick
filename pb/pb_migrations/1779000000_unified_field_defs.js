@@ -60,11 +60,12 @@ migrate((app) => {
   const fieldDefs = new Collection({
     type: "base",
     name: "workflow_field_defs",
-    // Read: admin or any participant in the project (field defs are structural,
-    // like stages/connections). Per-field VALUE visibility lives on workflow_field_values
-    // via field_def_id.view_roles.
-    listRule: `workflow_id.project_id.owner_id = @request.auth.id || ${participantInProject("workflow_id.project_id")}`,
-    viewRule: `workflow_id.project_id.owner_id = @request.auth.id || ${participantInProject("workflow_id.project_id")}`,
+    // Read: admin, or a participant in the project whose role passes view_roles.
+    // Empty view_roles = visible to all participants (default). Non-empty =
+    // only listed roles. When the gate excludes the participant the entire row
+    // is hidden — including the view_roles column itself, so no meta-leak.
+    listRule: `workflow_id.project_id.owner_id = @request.auth.id || (${participantInProject("workflow_id.project_id")} && ${roleCheck("view_roles")})`,
+    viewRule: `workflow_id.project_id.owner_id = @request.auth.id || (${participantInProject("workflow_id.project_id")} && ${roleCheck("view_roles")})`,
     createRule: `workflow_id.project_id.owner_id = @request.auth.id`,
     updateRule: `workflow_id.project_id.owner_id = @request.auth.id`,
     deleteRule: `workflow_id.project_id.owner_id = @request.auth.id`,
@@ -106,8 +107,8 @@ migrate((app) => {
       { name: "is_required", type: "bool" },
       { name: "validation_rules", type: "json" },
       { name: "field_options", type: "json" },
-      // Phase 2: computed only. Stored in Phase 1 so admin UI can already accept it.
-      { name: "compute_expression", type: "text", max: 2000 },
+      // Compute formulas live in tools_automation (admin-only); the def keeps
+      // write_mode="computed" purely as a renderer marker.
       { name: "created", type: "autodate", onCreate: true },
       { name: "updated", type: "autodate", onCreate: true, onUpdate: true },
     ],
@@ -202,9 +203,24 @@ migrate((app) => {
   const formFieldRefs = new Collection({
     type: "base",
     name: "tools_form_field_refs",
-    // Inherits parent form's read scope (same pattern as old tools_form_fields).
-    listRule: `form_id.workflow_id.project_id.owner_id = @request.auth.id || ${participantInProject("form_id.workflow_id.project_id")}`,
-    viewRule: `form_id.workflow_id.project_id.owner_id = @request.auth.id || ${participantInProject("form_id.workflow_id.project_id")}`,
+    // Mirror tools_forms.listRule: a ref is visible iff its parent form is
+    // role-visible to the participant. Either the connection (if the form is
+    // attached to one) or the form's own allowed_roles gate (when stage-bound)
+    // must permit the role.
+    listRule: `form_id.workflow_id.project_id.owner_id = @request.auth.id || (
+      ${participantInProject("form_id.workflow_id.project_id")} &&
+      (
+        (form_id.connection_id != "" && ${roleCheck("form_id.connection_id.allowed_roles")}) ||
+        (form_id.stage_id != "" && ${roleCheck("form_id.allowed_roles")})
+      )
+    )`,
+    viewRule: `form_id.workflow_id.project_id.owner_id = @request.auth.id || (
+      ${participantInProject("form_id.workflow_id.project_id")} &&
+      (
+        (form_id.connection_id != "" && ${roleCheck("form_id.connection_id.allowed_roles")}) ||
+        (form_id.stage_id != "" && ${roleCheck("form_id.allowed_roles")})
+      )
+    )`,
     createRule: `form_id.workflow_id.project_id.owner_id = @request.auth.id`,
     updateRule: `form_id.workflow_id.project_id.owner_id = @request.auth.id`,
     deleteRule: `form_id.workflow_id.project_id.owner_id = @request.auth.id`,
@@ -215,7 +231,7 @@ migrate((app) => {
       { name: "page", type: "number", min: 1 },
       { name: "page_title", type: "text", max: 255 },
       { name: "row_index", type: "number", min: 0 },
-      { name: "column_position", type: "number", min: 0 },
+      { name: "column_position", type: "select", values: ["left", "right", "full"], maxSelect: 1 },
       // Per-form overrides (null/empty = use field def's defaults).
       { name: "is_required_override", type: "bool" },
       { name: "placeholder_override", type: "text", max: 255 },

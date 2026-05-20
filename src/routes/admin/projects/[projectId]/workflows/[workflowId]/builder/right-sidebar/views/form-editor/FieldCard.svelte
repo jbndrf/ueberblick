@@ -22,6 +22,11 @@
 		selected?: boolean;
 		dragging?: boolean;
 		halfWidth?: boolean;
+		/**
+		 * Protocol forms only: tints the card so lifecycle (case) fields and
+		 * protocol-local fields are visually distinct. `null` = no tint.
+		 */
+		scopeTint?: 'lifecycle' | 'local' | null;
 		onSelect?: () => void;
 		onUpdate?: (updates: Partial<ToolsFormField>) => void;
 		onDragStart?: () => void;
@@ -33,6 +38,7 @@
 		selected = false,
 		dragging = false,
 		halfWidth = false,
+		scopeTint = null,
 		onSelect,
 		onUpdate,
 		onDragStart,
@@ -144,6 +150,8 @@
 	class:dragging
 	class:half-width={halfWidth}
 	class:can-drag={canDrag}
+	class:scope-lifecycle={scopeTint === 'lifecycle'}
+	class:scope-local={scopeTint === 'local'}
 	draggable={canDrag}
 	ondragstart={handleCardDragStart}
 	ondragend={handleCardDragEnd}
@@ -304,6 +312,28 @@
 	/* When card is ready to be dragged */
 	.field-card.can-drag {
 		cursor: grabbing;
+	}
+
+	/* Protocol form: scope tinting. Lifecycle (case) fields read bluish;
+	   protocol-local fields read greenish. */
+	.field-card.scope-lifecycle {
+		background: oklch(0.97 0.025 240);
+		border-color: oklch(0.85 0.05 240);
+	}
+
+	.field-card.scope-local {
+		background: oklch(0.97 0.04 150);
+		border-color: oklch(0.85 0.06 150);
+	}
+
+	:global(.dark) .field-card.scope-lifecycle {
+		background: oklch(0.28 0.04 240);
+		border-color: oklch(0.42 0.06 240);
+	}
+
+	:global(.dark) .field-card.scope-local {
+		background: oklch(0.28 0.05 150);
+		border-color: oklch(0.42 0.07 150);
 	}
 
 	.drag-handle {

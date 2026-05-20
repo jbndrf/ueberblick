@@ -38,7 +38,7 @@
 		currentPage = 1,
 		onPageChange,
 		errors = {},
-		fileCollection = 'workflow_instance_field_values'
+		fileCollection = 'workflow_field_values'
 	}: Props = $props();
 
 	// ==========================================================================

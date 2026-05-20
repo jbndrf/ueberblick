@@ -93,6 +93,30 @@ export interface ToolsForm {
 	 * - If stage_id is set: USED (defines the button appearance)
 	 */
 	visual_config?: VisualConfig;
+	/**
+	 * Protocol-local inline fields. Only populated when this form backs a
+	 * protocol tool and the admin added fields that should NOT enter the
+	 * workflow field registry. Values land in workflow_protocol_entries.snapshot
+	 * only.
+	 */
+	local_fields?: ProtocolLocalFieldDef[];
+}
+
+/**
+ * Inline field on `tools_forms.local_fields`. Mirrors the participant-state
+ * shape (`ProtocolLocalField`) but typed against the builder's FieldType.
+ */
+export interface ProtocolLocalFieldDef {
+	key: string;
+	label: string;
+	field_type: Exclude<FieldType, 'instance_reference'>;
+	field_options: Record<string, unknown> | null;
+	required: boolean;
+	placeholder: string | null;
+	help_text: string | null;
+	page: number;
+	row_index: number;
+	column_position: 'left' | 'right' | 'full';
 }
 
 // =============================================================================
@@ -248,8 +272,13 @@ export interface WorkflowFieldDef {
 	is_required?: boolean;
 	validation_rules?: Record<string, unknown> | null;
 	field_options?: Record<string, unknown> | null;
+	/**
+	 * UI transient: formula text typed by the admin. Persisted into a
+	 * companion `tools_automation` row rather than a column on this def.
+	 * Loaded back by the builder's load layer for round-trip editing.
+	 */
 	compute_expression?: string;
-	/** Phase 2: ids of field defs this computed field references. */
+	/** UI transient: ids of fields the formula references (auto-derived). */
 	compute_depends_on?: string[];
 }
 
@@ -541,3 +570,4 @@ export type TrackedEditTool = TrackedItem<ToolsEdit>;
 export type TrackedProtocolTool = TrackedItem<ToolsProtocol>;
 export type TrackedAutomation = TrackedItem<ToolsAutomation>;
 export type TrackedFieldTag = TrackedItem<ToolsFieldTag>;
+export type TrackedFieldDef = TrackedItem<WorkflowFieldDef>;

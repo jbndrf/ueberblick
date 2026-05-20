@@ -84,7 +84,9 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 
 		// Process collections
 		if (collections.length > 0) {
-			const nonSystem = collections.filter((c: any) => !c.name.startsWith('_'));
+			const nonSystem = collections.filter(
+				(c: any) => !c.name.startsWith('_')
+			);
 			collectionNames = nonSystem.map((c: any) => c.name);
 
 			for (const c of nonSystem) {

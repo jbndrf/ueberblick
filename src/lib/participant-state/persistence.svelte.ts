@@ -74,7 +74,6 @@ export async function saveReferenceData(data: {
 	await saveItems('tools_forms', data.toolsForms);
 	await saveItems('tools_form_field_refs', data.toolsFormFieldRefs);
 	await saveItems('workflow_field_defs', data.workflowFieldDefs);
-	// TODO(field-def-redesign): tools_edit removed; convert if still needed
 	await saveItems('marker_categories', data.markerCategories);
 	await saveItems('roles', data.roles);
 }

@@ -26,7 +26,13 @@
 		participantWorkflowInstanceDetailNoLocation,
 		participantWorkflowInstanceDetailTabActivity,
 		participantWorkflowInstanceDetailTabData,
+		participantWorkflowInstanceDetailTabProtocols,
+		participantWorkflowInstanceDetailProtocolHistoryEmpty,
+		participantWorkflowInstanceDetailProtocolAutologSummary,
 		participantWorkflowInstanceDetailUpdatedSuffix,
+		participantWorkflowInstanceDetailVisitSuffix,
+		participantWorkflowInstanceDetailLoadOlder,
+		participantWorkflowInstanceDetailLoadOlderOfflineHint,
 		participantWorkflowInstanceDetailYesterday
 	} from '$lib/paraglide/messages';
 	import ModuleShell from '$lib/components/module-shell.svelte';
@@ -45,7 +51,8 @@
 	import type { WorkflowInstanceSelection } from '../types';
 	import * as Tabs from '$lib/components/ui/tabs';
 	import { ChevronRight } from '@lucide/svelte';
-	import { FormFillTool, EditFieldsTool, ViewFieldsTool, LocationEditTool, ConflictResolutionTool, ProtocolTool } from './tools';
+	import { FormFillTool, ViewFieldsTool, LocationEditTool, ConflictResolutionTool, ProtocolTool } from './tools';
+	import { isMeaningfulValue } from './tools/form-state';
 	import FieldValueImage from './FieldValueImage.svelte';
 	import { getConflictsForInstance, resolveConflict } from '$lib/participant-state/sync.svelte';
 	import type { SyncConflict } from '$lib/participant-state/db';
@@ -74,10 +81,12 @@
 		isEditingLocation?: boolean;
 		/** Optional field value cache for O(1) lookups */
 		fieldValueCache?: FieldValueCache;
+		/** Participant role ids — used to filter view_roles-restricted fields. */
+		participantRoleIds?: string[];
 		onClose: () => void;
 	}
 
-	let { selection, isExpanded = $bindable(false), map = null, isEditingLocation = $bindable(false), fieldValueCache, onClose }: Props = $props();
+	let { selection, isExpanded = $bindable(false), map = null, isEditingLocation = $bindable(false), fieldValueCache, participantRoleIds = [], onClose }: Props = $props();
 
 	// ==========================================================================
 	// State
@@ -121,10 +130,10 @@
 	}
 
 	/**
-	 * Write a single field value, honouring write_mode:
-	 *   singleton -> upsert by (instance, field_def) using the in-memory cache.
-	 *   observation -> always append a new row.
-	 *   computed -> reject (server-only).
+	 * Write a single field value. Storage is append-only: every write_mode
+	 * inserts a new row, and "current value" is the latest by recorded_at.
+	 * write_mode is recorded on the row purely as a render hint.
+	 *   computed -> reject (server-evaluated).
 	 *
 	 * Files: when `value` is a File, write the binary into `file_value` instead.
 	 */
@@ -168,33 +177,8 @@
 			};
 		};
 
-		if (writeMode === 'observation') {
-			await gateway.collection('workflow_field_values').create(buildPayload() as any);
-			return;
-		}
-
-		// singleton: upsert by (instance, field_def) using the local cache.
-		const existing = detailState.fieldValuesByDefId.get(fieldDef.id)?.[0];
-		if (existing) {
-			if (isFile) {
-				const fd = new FormData();
-				fd.append('value', '');
-				fd.append('file_value', value as File);
-				fd.append('recorded_at', nowIso);
-				fd.append('recorded_at_stage', ctx.stageId);
-				if (ctx.toolUsageId) fd.append('recorded_by_action', ctx.toolUsageId);
-				await gateway.collection('workflow_field_values').update(existing.id, fd as any);
-			} else {
-				await gateway.collection('workflow_field_values').update(existing.id, {
-					value: typeof value === 'string' ? value : serializeValue(value),
-					recorded_at: nowIso,
-					recorded_at_stage: ctx.stageId,
-					recorded_by_action: ctx.toolUsageId ?? ''
-				});
-			}
-			return;
-		}
-
+		// Append-only: singleton, observation and any other mode all insert a
+		// new row. The read layer resolves "current value" as the latest.
 		await gateway.collection('workflow_field_values').create(buildPayload() as any);
 	}
 
@@ -279,8 +263,25 @@
 
 	const tabs = [
 		{ id: 'activity', label: participantWorkflowInstanceDetailTabActivity?.() ?? 'Activity' },
-		{ id: 'data', label: participantWorkflowInstanceDetailTabData?.() ?? 'Data' }
+		{ id: 'data', label: participantWorkflowInstanceDetailTabData?.() ?? 'Data' },
+		{ id: 'protocols', label: participantWorkflowInstanceDetailTabProtocols?.() ?? 'Protocols' }
 	];
+
+	let expandedProtocolEntry = $state<string | null>(null);
+	function toggleProtocolEntry(id: string) {
+		expandedProtocolEntry = expandedProtocolEntry === id ? null : id;
+	}
+	function formatTimestamp(iso: string): string {
+		if (!iso) return '';
+		const d = new Date(iso);
+		if (Number.isNaN(d.getTime())) return iso;
+		return d.toLocaleString();
+	}
+	function renderProtocolValue(v: unknown): string {
+		if (v === null || v === undefined || v === '') return '—';
+		if (typeof v === 'object') return JSON.stringify(v);
+		return String(v);
+	}
 
 	// ==========================================================================
 	// Computed Values
@@ -418,63 +419,114 @@
 	interface ActivitySection {
 		stageId: string;
 		stageName: string;
+		/** 1-based ordinal across visits to the same stage_id. */
+		visitIndex: number;
+		/** Total visits to the same stage_id across the whole timeline. */
+		visitTotal: number;
 		transitionEntry: ToolUsageRecord | null;
 		entries: ToolUsageRecord[];
 	}
 
+	// Chronological stage-visit segmentation. Circular workflows visit the same
+	// stage multiple times — each visit is its own segment so value rows
+	// recorded during that visit appear under the correct visit, not collapsed
+	// into a single per-stage bucket. Entries are bucketed by their own
+	// `stage_id` (which is the destination for form_fills authored while
+	// advancing) rather than strictly by executed_at, because form_fill is
+	// written a few ms BEFORE the stage_transition it accompanies — using
+	// strict time-window matching would mis-attribute it to the previous stage.
 	const activitySections = $derived.by((): ActivitySection[] => {
 		if (!detailState || detailState.toolUsageHistory.length === 0) return [];
 
-		// Group by each entry's true stage. For stage_transition the destination
-		// is metadata.to_stage_id (the entry itself was logged with the FROM
-		// stage as its stage_id); for everything else the entry's own stage_id
-		// is already correct. The previous newest-first walk attributed
-		// form_fills to the wrong stage because executeToolFlowTransition()
-		// records form_fill BEFORE stage_transition, putting the transition
-		// later in -executed_at order than the form_fill that triggered it.
-		const buckets = new Map<string, ToolUsageRecord[]>();
-		const transitionByStage = new Map<string, ToolUsageRecord>();
+		const ascending = [...detailState.toolUsageHistory].sort((a, b) =>
+			a.executed_at.localeCompare(b.executed_at)
+		);
 
-		for (const entry of detailState.toolUsageHistory) {
-			let stageKey: string;
-			if (entry.metadata?.action === 'stage_transition') {
-				stageKey = (entry.metadata.to_stage_id as string | undefined) ?? (entry.stage_id as string);
-				transitionByStage.set(stageKey, entry);
-			} else {
-				stageKey = entry.stage_id as string;
-			}
-			if (!stageKey) continue;
-			if (!buckets.has(stageKey)) buckets.set(stageKey, []);
-			buckets.get(stageKey)!.push(entry);
-		}
+		type Segment = {
+			stageId: string;
+			openedAt: string;
+			transition: ToolUsageRecord | null;
+			entries: ToolUsageRecord[];
+		};
+		const segments: Segment[] = [];
 
-		const sections: ActivitySection[] = [];
-		for (const [stageId, entries] of buckets) {
-			const transition = transitionByStage.get(stageId) ?? null;
-			// The transition row is rendered as the section header -- pull it
-			// out of the inner entries list to avoid double-rendering.
-			const innerEntries = transition
-				? entries.filter((e) => e.id !== transition.id)
-				: entries;
-			sections.push({
-				stageId,
-				stageName: getStageName(stageId) || stageId,
-				transitionEntry: transition,
-				entries: innerEntries
-			});
-		}
-
-		// Newest section first by transition time. Sections without a
-		// transition (the initial stage) sort to the bottom.
-		sections.sort((a, b) => {
-			const ta = a.transitionEntry?.executed_at;
-			const tb = b.transitionEntry?.executed_at;
-			if (ta && tb) return tb.localeCompare(ta);
-			if (ta) return -1;
-			if (tb) return 1;
-			return 0;
+		// Initial segment. Resolve its stage_id from the first transition's
+		// from_stage_id if available; otherwise fall back to the earliest
+		// non-transition entry's stage_id; otherwise the instance's current
+		// stage.
+		const firstTransition = ascending.find((e) => e.metadata?.action === 'stage_transition');
+		const initialStageId =
+			(firstTransition?.metadata?.from_stage_id as string | undefined) ||
+			(ascending.find((e) => e.metadata?.action !== 'stage_transition')?.stage_id as string | undefined) ||
+			((detailState.instance?.current_stage_id as string | undefined) ?? '');
+		segments.push({
+			stageId: initialStageId,
+			openedAt: (ascending[0]?.executed_at ?? new Date(0).toISOString()),
+			transition: null,
+			entries: []
 		});
 
+		for (const entry of ascending) {
+			if (entry.metadata?.action === 'stage_transition') {
+				const toStage =
+					(entry.metadata.to_stage_id as string | undefined) ?? (entry.stage_id as string);
+				if (!toStage) continue;
+				segments.push({ stageId: toStage, openedAt: entry.executed_at, transition: entry, entries: [] });
+			}
+		}
+
+		// Assign each non-transition entry to the segment whose stage_id matches
+		// AND whose openedAt is closest to (but at most slightly later than)
+		// the entry's executed_at. This handles form_fill-stamped-with-to-stage
+		// written just before its transition.
+		for (const entry of ascending) {
+			if (entry.metadata?.action === 'stage_transition') continue;
+			const entryStage = entry.stage_id as string | undefined;
+			if (!entryStage) continue;
+			const candidates = segments.filter((s) => s.stageId === entryStage);
+			let target: Segment | null = null;
+			if (candidates.length === 1) {
+				target = candidates[0];
+			} else if (candidates.length > 1) {
+				// Prefer the segment whose openedAt is the latest value still
+				// <= entry.executed_at + 5s (small skew tolerance for form_fill
+				// written just before its transition).
+				const SKEW_MS = 5_000;
+				const entryT = Date.parse(entry.executed_at);
+				let best: Segment | null = null;
+				let bestDelta = Infinity;
+				for (const c of candidates) {
+					const openedT = Date.parse(c.openedAt);
+					if (openedT - entryT > SKEW_MS) continue; // segment opens too far in the future
+					const delta = Math.abs(entryT - openedT);
+					if (delta < bestDelta) { best = c; bestDelta = delta; }
+				}
+				target = best ?? candidates[candidates.length - 1];
+			}
+			if (target) target.entries.push(entry);
+		}
+
+		const filtered = segments.filter((s) => s.transition || s.entries.length > 0);
+
+		const totalsByStage = new Map<string, number>();
+		for (const s of filtered) totalsByStage.set(s.stageId, (totalsByStage.get(s.stageId) ?? 0) + 1);
+		const seenByStage = new Map<string, number>();
+
+		const sections: ActivitySection[] = filtered.map((s) => {
+			const idx = (seenByStage.get(s.stageId) ?? 0) + 1;
+			seenByStage.set(s.stageId, idx);
+			return {
+				stageId: s.stageId,
+				stageName: getStageName(s.stageId) || s.stageId,
+				visitIndex: idx,
+				visitTotal: totalsByStage.get(s.stageId) ?? 1,
+				transitionEntry: s.transition,
+				// Newest-first within a segment, matching the previous UX.
+				entries: [...s.entries].sort((a, b) => b.executed_at.localeCompare(a.executed_at))
+			};
+		});
+
+		sections.reverse();
 		return sections;
 	});
 
@@ -605,7 +657,10 @@
 	// ==========================================================================
 
 	function getFieldName(fieldKey: string): string | undefined {
-		return detailState?.formFields.find(f => f.id === fieldKey)?.field_label;
+		return (
+			detailState?.formFields.find(f => f.id === fieldKey)?.field_label
+			?? detailState?.fieldDefsById.get(fieldKey)?.label
+		);
 	}
 
 	function getStageName(stageId: string): string | undefined {
@@ -633,17 +688,17 @@
 			);
 
 			const fieldEntries = Object.entries(formValues).filter(
-				([fieldId, value]) =>
-					refDefIds.has(fieldId) &&
-					value !== null && value !== undefined && value !== ''
+				([fieldId, value]) => refDefIds.has(fieldId) && isMeaningfulValue(value)
 			);
 
-			const createdFields = fieldEntries.map(([fieldId, value]) => ({
+			// Only field identifiers go into the audit metadata — never values.
+			// Values live exclusively in workflow_field_values (append-only), where
+			// each row is gated by workflow_field_defs.view_roles. This prevents
+			// the audit UI from leaking values to participants who can't see the
+			// underlying field.
+			const createdFields = fieldEntries.map(([fieldId]) => ({
 				field_key: fieldId,
-				field_name: getFieldName(fieldId) || fieldId,
-				value: Array.isArray(value) && value[0] instanceof File
-					? `[${(value as File[]).length} file(s)]`
-					: typeof value === 'object' ? JSON.stringify(value) : String(value)
+				field_name: getFieldName(fieldId) || fieldId
 			}));
 
 			// 1. Create tool_usage record with actual data (audit trail)
@@ -1007,76 +1062,80 @@
 		return hex;
 	}
 
-	async function saveProtocol(protocolTool: ToolProtocol, editValues: Record<string, unknown>, protocolValues: Record<string, unknown>) {
+	async function saveProtocol(
+		protocolTool: ToolProtocol,
+		caseValues: Record<string, unknown>,
+		localValues: Record<string, unknown>
+	) {
 		if (!detailState || !gateway) return;
 
 		const currentStageId = detailState.instance?.current_stage_id as string;
 
-		// 1. Build deterministic snapshot. Includes the protocol form's fields
-		//    plus any `protocol_only_field_defs` (snapshot-only — never written
-		//    to workflow_field_values).
-		const snapshotFields: Array<Record<string, unknown>> = [];
+		// Resolve the protocol's form and its local fields.
 		const protocolFormFields = protocolTool.protocol_form_id
 			? detailState.getProtocolFormFields(protocolTool.protocol_form_id)
 			: [];
+		const localFields = detailState.getProtocolLocalFields(protocolTool.protocol_form_id);
 
+		// 1. Build the snapshot in the canonical shape (kind: 'manual').
+		const caseFieldsSnapshot: Array<Record<string, unknown>> = [];
 		for (const field of protocolFormFields) {
-			const value = protocolValues[field.id];
+			const value = caseValues[field.id];
 			const entry: Record<string, unknown> = {
-				id: field.id,
-				name: field.field_label,
-				type: field.field_type
+				field_def_id: field.id,
+				key: (field as any).key ?? field.id,
+				label: field.field_label,
+				write_mode: field.write_mode ?? 'singleton'
 			};
-
 			if (Array.isArray(value) && value.length > 0 && value[0] instanceof File) {
-				entry.images_added = (value as File[]).map(f => f.name);
+				entry.value = null;
+				entry.images_added = (value as File[]).map((f) => f.name);
 			} else if (value !== null && value !== undefined && value !== '') {
 				entry.value = typeof value === 'object' ? value : String(value);
 			} else {
 				entry.value = null;
 			}
-
-			snapshotFields.push(entry);
+			caseFieldsSnapshot.push(entry);
 		}
 
-		// Snapshot-only field defs (live only inside this entry's snapshot JSON).
-		const protocolOnlyIds = protocolTool.protocol_only_field_defs ?? [];
-		for (const defId of protocolOnlyIds) {
-			const def = detailState.fieldDefsById.get(defId);
-			if (!def) continue;
-			const value = protocolValues[defId];
+		const localFieldsSnapshot: Array<Record<string, unknown>> = [];
+		for (const lf of localFields) {
+			const value = localValues[lf.key];
 			const entry: Record<string, unknown> = {
-				id: def.id,
-				name: def.label,
-				type: def.field_type,
-				snapshot_only: true
+				key: lf.key,
+				label: lf.label
 			};
 			if (Array.isArray(value) && value.length > 0 && value[0] instanceof File) {
-				entry.images_added = (value as File[]).map(f => f.name);
+				entry.value = null;
+				entry.images_added = (value as File[]).map((f) => f.name);
 			} else if (value !== null && value !== undefined && value !== '') {
 				entry.value = typeof value === 'object' ? value : String(value);
 			} else {
 				entry.value = null;
 			}
-			snapshotFields.push(entry);
+			localFieldsSnapshot.push(entry);
 		}
 
-		// Sort by field ID for determinism
-		snapshotFields.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+		caseFieldsSnapshot.sort((a, b) => String(a.field_def_id).localeCompare(String(b.field_def_id)));
+		localFieldsSnapshot.sort((a, b) => String(a.key).localeCompare(String(b.key)));
 
-		const snapshotJson = sortedStringify(snapshotFields);
+		const snapshot = {
+			kind: 'manual' as const,
+			case_fields: caseFieldsSnapshot,
+			local_fields: localFieldsSnapshot,
+			autolog: null
+		};
+		const snapshotJson = sortedStringify(snapshot);
 		const hashHex = await sha256Hex(snapshotJson);
 
-		// Snapshot-only ids -- used below to skip writeFieldValue for these.
-		const protocolOnlySet = new Set(protocolOnlyIds);
-
-		// 2. Create protocol entry record
-		const hasFiles = Object.values(protocolValues).some(
-			v => Array.isArray(v) && v.length > 0 && v[0] instanceof File
+		// 2. Create the protocol entry. Files attach as multipart when present.
+		const allValues: Record<string, unknown> = { ...caseValues };
+		for (const [k, v] of Object.entries(localValues)) allValues[`local:${k}`] = v;
+		const hasFiles = Object.values(allValues).some(
+			(v) => Array.isArray(v) && v.length > 0 && v[0] instanceof File
 		);
 
 		let protocolEntry: { id: string };
-
 		if (hasFiles) {
 			const formData = new FormData();
 			formData.append('instance_id', detailState.instanceId);
@@ -1086,51 +1145,38 @@
 			formData.append('recorded_at', new Date().toISOString());
 			formData.append('snapshot', snapshotJson);
 			formData.append('snapshot_hash', hashHex);
-
-			// Add protocol field values as JSON
-			const cleanProtocolValues: Record<string, unknown> = {};
-			for (const [fieldId, value] of Object.entries(protocolValues)) {
-				if (Array.isArray(value) && value.length > 0 && value[0] instanceof File) {
-					for (const file of value as File[]) {
-						formData.append('files', file);
-					}
-				} else {
-					cleanProtocolValues[fieldId] = value;
+			for (const v of Object.values(allValues)) {
+				if (Array.isArray(v) && v.length > 0 && v[0] instanceof File) {
+					for (const file of v as File[]) formData.append('files', file);
 				}
 			}
-			formData.append('field_values', JSON.stringify(cleanProtocolValues));
-
-			protocolEntry = await gateway.collection('workflow_protocol_entries').create(formData as any) as { id: string };
+			protocolEntry = (await gateway
+				.collection('workflow_protocol_entries')
+				.create(formData as any)) as { id: string };
 		} else {
-			protocolEntry = await gateway.collection('workflow_protocol_entries').create({
+			protocolEntry = (await gateway.collection('workflow_protocol_entries').create({
 				instance_id: detailState.instanceId,
 				tool_id: protocolTool.id,
 				stage_id: currentStageId,
 				recorded_by: gateway.participantId,
 				recorded_at: new Date().toISOString(),
 				snapshot: snapshotJson,
-				snapshot_hash: hashHex,
-				field_values: protocolValues
-			}) as { id: string };
+				snapshot_hash: hashHex
+			})) as { id: string };
 		}
 
-		// 3. Create tool_usage record (audit trail). Edit changes (legacy
-		//    "lifecycle fields") are compared against the latest known value.
-		const editChanges: Array<{ field_key: string; field_name: string; before: string | null; after: string }> = [];
-		for (const [fieldId, newValue] of Object.entries(editValues)) {
-			if (newValue === null || newValue === undefined || newValue === '') continue;
-			const existing = detailState.fieldValuesByDefId.get(fieldId)?.[0];
-			const oldValue = existing?.value || null;
-			const newValueStr = Array.isArray(newValue) && newValue[0] instanceof File
-				? `[${(newValue as File[]).length} file(s)]`
-				: typeof newValue === 'object' ? JSON.stringify(newValue) : String(newValue);
-
-			if (oldValue !== newValueStr) {
-				editChanges.push({ field_key: fieldId, field_name: getFieldName(fieldId) || fieldId, before: oldValue, after: newValueStr });
-			}
+		// 3. tool_usage audit row. Only identifiers — never values.
+		const changes: Array<{ field_key: string; field_name: string }> = [];
+		for (const [fieldId, value] of Object.entries(caseValues)) {
+			if (!isMeaningfulValue(value)) continue;
+			changes.push({ field_key: fieldId, field_name: getFieldName(fieldId) || fieldId });
+		}
+		for (const lf of localFields) {
+			if (!isMeaningfulValue(localValues[lf.key])) continue;
+			changes.push({ field_key: `local:${lf.key}`, field_name: lf.label });
 		}
 
-		const toolUsage = await gateway.collection('workflow_instance_tool_usage').create({
+		const toolUsage = (await gateway.collection('workflow_instance_tool_usage').create({
 			instance_id: detailState.instanceId,
 			stage_id: currentStageId,
 			executed_by: gateway.participantId,
@@ -1139,16 +1185,14 @@
 				action: 'protocol',
 				stage_name: getStageName(currentStageId) || currentStageId,
 				protocol_entry_id: protocolEntry.id,
-				changes: editChanges
+				changes
 			}
-		}) as { id: string };
+		})) as { id: string };
 
-		// 4. Write field values for the protocol form's fields through the
-		//    unified helper. write_mode on each field def decides upsert vs append.
-		//    Snapshot-only fields are intentionally skipped here.
-		for (const [fieldId, value] of Object.entries(protocolValues)) {
-			if (value === null || value === undefined || value === '') continue;
-			if (protocolOnlySet.has(fieldId)) continue;
+		// 4. Persist case-field values through the unified write path.
+		//    Local fields live only in the snapshot — no writeFieldValue call.
+		for (const [fieldId, value] of Object.entries(caseValues)) {
+			if (!isMeaningfulValue(value)) continue;
 			const def = detailState.fieldDefsById.get(fieldId);
 			if (!def) {
 				console.warn('[saveProtocol] no field_def found for id', fieldId);
@@ -1172,38 +1216,15 @@
 			}
 		}
 
-		// editValues survives only because ProtocolTool still exposes a separate
-		// edit-section panel. Route those values through writeFieldValue too --
-		// no separate "edit" code path, no tools_edit semantics.
-		for (const [fieldId, value] of Object.entries(editValues)) {
-			if (value === null || value === undefined || value === '') continue;
-			const def = detailState.fieldDefsById.get(fieldId);
-			if (!def) continue;
-			const stageId = getStageIdForField(fieldId) || currentStageId;
-			if (Array.isArray(value) && value.length > 0 && value[0] instanceof File) {
-				for (const file of value as File[]) {
-					await writeFieldValue(def, file, {
-						instanceId: detailState.instanceId,
-						stageId,
-						toolUsageId: toolUsage.id
-					});
-				}
-			} else {
-				await writeFieldValue(def, serializeValue(value), {
-					instanceId: detailState.instanceId,
-					stageId,
-					toolUsageId: toolUsage.id
-				});
-			}
-		}
-
-		// 5. Refresh state
 		await detailState.refresh();
 	}
 
-	async function handleProtocolSave(editValues: Record<string, unknown>, protocolValues: Record<string, unknown>) {
+	async function handleProtocolSave(
+		caseValues: Record<string, unknown>,
+		localValues: Record<string, unknown>
+	) {
 		if (!activeProtocolTool) return;
-		await saveProtocol(activeProtocolTool, editValues, protocolValues);
+		await saveProtocol(activeProtocolTool, caseValues, localValues);
 		activeProtocolTool = null;
 	}
 
@@ -1391,23 +1412,8 @@
 					workflowId={activeToolFlow.connection.workflow_id}
 					connectionId={activeToolFlow.connection.id}
 					existingFieldValues={detailState?.fieldValues}
+					{participantRoleIds}
 					onSubmit={handleToolFormSubmit}
-					onCancel={handleToolFlowCancel}
-				/>
-			{:else if currentTool?.type === 'edit' && detailState}
-				{@const editToolInFlow = currentTool.tool as ToolEdit}
-				<EditFieldsTool
-					editTool={editToolInFlow}
-					instanceId={detailState.instanceId}
-					existingFieldValues={detailState.fieldValues}
-					formFields={detailState.getFormFieldsForReachedStages()}
-					groupedFields={detailState.getEditableFieldsGroupedByStage(editToolInFlow.editable_fields || [])}
-					initialActiveStageId={detailState.activeStageTab}
-					onSave={async (values) => {
-						// For edit tools in a connection flow, save and advance
-						await handleEditSave(values);
-						advanceToolFlow();
-					}}
 					onCancel={handleToolFlowCancel}
 				/>
 			{:else if currentTool?.type === 'protocol' && detailState}
@@ -1415,11 +1421,10 @@
 				<ProtocolTool
 					protocolTool={protocolToolInFlow}
 					instanceId={detailState.instanceId}
-					existingFieldValues={detailState.fieldValues}
-					formFields={detailState.getFormFieldsForReachedStages()}
 					protocolFormFields={protocolToolInFlow.protocol_form_id ? detailState.getProtocolFormFields(protocolToolInFlow.protocol_form_id) : []}
-					onSave={async (editValues, protocolValues) => {
-						await saveProtocol(protocolToolInFlow, editValues, protocolValues);
+					localFields={detailState.getProtocolLocalFields(protocolToolInFlow.protocol_form_id)}
+					onSave={async (caseValues, localValues) => {
+						await saveProtocol(protocolToolInFlow, caseValues, localValues);
 						advanceToolFlow();
 					}}
 					onCancel={handleToolFlowCancel}
@@ -1432,24 +1437,12 @@
 				onResolve={handleConflictResolve}
 				onCancel={handleConflictCancel}
 			/>
-		{:else if activeEditTool && detailState}
-			<EditFieldsTool
-				editTool={activeEditTool}
-				instanceId={detailState.instanceId}
-				existingFieldValues={detailState.fieldValues}
-				formFields={detailState.getFormFieldsForReachedStages()}
-				groupedFields={detailState.getEditableFieldsGroupedByStage(activeEditTool.editable_fields || [])}
-				initialActiveStageId={detailState.activeStageTab}
-				onSave={handleEditSave}
-				onCancel={handleEditCancel}
-			/>
 		{:else if activeProtocolTool && detailState}
 			<ProtocolTool
 				protocolTool={activeProtocolTool}
 				instanceId={detailState.instanceId}
-				existingFieldValues={detailState.fieldValues}
-				formFields={detailState.getFormFieldsForReachedStages()}
 				protocolFormFields={activeProtocolTool.protocol_form_id ? detailState.getProtocolFormFields(activeProtocolTool.protocol_form_id) : []}
+				localFields={detailState.getProtocolLocalFields(activeProtocolTool.protocol_form_id)}
 				onSave={handleProtocolSave}
 				onCancel={handleProtocolCancel}
 			/>
@@ -1534,7 +1527,7 @@
 										>
 											<div class="flex-1 min-w-0">
 												<p class="text-sm font-semibold text-blue-900 dark:text-blue-100">
-													{participantWorkflowInstanceDetailMovedTo?.({ stageName: section.stageName }) ?? `Moved to: ${section.stageName}`}
+													{participantWorkflowInstanceDetailMovedTo?.({ stageName: section.stageName }) ?? `Moved to: ${section.stageName}`}{section.visitTotal > 1 ? ` ${participantWorkflowInstanceDetailVisitSuffix?.({ index: section.visitIndex, total: section.visitTotal }) ?? `(visit ${section.visitIndex} of ${section.visitTotal})`}` : ''}
 												</p>
 												<p class="text-xs text-blue-700/70 dark:text-blue-300/70">
 													{relativeTime(section.transitionEntry.executed_at)}{transBy ? ` \u00b7 ${transBy}` : ''}
@@ -1549,7 +1542,7 @@
 											class:mt-2={sectionIndex > 0}
 										>
 											<div class="h-2 w-2 rounded-full bg-green-500 shrink-0"></div>
-											<p class="text-sm font-semibold text-foreground">{section.stageName}</p>
+											<p class="text-sm font-semibold text-foreground">{section.stageName}{section.visitTotal > 1 ? ` ${participantWorkflowInstanceDetailVisitSuffix?.({ index: section.visitIndex, total: section.visitTotal }) ?? `(visit ${section.visitIndex} of ${section.visitTotal})`}` : ''}</p>
 										</div>
 									{/if}
 
@@ -1563,6 +1556,7 @@
 												{@const showActor = !prevEntry || (prevEntry.expand?.executed_by?.name || prevEntry.expand?.executed_by?.email) !== (entry.expand?.executed_by?.name || entry.expand?.executed_by?.email) || (prevEntry.metadata?.action === 'admin_edit') !== (metadata.action === 'admin_edit')}
 												{@const hasExpandableContent = (metadata.action === 'instance_created' || metadata.action === 'form_fill') && Array.isArray(metadata.created_fields) && metadata.created_fields.length > 2}
 												{@const label = getEntryLabel(metadata)}
+												{@const valuesForEntry = detailState?.fieldValues.filter((fv) => (fv as any).recorded_by_action === entry.id) ?? []}
 
 												<details class="group" data-testid="activity-entry">
 													<summary class="flex items-baseline justify-between gap-2 py-1.5 cursor-pointer select-none hover:bg-muted/30 -mx-1 px-1 rounded">
@@ -1578,43 +1572,46 @@
 													</summary>
 
 													<div class="pb-2 pt-0.5">
+														<!-- Field rows render from workflow_field_values keyed by recorded_by_action.
+														     Values live exclusively there, gated row-by-row by workflow_field_defs.view_roles. -->
 														<!-- instance_created -->
-														{#if metadata.action === 'instance_created' && metadata.created_fields}
+														{#if metadata.action === 'instance_created'}
 															{#if metadata.centroid}
 																<div class="flex gap-1.5 text-xs mb-0.5">
 																	<span class="text-muted-foreground shrink-0">{participantWorkflowInstanceDetailLocationLabel?.() ?? 'Location'}:</span>
 																	<span class="font-medium truncate">{metadata.centroid.lat.toFixed(5)}, {metadata.centroid.lon.toFixed(5)}{metadata.geometry_type && metadata.geometry_type !== 'Point' ? ` (${metadata.geometry_type})` : ''}</span>
 																</div>
 															{/if}
-															{#each metadata.created_fields as field}
-																{@const fieldDef = detailState?.formFields.find(f => f.id === field.field_key)}
+															{#each valuesForEntry as fv (fv.id)}
+																{@const defId = (fv as any).field_def_id as string}
+																{@const fieldDef = detailState?.formFields.find((f) => f.id === defId)}
 																<div class="flex gap-1.5 text-xs mb-0.5">
-																	<span class="text-muted-foreground shrink-0">{fieldDef?.field_label || field.field_key}:</span>
-																	<span class="font-medium truncate">{formatHistoryValue(field.value, field.field_key)}</span>
+																	<span class="text-muted-foreground shrink-0">{fieldDef?.field_label || detailState?.fieldDefsById.get(defId)?.label || defId}:</span>
+																	<span class="font-medium truncate">{formatHistoryValue((fv as any).value, defId)}</span>
 																</div>
 															{/each}
 														{/if}
 
 														<!-- form_fill -->
-														{#if metadata.action === 'form_fill' && metadata.created_fields}
-															{#each metadata.created_fields as field}
-																{@const fieldDef = detailState?.formFields.find(f => f.id === field.field_key)}
+														{#if metadata.action === 'form_fill'}
+															{#each valuesForEntry as fv (fv.id)}
+																{@const defId = (fv as any).field_def_id as string}
+																{@const fieldDef = detailState?.formFields.find((f) => f.id === defId)}
 																<div class="flex gap-1.5 text-xs mb-0.5">
-																	<span class="text-muted-foreground shrink-0">{fieldDef?.field_label || field.field_key}:</span>
-																	<span class="font-medium truncate">{formatHistoryValue(field.value, field.field_key)}</span>
+																	<span class="text-muted-foreground shrink-0">{fieldDef?.field_label || detailState?.fieldDefsById.get(defId)?.label || defId}:</span>
+																	<span class="font-medium truncate">{formatHistoryValue((fv as any).value, defId)}</span>
 																</div>
 															{/each}
 														{/if}
 
 														<!-- edit / admin_edit -->
-														{#if (metadata.action === 'edit' || metadata.action === 'admin_edit') && metadata.changes}
-															{#each metadata.changes as change}
-																{@const fieldDef = detailState?.formFields.find(f => f.id === change.field_key)}
+														{#if metadata.action === 'edit' || metadata.action === 'admin_edit'}
+															{#each valuesForEntry as fv (fv.id)}
+																{@const defId = (fv as any).field_def_id as string}
+																{@const fieldDef = detailState?.formFields.find((f) => f.id === defId)}
 																<div class="text-xs mb-0.5">
-																	<span class="text-muted-foreground">{fieldDef?.field_label || change.field_key}: </span>
-																	<span class="line-through text-muted-foreground/60">{formatHistoryValue(change.before, change.field_key)}</span>
-																	<span class="text-muted-foreground mx-0.5">-></span>
-																	<span class="font-medium">{formatHistoryValue(change.after, change.field_key)}</span>
+																	<span class="text-muted-foreground">{fieldDef?.field_label || detailState?.fieldDefsById.get(defId)?.label || defId}: </span>
+																	<span class="font-medium">{formatHistoryValue((fv as any).value, defId)}</span>
 																</div>
 															{/each}
 														{/if}
@@ -1635,14 +1632,13 @@
 														{/if}
 
 														<!-- protocol -->
-														{#if metadata.action === 'protocol' && metadata.changes}
-															{#each metadata.changes as change}
-																{@const fieldDef = detailState?.formFields.find(f => f.id === change.field_key)}
+														{#if metadata.action === 'protocol'}
+															{#each valuesForEntry as fv (fv.id)}
+																{@const defId = (fv as any).field_def_id as string}
+																{@const fieldDef = detailState?.formFields.find((f) => f.id === defId)}
 																<div class="text-xs mb-0.5">
-																	<span class="text-muted-foreground">{fieldDef?.field_label || change.field_key}: </span>
-																	<span class="line-through text-muted-foreground/60">{formatHistoryValue(change.before, change.field_key)}</span>
-																	<span class="text-muted-foreground mx-0.5">-></span>
-																	<span class="font-medium">{formatHistoryValue(change.after, change.field_key)}</span>
+																	<span class="text-muted-foreground">{fieldDef?.field_label || detailState?.fieldDefsById.get(defId)?.label || defId}: </span>
+																	<span class="font-medium">{formatHistoryValue((fv as any).value, defId)}</span>
 																</div>
 															{/each}
 														{/if}
@@ -1674,6 +1670,19 @@
 										</div>
 									{/if}
 								{/each}
+								{#if detailState && detailState.hasMoreOlderValues}
+									<div class="pt-3 flex justify-center">
+										<button
+											type="button"
+											class="text-xs px-3 py-1.5 rounded border border-border text-muted-foreground hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+											disabled={detailState.loadingOlderValues || !navigator.onLine}
+											title={navigator.onLine ? '' : (participantWorkflowInstanceDetailLoadOlderOfflineHint?.() ?? 'Online required to load older activity')}
+											onclick={() => detailState && detailState.loadOlderFieldValues()}
+										>
+											{participantWorkflowInstanceDetailLoadOlder?.() ?? 'Load older activity'}
+										</button>
+									</div>
+								{/if}
 							</div>
 						{/if}
 					</Tabs.Content>
@@ -1711,6 +1720,76 @@
 								</div>
 							{/if}
 						</div>
+					</Tabs.Content>
+
+					<Tabs.Content value="protocols" class="pt-4">
+						{@const ds = detailState}
+						{#if !ds || ds.protocolEntries.length === 0}
+							<div class="text-center py-12 text-muted-foreground">
+								<p class="text-sm">{participantWorkflowInstanceDetailProtocolHistoryEmpty?.() ?? 'No protocols recorded for this case yet.'}</p>
+							</div>
+						{:else}
+							<div class="space-y-2">
+								{#each ds.protocolEntries as entry (entry.id)}
+									{@const expanded = expandedProtocolEntry === entry.id}
+									<div class="rounded-lg border border-border bg-background">
+										<button
+											type="button"
+											class="w-full flex items-center justify-between p-3 text-left hover:bg-muted/40"
+											onclick={() => toggleProtocolEntry(entry.id)}
+										>
+											<div class="flex flex-col">
+												<span class="text-sm font-medium">
+													{entry.tool_name ?? (entry.kind === 'global_autolog' ? 'Audit log' : 'Protocol')}
+												</span>
+												<span class="text-xs text-muted-foreground">
+													{formatTimestamp(entry.recorded_at)}
+												</span>
+											</div>
+											<span class="text-xs text-muted-foreground">
+												{entry.kind === 'global_autolog' ? 'auto' : 'manual'}
+											</span>
+										</button>
+
+										{#if expanded}
+											<div class="border-t border-border p-3 space-y-3">
+												{#if entry.kind === 'global_autolog' && entry.autolog}
+													<p class="text-xs text-muted-foreground">
+														{participantWorkflowInstanceDetailProtocolAutologSummary?.({
+															count: entry.autolog.entries.length,
+															from: formatTimestamp(entry.autolog.from),
+															to: formatTimestamp(entry.autolog.to)
+														}) ?? `${entry.autolog.entries.length} audit entries between ${formatTimestamp(entry.autolog.from)} and ${formatTimestamp(entry.autolog.to)}.`}
+													</p>
+												{/if}
+
+												{#if entry.case_fields.length > 0}
+													<dl class="text-xs space-y-1">
+														{#each entry.case_fields as cf (cf.field_def_id)}
+															<div class="flex justify-between gap-3">
+																<dt class="text-muted-foreground">{cf.label}</dt>
+																<dd class="font-medium text-right break-all">{renderProtocolValue(cf.value)}</dd>
+															</div>
+														{/each}
+													</dl>
+												{/if}
+
+												{#if entry.local_fields.length > 0}
+													<dl class="text-xs space-y-1 pt-2 border-t border-border">
+														{#each entry.local_fields as lf (lf.key)}
+															<div class="flex justify-between gap-3">
+																<dt class="text-muted-foreground italic">{lf.label}</dt>
+																<dd class="font-medium text-right break-all">{renderProtocolValue(lf.value)}</dd>
+															</div>
+														{/each}
+													</dl>
+												{/if}
+											</div>
+										{/if}
+									</div>
+								{/each}
+							</div>
+						{/if}
 					</Tabs.Content>
 				</Tabs.Root>
 			</div>

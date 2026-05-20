@@ -63,7 +63,8 @@ export type SelectionContext =
 	| { type: 'addTool'; attachedTo: AddToolContextData['attachedTo'] }
 	| { type: 'globalTools' }
 	| { type: 'automation'; automationId: string }
-	| { type: 'fieldTags' };
+	| { type: 'fieldTags' }
+	| { type: 'fieldLibrary' };
 
 // Helper to create contexts
 export const createContext = {
@@ -124,7 +125,9 @@ export const createContext = {
 		automationId
 	}),
 
-	fieldTags: (): SelectionContext => ({ type: 'fieldTags' })
+	fieldTags: (): SelectionContext => ({ type: 'fieldTags' }),
+
+	fieldLibrary: (): SelectionContext => ({ type: 'fieldLibrary' })
 };
 
 // Type guards for narrowing
@@ -178,4 +181,10 @@ export function isFieldTagsContext(
 	ctx: SelectionContext
 ): ctx is Extract<SelectionContext, { type: 'fieldTags' }> {
 	return ctx.type === 'fieldTags';
+}
+
+export function isFieldLibraryContext(
+	ctx: SelectionContext
+): ctx is Extract<SelectionContext, { type: 'fieldLibrary' }> {
+	return ctx.type === 'fieldLibrary';
 }

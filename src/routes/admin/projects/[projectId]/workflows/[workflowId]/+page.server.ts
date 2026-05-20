@@ -245,8 +245,6 @@ export const actions: Actions = {
 		const instanceId = formData.get('instance_id') as string;
 		const fieldKey = formData.get('field_key') as string;
 		const newValue = formData.get('value') as string;
-		const oldValue = formData.get('old_value') as string;
-		const existingRecordId = formData.get('record_id') as string;
 		const stageId = formData.get('stage_id') as string;
 
 		if (!instanceId || !fieldKey) {
@@ -254,7 +252,9 @@ export const actions: Actions = {
 		}
 
 		try {
-			// Step 1: Create audit trail entry
+			// workflow_field_values is append-only. Every admin edit creates a new
+			// row; "current value" is the latest by recorded_at. The previous row
+			// IS the before-value — no need to copy it into tool_usage metadata.
 			const toolUsage = await pb.collection('workflow_instance_tool_usage').create({
 				instance_id: instanceId,
 				stage_id: stageId || null,
@@ -262,31 +262,26 @@ export const actions: Actions = {
 				executed_at: new Date().toISOString(),
 				metadata: {
 					action: 'admin_edit',
-					changes: [{ field_key: fieldKey, before: oldValue || null, after: newValue }]
+					// Identifiers only — values live in workflow_field_values
+					// (append-only, gated by field-level view_roles).
+					changes: [{ field_key: fieldKey }]
 				}
 			});
 
-			// Step 2: Update or create field value. `fieldKey` is the field_def_id.
-			// Source `write_mode` from the def so observation-mode fields don't get
-			// silently coerced to singletons on inline admin edits.
-			if (existingRecordId) {
-				await pb.collection('workflow_field_values').update(existingRecordId, {
-					value: newValue
-				});
-			} else {
-				const def = await pb
-					.collection('workflow_field_defs')
-					.getOne(fieldKey, { fields: 'write_mode', requestKey: null });
-				const writeMode = (def as any).write_mode ?? 'singleton';
-				await pb.collection('workflow_field_values').create({
-					instance_id: instanceId,
-					field_def_id: fieldKey,
-					recorded_at_stage: stageId || null,
-					recorded_by_action: toolUsage.id,
-					write_mode: writeMode,
-					value: newValue
-				});
-			}
+			const def = await pb
+				.collection('workflow_field_defs')
+				.getOne(fieldKey, { fields: 'write_mode', requestKey: null });
+			const writeMode = (def as any).write_mode ?? 'singleton';
+
+			await pb.collection('workflow_field_values').create({
+				instance_id: instanceId,
+				field_def_id: fieldKey,
+				recorded_at_stage: stageId || null,
+				recorded_by_action: toolUsage.id,
+				recorded_at: new Date().toISOString(),
+				write_mode: writeMode,
+				value: newValue
+			});
 
 			return { success: true };
 		} catch (err) {

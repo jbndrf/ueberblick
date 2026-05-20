@@ -2,210 +2,159 @@
 	/**
 	 * ProtocolTool
 	 *
-	 * Combines Edit + Form in one tool:
-	 * - Section 1: Lifecycle fields (pre-filled from current field_values, respecting prefill_config)
-	 * - Section 2: Protocol fields (from protocol_form_id, mode="fill")
-	 * - On save: calls onSave(editValues, protocolValues)
+	 * A protocol is a form that also emits an immutable snapshot. The fields
+	 * shown here come from two sources:
+	 *   - **Case (library) fields**: referenced via `tools_form_field_refs`.
+	 *     Submitted values flow through `writeFieldValue` and land in
+	 *     `workflow_field_values` like any other form.
+	 *   - **Protocol-local fields**: inline on `tools_forms.local_fields`.
+	 *     Values land only in `workflow_protocol_entries.snapshot.local_fields`
+	 *     — never in `workflow_field_values`.
+	 *
+	 * The single `onSave(caseValues, localValues)` callback hands both maps to
+	 * the parent module so it can build the snapshot and persist case fields
+	 * independently.
 	 */
 	import { onMount } from 'svelte';
 	import { FormRenderer } from '$lib/components/form-renderer';
 	import { Button } from '$lib/components/ui/button';
 	import { Save, X, Loader2 } from '@lucide/svelte';
-	import { Separator } from '$lib/components/ui/separator';
 	import type { FormFieldWithValue } from '$lib/components/form-renderer';
-	import type { ToolProtocol, FormField, FieldValue } from '../state.svelte';
+	import type { ToolProtocol, FormField } from '../state.svelte';
+	import type { ProtocolLocalField } from '$lib/participant-state/types';
 	import {
 		commonCancel,
 		participantProtocolToolFieldRequired,
-		participantProtocolToolLifecycleFields,
 		participantProtocolToolLoading,
 		participantProtocolToolNoFields,
-		participantProtocolToolProtocolFields,
 		participantProtocolToolSave,
 		participantProtocolToolSaving
 	} from '$lib/paraglide/messages';
 
-	// ==========================================================================
-	// Props
-	// ==========================================================================
-
 	interface Props {
 		protocolTool: ToolProtocol;
 		instanceId: string;
-		existingFieldValues: FieldValue[];
-		formFields: FormField[];
+		/** Fields from `tools_form_field_refs` joined with their field defs. */
 		protocolFormFields: FormField[];
-		onSave: (editValues: Record<string, unknown>, protocolValues: Record<string, unknown>) => Promise<void>;
+		/** Inline local fields from `tools_forms.local_fields`. */
+		localFields: ProtocolLocalField[];
+		/**
+		 * `caseValues` keyed by field_def_id; `localValues` keyed by the local
+		 * field's `key`.
+		 */
+		onSave: (
+			caseValues: Record<string, unknown>,
+			localValues: Record<string, unknown>
+		) => Promise<void>;
 		onCancel: () => void;
 	}
 
-	let { protocolTool, instanceId, existingFieldValues, formFields, protocolFormFields, onSave, onCancel }: Props = $props();
+	let { protocolTool: _protocolTool, instanceId: _instanceId, protocolFormFields, localFields, onSave, onCancel }: Props = $props();
 
-	// ==========================================================================
-	// State
-	// ==========================================================================
-
-	let editValues = $state<Record<string, unknown>>({});
-	let protocolValues = $state<Record<string, unknown>>({});
+	let caseValues = $state<Record<string, unknown>>({});
+	let localValues = $state<Record<string, unknown>>({});
 	let errors = $state<Record<string, string>>({});
 	let isSubmitting = $state(false);
 	let isLoading = $state(true);
-	let editFileChanges = $state<Record<string, File[]>>({});
-	let protocolFileChanges = $state<Record<string, File[]>>({});
+	let caseFileChanges = $state<Record<string, File[]>>({});
+	let localFileChanges = $state<Record<string, File[]>>({});
 
-	// ==========================================================================
-	// Derived
-	// ==========================================================================
-
-	// TODO(field-def-redesign): tools_protocol.editable_fields was dropped.
-	// Lifecycle-style edits are now driven by the field def's own write_mode --
-	// any singleton field referenced by the protocol form upserts naturally.
-	// We keep an empty list so the rendering stays compatible while admin sweeps
-	// the data.
-	const editableFieldIds = $derived<string[]>([]);
-	const prefillConfig = $derived(protocolTool.prefill_config || {});
-
-	const editableFields = $derived.by((): FormFieldWithValue[] => {
-		const filtered = formFields.filter(f => editableFieldIds.includes(f.id));
-		return filtered.map(field => {
-			const fieldValuesForField = existingFieldValues.filter(fv => (fv as any).field_def_id === field.id);
-			const storedFiles = fieldValuesForField
-				.filter(fv => fv.file_value)
-				.map(fv => ({ recordId: fv.id, fileName: fv.file_value }));
-			const firstValue = fieldValuesForField.find(fv => fv.value);
-
-			return {
-				...field,
-				value: editValues[field.id] ?? firstValue?.value ?? undefined,
-				fileValue: storedFiles[0]?.fileName || undefined,
-				fileRecordId: storedFiles[0]?.recordId || undefined,
-				storedFiles: storedFiles.length > 0 ? storedFiles : undefined
-			} as FormFieldWithValue;
-		});
-	});
-
-	const protocolFieldsWithValues = $derived.by((): FormFieldWithValue[] => {
-		return protocolFormFields.map(field => ({
+	const caseFieldsWithValues = $derived.by((): FormFieldWithValue[] => {
+		return protocolFormFields.map((field) => ({
 			...field,
-			value: protocolValues[field.id]
+			value: caseValues[field.id]
 		})) as FormFieldWithValue[];
 	});
 
-	const hasEditFields = $derived(editableFields.length > 0);
-	const hasProtocolFields = $derived(protocolFormFields.length > 0);
+	/** Render local fields by shimming them into the FormField shape. */
+	const localFieldsAsFormFields = $derived.by((): FormFieldWithValue[] => {
+		return (localFields ?? []).map((lf, idx) => ({
+			id: `local:${lf.key}`,
+			form_id: '',
+			field_def_id: '',
+			ref_id: '',
+			field_label: lf.label,
+			field_type: lf.field_type,
+			field_order: 10_000 + idx,
+			is_required: lf.required,
+			placeholder: lf.placeholder ?? undefined,
+			help_text: lf.help_text ?? undefined,
+			field_options: lf.field_options,
+			page: lf.page,
+			row_index: lf.row_index,
+			column_position: lf.column_position,
+			value: localValues[lf.key]
+		})) as unknown as FormFieldWithValue[];
+	});
 
-	// ==========================================================================
-	// Initialization
-	// ==========================================================================
+	const hasCaseFields = $derived(protocolFormFields.length > 0);
+	const hasLocalFields = $derived((localFields?.length ?? 0) > 0);
 
 	onMount(() => {
-		initializeValues();
 		isLoading = false;
 	});
 
-	function initializeValues() {
-		const initialEditValues: Record<string, unknown> = {};
-
-		// Pre-fill edit fields from existing values, respecting prefill_config
-		for (const fieldValue of existingFieldValues) {
-			const key = (fieldValue as any).field_def_id as string | undefined;
-			if (!key) continue;
-			if (!editableFieldIds.includes(key)) continue;
-
-			// Check if prefill is enabled for this field (default is true)
-			if (prefillConfig[key] === false) continue;
-
-			try {
-				if (fieldValue.value.startsWith('[') || fieldValue.value.startsWith('{')) {
-					initialEditValues[key] = JSON.parse(fieldValue.value);
-				} else {
-					initialEditValues[key] = fieldValue.value;
-				}
-			} catch {
-				initialEditValues[key] = fieldValue.value;
-			}
-		}
-
-		editValues = initialEditValues;
+	function handleCaseValueChange(fieldId: string, value: unknown) {
+		caseValues = { ...caseValues, [fieldId]: value };
+		clearError(fieldId);
 	}
 
-	// ==========================================================================
-	// Handlers
-	// ==========================================================================
-
-	function handleEditValueChange(fieldId: string, value: unknown) {
-		editValues = { ...editValues, [fieldId]: value };
-		if (errors[fieldId]) {
-			const newErrors = { ...errors };
-			delete newErrors[fieldId];
-			errors = newErrors;
-		}
+	function handleCaseFileChange(fieldId: string, files: File[]) {
+		caseFileChanges = { ...caseFileChanges, [fieldId]: files };
+		caseValues = { ...caseValues, [fieldId]: files };
 	}
 
-	function handleEditFileChange(fieldId: string, files: File[]) {
-		editFileChanges = { ...editFileChanges, [fieldId]: files };
-		editValues = { ...editValues, [fieldId]: files };
+	function handleLocalValueChange(syntheticId: string, value: unknown) {
+		const key = syntheticId.startsWith('local:') ? syntheticId.slice(6) : syntheticId;
+		localValues = { ...localValues, [key]: value };
+		clearError(syntheticId);
 	}
 
-	function handleProtocolValueChange(fieldId: string, value: unknown) {
-		protocolValues = { ...protocolValues, [fieldId]: value };
-		if (errors[fieldId]) {
-			const newErrors = { ...errors };
-			delete newErrors[fieldId];
-			errors = newErrors;
-		}
+	function handleLocalFileChange(syntheticId: string, files: File[]) {
+		const key = syntheticId.startsWith('local:') ? syntheticId.slice(6) : syntheticId;
+		localFileChanges = { ...localFileChanges, [key]: files };
+		localValues = { ...localValues, [key]: files };
 	}
 
-	function handleProtocolFileChange(fieldId: string, files: File[]) {
-		protocolFileChanges = { ...protocolFileChanges, [fieldId]: files };
-		protocolValues = { ...protocolValues, [fieldId]: files };
+	function clearError(id: string) {
+		if (!errors[id]) return;
+		const next = { ...errors };
+		delete next[id];
+		errors = next;
 	}
 
-	function validateFields(): boolean {
-		const newErrors: Record<string, string> = {};
-
-		for (const field of editableFields) {
-			const value = editValues[field.id];
-			if (field.is_required) {
-				if (value === null || value === undefined || value === '') {
-					newErrors[field.id] = (participantProtocolToolFieldRequired?.() ?? 'This field is required');
-					continue;
-				}
-				if (Array.isArray(value) && value.length === 0) {
-					newErrors[field.id] = (participantProtocolToolFieldRequired?.() ?? 'This field is required');
-					continue;
-				}
-			}
-		}
+	function validate(): boolean {
+		const next: Record<string, string> = {};
+		const requiredMsg = participantProtocolToolFieldRequired?.() ?? 'This field is required';
 
 		for (const field of protocolFormFields) {
-			const value = protocolValues[field.id];
-			if (field.is_required) {
-				if (value === null || value === undefined || value === '') {
-					newErrors[field.id] = (participantProtocolToolFieldRequired?.() ?? 'This field is required');
-					continue;
-				}
-				if (Array.isArray(value) && value.length === 0) {
-					newErrors[field.id] = (participantProtocolToolFieldRequired?.() ?? 'This field is required');
-					continue;
-				}
+			if (!field.is_required) continue;
+			const v = caseValues[field.id];
+			if (v === null || v === undefined || v === '' || (Array.isArray(v) && v.length === 0)) {
+				next[field.id] = requiredMsg;
+			}
+		}
+		for (const lf of localFields ?? []) {
+			if (!lf.required) continue;
+			const v = localValues[lf.key];
+			if (v === null || v === undefined || v === '' || (Array.isArray(v) && v.length === 0)) {
+				next[`local:${lf.key}`] = requiredMsg;
 			}
 		}
 
-		errors = newErrors;
-		return Object.keys(newErrors).length === 0;
+		errors = next;
+		return Object.keys(next).length === 0;
 	}
 
 	async function handleSave() {
 		if (isSubmitting) return;
-		if (!validateFields()) return;
+		if (!validate()) return;
 
 		isSubmitting = true;
-
 		try {
-			const finalEditValues = { ...editValues, ...editFileChanges };
-			const finalProtocolValues = { ...protocolValues, ...protocolFileChanges };
-			await onSave(finalEditValues, finalProtocolValues);
+			const finalCaseValues = { ...caseValues, ...caseFileChanges };
+			const finalLocalValues = { ...localValues, ...localFileChanges };
+			await onSave(finalCaseValues, finalLocalValues);
 		} catch (err) {
 			console.error('Protocol tool save failed:', err);
 		} finally {
@@ -214,95 +163,67 @@
 	}
 </script>
 
-{#snippet contentSnippet()}
-	{#if isLoading}
-		<div class="flex-1 flex items-center justify-center py-12">
-			<div class="text-center">
-				<div
-					class="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2"
-				></div>
-				<p class="text-sm text-muted-foreground">{participantProtocolToolLoading?.() ?? 'Loading...'}</p>
+<div class="flex flex-col min-h-full">
+	<div class="flex-1">
+		{#if isLoading}
+			<div class="flex-1 flex items-center justify-center py-12">
+				<div class="text-center">
+					<div class="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+					<p class="text-sm text-muted-foreground">{participantProtocolToolLoading?.() ?? 'Loading...'}</p>
+				</div>
 			</div>
-		</div>
-	{:else}
-		{#if hasEditFields}
-			<div class="p-4">
-				<h4 class="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">{participantProtocolToolLifecycleFields?.() ?? 'Lifecycle Fields'}</h4>
-				<FormRenderer
-					mode="edit"
-					fields={editableFields}
-					values={editValues}
-					{errors}
-					paginated={false}
-					onValueChange={handleEditValueChange}
-					onFileChange={handleEditFileChange}
-				/>
-			</div>
-		{/if}
-
-		{#if hasEditFields && hasProtocolFields}
-			<Separator />
-		{/if}
-
-		{#if hasProtocolFields}
-			<div class="p-4">
-				<h4 class="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">{participantProtocolToolProtocolFields?.() ?? 'Protocol Fields'}</h4>
-				<FormRenderer
-					mode="fill"
-					fields={protocolFieldsWithValues}
-					values={protocolValues}
-					{errors}
-					paginated={false}
-					onValueChange={handleProtocolValueChange}
-					onFileChange={handleProtocolFileChange}
-				/>
-			</div>
-		{/if}
-
-		{#if !hasEditFields && !hasProtocolFields}
+		{:else if !hasCaseFields && !hasLocalFields}
 			<div class="flex-1 flex items-center justify-center p-4 py-12">
 				<p class="text-sm text-muted-foreground">{participantProtocolToolNoFields?.() ?? 'No fields configured for this protocol tool.'}</p>
 			</div>
+		{:else}
+			{#if hasCaseFields}
+				<div class="p-4">
+					<FormRenderer
+						mode="fill"
+						fields={caseFieldsWithValues}
+						values={caseValues}
+						{errors}
+						paginated={false}
+						onValueChange={handleCaseValueChange}
+						onFileChange={handleCaseFileChange}
+					/>
+				</div>
+			{/if}
+
+			{#if hasLocalFields}
+				<div class="p-4">
+					<FormRenderer
+						mode="fill"
+						fields={localFieldsAsFormFields}
+						values={Object.fromEntries(Object.entries(localValues).map(([k, v]) => [`local:${k}`, v]))}
+						{errors}
+						paginated={false}
+						onValueChange={handleLocalValueChange}
+						onFileChange={handleLocalFileChange}
+					/>
+				</div>
+			{/if}
 		{/if}
-	{/if}
-{/snippet}
-
-{#snippet footerSnippet()}
-	<div class="p-4">
-		<div class="flex gap-2">
-			<Button
-				variant="outline"
-				onclick={onCancel}
-				disabled={isSubmitting}
-				class="flex-1"
-			>
-				<X class="w-4 h-4 mr-1" />
-				{commonCancel?.() ?? 'Cancel'}
-			</Button>
-
-			<Button
-				onclick={handleSave}
-				disabled={isSubmitting || (!hasEditFields && !hasProtocolFields)}
-				class="flex-1"
-			>
-				{#if isSubmitting}
-					<Loader2 class="w-4 h-4 mr-2 animate-spin" />
-					{participantProtocolToolSaving?.() ?? 'Saving...'}
-				{:else}
-					<Save class="w-4 h-4 mr-2" />
-					{participantProtocolToolSave?.() ?? 'Save Protocol'}
-				{/if}
-			</Button>
-		</div>
 	</div>
-{/snippet}
 
-<!-- Render content - parent (ModuleShell) handles scrolling -->
-<div class="flex flex-col min-h-full">
-	<div class="flex-1">
-		{@render contentSnippet()}
-	</div>
 	<div class="sticky bottom-0 bg-background border-t border-border">
-		{@render footerSnippet()}
+		<div class="p-4">
+			<div class="flex gap-2">
+				<Button variant="outline" onclick={onCancel} disabled={isSubmitting} class="flex-1">
+					<X class="w-4 h-4 mr-1" />
+					{commonCancel?.() ?? 'Cancel'}
+				</Button>
+				<Button onclick={handleSave} disabled={isSubmitting || (!hasCaseFields && !hasLocalFields)} class="flex-1">
+					{#if isSubmitting}
+						<Loader2 class="w-4 h-4 mr-2 animate-spin" />
+						{participantProtocolToolSaving?.() ?? 'Saving...'}
+					{:else}
+						<Save class="w-4 h-4 mr-2" />
+						{participantProtocolToolSave?.() ?? 'Save Protocol'}
+					{/if}
+				</Button>
+			</div>
+		</div>
 	</div>
 </div>

@@ -29,7 +29,6 @@
 		mapPackageSelectorProgressConnections,
 		mapPackageSelectorProgressDownloadingPackage,
 		mapPackageSelectorProgressDownloadingSize,
-		mapPackageSelectorProgressEditTools,
 		mapPackageSelectorProgressExtractingTiles,
 		mapPackageSelectorProgressExtractingTilesCount,
 		mapPackageSelectorProgressFieldValues,
@@ -223,10 +222,10 @@
 			for (let i = 0; i < instanceIds.length; i += batchSize) {
 				const batch = instanceIds.slice(i, i + batchSize);
 				const filterParts = batch.map((id) => `instance_id = "${id}"`);
-				const fieldValues = await pb.collection('workflow_instance_field_values').getFullList({
+				const fieldValues = await pb.collection('workflow_field_values').getFullList({
 					filter: filterParts.join(' || ')
 				});
-				await storeRecords('workflow_instance_field_values', fieldValues);
+				await storeRecords('workflow_field_values', fieldValues);
 			}
 		}
 
@@ -273,20 +272,16 @@
 
 			if (forms.length > 0) {
 				const formFilter = forms.map((f) => `form_id = "${f.id}"`).join(' || ');
-				const fields = await pb.collection('tools_form_fields').getFullList({
+				const refs = await pb.collection('tools_form_field_refs').getFullList({
 					filter: formFilter
 				});
-				await storeRecords('tools_form_fields', fields);
+				await storeRecords('tools_form_field_refs', refs);
 			}
 
-			if (stages.length > 0) {
-				downloadProgress = { phase: 'extracting', progress: 92, message: mapPackageSelectorProgressEditTools() };
-				const stageFilter = stages.map((s) => `stage_id ~ "${s.id}"`).join(' || ');
-				const editTools = await pb.collection('tools_edit').getFullList({
-					filter: stageFilter
-				});
-				await storeRecords('tools_edit', editTools);
-			}
+			const fieldDefs = await pb.collection('workflow_field_defs').getFullList({
+				filter: workflowFilter
+			});
+			await storeRecords('workflow_field_defs', fieldDefs);
 		}
 
 		// Download map layers (source data is now inline)

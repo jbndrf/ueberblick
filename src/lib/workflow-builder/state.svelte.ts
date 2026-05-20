@@ -29,7 +29,10 @@ import type {
 	TriggerType,
 	TriggerConfig,
 	TransitionTriggerConfig,
-	ExecutionMode
+	ExecutionMode,
+	WorkflowFieldDef,
+	TrackedFieldDef,
+	FieldType
 } from './types';
 
 // =============================================================================
@@ -52,6 +55,129 @@ export class WorkflowBuilderState {
 	automations = $state<TrackedAutomation[]>([]);
 	fieldTags = $state<TrackedFieldTag[]>([]);
 
+	// Workflow-scoped field-def registry (workflow_field_defs collection).
+	fieldDefs = $state<TrackedFieldDef[]>([]);
+
+	visibleFieldDefs = $derived(this.fieldDefs.filter((d) => d.status !== 'deleted'));
+
+	/**
+	 * Field defs as seen by cross-form consumers (library palette, protocol-tool
+	 * field picker, smart-dropdown source picker). Includes both:
+	 *  - real entries from `workflow_field_defs` (`this.fieldDefs`)
+	 *  - synthesized transient entries derived from new form fields whose
+	 *    `field_def_id` placeholder (e.g. `_temp_*`) is not yet in the registry.
+	 *
+	 * Synthesized entries let users reference freshly-added fields in other forms
+	 * before saving. They are NOT included in `getChanges()`; the save path
+	 * already materialises them via the `_temp_*` placeholder flow.
+	 */
+	effectiveFieldDefs = $derived.by((): TrackedFieldDef[] => {
+		const real = this.fieldDefs.filter((d) => d.status !== 'deleted');
+		const realIds = new Set(real.map((d) => d.data.id));
+		const seenSynth = new Set<string>();
+		const synthesized: TrackedFieldDef[] = [];
+		for (const f of this.formFields) {
+			if (f.status === 'deleted') continue;
+			const defId = f.data.field_def_id;
+			if (!defId || realIds.has(defId) || seenSynth.has(defId)) continue;
+			seenSynth.add(defId);
+			synthesized.push({
+				data: {
+					id: defId,
+					workflow_id: this.workflowId,
+					key: '',
+					label: f.data.field_label ?? '',
+					field_type: f.data.field_type,
+					write_mode: f.data.write_mode ?? 'singleton',
+					output_type: '',
+					view_roles: [],
+					placeholder: f.data.placeholder ?? '',
+					help_text: f.data.help_text ?? '',
+					is_required: f.data.is_required ?? false,
+					validation_rules: f.data.validation_rules ?? null,
+					field_options: f.data.field_options ?? null,
+					compute_expression: f.data.compute_expression ?? '',
+					compute_depends_on: []
+				},
+				status: 'new'
+			});
+		}
+		return [...real, ...synthesized];
+	});
+
+	getFieldDefById(id: string | undefined): WorkflowFieldDef | undefined {
+		if (!id) return undefined;
+		const real = this.fieldDefs.find((d) => d.data.id === id && d.status !== 'deleted')?.data;
+		if (real) return real;
+		return this.effectiveFieldDefs.find((d) => d.data.id === id)?.data;
+	}
+
+	addFieldDef(partial?: Partial<WorkflowFieldDef>): WorkflowFieldDef {
+		const def: WorkflowFieldDef = {
+			id: generateId(),
+			workflow_id: this.workflowId,
+			key: partial?.key ?? '',
+			label: partial?.label ?? '',
+			field_type: (partial?.field_type ?? 'short_text') as FieldType,
+			write_mode: partial?.write_mode ?? 'singleton',
+			output_type: partial?.output_type ?? '',
+			display_stage_id: partial?.display_stage_id,
+			view_roles: partial?.view_roles ?? [],
+			placeholder: partial?.placeholder ?? '',
+			help_text: partial?.help_text ?? '',
+			is_required: partial?.is_required ?? false,
+			validation_rules: partial?.validation_rules ?? null,
+			field_options: partial?.field_options ?? null,
+			compute_expression: partial?.compute_expression ?? '',
+			compute_depends_on: partial?.compute_depends_on ?? []
+		};
+		this.fieldDefs.push({ data: def, status: 'new' });
+		return def;
+	}
+
+	updateFieldDef(id: string, updates: Partial<WorkflowFieldDef>): void {
+		const def = this.fieldDefs.find((d) => d.data.id === id);
+		if (!def) return;
+		def.data = { ...def.data, ...updates };
+		if (def.status === 'unchanged') def.status = 'modified';
+
+		// Form-fields denormalize a subset of def-level properties (label,
+		// type, write_mode, options, validation, required, placeholder,
+		// help_text, compute_expression) onto their ref row. Mirror def
+		// edits onto every form-field pointing at this def so the form
+		// builder and runtime see consistent values without a save+refresh.
+		for (const f of this.formFields) {
+			if (f.status === 'deleted') continue;
+			if (f.data.field_def_id !== id) continue;
+			const patch: Partial<ToolsFormField> = {};
+			if (updates.label !== undefined) patch.field_label = updates.label ?? '';
+			if (updates.field_type !== undefined) patch.field_type = updates.field_type;
+			if (updates.write_mode !== undefined) (patch as any).write_mode = updates.write_mode;
+			if (updates.is_required !== undefined) patch.is_required = updates.is_required ?? false;
+			if (updates.field_options !== undefined) patch.field_options = updates.field_options ?? undefined;
+			if (updates.validation_rules !== undefined) patch.validation_rules = updates.validation_rules ?? undefined;
+			if (updates.placeholder !== undefined) patch.placeholder = updates.placeholder ?? '';
+			if (updates.help_text !== undefined) patch.help_text = updates.help_text ?? '';
+			if (updates.compute_expression !== undefined) (patch as any).compute_expression = updates.compute_expression ?? '';
+			if (Object.keys(patch).length === 0) continue;
+			Object.assign(f.data, patch);
+			if (f.status === 'unchanged' && !deepEqual(f.data, f.original)) {
+				f.status = 'modified';
+			}
+		}
+	}
+
+	deleteFieldDef(id: string): void {
+		const def = this.fieldDefs.find((d) => d.data.id === id);
+		if (!def) return;
+
+		if (def.status === 'new') {
+			this.fieldDefs = this.fieldDefs.filter((d) => d.data.id !== id);
+		} else {
+			def.status = 'deleted';
+		}
+	}
+
 	// Derived: dirty state
 	isDirty = $derived(
 		this.stages.some((s) => s.status !== 'unchanged') ||
@@ -61,7 +187,8 @@ export class WorkflowBuilderState {
 			this.editTools.some((e) => e.status !== 'unchanged') ||
 			this.protocolTools.some((p) => p.status !== 'unchanged') ||
 			this.automations.some((a) => a.status !== 'unchanged') ||
-			this.fieldTags.some((ft) => ft.status !== 'unchanged')
+			this.fieldTags.some((ft) => ft.status !== 'unchanged') ||
+			this.fieldDefs.some((d) => d.status !== 'unchanged')
 	);
 
 	// Derived: visible items (exclude deleted)
@@ -96,6 +223,7 @@ export class WorkflowBuilderState {
 		protocolTools?: ToolsProtocol[];
 		automations?: ToolsAutomation[];
 		fieldTags?: ToolsFieldTag[];
+		fieldDefs?: WorkflowFieldDef[];
 	}) {
 		// Guard against re-initialization (prevents infinite effect loops)
 		if (this.initialized) return;
@@ -175,6 +303,12 @@ export class WorkflowBuilderState {
 			data: ft,
 			status: 'unchanged' as ItemStatus,
 			original: structuredClone(ft)
+		}));
+
+		this.fieldDefs = (data.fieldDefs || []).map((d) => ({
+			data: d,
+			status: 'unchanged' as ItemStatus,
+			original: structuredClone(d)
 		}));
 	}
 
@@ -518,10 +652,11 @@ export class WorkflowBuilderState {
 		// `builder/+page.server.ts saveWorkflow` recognises the prefix and replaces
 		// it with the id of a freshly-created field def. Definitional fields are
 		// kept on the ref shape for the legacy UI; the save action splits them out.
+		const tempDefId = `_temp_${generateId()}`;
 		const newField: ToolsFormField = {
 			id: generateId(),
 			form_id: formId,
-			field_def_id: `_temp_${generateId()}`,
+			field_def_id: tempDefId,
 			field_label: 'New Field',
 			field_type: fieldType,
 			field_order: existingFields.length,
@@ -536,6 +671,70 @@ export class WorkflowBuilderState {
 			status: 'new'
 		});
 
+		// Mirror this form-field as a workflow_field_def in client state so
+		// the field library (and other def-consumers) see it immediately,
+		// without waiting for a save+refresh round-trip. The `_temp_` id is
+		// excluded from getChanges().fieldDefs — the server materialises the
+		// real def via the formFields.new save path.
+		this.fieldDefs.push({
+			data: {
+				id: tempDefId,
+				workflow_id: this.workflowId,
+				key: '',
+				label: 'New Field',
+				field_type: fieldType,
+				write_mode: 'singleton',
+				output_type: '',
+				view_roles: [],
+				placeholder: '',
+				help_text: '',
+				is_required: false,
+				validation_rules: null,
+				field_options: null,
+				compute_expression: '',
+				compute_depends_on: []
+			},
+			status: 'new'
+		});
+
+		return newField;
+	}
+
+	/**
+	 * Add a form-field reference pointing at an EXISTING workflow_field_defs row.
+	 * Unlike `addFormField`, this does not synthesize a new def — the ref carries
+	 * a real `field_def_id`. Legacy denormalized fields (label/type/etc.) are
+	 * populated from the def so the existing UI continues to render.
+	 */
+	addFormFieldRef(
+		formId: string,
+		fieldDefId: string,
+		rowIndex: number,
+		columnPosition: ToolsFormField['column_position'],
+		page: number = 1
+	): ToolsFormField | null {
+		const def = this.getFieldDefById(fieldDefId);
+		if (!def) return null;
+		const existingFields = this.visibleFormFields.filter((f) => f.data.form_id === formId);
+		const newField: ToolsFormField = {
+			id: generateId(),
+			form_id: formId,
+			field_def_id: fieldDefId,
+			field_label: def.label ?? '',
+			field_type: def.field_type,
+			field_order: existingFields.length,
+			page,
+			row_index: rowIndex,
+			column_position: columnPosition,
+			is_required: def.is_required ?? false,
+			placeholder: def.placeholder ?? '',
+			help_text: def.help_text ?? '',
+			validation_rules: def.validation_rules ?? undefined,
+			field_options: def.field_options ?? undefined,
+			write_mode: def.write_mode,
+			compute_expression: def.compute_expression
+		};
+		this.formFields.push({ data: newField, status: 'new' });
 		return newField;
 	}
 
@@ -548,6 +747,25 @@ export class WorkflowBuilderState {
 		if (field.status === 'unchanged') {
 			if (!deepEqual(field.data, field.original)) {
 				field.status = 'modified';
+			}
+		}
+
+		// Mirror definitional changes to the matching tracked field def
+		// (only for shadow `_temp_*` defs created by addFormField — real defs
+		// are owned by FieldLibraryView and shouldn't be mutated implicitly).
+		const defId = field.data.field_def_id;
+		if (typeof defId === 'string' && defId.startsWith('_temp_')) {
+			const def = this.fieldDefs.find((d) => d.data.id === defId);
+			if (def) {
+				if (updates.field_label !== undefined) def.data.label = updates.field_label ?? '';
+				if (updates.field_type !== undefined) def.data.field_type = updates.field_type;
+				if (updates.is_required !== undefined) def.data.is_required = updates.is_required ?? false;
+				if (updates.field_options !== undefined) def.data.field_options = updates.field_options ?? null;
+				if (updates.validation_rules !== undefined) def.data.validation_rules = updates.validation_rules ?? null;
+				if (updates.placeholder !== undefined) def.data.placeholder = updates.placeholder ?? '';
+				if (updates.help_text !== undefined) def.data.help_text = updates.help_text ?? '';
+				if ((updates as any).write_mode !== undefined) def.data.write_mode = (updates as any).write_mode;
+				if ((updates as any).compute_expression !== undefined) def.data.compute_expression = (updates as any).compute_expression ?? '';
 			}
 		}
 	}
@@ -564,6 +782,17 @@ export class WorkflowBuilderState {
 			}
 		}
 
+		// Protocol tools denormalize the same `editable_fields` shape as
+		// edit tools — keep them in sync too.
+		for (const pt of this.protocolTools) {
+			if (pt.status === 'deleted') continue;
+			if (!pt.data.editable_fields?.includes(id)) continue;
+			pt.data.editable_fields = pt.data.editable_fields.filter((f) => f !== id);
+			if (pt.status === 'unchanged' && !deepEqual(pt.data, pt.original)) {
+				pt.status = 'modified';
+			}
+		}
+
 		// Remove any field tag mappings that reference this field
 		for (const ft of this.fieldTags) {
 			if (ft.status === 'deleted') continue;
@@ -574,6 +803,15 @@ export class WorkflowBuilderState {
 					ft.status = 'modified';
 				}
 			}
+		}
+
+		// Drop the shadow def created by addFormField when the form-field
+		// itself goes away. Real (`workflow_field_defs`-backed) refs leave
+		// the def alone — it may still be referenced elsewhere or edited
+		// independently via the field library.
+		const defId = field.data.field_def_id;
+		if (typeof defId === 'string' && defId.startsWith('_temp_')) {
+			this.fieldDefs = this.fieldDefs.filter((d) => d.data.id !== defId);
 		}
 
 		if (field.status === 'new') {
@@ -795,6 +1033,13 @@ export class WorkflowBuilderState {
 	deleteProtocolTool(id: string) {
 		const tool = this.protocolTools.find((p) => p.data.id === id);
 		if (!tool) return;
+
+		// The protocol form is owned 1:1 by its protocol tool (see
+		// `getProtocolFormIds`). Cascade its deletion so the now-orphaned
+		// form doesn't reappear in the regular forms list.
+		if (tool.data.protocol_form_id) {
+			this.deleteForm(tool.data.protocol_form_id);
+		}
 
 		if (tool.status === 'new') {
 			this.protocolTools = this.protocolTools.filter((p) => p.data.id !== id);
@@ -1319,6 +1564,11 @@ export class WorkflowBuilderState {
 			ft.status = 'unchanged';
 			ft.original = $state.snapshot(ft.data);
 		}
+		this.fieldDefs = this.fieldDefs.filter((d) => d.status !== 'deleted');
+		for (const d of this.fieldDefs) {
+			d.status = 'unchanged';
+			d.original = $state.snapshot(d.data);
+		}
 	}
 
 	// =========================================================================
@@ -1370,6 +1620,20 @@ export class WorkflowBuilderState {
 				new: this.fieldTags.filter((ft) => ft.status === 'new').map((ft) => $state.snapshot(ft.data)),
 				modified: this.fieldTags.filter((ft) => ft.status === 'modified').map((ft) => $state.snapshot(ft.data)),
 				deleted: this.fieldTags.filter((ft) => ft.status === 'deleted').map((ft) => ft.data.id)
+			},
+			fieldDefs: {
+				// Shadow defs (id starts with `_temp_`) are mirrors of new form
+				// fields; the server creates them via the formFields.new save
+				// path, so don't double-send them here.
+				new: this.fieldDefs
+					.filter((d) => d.status === 'new' && !d.data.id.startsWith('_temp_'))
+					.map((d) => $state.snapshot(d.data)),
+				modified: this.fieldDefs
+					.filter((d) => d.status === 'modified' && !d.data.id.startsWith('_temp_'))
+					.map((d) => $state.snapshot(d.data)),
+				deleted: this.fieldDefs
+					.filter((d) => d.status === 'deleted' && !d.data.id.startsWith('_temp_'))
+					.map((d) => d.data.id)
 			}
 		};
 	}

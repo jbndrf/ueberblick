@@ -22,10 +22,13 @@
 		onFieldSelect?: (fieldId: string) => void;
 		onFieldsReorder?: (fieldIds: string[]) => void;
 		onFieldDrop?: (fieldType: FieldType, page: number, rowIndex: number, columnPosition: ColumnPosition) => void;
+		onFieldRefDrop?: (fieldDefId: string, page: number, rowIndex: number, columnPosition: ColumnPosition) => void;
 		onFieldUpdate?: (fieldId: string, updates: Partial<ToolsFormField>) => void;
 		onPageTitleChange?: (page: number, title: string) => void;
 		onAddPage?: () => void;
 		onDeletePage?: (page: number) => void;
+		/** Protocol forms: tint cards by scope (lifecycle vs protocol-local). */
+		scopeTinted?: boolean;
 	};
 
 	let {
@@ -34,10 +37,12 @@
 		onFieldSelect,
 		onFieldsReorder,
 		onFieldDrop,
+		onFieldRefDrop,
 		onFieldUpdate,
 		onPageTitleChange,
 		onAddPage,
-		onDeletePage
+		onDeletePage,
+		scopeTinted = false
 	}: Props = $props();
 
 	// Current page being viewed
@@ -136,13 +141,46 @@
 		squeezeFieldId?: string; // Field to squeeze when previewing beside full-width
 	} | null>(null);
 
+	// Reads a "new field" payload from a drag event — either a fresh field
+	// type from FieldTypesPalette, or an existing field-def id from
+	// LibraryFieldsPalette. Both result in a new ToolsFormField on the form;
+	// the def id branch reuses an existing WorkflowFieldDef instead of
+	// creating one.
+	type NewFieldPayload =
+		| { kind: 'type'; fieldType: FieldType }
+		| { kind: 'def'; fieldDefId: string };
+
+	function readNewFieldPayload(e: DragEvent): NewFieldPayload | null {
+		const fieldType = (e.dataTransfer?.getData('fieldType') || e.dataTransfer?.getData('fieldtype')) as FieldType;
+		if (fieldType) return { kind: 'type', fieldType };
+		const fieldDefId = e.dataTransfer?.getData('fieldDefId') || e.dataTransfer?.getData('fielddefid');
+		if (fieldDefId) return { kind: 'def', fieldDefId };
+		return null;
+	}
+
+	function emitNewField(
+		payload: NewFieldPayload,
+		page: number,
+		rowIndex: number,
+		columnPosition: ColumnPosition
+	) {
+		if (payload.kind === 'type') {
+			onFieldDrop?.(payload.fieldType, page, rowIndex, columnPosition);
+		} else {
+			onFieldRefDrop?.(payload.fieldDefId, page, rowIndex, columnPosition);
+		}
+	}
+
 	function handleFormDragOver(e: DragEvent) {
 		e.preventDefault();
 		const types = e.dataTransfer?.types;
 
-		// Check if dragging a field type from palette (new field)
-		const hasFieldType = types && (Array.from(types).includes('fieldtype') || Array.from(types).includes('fieldType'));
-		if (hasFieldType) {
+		// Check if dragging a new field from either palette (fresh type or library def)
+		const hasNewField = types && Array.from(types).some((t) => {
+			const lower = t.toLowerCase();
+			return lower === 'fieldtype' || lower === 'fielddefid';
+		});
+		if (hasNewField) {
 			isDraggingFieldType = true;
 			if (e.dataTransfer) {
 				e.dataTransfer.dropEffect = 'copy';
@@ -223,8 +261,8 @@
 		e.preventDefault();
 		e.stopPropagation();
 
-		const fieldType = (e.dataTransfer?.getData('fieldType') || e.dataTransfer?.getData('fieldtype')) as FieldType;
-		if (!fieldType) return;
+		const payload = readNewFieldPayload(e);
+		if (!payload) return;
 
 		// Convert position to column_position
 		const columnPosition: ColumnPosition = position === 'middle' ? 'full' : position;
@@ -234,10 +272,10 @@
 			const existingPosition: ColumnPosition = position === 'left' ? 'right' : 'left';
 			onFieldUpdate?.(squeezeFieldId, { column_position: existingPosition });
 			// Add new field in the same row (use integer rowIndex)
-			onFieldDrop?.(fieldType, currentPage, Math.floor(rowIndex), columnPosition);
+			emitNewField(payload, currentPage, Math.floor(rowIndex), columnPosition);
 		} else if (type === 'empty-side') {
 			// Filling empty side of existing row
-			onFieldDrop?.(fieldType, currentPage, rowIndex, columnPosition);
+			emitNewField(payload, currentPage, rowIndex, columnPosition);
 		} else if (type === 'between-row') {
 			// Between-row insertion - shift all fields at and after the ceiling rowIndex
 			const insertAtIndex = Math.ceil(rowIndex);
@@ -248,10 +286,10 @@
 				}
 			}
 			// Add new field at the insertion point
-			onFieldDrop?.(fieldType, currentPage, insertAtIndex, columnPosition);
+			emitNewField(payload, currentPage, insertAtIndex, columnPosition);
 		} else {
 			// New row at the end
-			onFieldDrop?.(fieldType, currentPage, rowIndex, columnPosition);
+			emitNewField(payload, currentPage, rowIndex, columnPosition);
 		}
 
 		resetDragState();
@@ -260,9 +298,9 @@
 	function handleFormDrop(e: DragEvent) {
 		e.preventDefault();
 		// If dropped on the form but not on a specific zone, add as full width at the end
-		const fieldType = (e.dataTransfer?.getData('fieldType') || e.dataTransfer?.getData('fieldtype')) as FieldType;
-		if (fieldType && !hoverTarget) {
-			onFieldDrop?.(fieldType, currentPage, nextRowIndex, 'full');
+		const payload = readNewFieldPayload(e);
+		if (payload && !hoverTarget) {
+			emitNewField(payload, currentPage, nextRowIndex, 'full');
 		}
 
 		// Reset all drag states
@@ -682,6 +720,9 @@
 									selected={selectedFieldId === trackedField.data.id}
 									dragging={draggedFieldId === trackedField.data.id}
 									halfWidth={row.isHalfWidth || isSqueezing}
+									scopeTint={scopeTinted
+										? (trackedField.data.field_def_id ? 'lifecycle' : 'local')
+										: null}
 									onSelect={() => onFieldSelect?.(trackedField.data.id)}
 									onUpdate={(updates) => onFieldUpdate?.(trackedField.data.id, updates)}
 									onDragStart={() => handleFieldDragStart(trackedField.data.id)}

@@ -317,49 +317,39 @@ onRecordAfterUpdateSuccess((e) => {
         } catch (err) { console.warn("[Protocol] Failed to resolve participant " + pid + ":", err); }
       }
 
-      var auditLog = [];
+      // Canonical snapshot shape: kind='global_autolog'. The autolog.entries
+      // hold the projected tool_usage history between region entry and exit;
+      // case_fields / local_fields stay empty for global protocols.
+      var autologEntries = [];
       for (var j = 0; j < spanUsage.length; j++) {
         var rec = spanUsage[j];
         var stageId = rec.get("stage_id");
         var executedBy = rec.get("executed_by");
         var meta = auto.parseJsonField(rec.get("metadata"));
-
-        // Enrich metadata with human-readable names
-        if (meta) {
-          if (meta.from_stage_id && stageMap[meta.from_stage_id]) {
-            meta.from_stage_name = stageMap[meta.from_stage_id];
-          }
-          if (meta.to_stage_id && stageMap[meta.to_stage_id]) {
-            meta.to_stage_name = stageMap[meta.to_stage_id];
-          }
-          if (meta.created_fields && Array.isArray(meta.created_fields)) {
-            for (var cf = 0; cf < meta.created_fields.length; cf++) {
-              if (meta.created_fields[cf].field_key && fieldMap[meta.created_fields[cf].field_key]) {
-                meta.created_fields[cf].field_name = fieldMap[meta.created_fields[cf].field_key];
-              }
-            }
-          }
-          if (meta.changes && Array.isArray(meta.changes)) {
-            for (var ch = 0; ch < meta.changes.length; ch++) {
-              if (meta.changes[ch].field_key && fieldMap[meta.changes[ch].field_key]) {
-                meta.changes[ch].field_name = fieldMap[meta.changes[ch].field_key];
-              }
-            }
-          }
-        }
-
-        auditLog.push({
-          id: rec.id,
+        autologEntries.push({
+          tool_usage_id: rec.id,
+          tool_id: meta && meta.tool_id ? meta.tool_id : null,
+          tool_name: meta && (meta.tool_name || meta.action) ? (meta.tool_name || meta.action) : null,
+          recorded_at: rec.get("executed_at"),
+          recorded_by: executedBy,
+          recorded_by_name: participantMap[executedBy] || null,
           stage_id: stageId,
           stage_name: stageMap[stageId] || null,
-          executed_by: executedBy,
-          executed_by_name: participantMap[executedBy] || null,
-          executed_at: rec.get("executed_at"),
           metadata: meta
         });
       }
 
-      var snapshotJson = JSON.stringify(auditLog);
+      var snapshot = {
+        kind: "global_autolog",
+        case_fields: [],
+        local_fields: [],
+        autolog: {
+          from: entryTimestamp,
+          to: new Date().toISOString(),
+          entries: autologEntries
+        }
+      };
+      var snapshotJson = JSON.stringify(snapshot);
 
       var hashHex = "";
       try {
@@ -426,10 +416,14 @@ function fireOnFieldChange(e) {
       if (!config) continue;
 
       const stageMatch = !config.stage_id || config.stage_id === stageId;
-      // config.field_key now holds a field_def_id (the admin editor writes
-      // the def's id into this slot). Keep the param name for storage
-      // compatibility; semantics moved with the value space.
-      const fieldMatch = !config.field_key || config.field_key === fieldDefId;
+      // config.field_key holds a single field_def_id (legacy/single-watch
+      // automations). config.field_keys holds an array (compute-driven
+      // automations watching all formula dependencies). Match either form.
+      const watchedIds = Array.isArray(config.field_keys) ? config.field_keys : null;
+      const fieldMatch =
+        (!config.field_key && !watchedIds) ||
+        (config.field_key && config.field_key === fieldDefId) ||
+        (watchedIds && watchedIds.indexOf(fieldDefId) !== -1);
 
       if (stageMatch && fieldMatch) {
         auto.runAutomation(automation, instanceId, stageId);

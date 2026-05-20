@@ -28,6 +28,9 @@
 		formEditorFieldAdvanced,
 		formEditorFieldComputeExpression,
 		formEditorFieldComputeExpressionHelp,
+		formEditorFieldComputeDepsLabel,
+		formEditorFieldComputeDepsEmpty,
+		formEditorFieldComputeDepUnknown,
 		formEditorFieldConfigAllFiles,
 		formEditorFieldConfigAllowedFileTypes,
 		formEditorFieldConfigDateAndTime,
@@ -373,6 +376,33 @@
 
 	const isComputed = $derived(writeMode === 'computed');
 
+	// Parse {field_def_id} refs out of the formula; resolve each to a label
+	// using the workflow's other fields (from ancestorFields). Unresolved
+	// ids surface as a red warning chip so the admin sees the broken ref.
+	const PB_ID_RE = /^[a-zA-Z0-9]{15}$/;
+	const fieldLabelById = $derived.by(() => {
+		const m = new Map<string, string>();
+		for (const g of ancestorFields) {
+			for (const f of g.fields) {
+				if (f.field_def_id && f.field_label) m.set(f.field_def_id, f.field_label);
+			}
+		}
+		return m;
+	});
+	const computeDeps = $derived.by(() => {
+		const out: { id: string; label: string | null }[] = [];
+		const seen = new Set<string>();
+		const re = /\{([^}]+)\}/g;
+		let match: RegExpExecArray | null;
+		while ((match = re.exec(computeExpression)) !== null) {
+			const id = match[1].trim();
+			if (!PB_ID_RE.test(id) || seen.has(id)) continue;
+			seen.add(id);
+			out.push({ id, label: fieldLabelById.get(id) ?? null });
+		}
+		return out;
+	});
+
 	function handleWriteModeChange(e: Event) {
 		const value = (e.currentTarget as HTMLSelectElement).value as 'singleton' | 'observation' | 'computed';
 		writeMode = value;
@@ -691,6 +721,21 @@
 				<p class="config-hint">
 					{formEditorFieldComputeExpressionHelp?.() ?? 'Expression with {field_def_id} references and functions like obs_avg, obs_last, sum, round, today, days_between. See docs.'}
 				</p>
+
+				<div class="compute-deps">
+					<Label>{formEditorFieldComputeDepsLabel?.() ?? 'Updates when these fields change:'}</Label>
+					{#if computeDeps.length === 0}
+						<p class="compute-deps-empty">{formEditorFieldComputeDepsEmpty?.() ?? 'No referenced fields yet.'}</p>
+					{:else}
+						<div class="compute-deps-chips">
+							{#each computeDeps as dep (dep.id)}
+								<span class="compute-dep-chip" class:compute-dep-chip-unknown={!dep.label}>
+									{dep.label ?? (formEditorFieldComputeDepUnknown?.() ?? 'Unknown field')}
+								</span>
+							{/each}
+						</div>
+					{/if}
+				</div>
 			</div>
 		{/if}
 	</div>
@@ -917,5 +962,34 @@
 
 	.config-footer :global(button) {
 		width: 100%;
+	}
+
+	.compute-deps {
+		margin-top: 0.5rem;
+	}
+	.compute-deps-empty {
+		font-size: 0.75rem;
+		color: var(--muted-foreground);
+		margin-top: 0.25rem;
+	}
+	.compute-deps-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem;
+		margin-top: 0.25rem;
+	}
+	.compute-dep-chip {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.125rem 0.5rem;
+		border-radius: 9999px;
+		background: var(--muted);
+		color: var(--muted-foreground);
+		font-size: 0.75rem;
+		line-height: 1.25rem;
+	}
+	.compute-dep-chip-unknown {
+		background: color-mix(in srgb, var(--destructive) 15%, transparent);
+		color: var(--destructive);
 	}
 </style>

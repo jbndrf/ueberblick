@@ -29,6 +29,14 @@ const MAX_PUSH_RETRIES = 5; // after this many failures a record stops auto-retr
 const PUSH_REQUEST_TIMEOUT_MS = 15_000;
 const PULL_REQUEST_TIMEOUT_MS = 60_000; // pulls can return large pages
 
+// Keep at most this many workflow_field_values rows per (instance_id, field_def_id)
+// in IndexedDB. `workflow_field_values` is append-only: every write inserts a new
+// row, "current value" is the latest. Bounding the local cache keeps the
+// participant DB from growing without limit for high-frequency observation fields,
+// while still giving every field a real offline audit trail of recent changes.
+// Older rows remain on the server and are fetched on demand via stock PB list.
+const OFFLINE_HISTORY_LIMIT = 10;
+
 // Single-flight worker state. `currentRun` is the architectural lock --
 // chaining onto its promise (instead of a stale boolean) makes it impossible
 // for a hung await to permanently wedge the engine. The AbortController is
@@ -298,12 +306,58 @@ async function pullChanges(collection: string, runSignal?: AbortSignal): Promise
 
 		await tx.done;
 
+		if (collection === 'workflow_field_values' && updatedCount > 0) {
+			try {
+				await pruneFieldValueHistory();
+			} catch (e) {
+				console.debug('Field-value history prune failed:', e);
+			}
+		}
+
 		return updatedCount;
 	} catch (e) {
 		// Collection might not be accessible - skip silently
 		console.debug(`Pull failed for ${collection}:`, e);
 		return 0;
 	}
+}
+
+/**
+ * Trim the local workflow_field_values cache to the latest OFFLINE_HISTORY_LIMIT
+ * rows per (instance_id, field_def_id). Append-only writes mean this collection
+ * grows without bound otherwise. Only `unchanged` (server-confirmed) rows are
+ * candidates — local pending writes are kept regardless so we never lose them.
+ */
+async function pruneFieldValueHistory(): Promise<number> {
+	const db = await getDB();
+	const all = await db.getAllFromIndex('records', 'by_collection', 'workflow_field_values');
+
+	const groups = new Map<string, CachedRecord[]>();
+	for (const row of all) {
+		if (row._status !== 'unchanged') continue;
+		const instanceId = row.instance_id as string | undefined;
+		const fieldDefId = row.field_def_id as string | undefined;
+		if (!instanceId || !fieldDefId) continue;
+		const key = `${instanceId}/${fieldDefId}`;
+		const arr = groups.get(key);
+		if (arr) arr.push(row);
+		else groups.set(key, [row]);
+	}
+
+	let pruned = 0;
+	for (const rows of groups.values()) {
+		if (rows.length <= OFFLINE_HISTORY_LIMIT) continue;
+		rows.sort((a, b) => {
+			const aAt = (a.recorded_at as string) ?? '';
+			const bAt = (b.recorded_at as string) ?? '';
+			return bAt.localeCompare(aAt); // DESC: newest first
+		});
+		for (let i = OFFLINE_HISTORY_LIMIT; i < rows.length; i++) {
+			await db.delete('records', rows[i]._key);
+			pruned++;
+		}
+	}
+	return pruned;
 }
 
 /**

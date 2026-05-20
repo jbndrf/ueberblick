@@ -412,9 +412,20 @@
 		}
 	});
 
-	// Call onSelectedIdsChange callback when selectedIds changes
+	// Call onSelectedIdsChange callback when selectedIds actually changes.
+	// Compare against last-emitted value to avoid feedback loops when the
+	// parent passes a fresh array literal on each render (e.g. `value ?? []`).
+	let lastEmitted: string[] | undefined = undefined;
 	$effect(() => {
-		onSelectedIdsChange?.(selectedIds);
+		const ids = selectedIds ?? [];
+		const prev = lastEmitted;
+		const same =
+			prev !== undefined &&
+			prev.length === ids.length &&
+			prev.every((v, i) => v === ids[i]);
+		if (same) return;
+		lastEmitted = ids.slice();
+		onSelectedIdsChange?.(ids);
 	});
 
 </script>

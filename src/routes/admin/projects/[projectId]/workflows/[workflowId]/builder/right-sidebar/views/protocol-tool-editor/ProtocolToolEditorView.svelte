@@ -9,7 +9,6 @@
 		protocolToolEditorDeleteRegion,
 		protocolToolEditorDeleteTool,
 		protocolToolEditorEditForm,
-		protocolToolEditorEditableFields,
 		protocolToolEditorName,
 		protocolToolEditorNoStages,
 		protocolToolEditorRegionDescription,
@@ -18,26 +17,14 @@
 		protocolToolEditorToolNamePlaceholder
 	} from '$lib/paraglide/messages';
 
-	import AncestorFieldsPanel from './AncestorFieldsPanel.svelte';
-	import FieldSelectionPreview from './FieldSelectionPreview.svelte';
-
-	import type { ToolsProtocol, ToolsForm, ToolsFormField, WorkflowStage } from '$lib/workflow-builder';
-
-	type AncestorFieldGroup = {
-		stage: WorkflowStage;
-		form: ToolsForm;
-		fields: ToolsFormField[];
-	};
+	import type { ToolsProtocol, WorkflowStage } from '$lib/workflow-builder';
 
 	type Props = {
 		protocolTool: ToolsProtocol;
-		ancestorFields: AncestorFieldGroup[];
 		formFieldCount: number;
 		/** All available stages (for region mode) */
 		allStages?: WorkflowStage[];
 		onNameChange?: (name: string) => void;
-		onFieldsChange?: (fieldIds: string[]) => void;
-		onPrefillConfigChange?: (config: Record<string, boolean>) => void;
 		onStageIdsChange?: (stageIds: string[]) => void;
 		onEditForm?: () => void;
 		onDelete?: () => void;
@@ -46,12 +33,9 @@
 
 	let {
 		protocolTool,
-		ancestorFields,
 		formFieldCount,
 		allStages = [],
 		onNameChange,
-		onFieldsChange,
-		onPrefillConfigChange,
 		onStageIdsChange,
 		onEditForm,
 		onDelete,
@@ -60,87 +44,22 @@
 
 	const isRegion = $derived(protocolTool.is_global);
 
-	// Local state
 	let toolName = $state(protocolTool.name);
-	let selectedFieldIds = $state<string[]>(protocolTool.editable_fields || []);
-	let prefillConfig = $state<Record<string, boolean>>(protocolTool.prefill_config || {});
 	let selectedStageIds = $state<string[]>(protocolTool.stage_id || []);
-
-	// Track current tool ID to detect changes
 	let currentToolId = $state(protocolTool.id);
 
-	// Update local state when tool changes
 	$effect(() => {
 		if (protocolTool.id !== currentToolId) {
 			currentToolId = protocolTool.id;
 			toolName = protocolTool.name;
-			selectedFieldIds = protocolTool.editable_fields || [];
-			prefillConfig = protocolTool.prefill_config || {};
 			selectedStageIds = protocolTool.stage_id || [];
 		}
-	});
-
-	// Watch for field selection changes (non-region mode)
-	$effect(() => {
-		if (isRegion) return;
-		const propFields = protocolTool.editable_fields || [];
-		const fieldsChanged =
-			selectedFieldIds.length !== propFields.length ||
-			selectedFieldIds.some((id, i) => id !== propFields[i]);
-
-		if (fieldsChanged && protocolTool.id === currentToolId) {
-			onFieldsChange?.(selectedFieldIds);
-		}
-	});
-
-	// Build selected fields with metadata for the preview
-	const selectedFieldsWithMeta = $derived.by(() => {
-		if (isRegion) return [];
-		const result: Array<{
-			field: ToolsFormField;
-			stageName: string;
-			formName: string;
-		}> = [];
-
-		for (const fieldId of selectedFieldIds) {
-			for (const group of ancestorFields) {
-				const field = group.fields.find((f) => f.id === fieldId);
-				if (field) {
-					result.push({
-						field,
-						stageName: group.stage.stage_name,
-						formName: group.form.name
-					});
-					break;
-				}
-			}
-		}
-
-		return result;
 	});
 
 	function handleNameBlur() {
 		if (toolName !== protocolTool.name && toolName.trim()) {
 			onNameChange?.(toolName.trim());
 		}
-	}
-
-	function handleToggleField(fieldId: string) {
-		if (selectedFieldIds.includes(fieldId)) {
-			selectedFieldIds = selectedFieldIds.filter((id) => id !== fieldId);
-		} else {
-			selectedFieldIds = [...selectedFieldIds, fieldId];
-		}
-	}
-
-	function handleRemoveField(fieldId: string) {
-		selectedFieldIds = selectedFieldIds.filter((id) => id !== fieldId);
-	}
-
-	function handleTogglePrefill(fieldId: string) {
-		const current = prefillConfig[fieldId] !== false;
-		prefillConfig = { ...prefillConfig, [fieldId]: !current };
-		onPrefillConfigChange?.(prefillConfig);
 	}
 
 	function handleToggleStage(stageId: string) {
@@ -154,7 +73,6 @@
 </script>
 
 <div class="protocol-tool-editor">
-	<!-- Header -->
 	<div class="editor-header">
 		<div class="header-content">
 			<div class="header-icon" class:region-icon={isRegion}>
@@ -180,13 +98,13 @@
 		</div>
 		{#if isRegion}
 			<p class="header-description">
-				{protocolToolEditorRegionDescription?.() ?? 'Automatically snapshots the audit trail when an instance exits this region.'}
+				{protocolToolEditorRegionDescription?.() ?? 'Snapshots the instance’s tool-usage history when it leaves this region.'}
 			</p>
 		{/if}
 	</div>
 
 	{#if isRegion}
-		<!-- Region mode: stage picker -->
+		<!-- Region/global mode: pure autolog. Pick the stages that make up the region. -->
 		<div class="region-content">
 			<div class="panel-header">
 				<span class="panel-label">{protocolToolEditorRegionStages?.() ?? 'Region Stages'}</span>
@@ -219,44 +137,22 @@
 			</div>
 		</div>
 	{:else}
-		<!-- Tool mode: field selection + protocol form -->
-		<div class="editor-content">
-			<div class="left-panel">
-				<div class="panel-header">
-					<span class="panel-label">{protocolToolEditorEditableFields?.() ?? 'Editable Fields'}</span>
-				</div>
-
-				<AncestorFieldsPanel
-					{ancestorFields}
-					{selectedFieldIds}
-					onToggleField={handleToggleField}
-					showPrefillToggle={true}
-					{prefillConfig}
-					onTogglePrefill={handleTogglePrefill}
-				/>
+		<!-- Manual mode: thin shell. Field selection lives entirely inside the form editor. -->
+		<div class="manual-content">
+			<div class="form-section">
+				<Button variant="outline" size="sm" onclick={onEditForm} class="w-full">
+					<FileText class="h-4 w-4 mr-2" />
+					{protocolTool.protocol_form_id
+						? (protocolToolEditorEditForm?.({ count: formFieldCount }) ?? `Edit Protocol Form (${formFieldCount} fields)`)
+						: (protocolToolEditorCreateForm?.() ?? 'Create Protocol Form')}
+				</Button>
 			</div>
 
-			<div class="center-panel">
-				<div class="preview-section">
-					<FieldSelectionPreview
-						selectedFields={selectedFieldsWithMeta}
-						onRemoveField={handleRemoveField}
-					/>
-				</div>
-
-				<div class="form-section">
-					<Button variant="outline" size="sm" onclick={onEditForm} class="w-full">
-						<FileText class="h-4 w-4 mr-2" />
-						{protocolTool.protocol_form_id ? (protocolToolEditorEditForm?.({ count: formFieldCount }) ?? `Edit Protocol Form (${formFieldCount} fields)`) : (protocolToolEditorCreateForm?.() ?? 'Create Protocol Form')}
-					</Button>
-				</div>
-
-				<div class="editor-footer">
-					<Button variant="destructive" size="sm" onclick={onDelete} class="w-full">
-						<Trash2 class="h-4 w-4 mr-2" />
-						{protocolToolEditorDeleteTool?.() ?? 'Delete Protocol Tool'}
-					</Button>
-				</div>
+			<div class="editor-footer">
+				<Button variant="destructive" size="sm" onclick={onDelete} class="w-full">
+					<Trash2 class="h-4 w-4 mr-2" />
+					{protocolToolEditorDeleteTool?.() ?? 'Delete Protocol Tool'}
+				</Button>
 			</div>
 		</div>
 	{/if}
@@ -319,23 +215,36 @@
 		line-height: 1.4;
 	}
 
-	.editor-content {
+	.manual-content {
 		display: flex;
+		flex-direction: column;
 		flex: 1;
 		overflow: hidden;
 	}
 
-	.left-panel {
-		width: 240px;
+	.form-section {
 		flex-shrink: 0;
-		border-right: 1px solid oklch(0.88 0.01 250);
-		overflow: hidden;
-		display: flex;
-		flex-direction: column;
+		padding: 1rem;
+		background: hsl(var(--background));
 	}
 
-	:global(.dark) .left-panel {
-		border-right-color: oklch(1 0 0 / 20%);
+	.editor-footer {
+		flex-shrink: 0;
+		padding: 1rem;
+		border-top: 1px solid oklch(0.88 0.01 250);
+		background: hsl(var(--background));
+		margin-top: auto;
+	}
+
+	:global(.dark) .editor-footer {
+		border-top-color: oklch(1 0 0 / 20%);
+	}
+
+	.region-content {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
 	}
 
 	.panel-header {
@@ -359,54 +268,6 @@
 		font-size: 0.6875rem;
 		font-weight: 500;
 		color: hsl(var(--muted-foreground));
-	}
-
-	.center-panel {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		overflow: hidden;
-	}
-
-	.preview-section {
-		flex: 1;
-		overflow: auto;
-		padding: 1rem;
-		background: oklch(0.95 0.005 250);
-	}
-
-	:global(.dark) .preview-section {
-		background: oklch(0.15 0.02 260);
-	}
-
-	.form-section {
-		flex-shrink: 0;
-		padding: 1rem;
-		border-top: 1px solid oklch(0.88 0.01 250);
-		background: hsl(var(--background));
-	}
-
-	:global(.dark) .form-section {
-		border-top-color: oklch(1 0 0 / 20%);
-	}
-
-	.editor-footer {
-		flex-shrink: 0;
-		padding: 1rem;
-		border-top: 1px solid oklch(0.88 0.01 250);
-		background: hsl(var(--background));
-	}
-
-	:global(.dark) .editor-footer {
-		border-top-color: oklch(1 0 0 / 20%);
-	}
-
-	/* Region mode */
-	.region-content {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		overflow: hidden;
 	}
 
 	.stage-list {

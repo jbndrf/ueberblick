@@ -118,26 +118,16 @@
 			arr.push({ id: s.id, workflow_id: s.workflow_id, name: s.stage_name ?? s.id });
 		}
 
-		const workflowByFormId = new Map<string, string>();
-		for (const f of (data.toolsForms ?? []) as any[]) {
-			if (f?.id && f?.workflow_id) workflowByFormId.set(f.id, f.workflow_id);
-		}
-
 		const filterableFields: BuilderContext['filterableFields'] = [];
-		// TODO(field-def-redesign): the settings +page.server.ts still loads
-		// `toolsFormFields` from the legacy `tools_form_fields` collection. Once
-		// the settings loader is migrated to load (refs, defs) separately, switch
-		// this loop to iterate `data.workflowFieldDefs` and resolve the workflow
-		// via field def's `workflow_id` directly.
-		for (const ff of (data.toolsFormFields ?? []) as any[]) {
-			const type = ff.field_type as string | undefined;
+		for (const def of (data.workflowFieldDefs ?? []) as any[]) {
+			const type = def.field_type as string | undefined;
 			if (!type || type === 'file') continue;
 
-			const workflowId = workflowByFormId.get(ff.form_id);
+			const workflowId = def.workflow_id as string | undefined;
 			if (!workflowId || !accessibleWorkflowIds.has(workflowId)) continue;
 
 			const options: { id: string; label: string }[] = [];
-			const opts = ff.field_options as any | null | undefined;
+			const opts = def.field_options as any | null | undefined;
 			if (type === 'dropdown' || type === 'multiple_choice') {
 				for (const o of (opts?.options ?? []) as Array<{ label: string }>) {
 					if (o?.label) options.push({ id: o.label, label: o.label });
@@ -159,10 +149,8 @@
 			filterableFields.push({
 				workflow_id: workflowId,
 				workflow_name: workflowNameById.get(workflowId) ?? workflowId,
-				// TODO(field-def-redesign): once toolsFormFields source is migrated,
-				// this should be the row's `field_def_id`, not the ref id.
-				field_def_id: ff.field_def_id ?? ff.id,
-				field_label: ff.field_label ?? ff.id,
+				field_def_id: def.id,
+				field_label: def.label ?? def.key ?? def.id,
 				field_type: type as BuilderContext['filterableFields'][number]['field_type'],
 				options
 			});

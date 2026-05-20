@@ -252,10 +252,10 @@ export class FieldValueCache {
 
 	/**
 	 * Return the latest value row for an (instance, field_def) pair.
-	 * TODO(field-def-redesign): observation-mode fields can have many rows per
-	 * (instance, field_def) -- callers will eventually need an array form. For
-	 * now we treat every field as singleton-style and return the single
-	 * most-recent row by `recorded_at` (falling back to `updated`).
+	 * workflow_field_values is fully append-only — every write_mode (singleton,
+	 * observation, computed) can have many rows per (instance, field_def). The
+	 * "current value" is the most-recent row by `recorded_at`. Full history is
+	 * available via `getHistoryForInstanceAndField()`.
 	 */
 	getLatestForInstanceAndField(instanceId: string, fieldDefId: string): any | null {
 		let latest: any | null = null;
@@ -270,6 +270,26 @@ export class FieldValueCache {
 			if (a > b) latest = fv;
 		}
 		return latest;
+	}
+
+	/**
+	 * Return all locally-cached value rows for an (instance, field_def) pair,
+	 * newest-first by `recorded_at`. The cache is bounded to the latest
+	 * OFFLINE_HISTORY_LIMIT rows per group; older history must be fetched online
+	 * via the stock PB list endpoint.
+	 */
+	getHistoryForInstanceAndField(instanceId: string, fieldDefId: string): any[] {
+		const rows: any[] = [];
+		for (const fv of this.store.values()) {
+			if (fv.instance_id !== instanceId || fv.field_def_id !== fieldDefId) continue;
+			rows.push(fv);
+		}
+		rows.sort((a, b) => {
+			const aAt = (a.recorded_at as string) || (a.updated as string) || '';
+			const bAt = (b.recorded_at as string) || (b.updated as string) || '';
+			return bAt.localeCompare(aAt);
+		});
+		return rows;
 	}
 
 	destroy(): void {

@@ -8,6 +8,70 @@
 import type { ParticipantGateway } from '$lib/participant-state/gateway.svelte';
 import type { Form, FormField, FormValues, FieldError, DateFieldOptions } from '$lib/components/form-renderer/types';
 
+/**
+ * Returns true if the participant's roles satisfy the field def's `view_roles`
+ * restriction. Empty/missing `view_roles` means no restriction (visible to all
+ * who can otherwise see the form).
+ */
+function canViewFieldDef(def: Record<string, any>, participantRoleIds: string[]): boolean {
+	const viewRoles = def?.view_roles;
+	if (!Array.isArray(viewRoles) || viewRoles.length === 0) return true;
+	return participantRoleIds.some((rid) => viewRoles.includes(rid));
+}
+
+/**
+ * Join `tools_form_field_refs` + `workflow_field_defs` into the legacy
+ * `FormField` render shape. Per-form override fields on the ref win when set.
+ * Filters out fields whose def `view_roles` excludes the participant.
+ */
+async function fetchFormFields(
+	gateway: ParticipantGateway,
+	formIds: string[],
+	participantRoleIds: string[] = []
+): Promise<FormField[]> {
+	if (formIds.length === 0) return [];
+	const refFilter = formIds.map((id) => `form_id = "${id}"`).join(' || ');
+	const refs = await gateway.collection('tools_form_field_refs').getFullList({
+		filter: refFilter,
+		sort: 'field_order'
+	}) as Array<Record<string, any>>;
+	if (refs.length === 0) return [];
+	const defIds = Array.from(new Set(refs.map((r) => r.field_def_id).filter(Boolean)));
+	const defFilter = defIds.map((id) => `id = "${id}"`).join(' || ');
+	const defs = defFilter
+		? (await gateway.collection('workflow_field_defs').getFullList({ filter: defFilter })) as Array<Record<string, any>>
+		: [];
+	const defById = new Map(defs.map((d) => [d.id, d]));
+	return refs
+		.filter((ref) => {
+			const def = defById.get(ref.field_def_id);
+			if (!def) return false;
+			return canViewFieldDef(def, participantRoleIds);
+		})
+		.map((ref) => {
+		const def = defById.get(ref.field_def_id) || {};
+		const isRequired = ref.is_required_override ?? def.is_required ?? false;
+		return {
+			id: ref.field_def_id,
+			form_id: ref.form_id,
+			field_label: def.label ?? '',
+			field_type: def.field_type,
+			field_order: ref.field_order,
+			page: ref.page,
+			page_title: ref.page_title,
+			row_index: ref.row_index ?? 0,
+			column_position: ref.column_position ?? 'full',
+			is_required: isRequired,
+			placeholder: ref.placeholder_override || def.placeholder,
+			help_text: ref.help_text_override || def.help_text,
+			validation_rules: def.validation_rules ?? null,
+			field_options: def.field_options ?? null,
+			conditional_logic: ref.conditional_logic ?? null,
+			write_mode: def.write_mode
+		} as FormField;
+	});
+}
+
 // ==========================================================================
 // Types
 // ==========================================================================
@@ -80,6 +144,61 @@ export function getCurrentPageTitle(state: FormFillState): string {
 	const fields = getCurrentPageFields(state);
 	const firstFieldWithTitle = fields.find(f => f.page_title);
 	return firstFieldWithTitle?.page_title || `Page ${state.currentPage}`;
+}
+
+/**
+ * Distinct pages present in the form, ascending. Title falls back to "Page N"
+ * when no field on the page carries a `page_title`. fieldIds enables per-tab
+ * error counts without re-walking state.fields.
+ */
+export function getPages(
+	state: FormFillState
+): Array<{ page: number; title: string; fieldIds: string[] }> {
+	const byPage = new Map<number, { title: string | null; fieldIds: string[] }>();
+	for (const f of state.fields) {
+		const p = f.page || 1;
+		const entry = byPage.get(p) ?? { title: null, fieldIds: [] };
+		entry.fieldIds.push(f.id);
+		if (!entry.title && f.page_title) entry.title = f.page_title;
+		byPage.set(p, entry);
+	}
+	return Array.from(byPage.entries())
+		.sort(([a], [b]) => a - b)
+		.map(([page, { title, fieldIds }]) => ({
+			page,
+			title: title || `Page ${page}`,
+			fieldIds
+		}));
+}
+
+/**
+ * Count of validation errors per page, used to badge tabs.
+ */
+export function errorsByPage(state: FormFillState): Map<number, number> {
+	const pageOf = new Map<string, number>();
+	for (const f of state.fields) pageOf.set(f.id, f.page || 1);
+	const counts = new Map<number, number>();
+	for (const err of state.errors) {
+		const p = pageOf.get(err.fieldId);
+		if (p === undefined) continue;
+		counts.set(p, (counts.get(p) ?? 0) + 1);
+	}
+	return counts;
+}
+
+/**
+ * Submit-filter predicate. A value is "meaningful" (should be persisted)
+ * when it isn't null/undefined, isn't an empty string, and isn't pure
+ * whitespace. Centralised so all submission paths share semantics.
+ *
+ * Note: empty arrays / empty objects currently pass through (they may carry
+ * meaning for some field types, e.g. cleared multi-selects). Revisit if
+ * empty arrays start producing unwanted `"[]"` rows.
+ */
+export function isMeaningfulValue(value: unknown): boolean {
+	if (value === null || value === undefined) return false;
+	if (typeof value === 'string') return value.trim() !== '';
+	return true;
 }
 
 export function getCurrentPageRows(state: FormFillState): Array<{ rowIndex: number; fields: FormField[] }> {
@@ -249,7 +368,8 @@ function initializeValues(fields: FormField[]): FormValues {
  */
 export async function loadEntryForm(
 	gateway: ParticipantGateway,
-	workflowId: string
+	workflowId: string,
+	participantRoleIds: string[] = []
 ): Promise<FormFillState> {
 	const state = createInitialState();
 	state.isLoading = true;
@@ -284,13 +404,8 @@ export async function loadEntryForm(
 
 		state.form = forms[0] as unknown as Form;
 
-		// Load form fields
-		const fields = await gateway.collection('tools_form_fields').getFullList({
-			filter: `form_id = "${state.form.id}"`,
-			sort: 'field_order'
-		});
-
-		state.fields = fields as unknown as FormField[];
+		// Load form fields (join refs + defs)
+		state.fields = await fetchFormFields(gateway, [state.form.id], participantRoleIds);
 		state.values = initializeValues(state.fields);
 		state.isLoading = false;
 
@@ -310,7 +425,8 @@ export async function loadEntryForm(
 export async function loadConnectionForm(
 	gateway: ParticipantGateway,
 	workflowId: string,
-	connectionId: string
+	connectionId: string,
+	participantRoleIds: string[] = []
 ): Promise<FormFillState> {
 	const state = createInitialState();
 	state.isLoading = true;
@@ -332,13 +448,8 @@ export async function loadConnectionForm(
 
 		state.form = forms[0] as unknown as Form;
 
-		// Load form fields
-		const fields = await gateway.collection('tools_form_fields').getFullList({
-			filter: `form_id = "${state.form.id}"`,
-			sort: 'field_order'
-		});
-
-		state.fields = fields as unknown as FormField[];
+		// Load form fields (join refs + defs)
+		state.fields = await fetchFormFields(gateway, [state.form.id], participantRoleIds);
 		state.values = initializeValues(state.fields);
 		state.isLoading = false;
 
@@ -367,7 +478,8 @@ export interface LoadedFormsData {
  */
 export async function loadConnectionForms(
 	gateway: ParticipantGateway,
-	connectionId: string
+	connectionId: string,
+	participantRoleIds: string[] = []
 ): Promise<LoadedFormsData> {
 	// Load all forms for this connection, ordered by created
 	const forms = await gateway.collection('tools_forms').getFullList({
@@ -379,14 +491,8 @@ export async function loadConnectionForms(
 		return { forms: [], fields: [], connectionId };
 	}
 
-	// Load fields for all forms
-	const formIds = forms.map(f => f.id);
-	const filterQuery = formIds.map(id => `form_id = "${id}"`).join(' || ');
-
-	const fields = await gateway.collection('tools_form_fields').getFullList({
-		filter: filterQuery,
-		sort: 'field_order'
-	}) as unknown as FormField[];
+	// Load fields for all forms (join refs + defs)
+	const fields = await fetchFormFields(gateway, forms.map((f) => f.id), participantRoleIds);
 
 	return { forms, fields, connectionId };
 }
@@ -396,7 +502,8 @@ export async function loadConnectionForms(
  */
 export async function loadEntryForms(
 	gateway: ParticipantGateway,
-	workflowId: string
+	workflowId: string,
+	participantRoleIds: string[] = []
 ): Promise<LoadedFormsData & { toStageId: string }> {
 	// Find the entry connection (from_stage_id is empty)
 	const connections = await gateway.collection('workflow_connections').getFullList({
@@ -408,7 +515,7 @@ export async function loadEntryForms(
 	}
 
 	const entryConnection = connections[0] as { id: string; to_stage_id: string };
-	const data = await loadConnectionForms(gateway, entryConnection.id);
+	const data = await loadConnectionForms(gateway, entryConnection.id, participantRoleIds);
 
 	return { ...data, toStageId: entryConnection.to_stage_id };
 }

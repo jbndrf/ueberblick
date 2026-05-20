@@ -19,7 +19,10 @@ export type ToolUsageAction =
 
 export interface ToolUsageMetadata {
 	action?: ToolUsageAction;
-	changes?: Array<{ field_def_id: string; field_name?: string }>;
+	// Identifier-only since metadata no longer carries field values
+	// (those live in workflow_field_values, gated by field-level view_roles).
+	// Both `field_key` and `field_def_id` are accepted for legacy compatibility.
+	changes?: Array<{ field_key?: string; field_def_id?: string; field_name?: string }>;
 	to_stage_name?: string;
 	[key: string]: unknown;
 }
@@ -64,10 +67,10 @@ export function toolUsageLabel(
 			const changes = metadata.changes ?? [];
 			if (changes.length === 1) {
 				const change = changes[0];
+				const id = change.field_def_id ?? change.field_key;
 				const fromName = change.field_name;
-				const fromDef = fieldDefById?.get(change.field_def_id);
-				const label =
-					fromName || fromDef?.label || change.field_def_id || strings.fieldFallback;
+				const fromDef = id ? fieldDefById?.get(id) : undefined;
+				const label = fromName || fromDef?.label || id || strings.fieldFallback;
 				return `${label} ${strings.updatedSuffix}`;
 			}
 			const count = changes.length || '';

@@ -181,7 +181,7 @@ export type TrackedToolUsage = TrackedItem<ToolUsage>;
 export interface ToolContext {
 	/** Tool type identifier ('edit' | 'form' | future tools) */
 	tool: string;
-	/** ID of the tool definition record (tools_edit or tools_forms) */
+	/** ID of the tool definition record (tools_forms etc.) */
 	toolId?: string;
 	/** Workflow instance this operation belongs to */
 	instanceId: string;
@@ -363,8 +363,66 @@ export interface ToolForm {
 	description: string;
 	allowed_roles: string[];
 	visual_config: Record<string, unknown> | null;
+	/**
+	 * Protocol-local inline field defs. Populated on forms that back a
+	 * protocol tool when the admin adds fields that should NOT join the
+	 * workflow-wide field registry. Values land only in
+	 * `workflow_protocol_entries.snapshot.local_fields`, never in
+	 * `workflow_field_values`.
+	 */
+	local_fields: ProtocolLocalField[] | null;
 	created: string;
 	updated: string;
+}
+
+/**
+ * Inline field definition stored on `tools_forms.local_fields`.
+ * Scope is the single form. Has no stage assignment, no view_roles, no
+ * cross-form reuse — the protocol tool's `allowed_roles` is the only gate.
+ */
+export interface ProtocolLocalField {
+	key: string;
+	label: string;
+	field_type: Exclude<FieldType, 'instance_reference'>;
+	field_options: Record<string, unknown> | null;
+	required: boolean;
+	placeholder: string | null;
+	help_text: string | null;
+	page: number;
+	row_index: number;
+	column_position: 'left' | 'right' | 'full';
+}
+
+/**
+ * Canonical shape of `workflow_protocol_entries.snapshot`.
+ * Labels are denormalized so renames don't rewrite history.
+ */
+export interface ProtocolEntrySnapshot {
+	kind: 'manual' | 'global_autolog';
+	case_fields: Array<{
+		field_def_id: string;
+		key: string;
+		label: string;
+		value: unknown;
+		write_mode: WriteMode;
+	}>;
+	local_fields: Array<{
+		key: string;
+		label: string;
+		value: unknown;
+	}>;
+	autolog: {
+		from: string;
+		to: string;
+		entries: Array<{
+			tool_usage_id: string;
+			tool_id: string;
+			tool_name: string;
+			recorded_at: string;
+			recorded_by: string;
+			stage_id: string;
+		}>;
+	} | null;
 }
 
 export type FieldType =
@@ -420,13 +478,6 @@ export interface FieldDef {
 	is_required: boolean;
 	validation_rules: Record<string, unknown> | null;
 	field_options: Record<string, unknown> | null;
-	compute_expression: string;
-	/**
-	 * Phase 2: field def ids this computed field reads from. Populated by the
-	 * admin save layer (parses {field_id} refs in compute_expression).
-	 * Used server-side by computed_fields.js as a forward index for recompute.
-	 */
-	compute_depends_on: string[];
 	created: string;
 	updated: string;
 }
@@ -444,7 +495,7 @@ export interface ToolFormFieldRef {
 	page: number;
 	page_title: string;
 	row_index: number;
-	column_position: number;
+	column_position: 'left' | 'right' | 'full';
 	is_required_override: boolean | null;
 	placeholder_override: string;
 	help_text_override: string;

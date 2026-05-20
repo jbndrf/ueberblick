@@ -98,23 +98,7 @@ async function loadPermissionsData(pb: PocketBase, projectId: string) {
 		const connectionIds = connections.map((c) => c.id);
 		const stageIds = stages.map((s) => s.id);
 
-		if (connectionIds.length > 0 || stageIds.length > 0) {
-			const editToolFilters: string[] = [];
-			if (connectionIds.length > 0) {
-				editToolFilters.push(
-					connectionIds.map((id) => `connection_id = "${id}"`).join(' || ')
-				);
-			}
-			if (stageIds.length > 0) {
-				editToolFilters.push(
-					stageIds.map((id) => `stage_id ?= "${id}"`).join(' || ')
-				);
-			}
-			editTools = await pb.collection('tools_edit').getFullList({
-				filter: editToolFilters.join(' || '),
-				fields: 'id,name,self_edit_roles,any_edit_roles,connection_id,stage_id,is_global'
-			});
-		}
+		// tools_edit collection removed in Phase 1 redesign; editTools stays empty.
 	}
 
 	// Index connections by from_stage_id

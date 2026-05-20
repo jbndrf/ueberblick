@@ -10,7 +10,7 @@
  * 3. The UI will automatically show it in the right places based on attachableTo
  */
 
-import { FileText, Edit3, Tag, Zap, ClipboardList } from '@lucide/svelte';
+import { FileText, Tag, Zap, ClipboardList } from '@lucide/svelte';
 import type { ToolDefinition, AttachmentTarget } from './types';
 
 // =============================================================================
@@ -100,16 +100,6 @@ const formTool: ToolDefinition = {
 	defaultColor: '#3B82F6'
 };
 
-// Edit tool - allows editing existing fields
-const editTool: ToolDefinition = {
-	toolType: 'edit',
-	displayName: 'Edit Fields',
-	description: 'Allow editing existing fields',
-	icon: Edit3,
-	attachableTo: ['stage', 'connection', 'global'],
-	defaultColor: '#6366F1'
-};
-
 // Field tag tool - semantic tagging for form fields (workflow-level)
 const fieldTagTool: ToolDefinition = {
 	toolType: 'field_tag',
@@ -142,9 +132,6 @@ const protocolTool: ToolDefinition = {
 
 // Register the built-in tools
 toolRegistry.register(formTool);
-// editTool removed from palette in Phase 1 redesign (tools_edit collection dropped).
-// Use a Form tool referencing existing field defs instead.
-// toolRegistry.register(editTool);
 toolRegistry.register(protocolTool);
 toolRegistry.register(fieldTagTool);
 toolRegistry.register(automationTool);
@@ -153,4 +140,4 @@ toolRegistry.register(automationTool);
 // Export individual tool definitions for direct access if needed
 // =============================================================================
 
-export { formTool, editTool, protocolTool, fieldTagTool, automationTool };
+export { formTool, protocolTool, fieldTagTool, automationTool };

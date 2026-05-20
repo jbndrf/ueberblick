@@ -153,6 +153,17 @@
 		}
 	});
 
+	// Listen for instance-reference card clicks so they re-select that case.
+	onMount(() => {
+		const handler = (ev: Event) => {
+			const detail = (ev as CustomEvent<{ instanceId: string }>).detail;
+			if (!detail?.instanceId) return;
+			selection = createSelection.workflowInstance(detail.instanceId);
+		};
+		document.addEventListener('instance-reference-open', handler);
+		return () => document.removeEventListener('instance-reference-open', handler);
+	});
+
 	// Set up navigation callbacks for header (desktop) navigation
 	onMount(() => {
 		// Wait for instances to finish streaming before starting field value fetch.
@@ -1668,12 +1679,11 @@
 				}
 			} catch (err) { console.warn('[Map] Failed to load field labels:', err); }
 
-			const createdFields = fieldEntries.map(([fieldId, value]) => ({
+			// Only identifiers — values live in workflow_field_values (append-only,
+			// gated by field-level view_roles). Keeps audit metadata leak-free.
+			const createdFields = fieldEntries.map(([fieldId]) => ({
 				field_key: fieldId,
-				field_name: fieldLabelMap[fieldId] || fieldId,
-				value: Array.isArray(value) && value[0] instanceof File
-					? `[${(value as File[]).length} file(s)]`
-					: typeof value === 'object' ? JSON.stringify(value) : String(value)
+				field_name: fieldLabelMap[fieldId] || fieldId
 			}));
 
 			const toolUsage = await gateway.collection('workflow_instance_tool_usage').create({
@@ -2051,6 +2061,7 @@
 			{selection}
 			{map}
 			{fieldValueCache}
+			{participantRoleIds}
 			bind:isExpanded={sheetExpanded}
 			bind:isEditingLocation
 			onClose={handleSelectionClose}
