@@ -29,7 +29,6 @@
 		connectionProtocolTools?: ToolsProtocol[];
 		onStageRename?: (stageId: string, newName: string) => void;
 		onStageDelete?: (stageId: string) => void;
-		onStageRolesChange?: (stageId: string, roleIds: string[]) => void;
 		onEdgeRename?: (edgeId: string, newName: string) => void;
 		onEdgeDelete?: (edgeId: string) => void;
 		onEdgeRolesChange?: (edgeId: string, roleIds: string[]) => void;
@@ -60,7 +59,6 @@
 		connectionProtocolTools = [],
 		onStageRename,
 		onStageDelete,
-		onStageRolesChange,
 		onEdgeRename,
 		onEdgeDelete,
 		onEdgeRolesChange,
@@ -111,7 +109,6 @@
 			ancestors={stageAncestors}
 			onRename={onStageRename}
 			onDelete={onStageDelete}
-			onRolesChange={onStageRolesChange}
 			{onToolRolesChange}
 			{onToolVisualConfigChange}
 			{onSelectTool}

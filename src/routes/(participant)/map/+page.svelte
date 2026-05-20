@@ -294,7 +294,7 @@
 	// "primary" field per instance) and the filter builder can resolve labels
 	// and types without server round-trips.
 	const formsLive = gateway!.collection<{ id: string; workflow_id: string }>('tools_forms').live({ priority: 'deferred' });
-	const fieldDefsLive = gateway!.collection<{ id: string; workflow_id: string; key: string; label: string; field_type: string; field_options?: unknown; display_stage_id?: string }>('workflow_field_defs').live({ priority: 'deferred' });
+	const fieldDefsLive = gateway!.collection<{ id: string; workflow_id: string; key: string; label: string; field_type: string; field_options?: unknown; display_config?: unknown }>('workflow_field_defs').live({ priority: 'deferred' });
 	const formFieldRefsLive = gateway!.collection<{ id: string; form_id: string; field_def_id: string; field_order?: number; page?: number; row_index?: number; column_position?: 'left' | 'full' | 'right' }>('tools_form_field_refs').live({ priority: 'deferred' });
 	// Tool usage powers the Recent sheet's last-activity label ("Erstellt",
 	// "2 Felder aktualisiert", etc.) so it matches the detail module's Activity tab.

@@ -84,7 +84,7 @@
 								</option>
 							{:else}
 								{#each fieldDefs as def (def.id)}
-									<option value={def.id}>{def.label || def.key}</option>
+									<option value={def.id}>{def.label}</option>
 								{/each}
 							{/if}
 						</select>

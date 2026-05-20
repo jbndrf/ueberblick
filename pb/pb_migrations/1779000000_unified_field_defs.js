@@ -71,7 +71,6 @@ migrate((app) => {
     deleteRule: `workflow_id.project_id.owner_id = @request.auth.id`,
     fields: [
       { name: "workflow_id", type: "relation", required: true, collectionId: workflowsId, maxSelect: 1, cascadeDelete: true },
-      { name: "key", type: "text", required: true, max: 255 },
       { name: "label", type: "text", required: true, max: 255 },
       {
         name: "field_type",
@@ -96,15 +95,17 @@ migrate((app) => {
         maxSelect: 1,
         values: ["text", "number", "date", "json"],
       },
-      // Where this field renders on the stage-tab read view.
-      // null/empty = derive from the (sole) form that references it.
-      { name: "display_stage_id", type: "relation", collectionId: workflowStagesId, maxSelect: 1 },
+      // Presentation config for the participant detail "Data" view. JSON shape:
+      //   { tab: string, tabOrder: number, row: number, column: "left"|"right"|"full" }
+      // null/empty = default "Data" tab, ordered by `created`. Tabs are emergent:
+      // the set of tabs = the distinct `tab` values across a workflow's field defs.
+      // Pure presentation — never referenced in API rules.
+      { name: "display_config", type: "json" },
       // Optional per-field visibility override. null/empty = inherit from the form's allowed_roles.
       { name: "view_roles", type: "relation", collectionId: rolesId, maxSelect: 99 },
-      // Default-value semantics for the form renderer.
-      { name: "placeholder", type: "text", max: 255 },
-      { name: "help_text", type: "text", max: 1000 },
-      { name: "is_required", type: "bool" },
+      // Intrinsic data-shape constraints (valid values, dropdown choices).
+      // Presentation (placeholder, help_text, required) lives per-form on
+      // tools_form_field_refs.config — never here.
       { name: "validation_rules", type: "json" },
       { name: "field_options", type: "json" },
       // Compute formulas live in tools_automation (admin-only); the def keeps
@@ -113,9 +114,8 @@ migrate((app) => {
       { name: "updated", type: "autodate", onCreate: true, onUpdate: true },
     ],
     indexes: [
-      "CREATE UNIQUE INDEX `idx_field_defs_workflow_key` ON `workflow_field_defs` (`workflow_id`, `key`)",
+      "CREATE UNIQUE INDEX `idx_field_defs_workflow_label` ON `workflow_field_defs` (`workflow_id`, `label`)",
       "CREATE INDEX `idx_field_defs_workflow_id` ON `workflow_field_defs` (`workflow_id`)",
-      "CREATE INDEX `idx_field_defs_display_stage_id` ON `workflow_field_defs` (`display_stage_id`)",
     ],
   });
   app.save(fieldDefs);
@@ -126,25 +126,25 @@ migrate((app) => {
 
   // Read rule honors:
   //   - admin (owner of the project), OR
-  //   - participant in project AND can see the stage where this value was recorded, AND
-  //   - if field_def has view_roles set, the participant's role must be in that set
-  //     (when view_roles is empty/null, fall back to stage gate only)
+  //   - participant in project AND, if field_def has view_roles set, the
+  //     participant's role must be in that set (empty/null view_roles = all).
+  // Per-field view_roles is the SOLE read gate — stage-based gating was removed
+  // (data presentation is now driven by emergent display tabs, not stages).
   //
   // Status filter on participant branch — drop deleted/archived from view.
   const valueParticipantRead = `
     ${participantInProject("instance_id.workflow_id.project_id")}
     && instance_id.status != "deleted"
     && instance_id.status != "archived"
-    && ${roleCheck("recorded_at_stage.visible_to_roles")}
     && ${roleCheck("field_def_id.view_roles")}
   `;
 
+  // Write gating is by workflow entry permission; the form/connection
+  // allowed_roles rules (tools_forms / tools_form_field_refs) gate which
+  // fields a participant can actually submit.
   const valueParticipantWrite = `
     ${participantInProject("instance_id.workflow_id.project_id")}
-    && (
-      ${roleCheck("instance_id.current_stage_id.visible_to_roles")}
-      || ${roleCheck("instance_id.workflow_id.entry_allowed_roles")}
-    )
+    && ${roleCheck("instance_id.workflow_id.entry_allowed_roles")}
   `;
 
   const fieldValues = new Collection({
@@ -194,11 +194,21 @@ migrate((app) => {
 
   // ============================================================================
   // 4) tools_form_field_refs — replaces tools_form_fields
-  //    Forms now reference field defs from the workflow's registry; per-form
-  //    layout + label overrides live here, not the definitional bits.
+  //    Forms reference field defs from the workflow's registry. ALL per-form
+  //    presentation (layout, placeholder, help_text, required, conditional
+  //    logic) lives in the `config` JSON column — definitional bits stay on
+  //    workflow_field_defs. JSON keeps presentation schema-change-free.
   // ============================================================================
 
-  const formsId = app.findCollectionByNameOrId("tools_forms").id;
+  const formsCollection = app.findCollectionByNameOrId("tools_forms");
+  const formsId = formsCollection.id;
+
+  // Page metadata (title + description per page) lives on the form, not
+  // denormalized onto every field ref.
+  if (!formsCollection.fields.find((f) => f.name === "pages")) {
+    formsCollection.fields.add(new Field({ name: "pages", type: "json" }));
+    app.save(formsCollection);
+  }
 
   const formFieldRefs = new Collection({
     type: "base",
@@ -227,16 +237,11 @@ migrate((app) => {
     fields: [
       { name: "form_id", type: "relation", required: true, collectionId: formsId, maxSelect: 1, cascadeDelete: true },
       { name: "field_def_id", type: "relation", required: true, collectionId: fieldDefs.id, maxSelect: 1, cascadeDelete: true },
-      { name: "field_order", type: "number", min: 0 },
-      { name: "page", type: "number", min: 1 },
-      { name: "page_title", type: "text", max: 255 },
-      { name: "row_index", type: "number", min: 0 },
-      { name: "column_position", type: "select", values: ["left", "right", "full"], maxSelect: 1 },
-      // Per-form overrides (null/empty = use field def's defaults).
-      { name: "is_required_override", type: "bool" },
-      { name: "placeholder_override", type: "text", max: 255 },
-      { name: "help_text_override", type: "text", max: 1000 },
-      { name: "conditional_logic", type: "json" },
+      // All per-form presentation. JSON shape:
+      //   { field_order, page, row_index, column_position,
+      //     is_required, placeholder, help_text, conditional_logic }
+      // Pure presentation — never referenced in API rules.
+      { name: "config", type: "json" },
       { name: "created", type: "autodate", onCreate: true },
       { name: "updated", type: "autodate", onCreate: true, onUpdate: true },
     ],
@@ -288,6 +293,16 @@ migrate((app) => {
   try { app.delete(app.findCollectionByNameOrId("tools_form_field_refs")); } catch (e) {}
   try { app.delete(app.findCollectionByNameOrId("workflow_field_values")); } catch (e) {}
   try { app.delete(app.findCollectionByNameOrId("workflow_field_defs")); } catch (e) {}
+
+  // Strip the pages column from tools_forms.
+  const formsCollection = app.findCollectionByNameOrId("tools_forms");
+  if (formsCollection) {
+    const idx = formsCollection.fields.findIndex((f) => f.name === "pages");
+    if (idx >= 0) {
+      formsCollection.fields.splice(idx, 1);
+      app.save(formsCollection);
+    }
+  }
 
   // Strip the additions from tools_protocol / workflow_protocol_entries.
   const protocol = app.findCollectionByNameOrId("tools_protocol");

@@ -43,7 +43,6 @@ export class WorkflowDatabaseAdapter {
 
         // Parse JSON for each stage
         stages.forEach(stage => {
-          stage.visible_to_roles = this.parseJsonField(stage.visible_to_roles, []);
           stage.visual_config = this.parseJsonField(stage.visual_config, {});
         });
       } catch (err) {
@@ -183,7 +182,6 @@ export class WorkflowDatabaseAdapter {
     for (const stage of data.stages) {
       const stageData = {
         ...stage,
-        visible_to_roles: JSON.stringify(stage.visible_to_roles),
         visual_config: JSON.stringify(stage.visual_config)
       };
 
@@ -275,7 +273,6 @@ export class WorkflowDatabaseAdapter {
     for (const stage of data.stages) {
       await this.pb.collection('workflow_stages').create({
         ...stage,
-        visible_to_roles: JSON.stringify(stage.visible_to_roles),
         visual_config: JSON.stringify(stage.visual_config)
       });
     }

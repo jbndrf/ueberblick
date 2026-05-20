@@ -2,11 +2,12 @@
 	import { flip } from 'svelte/animate';
 	import { tick } from 'svelte';
 	import { Plus, X, Pencil, Check, AlignLeft, AlignRight, Maximize2 } from '@lucide/svelte';
-	import { formEditorPreviewAriaLabel, formEditorPreviewDragToAdd, formEditorPreviewMoveHere, formEditorPreviewNewField, formEditorPreviewNoFieldsYet, formEditorPreviewPageFallback } from '$lib/paraglide/messages';
+	import { formEditorPreviewAriaLabel, formEditorPreviewDragToAdd, formEditorPreviewMoveHere, formEditorPreviewNewField, formEditorPreviewNoFieldsYet, formEditorPreviewPageFallback, formEditorPreviewPageDescriptionPlaceholder } from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
+	import { Textarea } from '$lib/components/ui/textarea';
 	import FieldCard from './FieldCard.svelte';
-	import type { TrackedFormField, FieldType, ToolsFormField, ColumnPosition } from '$lib/workflow-builder';
+	import type { TrackedFormField, FieldType, ToolsFormField, ColumnPosition, FormPage } from '$lib/workflow-builder';
 
 	// Drop zone configuration type
 	type DropZoneConfig = {
@@ -24,11 +25,19 @@
 		onFieldDrop?: (fieldType: FieldType, page: number, rowIndex: number, columnPosition: ColumnPosition) => void;
 		onFieldRefDrop?: (fieldDefId: string, page: number, rowIndex: number, columnPosition: ColumnPosition) => void;
 		onFieldUpdate?: (fieldId: string, updates: Partial<ToolsFormField>) => void;
+		/** Per-page metadata (title + description). */
+		pages?: FormPage[];
 		onPageTitleChange?: (page: number, title: string) => void;
+		onPageDescriptionChange?: (page: number, description: string) => void;
 		onAddPage?: () => void;
 		onDeletePage?: (page: number) => void;
 		/** Protocol forms: tint cards by scope (lifecycle vs protocol-local). */
 		scopeTinted?: boolean;
+		/**
+		 * Hide the internal page-tab bar. Used when an outer surface (e.g. the
+		 * data-tab editor) owns tab navigation and feeds a single page's fields.
+		 */
+		showPages?: boolean;
 	};
 
 	let {
@@ -39,10 +48,13 @@
 		onFieldDrop,
 		onFieldRefDrop,
 		onFieldUpdate,
+		pages: pageMeta = [],
 		onPageTitleChange,
+		onPageDescriptionChange,
 		onAddPage,
 		onDeletePage,
-		scopeTinted = false
+		scopeTinted = false,
+		showPages = true
 	}: Props = $props();
 
 	// Current page being viewed
@@ -51,6 +63,9 @@
 	// Editing page title
 	let editingPageTitle = $state<number | null>(null);
 	let editingTitleValue = $state('');
+
+	// Per-page description draft, kept in sync with the current page.
+	let descDraft = $state('');
 
 	// Get unique pages from fields, default to page 1
 	const pages = $derived.by(() => {
@@ -62,15 +77,26 @@
 		return Array.from(pageSet).sort((a, b) => a - b);
 	});
 
-	// Get page titles from the first field on each page
+	// Page titles + descriptions come from the form's `pages` metadata.
+	const pageMetaByNum = $derived(new Map(pageMeta.map((p) => [p.page, p])));
 	const pageTitles = $derived.by(() => {
 		const titles: Record<number, string> = {};
 		for (const page of pages) {
-			const firstField = fields.find((f) => (f.data.page ?? 1) === page);
-			titles[page] = firstField?.data.page_title || (formEditorPreviewPageFallback?.({ page }) ?? `Page ${page}`);
+			titles[page] = pageMetaByNum.get(page)?.title || (formEditorPreviewPageFallback?.({ page }) ?? `Page ${page}`);
 		}
 		return titles;
 	});
+
+	const currentPageDescription = $derived(pageMetaByNum.get(currentPage)?.description ?? '');
+	$effect(() => {
+		descDraft = currentPageDescription;
+	});
+
+	function commitPageDescription() {
+		if (descDraft.trim() !== currentPageDescription.trim()) {
+			onPageDescriptionChange?.(currentPage, descDraft.trim());
+		}
+	}
 
 	// Sort and filter fields for current page
 	const currentPageFields = $derived(
@@ -428,6 +454,27 @@
 		}
 	}
 
+	/** Move the field being dragged onto a page tab into that page. */
+	function handleFieldDropOnPage(targetPage: number) {
+		if (!draggedFieldId) return;
+		const dragged = fields.find((f) => f.data.id === draggedFieldId);
+		if (!dragged || (dragged.data.page ?? 1) === targetPage) {
+			draggedFieldId = null;
+			return;
+		}
+		const targetRows = fields
+			.filter((f) => (f.data.page ?? 1) === targetPage && f.data.id !== draggedFieldId)
+			.map((f) => f.data.row_index ?? 0);
+		const nextRow = targetRows.length > 0 ? Math.max(...targetRows) + 1 : 0;
+		onFieldUpdate?.(draggedFieldId, {
+			page: targetPage,
+			row_index: nextRow,
+			column_position: 'full'
+		});
+		draggedFieldId = null;
+		recalculateFieldOrder();
+	}
+
 	// =============================================================================
 	// Unified Drop Zone Helpers
 	// =============================================================================
@@ -551,18 +598,21 @@
 	aria-label={formEditorPreviewAriaLabel?.() ?? 'Form preview'}
 >
 	<!-- Page Tabs -->
-	{#if pages.length > 1 || fields.length > 0}
+	{#if showPages && (pages.length > 1 || fields.length > 0)}
 		<div class="page-tabs">
 			<div class="tabs-container">
 				{#each pages as page (page)}
 					<div
 						class="page-tab"
 						class:active={currentPage === page}
+						class:drop-target={!!draggedFieldId && currentPage !== page}
 						role="tab"
 						tabindex="0"
 						aria-selected={currentPage === page}
 						onclick={() => (currentPage = page)}
 						onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); currentPage = page; } }}
+						ondragover={(e) => { if (draggedFieldId) e.preventDefault(); }}
+						ondrop={(e) => { if (draggedFieldId) { e.preventDefault(); handleFieldDropOnPage(page); } }}
 					>
 						{#if editingPageTitle === page}
 							<Input
@@ -602,6 +652,18 @@
 			<Button variant="ghost" size="sm" onclick={handleAddPage} class="add-page-btn">
 				<Plus class="h-4 w-4" />
 			</Button>
+		</div>
+	{/if}
+
+	{#if showPages && fields.length > 0}
+		<div class="page-description">
+			<Textarea
+				bind:value={descDraft}
+				class="page-description-input"
+				rows={2}
+				placeholder={formEditorPreviewPageDescriptionPlaceholder?.() ?? 'Optional description shown at the top of this page'}
+				onblur={commitPageDescription}
+			/>
 		</div>
 	{/if}
 
@@ -863,6 +925,11 @@
 		color: hsl(var(--foreground));
 	}
 
+	.page-tab.drop-target {
+		outline: 2px dashed hsl(var(--primary));
+		outline-offset: -2px;
+	}
+
 	.page-tab.active {
 		background: hsl(var(--background));
 		border-color: hsl(var(--border));
@@ -931,6 +998,17 @@
 		width: 28px;
 		padding: 0;
 		flex-shrink: 0;
+	}
+
+	.page-description {
+		padding: 0.5rem 0.75rem 0;
+		flex-shrink: 0;
+	}
+
+	.page-description :global(.page-description-input) {
+		font-size: 0.75rem;
+		resize: vertical;
+		background: hsl(var(--muted) / 0.3);
 	}
 
 	.form-preview-inner {

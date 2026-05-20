@@ -43,17 +43,17 @@
 					class:dragging={draggingId === def.id}
 					class:used={isUsed}
 					draggable={!isUsed}
-					ondragstart={(e) => handleDragStart(e, def.id, def.label ?? def.key)}
+					ondragstart={(e) => handleDragStart(e, def.id, def.label)}
 					ondragend={handleDragEnd}
 					onclick={() => !isUsed && onPick?.(def.id)}
 					disabled={isUsed}
 					type="button"
-					title={expanded ? undefined : `${def.label || def.key} (${def.field_type}, ${def.write_mode})${isUsed ? ' — already on this form' : ''}`}
+					title={expanded ? undefined : `${def.label} (${def.field_type}, ${def.write_mode})${isUsed ? ' — already on this form' : ''}`}
 				>
 					<div class="dot" data-mode={def.write_mode}></div>
 					{#if expanded}
 						<div class="info">
-							<span class="label">{def.label || def.key || '(unnamed)'}</span>
+							<span class="label">{def.label || '(unnamed)'}</span>
 							<span class="meta">{def.field_type} · {def.write_mode}</span>
 						</div>
 					{/if}

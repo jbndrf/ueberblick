@@ -3,12 +3,8 @@
  *
  * Validation schemas for workflow builder forms using Zod.
  *
- * TODO(field-def-redesign): The `formFieldSchema` / `fieldOptionsSchema` /
- * `fieldValidationSchema` / `smartDropdownMappingSchema` below mirror the
- * legacy `tools_form_fields` shape (using `field_key`). The new model splits
- * field declarations into `workflow_field_defs` (registry) and per-form
- * references in `tools_form_field_refs`. These schemas need to be split
- * accordingly. Admin-side worker is updating consumers in parallel.
+ * Field declarations live in `workflow_field_defs` (the registry); per-form
+ * presentation lives in the `config` JSON of `tools_form_field_refs`.
  */
 
 import { z } from 'zod';
@@ -33,7 +29,6 @@ export const stageSchema = z.object({
   stage_key: z.string().min(1, 'Stage key is required').max(50).regex(/^[a-z0-9_]+$/, 'Stage key must be lowercase alphanumeric with underscores'),
   stage_type: z.enum(['start', 'intermediate', 'end']),
   max_duration_hours: z.number().int().min(0).max(8760), // Max 1 year
-  visible_to_roles: z.array(z.string()).default([]),
   position_x: z.number().default(100),
   position_y: z.number().default(100)
 });
@@ -54,17 +49,26 @@ export const actionSchema = z.object({
 });
 
 /**
- * Form Field Schema
+ * Per-form field presentation config — the shape of `tools_form_field_refs.config`.
  */
-export const formFieldSchema = z.object({
-  field_label: z.string().min(1, 'Field label is required').max(100),
-  field_key: z.string().min(1, 'Field key is required').max(50).regex(/^[a-z0-9_]+$/, 'Field key must be lowercase alphanumeric with underscores'),
-  field_type: z.enum(['short', 'long', 'multiple', 'dropdown', 'smart_dropdown', 'date', 'file', 'number', 'email']),
-  is_required: z.boolean().default(false),
-  placeholder: z.string().max(100).optional(),
-  help_text: z.string().max(200).optional(),
+export const formFieldConfigSchema = z.object({
+  field_order: z.number().int().min(0).default(0),
   page: z.number().int().min(1).default(1),
-  page_title: z.string().max(100).optional()
+  row_index: z.number().int().min(0).default(0),
+  column_position: z.enum(['left', 'right', 'full']).default('full'),
+  is_required: z.boolean().default(false),
+  placeholder: z.string().max(255).optional(),
+  help_text: z.string().max(1000).optional(),
+  conditional_logic: z.record(z.string(), z.unknown()).nullable().optional()
+});
+
+/**
+ * Per-page metadata — the shape of an entry in `tools_forms.pages`.
+ */
+export const formPageSchema = z.object({
+  page: z.number().int().min(1),
+  title: z.string().max(255).default(''),
+  description: z.string().max(2000).default('')
 });
 
 /**

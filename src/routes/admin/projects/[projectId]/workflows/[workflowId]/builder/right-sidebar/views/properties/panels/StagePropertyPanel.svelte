@@ -28,12 +28,9 @@
 		propertiesStagePropertyDeleteStage,
 		propertiesStagePropertyNamePlaceholder,
 		propertiesStagePropertyNoTools,
-		propertiesStagePropertyRolesPlaceholder,
 		propertiesStagePropertyTabPermissions,
 		propertiesStagePropertyTabTools,
-		propertiesStagePropertyToolPermissionsTitle,
-		propertiesStagePropertyVisibilityHelp,
-		propertiesStagePropertyVisibilityTitle
+		propertiesStagePropertyToolPermissionsTitle
 	} from '$lib/paraglide/messages';
 
 	type Role = {
@@ -52,7 +49,6 @@
 		stageEditTools?: ToolsEdit[];
 		onRename?: (stageId: string, newName: string) => void;
 		onDelete?: (stageId: string) => void;
-		onRolesChange?: (stageId: string, roleIds: string[]) => void;
 		/** Callback when a tool's edit roles change. `scope` distinguishes
 		 *  the self-edit-only vs edit-anyone's arrays (any wins on overlap). */
 		onToolRolesChange?: (toolId: string, roleIds: string[], scope: 'self' | 'any') => void;
@@ -75,7 +71,6 @@
 		stageEditTools = [],
 		onRename,
 		onDelete,
-		onRolesChange,
 		onToolRolesChange,
 		onToolVisualConfigChange,
 		onSelectTool,
@@ -85,7 +80,6 @@
 
 	// Local state for editing
 	let stageName = $state(stage.data.title);
-	let selectedRoleIds = $state<string[]>(stage.data.visible_to_roles || []);
 	let activeTab = $state('permissions');
 
 	// Track current stage ID to detect stage switches
@@ -127,20 +121,6 @@
 		if (stage.id !== currentStageId) {
 			currentStageId = stage.id;
 			stageName = stage.data.title;
-			selectedRoleIds = stage.data.visible_to_roles || [];
-		}
-	});
-
-	// Watch for role changes and notify parent
-	$effect(() => {
-		// Compare with prop value to avoid calling on initial sync
-		const propRoles = stage.data.visible_to_roles || [];
-		const rolesChanged =
-			selectedRoleIds.length !== propRoles.length ||
-			selectedRoleIds.some((id, i) => id !== propRoles[i]);
-
-		if (rolesChanged && stage.id === currentStageId) {
-			onRolesChange?.(stage.id, selectedRoleIds);
 		}
 	});
 
@@ -254,29 +234,6 @@
 		<div class="panel-content">
 			<!-- Permissions Tab -->
 			<Tabs.Content value="permissions" class="tab-content">
-				<!-- Stage Visibility - Primary/Prominent Section -->
-				<div class="primary-permission-section">
-					<div class="primary-permission-header">
-						<span class="primary-permission-title">{propertiesStagePropertyVisibilityTitle?.() ?? 'Stage Visibility'}</span>
-					</div>
-					<div class="primary-permission-content">
-						<MobileMultiSelect
-							bind:selectedIds={selectedRoleIds}
-							options={roles}
-							getOptionId={(r) => r.id}
-							getOptionLabel={(r) => r.name}
-							getOptionDescription={(r) => r.description}
-							allowCreate={!!onCreateRole}
-							onCreateOption={onCreateRole}
-							placeholder={propertiesStagePropertyRolesPlaceholder?.() ?? 'Select or search roles...'}
-							class="w-full"
-						/>
-						<p class="help-text">
-							{propertiesStagePropertyVisibilityHelp?.() ?? 'Only participants with these roles can see this stage. Leave empty to make visible to all.'}
-						</p>
-					</div>
-				</div>
-
 				<!-- Tool Permissions Section -->
 				{#if stageEditTools.length > 0}
 					<PropertySection title={propertiesStagePropertyToolPermissionsTitle?.() ?? 'Tool Permissions'} defaultOpen={true}>

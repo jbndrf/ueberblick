@@ -304,7 +304,6 @@ export interface WorkflowStage {
 	stage_order: number;
 	position_x: number;
 	position_y: number;
-	visible_to_roles: string[];
 	visual_config: Record<string, unknown> | null;
 	created: string;
 	updated: string;
@@ -459,6 +458,21 @@ export interface InstanceReferenceOptions {
 }
 
 /**
+ * Presentation layout for a field def on the participant detail "Data" view.
+ * Stored as the `display_config` JSON column on `workflow_field_defs`.
+ */
+export interface FieldDisplayConfig {
+	/** Tab name; also its label and identity. Empty = default "Data" tab. */
+	tab: string;
+	/** Tab ordering — denormalized across all defs in the tab. */
+	tabOrder: number;
+	/** Visual row within the tab (0-based). */
+	row: number;
+	/** Column within the row. */
+	column: 'left' | 'right' | 'full';
+}
+
+/**
  * Field definition - matches `workflow_field_defs` collection.
  * The workflow-scoped registry: each field is declared once here, then
  * referenced from any number of forms via `tools_form_field_refs`.
@@ -466,16 +480,18 @@ export interface InstanceReferenceOptions {
 export interface FieldDef {
 	id: string;
 	workflow_id: string;
-	key: string;
+	/** Field identity. Unique per workflow. */
 	label: string;
 	field_type: FieldType;
 	write_mode: WriteMode;
 	output_type: 'text' | 'number' | 'date' | 'json' | '';
-	display_stage_id: string;
+	/**
+	 * Presentation layout for the participant detail "Data" view. JSON:
+	 *   { tab: string, tabOrder: number, row: number, column: 'left'|'right'|'full' }
+	 * null = default "Data" tab, ordered by `created`.
+	 */
+	display_config: FieldDisplayConfig | null;
 	view_roles: string[];
-	placeholder: string;
-	help_text: string;
-	is_required: boolean;
 	validation_rules: Record<string, unknown> | null;
 	field_options: Record<string, unknown> | null;
 	created: string;
@@ -483,25 +499,39 @@ export interface FieldDef {
 }
 
 /**
+ * Per-form presentation config for a field. Stored as the `config` JSON
+ * column on `tools_form_field_refs`.
+ */
+export interface FormFieldConfig {
+	field_order: number;
+	page: number;
+	row_index: number;
+	column_position: 'left' | 'right' | 'full';
+	is_required: boolean;
+	placeholder: string;
+	help_text: string;
+	conditional_logic: Record<string, unknown> | null;
+}
+
+/**
  * Form field reference - matches `tools_form_field_refs` collection.
- * A form references field defs from the workflow's registry; per-form layout
- * and override knobs live on the reference, not the definition.
+ * A form references a field def from the workflow's registry; all per-form
+ * presentation lives in the `config` JSON column.
  */
 export interface ToolFormFieldRef {
 	id: string;
 	form_id: string;
 	field_def_id: string;
-	field_order: number;
-	page: number;
-	page_title: string;
-	row_index: number;
-	column_position: 'left' | 'right' | 'full';
-	is_required_override: boolean | null;
-	placeholder_override: string;
-	help_text_override: string;
-	conditional_logic: Record<string, unknown> | null;
+	config: FormFieldConfig | null;
 	created: string;
 	updated: string;
+}
+
+/** Per-page metadata for a multi-page form. Stored on `tools_forms.pages`. */
+export interface FormPage {
+	page: number;
+	title: string;
+	description: string;
 }
 
 /**

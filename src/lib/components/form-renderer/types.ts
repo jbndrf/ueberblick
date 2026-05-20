@@ -72,6 +72,12 @@ export interface ValidationRules {
 	maxFileSize?: number;
 }
 
+export interface FormPage {
+	page: number;
+	title: string;
+	description: string;
+}
+
 export interface FormField {
 	id: string;
 	form_id: string;
@@ -79,7 +85,6 @@ export interface FormField {
 	field_type: FieldType;
 	field_order?: number;
 	page?: number;
-	page_title?: string;
 	row_index: number;
 	column_position: ColumnPosition;
 	is_required?: boolean;
@@ -101,6 +106,7 @@ export interface Form {
 	name: string;
 	description?: string;
 	allowed_roles?: string[];
+	pages?: FormPage[];
 	visual_config?: {
 		button_label?: string;
 		button_color?: string;
@@ -224,6 +230,7 @@ export interface MediaFile {
 export interface PageGroup {
 	page: number;
 	pageTitle: string;
+	pageDescription: string;
 	rows: RowGroup[];
 }
 
@@ -267,15 +274,24 @@ export function getColumnClass(position: ColumnPosition): string {
 }
 
 /**
- * Group fields by page and row
+ * Group fields by page and row. Page title/description come from the form's
+ * `pages` metadata array, keyed by page number.
  */
-export function groupFieldsByLayout(fields: FormFieldWithValue[]): PageGroup[] {
+export function groupFieldsByLayout(
+	fields: FormFieldWithValue[],
+	pages: FormPage[] = []
+): PageGroup[] {
+	const pageMeta = new Map<number, FormPage>();
+	for (const p of pages) pageMeta.set(p.page, p);
+
 	if (!hasLayoutMetadata(fields)) {
 		// Fallback: single page, one field per row
+		const meta = pageMeta.get(1);
 		return [
 			{
 				page: 1,
-				pageTitle: '',
+				pageTitle: meta?.title || '',
+				pageDescription: meta?.description || '',
 				rows: fields.map((field, index) => ({
 					rowIndex: index,
 					fields: [{ ...field, column_position: 'full' as ColumnPosition }]
@@ -296,8 +312,9 @@ export function groupFieldsByLayout(fields: FormFieldWithValue[]): PageGroup[] {
 	return Array.from(pageMap.entries())
 		.sort(([a], [b]) => a - b)
 		.map(([page, pageFields]) => {
-			// Get page title from first field that has one
-			const pageTitle = pageFields.find((f) => f.page_title)?.page_title || '';
+			const meta = pageMeta.get(page);
+			const pageTitle = meta?.title || '';
+			const pageDescription = meta?.description || '';
 
 			// Group by row
 			const rowMap = new Map<number, FormFieldWithValue[]>();
@@ -310,6 +327,7 @@ export function groupFieldsByLayout(fields: FormFieldWithValue[]): PageGroup[] {
 			return {
 				page,
 				pageTitle,
+				pageDescription,
 				rows: Array.from(rowMap.entries())
 					.sort(([a], [b]) => a - b)
 					.map(([rowIndex, rowFields]) => ({

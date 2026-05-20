@@ -16,9 +16,12 @@ export type {
 	WorkflowConnection,
 	SentryClause,
 	WorkflowFieldDef,
+	FieldDisplayConfig,
 	ToolsForm,
+	FormPage,
 	ProtocolLocalFieldDef,
 	ToolsFormField,
+	FormFieldConfig,
 	ToolsEdit,
 	VisualConfig,
 	TrackedStage,
@@ -71,6 +74,9 @@ export type {
 	ConnectionEdgeData,
 	RegionInfo
 } from './types';
+
+// Value exports from types
+export { DEFAULT_DATA_TAB } from './types';
 
 // Utilities
 export { generateId, arraysEqual, deepEqual } from './utils';

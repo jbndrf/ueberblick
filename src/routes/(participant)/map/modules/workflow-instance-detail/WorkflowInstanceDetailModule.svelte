@@ -3,6 +3,9 @@
 	import {
 		commonCancel,
 		mapWorkflowContinue,
+		participantEditToolCancel,
+		participantEditToolRequiredField,
+		participantEditToolSave,
 		participantWorkflowInstanceDetailAdminUpdated,
 		participantWorkflowInstanceDetailAttachmentAlt,
 		participantWorkflowInstanceDetailConfirmAction,
@@ -30,7 +33,6 @@
 		participantWorkflowInstanceDetailProtocolHistoryEmpty,
 		participantWorkflowInstanceDetailProtocolAutologSummary,
 		participantWorkflowInstanceDetailUpdatedSuffix,
-		participantWorkflowInstanceDetailVisitSuffix,
 		participantWorkflowInstanceDetailLoadOlder,
 		participantWorkflowInstanceDetailLoadOlderOfflineHint,
 		participantWorkflowInstanceDetailYesterday
@@ -50,8 +52,10 @@
 	import type { FieldDef } from '$lib/participant-state/types';
 	import type { WorkflowInstanceSelection } from '../types';
 	import * as Tabs from '$lib/components/ui/tabs';
-	import { ChevronRight } from '@lucide/svelte';
+	import { ChevronRight, Check, X } from '@lucide/svelte';
+	import { Button } from '$lib/components/ui/button';
 	import { FormFillTool, ViewFieldsTool, LocationEditTool, ConflictResolutionTool, ProtocolTool } from './tools';
+	import { FormRenderer } from '$lib/components/form-renderer';
 	import { isMeaningfulValue } from './tools/form-state';
 	import FieldValueImage from './FieldValueImage.svelte';
 	import { getConflictsForInstance, resolveConflict } from '$lib/participant-state/sync.svelte';
@@ -106,7 +110,14 @@
 	}
 
 	let activeToolFlow = $state<ActiveToolFlow | null>(null);
+	/** Set while the detail view is in field edit mode (edit_mode='form_fields'). */
 	let activeEditTool = $state<ToolEdit | null>(null);
+	/** User-entered edits, keyed by field_def id. Only changed fields appear here. */
+	let editValues = $state<Record<string, unknown>>({});
+	/** Validation errors for the active edit, keyed by field_def id. */
+	let editErrors = $state<Record<string, string>>({});
+	/** Guards the save handler against double-submits. */
+	let isEditSaving = $state(false);
 	let activeProtocolTool = $state<ToolProtocol | null>(null);
 	let isLocationPickerActive = $state(false);
 	let activeLocationEditTool = $state<ToolEdit | null>(null);
@@ -197,6 +208,9 @@
 		activeTab = 'activity';
 		activeToolFlow = null;
 		activeEditTool = null;
+		editValues = {};
+		editErrors = {};
+		isEditSaving = false;
 		activeProtocolTool = null;
 		isLocationPickerActive = false;
 		activeLocationEditTool = null;
@@ -405,11 +419,12 @@
 		return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 	}
 
-	function navigateToStageData(stageId: string) {
-		if (detailState) {
-			detailState.setActiveStageTab(stageId);
-			activeTab = 'data';
-		}
+	/** Data tab key for the default "Data" tab is the empty string; the bits-ui
+	 * Tabs component needs a non-empty value, so map it to this sentinel. */
+	const DATA_TAB_SENTINEL = '__data__';
+
+	function navigateToData() {
+		activeTab = 'data';
 	}
 
 	// ==========================================================================
@@ -574,9 +589,9 @@
 		activeTab = tabId;
 	}
 
-	function handleStageTabChange(stageId: string) {
+	function handleDataTabChange(tabValue: string) {
 		if (detailState) {
-			detailState.setActiveStageTab(stageId);
+			detailState.setActiveDataTab(tabValue === DATA_TAB_SENTINEL ? '' : tabValue);
 		}
 	}
 
@@ -647,8 +662,11 @@
 				isLocationPickerActive = true;
 			}
 		} else {
-			// Form fields edit mode
+			// Form fields edit mode — flip the Data tab into editable rendering.
 			activeEditTool = editTool;
+			editValues = {};
+			editErrors = {};
+			activeTab = 'data';
 		}
 	}
 
@@ -970,18 +988,97 @@
 		return String(parsed);
 	}
 
-	async function handleEditSave(values: Record<string, unknown>) {
-		// TODO(field-def-redesign): tools_edit removed; admin should convert to Form tool.
-		// activeEditTool can never be set in the new world (availableStageEditTools
-		// is empty), so this is effectively dead. Kept as a no-op so existing
-		// callers (and ProtocolTool's editValues path) compile.
-		if (!activeEditTool || !detailState || !gateway) return;
-		console.warn('[handleEditSave] tools_edit is deprecated; received values for', Object.keys(values));
-		activeEditTool = null;
+	function handleEditValueChange(fieldId: string, value: unknown) {
+		editValues = { ...editValues, [fieldId]: value };
+		if (editErrors[fieldId]) {
+			const next = { ...editErrors };
+			delete next[fieldId];
+			editErrors = next;
+		}
+	}
+
+	function handleEditFileChange(fieldId: string, files: File[]) {
+		editValues = { ...editValues, [fieldId]: files };
+	}
+
+	/**
+	 * Persist the active edit. `editValues` holds only fields the user actually
+	 * changed, so every meaningful entry is a deliberate write. Singleton writes
+	 * become a new latest value; observation writes append a new entry.
+	 */
+	async function handleEditSave() {
+		if (!activeEditTool || !detailState || !gateway || isEditSaving) return;
+
+		const editableSet = new Set(activeEditTool.editable_fields);
+
+		// Required-field validation is form-scoped (lives on tools_form_field_refs
+		// .config), so the edit tool — which edits field defs directly, not via a
+		// form — has no required gate.
+
+		const entries = Object.entries(editValues).filter(
+			([fieldId, value]) => editableSet.has(fieldId) && isMeaningfulValue(value)
+		);
+		if (entries.length === 0) {
+			handleEditCancel();
+			return;
+		}
+
+		isEditSaving = true;
+		try {
+			const currentStageId = detailState.instance?.current_stage_id as string;
+			const changedFields = entries.map(([fieldId]) => ({
+				field_key: fieldId,
+				field_name: getFieldName(fieldId) || fieldId
+			}));
+
+			const toolUsage = await gateway.collection('workflow_instance_tool_usage').create({
+				instance_id: detailState.instanceId,
+				stage_id: currentStageId,
+				executed_by: gateway.participantId,
+				executed_at: new Date().toISOString(),
+				metadata: {
+					action: 'edit',
+					stage_name: getStageName(currentStageId) || currentStageId,
+					changes: changedFields
+				}
+			}) as { id: string };
+
+			for (const [fieldId, value] of entries) {
+				const def = detailState.fieldDefsById.get(fieldId);
+				if (!def) continue;
+				const stageId = getStageIdForField(fieldId) || currentStageId;
+				if (Array.isArray(value) && value.length > 0 && value[0] instanceof File) {
+					for (const file of value as File[]) {
+						await writeFieldValue(def, file, {
+							instanceId: detailState.instanceId,
+							stageId,
+							toolUsageId: toolUsage.id
+						});
+					}
+				} else {
+					await writeFieldValue(def, serializeValue(value), {
+						instanceId: detailState.instanceId,
+						stageId,
+						toolUsageId: toolUsage.id
+					});
+				}
+			}
+
+			await detailState.refresh();
+			activeEditTool = null;
+			editValues = {};
+			editErrors = {};
+		} catch (err) {
+			console.error('Failed to save edits:', err);
+		} finally {
+			isEditSaving = false;
+		}
 	}
 
 	function handleEditCancel() {
 		activeEditTool = null;
+		editValues = {};
+		editErrors = {};
 	}
 
 	// ==========================================================================
@@ -1403,6 +1500,29 @@
 	error={detailState?.loadError}
 	onClose={handleClose}
 >
+	{#snippet headerActions()}
+		{#if activeEditTool}
+			<Button
+				variant="ghost"
+				size="icon"
+				onclick={handleEditCancel}
+				disabled={isEditSaving}
+				aria-label={participantEditToolCancel?.() ?? 'Cancel'}
+			>
+				<X class="w-4 h-4" />
+			</Button>
+			<Button
+				variant="ghost"
+				size="icon"
+				onclick={handleEditSave}
+				disabled={isEditSaving}
+				aria-label={participantEditToolSave?.() ?? 'Save'}
+			>
+				<Check class="w-4 h-4" />
+			</Button>
+		{/if}
+	{/snippet}
+
 	{#snippet content()}
 		<!-- Check if we're in a tool flow or edit mode -->
 		{#if activeToolFlow}
@@ -1523,11 +1643,11 @@
 										<button
 											class="w-full flex items-center gap-3 rounded-lg bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 px-3 py-2 text-left transition-colors hover:bg-blue-100 dark:hover:bg-blue-900/50"
 											class:mt-2={sectionIndex > 0}
-											onclick={() => navigateToStageData(section.stageId)}
+											onclick={() => navigateToData()}
 										>
 											<div class="flex-1 min-w-0">
 												<p class="text-sm font-semibold text-blue-900 dark:text-blue-100">
-													{participantWorkflowInstanceDetailMovedTo?.({ stageName: section.stageName }) ?? `Moved to: ${section.stageName}`}{section.visitTotal > 1 ? ` ${participantWorkflowInstanceDetailVisitSuffix?.({ index: section.visitIndex, total: section.visitTotal }) ?? `(visit ${section.visitIndex} of ${section.visitTotal})`}` : ''}
+													{participantWorkflowInstanceDetailMovedTo?.({ stageName: section.stageName }) ?? `Moved to: ${section.stageName}`}
 												</p>
 												<p class="text-xs text-blue-700/70 dark:text-blue-300/70">
 													{relativeTime(section.transitionEntry.executed_at)}{transBy ? ` \u00b7 ${transBy}` : ''}
@@ -1542,7 +1662,7 @@
 											class:mt-2={sectionIndex > 0}
 										>
 											<div class="h-2 w-2 rounded-full bg-green-500 shrink-0"></div>
-											<p class="text-sm font-semibold text-foreground">{section.stageName}{section.visitTotal > 1 ? ` ${participantWorkflowInstanceDetailVisitSuffix?.({ index: section.visitIndex, total: section.visitTotal }) ?? `(visit ${section.visitIndex} of ${section.visitTotal})`}` : ''}</p>
+											<p class="text-sm font-semibold text-foreground">{section.stageName}</p>
 										</div>
 									{/if}
 
@@ -1689,28 +1809,53 @@
 
 					<Tabs.Content value="data" class="pt-4">
 						{@const ds = detailState}
-						{@const stagesWithData = ds
-							? ds.stages.filter((s) => ds.stageHasData(s.id))
+						{@const visibleTabs = ds
+							? (activeEditTool
+								? ds.getDataTabs().map((t) => ({ name: t.name, isDefault: t.isDefault }))
+								: ds.getVisibleDataTabs(participantRoleIds))
 							: []}
-						<!-- DATA TAB with Stage Sub-tabs -->
+						{@const activeName = visibleTabs.some((t) => t.name === ds?.activeDataTab)
+							? (ds?.activeDataTab ?? '')
+							: (visibleTabs[0]?.name ?? '')}
+						<!-- DATA TAB with configurable data-tab sub-tabs -->
 						<div class="space-y-4">
-							{#if ds && stagesWithData.length > 0}
+							{#if ds && visibleTabs.length > 0}
 								<Tabs.Root
-									value={ds.activeStageTab}
-									onValueChange={(v) => handleStageTabChange(v as string)}
+									value={activeName === '' ? DATA_TAB_SENTINEL : activeName}
+									onValueChange={(v) => handleDataTabChange(v as string)}
 								>
 									<Tabs.List class="w-full overflow-x-auto flex-nowrap">
-										{#each stagesWithData as stage}
-											<Tabs.Trigger value={stage.id} class="text-xs whitespace-nowrap">
-												{stage.stage_name}
+										{#each visibleTabs as tab}
+											<Tabs.Trigger
+												value={tab.name === '' ? DATA_TAB_SENTINEL : tab.name}
+												class="text-xs whitespace-nowrap"
+											>
+												{tab.isDefault
+													? (participantWorkflowInstanceDetailTabData?.() ?? 'Data')
+													: tab.name}
 											</Tabs.Trigger>
 										{/each}
 									</Tabs.List>
 
-									{#each stagesWithData as stage}
-										<Tabs.Content value={stage.id} class="pt-4">
-											{@const fields = ds.getFieldsForFormRenderer(stage.id) as import('$lib/components/form-renderer').FormFieldWithValue[]}
-											<ViewFieldsTool {fields} />
+									{#each visibleTabs as tab}
+										<Tabs.Content
+											value={tab.name === '' ? DATA_TAB_SENTINEL : tab.name}
+											class="pt-4"
+										>
+											{@const fields = ds.getFieldsForFormRenderer(tab.name, participantRoleIds) as import('$lib/components/form-renderer').FormFieldWithValue[]}
+											{#if activeEditTool}
+												<FormRenderer
+													mode="view"
+													{fields}
+													editableFieldIds={activeEditTool.editable_fields}
+													values={editValues}
+													errors={editErrors}
+													onValueChange={handleEditValueChange}
+													onFileChange={handleEditFileChange}
+												/>
+											{:else}
+												<ViewFieldsTool {fields} />
+											{/if}
 										</Tabs.Content>
 									{/each}
 								</Tabs.Root>

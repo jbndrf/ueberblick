@@ -13,7 +13,6 @@
 		stagePreviewParticipantNoForms,
 		stagePreviewParticipantOutgoing,
 		stagePreviewParticipantProgress,
-		stagePreviewParticipantSelectRoles,
 		stagePreviewParticipantStageName,
 		stagePreviewParticipantStageNameHint,
 		stagePreviewParticipantStageNamePlaceholder,
@@ -24,14 +23,11 @@
 		stagePreviewParticipantTools,
 		stagePreviewParticipantToolsCount,
 		stagePreviewParticipantUnnamedForm,
-		stagePreviewParticipantVia,
-		stagePreviewParticipantVisibleToRolesHint,
-		tileSetVisibleToRoles
+		stagePreviewParticipantVia
 	} from '$lib/paraglide/messages';
 	import * as Tabs from '$lib/components/ui/tabs';
 	import * as Card from '$lib/components/ui/card';
 	import { Separator } from '$lib/components/ui/separator';
-	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 	import { FormRenderer } from '$lib/components/form-renderer';
 	import type { FormFieldWithValue } from '$lib/components/form-renderer';
 	import type { WorkflowStage } from '$lib/workflow-builder';
@@ -52,7 +48,6 @@
 		onButtonHover?: (actionId: string | null) => void;
 		onAddButtonClick?: () => void;
 		onStageRename?: (name: string) => void;
-		onStageRolesChange?: (roleIds: string[]) => void;
 		onStageDelete?: () => void;
 		onClose?: () => void;
 		onRoleFilterChange?: (roleId: string) => void;
@@ -72,7 +67,6 @@
 		onButtonHover,
 		onAddButtonClick,
 		onStageRename,
-		onStageRolesChange,
 		onStageDelete,
 		onClose,
 		onRoleFilterChange,
@@ -116,13 +110,6 @@
 	const toolCount = $derived(
 		actions.filter((a) => a.type !== 'connection').length
 	);
-	// Stage visibility roles
-	const selectedRoleIds = $derived(stage.visible_to_roles || []);
-
-	function handleRolesChange(ids: string[]) {
-		onStageRolesChange?.(ids);
-	}
-
 	function handleNameBlur() {
 		editingName = false;
 		if (nameInputValue.trim() && nameInputValue !== stage.stage_name) {
@@ -422,7 +409,7 @@
 										<p class="text-xs text-muted-foreground px-3 py-2">{stagePreviewParticipantNoFields?.() ?? 'No fields yet'}</p>
 									{:else}
 										<div class="p-3">
-											<FormRenderer mode="view" fields={toFormFields(group.fields)} />
+											<FormRenderer mode="view" fields={toFormFields(group.fields)} pages={group.form.pages ?? []} />
 										</div>
 									{/if}
 								</div>
@@ -451,26 +438,6 @@
 							/>
 							<p class="text-xs text-muted-foreground">
 								{stagePreviewParticipantStageNameHint?.() ?? 'Shown in the participant progress view'}
-							</p>
-						</div>
-
-						<!-- Visible to Roles -->
-						<div class="space-y-2">
-							<div class="text-sm font-medium">{tileSetVisibleToRoles?.() ?? 'Visible to Roles'}</div>
-							<MobileMultiSelect
-								selectedIds={selectedRoleIds}
-								options={roles}
-								getOptionId={(r) => r.id}
-								getOptionLabel={(r) => r.name}
-								getOptionDescription={(r) => r.description}
-								allowCreate={!!onCreateRole}
-								onCreateOption={onCreateRole}
-								onSelectedIdsChange={handleRolesChange}
-								placeholder={stagePreviewParticipantSelectRoles?.() ?? 'Select or search roles...'}
-								class="w-full"
-							/>
-							<p class="text-xs text-muted-foreground">
-								{stagePreviewParticipantVisibleToRolesHint?.() ?? 'Only participants with these roles can see this stage. Leave empty to make visible to all.'}
 							</p>
 						</div>
 

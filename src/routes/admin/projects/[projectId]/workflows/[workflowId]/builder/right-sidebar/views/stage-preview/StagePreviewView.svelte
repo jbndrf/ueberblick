@@ -20,7 +20,6 @@
 		incomingForms?: IncomingFormGroup[];
 		// Handlers
 		onStageRename?: (stageId: string, name: string) => void;
-		onStageRolesChange?: (stageId: string, roleIds: string[]) => void;
 		onStageDelete?: (stageId: string) => void;
 		onClose?: () => void;
 		// Button config handlers
@@ -55,7 +54,6 @@
 		availableTargetStages,
 		incomingForms = [],
 		onStageRename,
-		onStageRolesChange,
 		onStageDelete,
 		onClose,
 		onButtonLabelChange,
@@ -230,7 +228,6 @@
 			onButtonHover={handleButtonHover}
 			onAddButtonClick={handleAddButtonClick}
 			onStageRename={(name) => onStageRename?.(stage.id, name)}
-			onStageRolesChange={(roleIds) => onStageRolesChange?.(stage.id, roleIds)}
 			onStageDelete={() => onStageDelete?.(stage.id)}
 			{onClose}
 			onRoleFilterChange={(role) => (roleFilter = role)}

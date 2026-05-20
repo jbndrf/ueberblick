@@ -20,8 +20,8 @@ function canViewFieldDef(def: Record<string, any>, participantRoleIds: string[])
 }
 
 /**
- * Join `tools_form_field_refs` + `workflow_field_defs` into the legacy
- * `FormField` render shape. Per-form override fields on the ref win when set.
+ * Join `tools_form_field_refs` + `workflow_field_defs` into the `FormField`
+ * render shape. All per-form presentation comes from the ref's `config` JSON.
  * Filters out fields whose def `view_roles` excludes the participant.
  */
 async function fetchFormFields(
@@ -32,8 +32,7 @@ async function fetchFormFields(
 	if (formIds.length === 0) return [];
 	const refFilter = formIds.map((id) => `form_id = "${id}"`).join(' || ');
 	const refs = await gateway.collection('tools_form_field_refs').getFullList({
-		filter: refFilter,
-		sort: 'field_order'
+		filter: refFilter
 	}) as Array<Record<string, any>>;
 	if (refs.length === 0) return [];
 	const defIds = Array.from(new Set(refs.map((r) => r.field_def_id).filter(Boolean)));
@@ -49,27 +48,27 @@ async function fetchFormFields(
 			return canViewFieldDef(def, participantRoleIds);
 		})
 		.map((ref) => {
-		const def = defById.get(ref.field_def_id) || {};
-		const isRequired = ref.is_required_override ?? def.is_required ?? false;
-		return {
-			id: ref.field_def_id,
-			form_id: ref.form_id,
-			field_label: def.label ?? '',
-			field_type: def.field_type,
-			field_order: ref.field_order,
-			page: ref.page,
-			page_title: ref.page_title,
-			row_index: ref.row_index ?? 0,
-			column_position: ref.column_position ?? 'full',
-			is_required: isRequired,
-			placeholder: ref.placeholder_override || def.placeholder,
-			help_text: ref.help_text_override || def.help_text,
-			validation_rules: def.validation_rules ?? null,
-			field_options: def.field_options ?? null,
-			conditional_logic: ref.conditional_logic ?? null,
-			write_mode: def.write_mode
-		} as FormField;
-	});
+			const def = defById.get(ref.field_def_id) || {};
+			const config = (ref.config ?? {}) as Record<string, any>;
+			return {
+				id: ref.field_def_id,
+				form_id: ref.form_id,
+				field_label: def.label ?? '',
+				field_type: def.field_type,
+				field_order: config.field_order ?? 0,
+				page: config.page ?? 1,
+				row_index: config.row_index ?? 0,
+				column_position: config.column_position ?? 'full',
+				is_required: config.is_required ?? false,
+				placeholder: config.placeholder ?? '',
+				help_text: config.help_text ?? '',
+				validation_rules: def.validation_rules ?? null,
+				field_options: def.field_options ?? null,
+				conditional_logic: config.conditional_logic ?? null,
+				write_mode: def.write_mode
+			} as FormField;
+		})
+		.sort((a, b) => (a.field_order ?? 0) - (b.field_order ?? 0));
 }
 
 // ==========================================================================
@@ -141,32 +140,32 @@ export function getCurrentPageFields(state: FormFillState): FormField[] {
 }
 
 export function getCurrentPageTitle(state: FormFillState): string {
-	const fields = getCurrentPageFields(state);
-	const firstFieldWithTitle = fields.find(f => f.page_title);
-	return firstFieldWithTitle?.page_title || `Page ${state.currentPage}`;
+	const meta = state.form?.pages?.find((p) => p.page === state.currentPage);
+	return meta?.title || `Page ${state.currentPage}`;
 }
 
 /**
- * Distinct pages present in the form, ascending. Title falls back to "Page N"
- * when no field on the page carries a `page_title`. fieldIds enables per-tab
- * error counts without re-walking state.fields.
+ * Distinct pages present in the form, ascending. Title comes from the form's
+ * `pages` metadata, falling back to "Page N". fieldIds enables per-tab error
+ * counts without re-walking state.fields.
  */
 export function getPages(
 	state: FormFillState
 ): Array<{ page: number; title: string; fieldIds: string[] }> {
-	const byPage = new Map<number, { title: string | null; fieldIds: string[] }>();
+	const byPage = new Map<number, string[]>();
 	for (const f of state.fields) {
 		const p = f.page || 1;
-		const entry = byPage.get(p) ?? { title: null, fieldIds: [] };
-		entry.fieldIds.push(f.id);
-		if (!entry.title && f.page_title) entry.title = f.page_title;
+		const entry = byPage.get(p) ?? [];
+		entry.push(f.id);
 		byPage.set(p, entry);
 	}
+	const titleOf = (page: number) =>
+		state.form?.pages?.find((p) => p.page === page)?.title || `Page ${page}`;
 	return Array.from(byPage.entries())
 		.sort(([a], [b]) => a - b)
-		.map(([page, { title, fieldIds }]) => ({
+		.map(([page, fieldIds]) => ({
 			page,
-			title: title || `Page ${page}`,
+			title: titleOf(page),
 			fieldIds
 		}));
 }

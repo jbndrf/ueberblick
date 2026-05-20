@@ -192,7 +192,6 @@ export const WORKFLOW_LAYERS: DuplicationLayer[] = [
 		collection: 'workflow_stages',
 		sort: 'stage_order',
 		remap: { workflow_id: 'workflow' },
-		roleFields: ['visible_to_roles'],
 	},
 	{
 		collection: 'workflow_connections',
@@ -220,13 +219,12 @@ export const WORKFLOW_LAYERS: DuplicationLayer[] = [
 	},
 	{
 		collection: 'tools_form_field_refs',
-		sort: 'field_order',
 		loadRecords: async (pb, _wfId, idMaps) => {
 			const formOldIds = new Set(idMaps['tools_forms']?.keys() ?? []);
 			if (formOldIds.size === 0) return [];
 			const all = await pb
 				.collection('tools_form_field_refs')
-				.getFullList({ sort: 'field_order' });
+				.getFullList();
 			return all.filter((f: any) => formOldIds.has(f.form_id));
 		},
 		remap: { form_id: 'tools_forms', field_def_id: 'workflow_field_defs' },
@@ -412,7 +410,7 @@ export async function exportProjectSchema(
 		if (forms.length > 0) {
 			const allRefs = await pb
 				.collection('tools_form_field_refs')
-				.getFullList({ sort: 'field_order' });
+				.getFullList();
 			const formIds = new Set(forms.map((f: any) => f.id));
 			formFieldRefs = allRefs.filter((f: any) => formIds.has(f.form_id));
 		}
@@ -638,11 +636,6 @@ export async function importProjectSchema(
 			const data = { ...stage };
 			delete data.id;
 			data.workflow_id = newWorkflowId;
-			if (Array.isArray(data.visible_to_roles)) {
-				data.visible_to_roles = data.visible_to_roles.map(
-					(id: string) => roleMap.get(id) ?? id
-				);
-			}
 			data.id = newId;
 			await pb.collection('workflow_stages').create(data);
 		}
@@ -699,9 +692,7 @@ export async function importProjectSchema(
 			if (Array.isArray(data.view_roles)) {
 				data.view_roles = data.view_roles.map((id: string) => roleMap.get(id) ?? id);
 			}
-			if (data.display_stage_id) {
-				data.display_stage_id = stageMap.get(data.display_stage_id) ?? data.display_stage_id;
-			}
+			// display_config is pure presentation JSON (no id references) — copied verbatim.
 			data = remapFieldOptions(data, wfIdMaps);
 			data.id = newId;
 			await pb.collection('workflow_field_defs').create(data);

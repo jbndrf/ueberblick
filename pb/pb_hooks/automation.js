@@ -879,14 +879,12 @@ function executeActions(actions, instanceId) {
         }
         const writeMode = fieldDef.get("write_mode") || "singleton";
 
-        // Stage attribution: prefer the def's display_stage; fall back to the
-        // instance's current stage. Automations don't run "on a connection",
-        // so there's no transition target to borrow.
-        var stageId = fieldDef.get("display_stage_id") || "";
-        if (!stageId) {
-          var inst = $app.findRecordById("workflow_instances", instanceId);
-          stageId = inst.get("current_stage_id");
-        }
+        // Stage attribution for the append-only value row's recorded_at_stage:
+        // automations don't run "on a connection", so use the instance's
+        // current stage. (Data presentation is driven by display tabs, not
+        // stages — recorded_at_stage is kept only for audit/protocol snapshots.)
+        var inst = $app.findRecordById("workflow_instances", instanceId);
+        var stageId = inst.get("current_stage_id");
         var nowIso = new Date().toISOString();
 
         // workflow_field_values is append-only — every write_mode just inserts

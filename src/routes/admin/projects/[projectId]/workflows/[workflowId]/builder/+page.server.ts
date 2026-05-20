@@ -57,13 +57,14 @@ export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) 
 				filter: `workflow_id = "${workflowId}"`,
 				sort: 'tool_order'
 			}),
-			safeGetFullList(pb, 'tools_form_field_refs', {
-				sort: 'field_order'
-			}),
+			safeGetFullList(pb, 'tools_form_field_refs', {}),
 			safeGetFullList(pb, 'workflow_field_defs', {
 				filter: `workflow_id = "${workflowId}"`
 			}),
-			Promise.resolve([]), // tools_edit removed in Phase 1 redesign
+			safeGetFullList(pb, 'tools_edit', {
+				filter: `workflow_id = "${workflowId}"`,
+				sort: 'tool_order'
+			}),
 
 			safeGetFullList(pb, 'tools_protocol', {
 				filter: `workflow_id = "${workflowId}"`,
@@ -122,22 +123,32 @@ export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) 
 			def.compute_automation_id = auto.id;
 		}
 
-		// TODO(field-def-redesign): denormalize def -> ref into the legacy combined
-		// shape so the existing builder UI keeps rendering. Replace with a proper
-		// (refs, defs) split + fieldDefById Map threaded into child components.
+		// Denormalize def -> ref into the flat shape the builder UI works with:
+		// presentation from the ref's `config` JSON, definitional bits from the
+		// matching field def. The save layer re-packs presentation into `config`.
 		const defById = new Map<string, any>();
 		for (const d of fieldDefs) defById.set(d.id, d);
 		const workflowFormFields = workflowFormFieldRefs.map((ref: any) => {
 			const def = defById.get(ref.field_def_id) ?? {};
+			const config = ref.config ?? {};
 			return {
-				...ref,
+				id: ref.id,
+				form_id: ref.form_id,
+				field_def_id: ref.field_def_id,
+				field_order: config.field_order ?? 0,
+				page: config.page ?? 1,
+				row_index: config.row_index ?? 0,
+				column_position: config.column_position ?? 'full',
+				is_required: config.is_required ?? false,
+				placeholder: config.placeholder ?? '',
+				help_text: config.help_text ?? '',
+				conditional_logic: config.conditional_logic ?? null,
 				field_label: def.label ?? '',
 				field_type: def.field_type ?? 'short_text',
 				field_options: def.field_options ?? null,
 				validation_rules: def.validation_rules ?? null,
-				is_required: ref.is_required_override ?? def.is_required ?? false,
-				placeholder: ref.placeholder_override || def.placeholder || '',
-				help_text: ref.help_text_override || def.help_text || ''
+				write_mode: def.write_mode ?? 'singleton',
+				compute_expression: def.compute_expression ?? ''
 			};
 		});
 
@@ -438,66 +449,56 @@ export const actions: Actions = {
 
 			// Helpers ----------------------------------------------------------
 			const PB_ID_RE = /^[a-zA-Z0-9]{15}$/;
-			const slugify = (s: string): string =>
-				(s || 'field')
-					.toLowerCase()
-					.replace(/[^a-z0-9]+/g, '_')
-					.replace(/^_+|_+$/g, '')
-					.slice(0, 60) || 'field';
 
-			// Per-workflow set of existing keys to avoid duplicates on insert.
-			const existingKeysByWorkflow = new Map<string, Set<string>>();
-			const ensureKeySet = async (workflowId: string): Promise<Set<string>> => {
-				let set = existingKeysByWorkflow.get(workflowId);
+			// Per-workflow set of existing labels — the def identity, unique per
+			// workflow. Collisions on new defs get a " (n)" suffix.
+			const existingLabelsByWorkflow = new Map<string, Set<string>>();
+			const ensureLabelSet = async (workflowId: string): Promise<Set<string>> => {
+				let set = existingLabelsByWorkflow.get(workflowId);
 				if (set) return set;
 				const defs = await pb.collection('workflow_field_defs').getFullList({
 					filter: `workflow_id = "${workflowId}"`,
-					fields: 'key',
+					fields: 'label',
 					requestKey: null
 				});
-				set = new Set<string>(defs.map((d: any) => d.key));
-				existingKeysByWorkflow.set(workflowId, set);
+				set = new Set<string>(defs.map((d: any) => d.label));
+				existingLabelsByWorkflow.set(workflowId, set);
 				return set;
 			};
-			const uniqueKey = async (workflowId: string, base: string): Promise<string> => {
-				const keys = await ensureKeySet(workflowId);
-				let candidate = base;
+			const uniqueLabel = async (workflowId: string, base: string): Promise<string> => {
+				const labels = await ensureLabelSet(workflowId);
+				const root = (base || 'New Field').slice(0, 250);
+				let candidate = root;
 				let n = 2;
-				while (keys.has(candidate)) {
-					candidate = `${base}_${n++}`;
+				while (labels.has(candidate)) {
+					candidate = `${root} (${n++})`;
 				}
-				keys.add(candidate);
+				labels.add(candidate);
 				return candidate;
 			};
 
-			const buildDefPayload = (field: any, workflowId: string, key: string) => {
-				const writeMode = field.write_mode ?? 'singleton';
-				return {
-					workflow_id: workflowId,
-					key,
-					label: field.field_label ?? 'New Field',
-					field_type: field.field_type ?? 'short_text',
-					write_mode: writeMode,
-					is_required: field.is_required ?? false,
-					field_options: field.field_options ?? null,
-					validation_rules: field.validation_rules ?? null,
-					placeholder: field.placeholder ?? '',
-					help_text: field.help_text ?? '',
-				};
-			};
+			const buildDefPayload = (field: any, workflowId: string, label: string) => ({
+				workflow_id: workflowId,
+				label,
+				field_type: field.field_type ?? 'short_text',
+				write_mode: field.write_mode ?? 'singleton',
+				field_options: field.field_options ?? null,
+				validation_rules: field.validation_rules ?? null
+			});
 
 			const buildRefPayload = (field: any, fieldDefId: string) => ({
 				form_id: field.form_id,
 				field_def_id: fieldDefId,
-				field_order: field.field_order ?? 0,
-				page: field.page ?? 1,
-				page_title: field.page_title ?? '',
-				row_index: field.row_index ?? 0,
-				column_position: field.column_position ?? 'full',
-				is_required_override: field.is_required_override ?? null,
-				placeholder_override: field.placeholder_override ?? '',
-				help_text_override: field.help_text_override ?? '',
-				conditional_logic: field.conditional_logic ?? null
+				config: {
+					field_order: field.field_order ?? 0,
+					page: field.page ?? 1,
+					row_index: field.row_index ?? 0,
+					column_position: field.column_position ?? 'full',
+					is_required: field.is_required ?? false,
+					placeholder: field.placeholder ?? '',
+					help_text: field.help_text ?? '',
+					conditional_logic: field.conditional_logic ?? null
+				}
 			});
 
 			// Upsert field defs first (outside batch) so we have real ids for refs.
@@ -536,29 +537,24 @@ export const actions: Actions = {
 					!PB_ID_RE.test(incomingDefId);
 
 				if (isPlaceholder) {
-					const baseKey = slugify(field.key || field.field_label || 'field');
-					const key = await uniqueKey(workflowId, baseKey);
+					const label = await uniqueLabel(workflowId, field.field_label);
 					const created = await pb
 						.collection('workflow_field_defs')
-						.create(buildDefPayload(field, workflowId, key));
+						.create(buildDefPayload(field, workflowId, label));
 					if (incomingDefId) defIdResolution.set(incomingDefId, created.id);
 					field.field_def_id = created.id;
 				} else {
 					// Existing def id supplied on a "new" ref: update def, reuse id.
 					try {
-						const existing = await pb
-							.collection('workflow_field_defs')
-							.getOne(incomingDefId, { fields: 'key', requestKey: null });
 						await pb
 							.collection('workflow_field_defs')
-							.update(incomingDefId, buildDefPayload(field, workflowId, existing.key));
+							.update(incomingDefId, buildDefPayload(field, workflowId, field.field_label));
 					} catch {
-						// Def missing -> create a new one with a fresh key.
-						const baseKey = slugify(field.key || field.field_label || 'field');
-						const key = await uniqueKey(workflowId, baseKey);
+						// Def missing -> create a new one.
+						const label = await uniqueLabel(workflowId, field.field_label);
 						const created = await pb
 							.collection('workflow_field_defs')
-							.create(buildDefPayload(field, workflowId, key));
+							.create(buildDefPayload(field, workflowId, label));
 						defIdResolution.set(incomingDefId, created.id);
 						field.field_def_id = created.id;
 					}
@@ -579,28 +575,23 @@ export const actions: Actions = {
 
 				if (placeholder) {
 					// Modified record whose def was never persisted: create it now.
-					const baseKey = slugify(field.key || field.field_label || 'field');
-					const key = await uniqueKey(workflowId, baseKey);
+					const label = await uniqueLabel(workflowId, field.field_label);
 					const created = await pb
 						.collection('workflow_field_defs')
-						.create(buildDefPayload(field, workflowId, key));
+						.create(buildDefPayload(field, workflowId, label));
 					if (defId) defIdResolution.set(defId, created.id);
 					defId = created.id;
 					field.field_def_id = defId;
 				} else {
 					try {
-						const existing = await pb
-							.collection('workflow_field_defs')
-							.getOne(defId!, { fields: 'key', requestKey: null });
 						await pb
 							.collection('workflow_field_defs')
-							.update(defId!, buildDefPayload(field, workflowId, existing.key));
+							.update(defId!, buildDefPayload(field, workflowId, field.field_label));
 					} catch {
-						const baseKey = slugify(field.key || field.field_label || 'field');
-						const key = await uniqueKey(workflowId, baseKey);
+						const label = await uniqueLabel(workflowId, field.field_label);
 						const created = await pb
 							.collection('workflow_field_defs')
-							.create(buildDefPayload(field, workflowId, key));
+							.create(buildDefPayload(field, workflowId, label));
 						defIdResolution.set(defId!, created.id);
 						defId = created.id;
 						field.field_def_id = defId;
@@ -655,6 +646,29 @@ export const actions: Actions = {
 				}
 			}
 
+			// 8. Edit Tools
+			// `editable_fields` may reference `_temp_*` placeholder field defs
+			// created in the same save (a field dragged into a form). Those defs
+			// are materialised above; remap to their real ids — otherwise the
+			// relation dangles and the whole batch transaction fails.
+			if (changes.editTools) {
+				const remapEditableFields = (tool: any) => ({
+					...tool,
+					editable_fields: Array.isArray(tool.editable_fields)
+						? tool.editable_fields.map((id: string) => defIdResolution.get(id) ?? id)
+						: tool.editable_fields
+				});
+				for (const tool of changes.editTools.new) {
+					batch.collection('tools_edit').create(remapEditableFields(tool));
+				}
+				for (const tool of changes.editTools.modified) {
+					batch.collection('tools_edit').update(tool.id, remapEditableFields(tool));
+				}
+				for (const toolId of changes.editTools.deleted) {
+					batch.collection('tools_edit').delete(toolId);
+				}
+			}
+
 			// Execute batch only if any operations were queued.
 			if (batchOps > 0) await batch.send();
 
@@ -688,7 +702,18 @@ export const actions: Actions = {
 
 			return { success: true };
 		} catch (err) {
-			console.error('Failed to save workflow:', err);
+			// PocketBase batch failures are atomic: the top-level message is the
+			// generic "Batch transaction failed." — the per-request errors that
+			// identify the culprit live in the nested response. Dump them fully
+			// (console.error truncates nested objects to "[Object]").
+			const anyErr = err as any;
+			const detail =
+				anyErr?.response?.data ??
+				anyErr?.originalError?.data ??
+				anyErr?.response ??
+				err;
+			console.error('Failed to save workflow:', anyErr?.message ?? err);
+			console.error('Batch failure detail:', JSON.stringify(detail, null, 2));
 			return fail(500, { message: workflowBuilderServerFailedToSaveWorkflow?.() ?? 'Failed to save workflow' });
 		}
 	}

@@ -29,7 +29,6 @@
 	import { ContextSidebar, createContext, type SelectionContext, type StageData } from './context-sidebar';
 	import { RightSidebar } from './right-sidebar';
 	import type { StageAction, TimelineStage, IncomingFormGroup } from './right-sidebar/views/stage-preview';
-	import type { FormFieldWithValue } from '$lib/components/form-renderer';
 	import {
 		createWorkflowBuilderState,
 		type WorkflowStage,
@@ -38,6 +37,7 @@
 		type TrackedFormField,
 		type TrackedEditTool,
 		type ToolsForm,
+		type FormPage,
 		type ToolsFormField,
 		type ToolsEdit,
 		type ToolsProtocol,
@@ -67,7 +67,6 @@
 		workflowBuilderPageTitleDefault,
 		workflowBuilderSave,
 		workflowBuilderSaving,
-		workflowBuilderUnnamedForm,
 		workflowBuilderWorkflowNamePlaceholder
 	} from '$lib/paraglide/messages';
 
@@ -272,7 +271,6 @@
 				title: stage.stage_name,
 				key: stage.id.slice(0, 8), // Short ID for display
 				stageType: stage.stage_type,
-				visible_to_roles: stage.visible_to_roles || [],
 				regions: getRegionsForStage(stage.id),
 				tools: getToolsForStage(stage.id),
 				onSelectTool: (toolId: string) => handleSelectStageTool(stage.id, toolId),
@@ -750,37 +748,6 @@
 		};
 	});
 
-	// Per-stage form groups for PreviewView (workflow overview)
-	// Each entry includes form name, allowed_roles, and fields -- enables role filtering
-	type PreviewFormGroup = { formName: string; allowedRoles: string[]; fields: FormFieldWithValue[] };
-	const previewStageFields = $derived.by(() => {
-		const map = new Map<string, PreviewFormGroup[]>();
-		for (const s of builderState.visibleStages) {
-			const groups: PreviewFormGroup[] = [];
-			// Forms from incoming connections
-			const incoming = builderState.visibleConnections.filter(c => c.data.to_stage_id === s.data.id);
-			for (const c of incoming) {
-				for (const f of builderState.getFormsForConnection(c.data.id)) {
-					groups.push({
-						formName: f.data.name || (workflowBuilderUnnamedForm?.() ?? 'Unnamed form'),
-						allowedRoles: f.data.allowed_roles || [],
-						fields: builderState.getFieldsForForm(f.data.id).map(ff => ff.data as unknown as FormFieldWithValue)
-					});
-				}
-			}
-			// Stage-attached forms
-			for (const f of builderState.getFormsForStage(s.data.id)) {
-				groups.push({
-					formName: f.data.name || (workflowBuilderUnnamedForm?.() ?? 'Unnamed form'),
-					allowedRoles: f.data.allowed_roles || [],
-					fields: builderState.getFieldsForForm(f.data.id).map(ff => ff.data as unknown as FormFieldWithValue)
-				});
-			}
-			map.set(s.data.id, groups);
-		}
-		return map;
-	});
-
 	// Convert global edit tools to ToolInstances for ToolBar display
 	const globalToolInstances = $derived.by((): ToolInstance[] => {
 		const editInstances: ToolInstance[] = globalEditTools.map((tool, index) => ({
@@ -1078,10 +1045,6 @@
 		builderState.updateStage(stageId, { stage_name: newName });
 	}
 
-	function handleStageRolesChange(stageId: string, roleIds: string[]) {
-		builderState.updateStage(stageId, { visible_to_roles: roleIds });
-	}
-
 	function handleEdgeRename(edgeId: string, newName: string) {
 		const conn = builderState.getConnectionById(edgeId);
 		if (conn) {
@@ -1166,36 +1129,63 @@
 		const maxPage = formFields.reduce((max, f) => Math.max(max, f.data.page ?? 1), 1);
 		const nextPage = maxPage + 1;
 
+		// Seed page metadata so the new page carries a default title.
+		const form = builderState.getFormById(formId);
+		const pages: FormPage[] = [...(form?.data.pages ?? [])];
+		pages.push({
+			page: nextPage,
+			title: workflowBuilderPageTitleDefault?.({ page: nextPage }) ?? `Page ${nextPage}`,
+			description: ''
+		});
+		builderState.updateForm(formId, { pages });
+
 		// Add a placeholder field on the new page so it shows up
 		const newField = builderState.addFormField(formId, 'short_text', 0, 'full', nextPage);
 		if (newField) {
 			builderState.updateFormField(newField.id, {
-				page_title: (workflowBuilderPageTitleDefault?.({ page: nextPage }) ?? `Page ${nextPage}`),
-				field_label: (workflowBuilderNewFieldLabel?.() ?? 'New Field')
+				field_label: workflowBuilderNewFieldLabel?.() ?? 'New Field'
 			});
 		}
 	}
 
 	function handleFormDeletePage(formId: string, page: number) {
-		// Get all fields on this page and delete them
+		// Non-destructive: fields on the deleted page move to the previous page;
+		// pages above it shift down so numbering stays contiguous.
 		const formFields = builderState.getFieldsForForm(formId);
-		const fieldsOnPage = formFields.filter(f => (f.data.page ?? 1) === page);
-
-		for (const field of fieldsOnPage) {
-			builderState.deleteFormField(field.data.id);
+		for (const field of formFields) {
+			const p = field.data.page ?? 1;
+			if (p === page) {
+				builderState.updateFormField(field.data.id, { page: Math.max(1, page - 1) });
+			} else if (p > page) {
+				builderState.updateFormField(field.data.id, { page: p - 1 });
+			}
 		}
+		// Drop the deleted page's metadata and renumber higher pages.
+		const form = builderState.getFormById(formId);
+		const pages: FormPage[] = (form?.data.pages ?? [])
+			.filter((p) => p.page !== page)
+			.map((p) => (p.page > page ? { ...p, page: p.page - 1 } : p));
+		builderState.updateForm(formId, { pages });
+	}
+
+	function setFormPageMeta(formId: string, page: number, patch: Partial<FormPage>) {
+		const form = builderState.getFormById(formId);
+		const pages: FormPage[] = [...(form?.data.pages ?? [])];
+		const idx = pages.findIndex((p) => p.page === page);
+		if (idx >= 0) {
+			pages[idx] = { ...pages[idx], ...patch };
+		} else {
+			pages.push({ page, title: '', description: '', ...patch });
+		}
+		builderState.updateForm(formId, { pages });
 	}
 
 	function handleFormPageTitleChange(formId: string, page: number, title: string) {
-		// Update page_title on the first field of the page
-		const formFields = builderState.getFieldsForForm(formId);
-		const fieldsOnPage = formFields
-			.filter(f => (f.data.page ?? 1) === page)
-			.sort((a, b) => (a.data.field_order ?? 0) - (b.data.field_order ?? 0));
+		setFormPageMeta(formId, page, { title });
+	}
 
-		if (fieldsOnPage.length > 0) {
-			builderState.updateFormField(fieldsOnPage[0].data.id, { page_title: title });
-		}
+	function handleFormPageDescriptionChange(formId: string, page: number, description: string) {
+		setFormPageMeta(formId, page, { description });
 	}
 
 	function handleFormClose() {
@@ -1713,7 +1703,6 @@
 			workflowName={builderState.workflowName}
 			{nodes}
 			{edges}
-			stageFields={previewStageFields}
 			roles={data.roles}
 			{selectedForm}
 			{formFields}
@@ -1740,7 +1729,6 @@
 			{stagePreviewData}
 			onStageRename={handleStageRename}
 			onStageDelete={handleDeleteStage}
-			onStageRolesChange={handleStageRolesChange}
 			onEdgeRename={handleEdgeRename}
 			onEdgeDelete={handleDeleteAction}
 			onEdgeRolesChange={handleEdgeRolesChange}
@@ -1763,6 +1751,7 @@
 			onFormAddPage={handleFormAddPage}
 			onFormDeletePage={handleFormDeletePage}
 			onFormPageTitleChange={handleFormPageTitleChange}
+			onFormPageDescriptionChange={handleFormPageDescriptionChange}
 			onFormClose={handleFormClose}
 			onFormRolesChange={handleFormRolesChange}
 			onFormVisualConfigChange={handleFormVisualConfigChange}

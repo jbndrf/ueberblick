@@ -7,8 +7,7 @@
 	import type {
 		WorkflowFieldDef,
 		TrackedFieldDef,
-		FieldType,
-		WorkflowStage
+		FieldType
 	} from '$lib/workflow-builder';
 
 	type Role = { id: string; name: string; description?: string };
@@ -17,7 +16,6 @@
 
 	type Props = {
 		fieldDefs: TrackedFieldDef[];
-		stages: WorkflowStage[];
 		roles: Role[];
 		/** All workflows in the same project — used as targets for instance_reference fields. */
 		projectWorkflows?: ProjectWorkflow[];
@@ -27,7 +25,7 @@
 		onClose?: () => void;
 	};
 
-	let { fieldDefs, stages, roles, projectWorkflows = [], onAdd, onUpdate, onDelete, onClose }: Props = $props();
+	let { fieldDefs, roles, projectWorkflows = [], onAdd, onUpdate, onDelete, onClose }: Props = $props();
 
 	function updateFieldOptions(defId: string, current: Record<string, unknown> | null | undefined, patch: Record<string, unknown>) {
 		onUpdate(defId, { field_options: { ...(current ?? {}), ...patch } });
@@ -66,11 +64,6 @@
 
 	function visibleDefs(defs: TrackedFieldDef[]) {
 		return defs.filter((d) => d.status !== 'deleted');
-	}
-
-	function stageLabel(stageId: string | undefined): string {
-		if (!stageId) return '— any —';
-		return stages.find((s) => s.id === stageId)?.stage_name ?? stageId;
 	}
 </script>
 
@@ -129,10 +122,10 @@
 						{/if}
 						<div class="flex-1 min-w-0">
 							<div class="text-sm font-medium truncate">
-								{def.data.label || def.data.key || 'Untitled field'}
+								{def.data.label || 'Untitled field'}
 							</div>
 							<div class="text-xs text-muted-foreground truncate">
-								{def.data.key || '(no key)'} · {def.data.field_type} · {def.data.write_mode}
+								{def.data.field_type} · {def.data.write_mode}
 							</div>
 						</div>
 						{#if def.status !== 'unchanged'}
@@ -144,15 +137,6 @@
 
 					{#if isOpen}
 						<div class="border-t px-3 py-3 space-y-3">
-							<div>
-								<Label class="text-xs">Key</Label>
-								<Input
-									value={def.data.key}
-									oninput={(e) => onUpdate(def.data.id, { key: (e.currentTarget as HTMLInputElement).value })}
-									placeholder="snake_case_key"
-									class="h-8 text-sm font-mono"
-								/>
-							</div>
 							<div>
 								<Label class="text-xs">Label</Label>
 								<Input
@@ -246,25 +230,6 @@
 								</select>
 								<p class="text-[11px] text-muted-foreground mt-1">
 									{WRITE_MODES.find((m) => m.value === def.data.write_mode)?.hint}
-								</p>
-							</div>
-							<div>
-								<Label class="text-xs">Display stage (optional)</Label>
-								<select
-									class="w-full h-8 rounded-md border border-input bg-background px-2 text-sm"
-									value={def.data.display_stage_id ?? ''}
-									onchange={(e) => {
-										const v = (e.currentTarget as HTMLSelectElement).value;
-										onUpdate(def.data.id, { display_stage_id: v || undefined });
-									}}
-								>
-									<option value="">{stageLabel(undefined)}</option>
-									{#each stages as s}
-										<option value={s.id}>{s.stage_name}</option>
-									{/each}
-								</select>
-								<p class="text-[11px] text-muted-foreground mt-1">
-									Stage tab where this field's value renders on the read view.
 								</p>
 							</div>
 							<div>

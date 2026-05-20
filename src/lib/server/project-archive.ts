@@ -284,9 +284,9 @@ export async function exportProjectArchive(
 	// Pre-load form-field refs + field defs keyed by id (used to label instance
 	// value columns). The ref carries layout/order; the def carries the label
 	// and type that drive column naming and value formatting.
-	const allFormFieldRefs = await pb
-		.collection('tools_form_field_refs')
-		.getFullList({ sort: 'field_order' });
+	const allFormFieldRefs = (
+		await pb.collection('tools_form_field_refs').getFullList()
+	).sort((a: any, b: any) => (a.config?.field_order ?? 0) - (b.config?.field_order ?? 0));
 	const allFieldDefs = await pb.collection('workflow_field_defs').getFullList();
 	const fieldDefById = new Map<string, any>();
 	for (const d of allFieldDefs) fieldDefById.set(d.id, d);
@@ -323,7 +323,7 @@ export async function exportProjectArchive(
 		const wfFields = ((wfExport as any).form_field_refs ?? [])
 			.filter((f: any) => formIds.has(f.form_id))
 			.slice()
-			.sort((a: any, b: any) => (a.field_order ?? 0) - (b.field_order ?? 0));
+			.sort((a: any, b: any) => (a.config?.field_order ?? 0) - (b.config?.field_order ?? 0));
 
 		// A field belongs to a form which belongs to a stage (form.stage_id) -- may be null for non-stage forms.
 		const formStageId = new Map<string, string | null>();
@@ -1285,14 +1285,14 @@ async function rebuildIdMapsFromImport(
 			if (newFormId) oldFormToNewForm.set(oldForm.id, newFormId);
 		}
 
-		// Field defs: match by key within workflow (key is unique per workflow).
+		// Field defs: match by label within workflow (label is unique per workflow).
 		const oldDefs = wfExport.field_defs ?? [];
 		const newDefs = await pb
 			.collection('workflow_field_defs')
 			.getFullList({ filter: `workflow_id = "${newWfId}"` });
-		const newDefByKey = new Map(newDefs.map((d: any) => [d.key, d.id]));
+		const newDefByLabel = new Map(newDefs.map((d: any) => [d.label, d.id]));
 		for (const od of oldDefs) {
-			const newDefId = newDefByKey.get(od.key);
+			const newDefId = newDefByLabel.get(od.label);
 			if (newDefId) maps.formFields.set(od.id, newDefId);
 		}
 
@@ -1306,12 +1306,14 @@ async function rebuildIdMapsFromImport(
 		for (const [oldFormId, oldRefsForForm] of oldRefsByForm) {
 			const newFormId = oldFormToNewForm.get(oldFormId);
 			if (!newFormId) continue;
-			const newRefs = await pb
-				.collection('tools_form_field_refs')
-				.getFullList({ filter: `form_id = "${newFormId}"`, sort: 'field_order' });
+			const newRefs = (
+				await pb
+					.collection('tools_form_field_refs')
+					.getFullList({ filter: `form_id = "${newFormId}"` })
+			).sort((a: any, b: any) => (a.config?.field_order ?? 0) - (b.config?.field_order ?? 0));
 			const sortedOld = oldRefsForForm
 				.slice()
-				.sort((a, b) => (a.field_order ?? 0) - (b.field_order ?? 0));
+				.sort((a, b) => ((a.config?.field_order ?? a.field_order) ?? 0) - ((b.config?.field_order ?? b.field_order) ?? 0));
 			for (let i = 0; i < sortedOld.length && i < newRefs.length; i++) {
 				maps.formFieldRefs.set(sortedOld[i].id, newRefs[i].id);
 			}

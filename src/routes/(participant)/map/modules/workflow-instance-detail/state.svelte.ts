@@ -10,8 +10,11 @@ import { onDataChange } from '$lib/participant-state/gateway.svelte';
 import type { FieldValueCache } from '$lib/participant-state/field-value-cache.svelte';
 import { getPocketBase } from '$lib/pocketbase';
 import type { Snippet } from 'svelte';
-import type { FieldDef, FieldValue as TFieldValue, ToolFormFieldRef, WriteMode } from '$lib/participant-state/types';
+import type { FieldDef, FieldDisplayConfig, FieldValue as TFieldValue, ToolFormFieldRef, WriteMode } from '$lib/participant-state/types';
 import { connectionIsAvailable } from '$lib/workflow-builder/sentry';
+
+/** Tab key for the default "Data" tab — field defs with no display_config. */
+const DEFAULT_DATA_TAB = '';
 
 // =============================================================================
 // Types
@@ -23,7 +26,6 @@ export interface WorkflowStage {
 	stage_name: string;
 	stage_type: 'start' | 'intermediate' | 'end';
 	stage_order: number;
-	visible_to_roles: string[];
 	visual_config?: Record<string, unknown>;
 }
 
@@ -66,10 +68,10 @@ export interface ToolForm {
 }
 
 /**
- * Form field — now sourced by joining `tools_form_field_refs` with the
- * referenced `workflow_field_defs`. Definitional bits (label, type, options,
- * is_required, placeholder, help_text, validation_rules) come from the
- * field def; per-form layout & overrides come from the ref.
+ * Form field — sourced by joining `tools_form_field_refs` with the referenced
+ * `workflow_field_defs`. Definitional bits (label, type, options,
+ * validation_rules) come from the field def; all per-form presentation
+ * (layout, is_required, placeholder, help_text) comes from the ref's `config`.
  *
  * Note: `id` here is the FIELD DEF id (not the ref id) — every existing
  * read/write path in the detail module keys field values by the def id.
@@ -89,21 +91,21 @@ export interface FormField {
 	field_options?: Record<string, unknown> | null;
 	conditional_logic?: Record<string, unknown> | null;
 	page?: number;
-	page_title?: string;
 	row_index?: number;
 	column_position?: 'left' | 'right' | 'full';
 	write_mode?: WriteMode;
-	display_stage_id?: string;
+	/** Presentation config from the field def — drives the read-side "Data" view. */
+	display_config?: FieldDisplayConfig | null;
 }
 
 /**
- * @deprecated tools_edit was dropped in the field-def redesign. This type
- * stays only so existing call-sites compile while we sweep the UI. New code
- * should use Form tools referencing already-written field defs instead.
+ * Edit tool: an in-place "edit mode" on the detail view. Backed by the
+ * tools_edit collection. `editable_fields` holds workflow_field_defs ids.
  */
 export interface ToolEdit {
 	id: string;
-	connection_id: string;
+	workflow_id: string;
+	connection_id?: string;
 	stage_id: string[];
 	name: string;
 	editable_fields: string[];
@@ -156,15 +158,6 @@ export interface ToolProtocol {
 	visual_config?: Record<string, unknown>;
 }
 
-export interface DisplayFieldValue {
-	id: string;
-	label: string;
-	value: string;
-	fileValue?: string;
-	type: string;
-	fieldKey: string;
-}
-
 export interface ToolQueueItem {
 	type: 'form' | 'edit' | 'protocol';
 	tool: ToolForm | ToolEdit | ToolProtocol;
@@ -179,11 +172,6 @@ export interface ActionButton {
 	onClick: () => void;
 }
 
-export interface EditableFieldsByStage {
-	stageId: string;
-	stageName: string;
-	fields: FormField[];
-}
 
 export interface ToolUsageRecord {
 	id: string;
@@ -237,12 +225,11 @@ export class WorkflowInstanceDetailState {
 	/** All field defs for this workflow, indexed by id. */
 	fieldDefs = $state<FieldDef[]>([]);
 	fieldDefsById = $state<Map<string, FieldDef>>(new Map());
-	fieldDefsByKey = $state<Map<string, FieldDef>>(new Map());
-	/** Form-field references (form_id, field_def_id, layout + overrides). */
+	/** Form-field references (form_id, field_def_id, config). */
 	formFieldRefs = $state<ToolFormFieldRef[]>([]);
 	/** Form-field view, joined from refs + defs. `id` is the field_def id. */
 	formFields = $state<FormField[]>([]);
-	/** @deprecated tools_edit collection is gone. Always empty. */
+	/** Edit tools for this workflow (stage-attached + global). */
 	editTools = $state<ToolEdit[]>([]);
 	protocolTools = $state<ToolProtocol[]>([]);
 	toolUsageHistory = $state<ToolUsageRecord[]>([]);
@@ -251,7 +238,8 @@ export class WorkflowInstanceDetailState {
 
 	isLoading = $state(true);
 	loadError = $state<string | null>(null);
-	activeStageTab = $state<string>('');
+	/** Active data tab key on the participant "Data" view. */
+	activeDataTab = $state<string>(DEFAULT_DATA_TAB);
 
 	currentStage = $derived.by((): WorkflowStage | null => {
 		if (!this.instance) return null;
@@ -268,9 +256,19 @@ export class WorkflowInstanceDetailState {
 		return fromStage.filter(c => connectionIsAvailable(c, ctx));
 	});
 
+	/**
+	 * Edit tools available on the instance's current stage: stage-attached tools
+	 * whose stage_id includes the current stage, plus global ones. Connection-
+	 * attached edit tools are excluded (handled in the transition flow).
+	 * Server-side listRule already gates these by self/any edit roles.
+	 */
 	availableStageEditTools = $derived.by((): ToolEdit[] => {
-		// TODO(field-def-redesign): tools_edit removed; admin should convert to Form tool.
-		return [];
+		if (!this.instance) return [];
+		const currentStageId = this.instance.current_stage_id as string;
+		return this.editTools.filter((t) => {
+			if (t.connection_id) return false;
+			return t.is_global || (t.stage_id?.includes(currentStageId) ?? false);
+		});
 	});
 
 	progressPercentage = $derived.by((): number => {
@@ -308,6 +306,7 @@ export class WorkflowInstanceDetailState {
 		'tools_forms',
 		'tools_form_field_refs',
 		'tools_protocol',
+		'tools_edit',
 		'workflow_role_assignments'
 	]);
 
@@ -492,27 +491,31 @@ export class WorkflowInstanceDetailState {
 				field_options: this.parseFieldOptions((d as any).field_options) as any
 			}));
 			const byId = new Map<string, FieldDef>();
-			const byKey = new Map<string, FieldDef>();
 			for (const d of this.fieldDefs) {
 				byId.set(d.id, d);
-				if (d.key) byKey.set(d.key, d);
 			}
 			this.fieldDefsById = byId;
-			this.fieldDefsByKey = byKey;
 
 			const connectionIds = new Set(this.connections.map(c => c.id));
 			const stageIds = new Set(this.stages.map(s => s.id));
 
 			const p2Start = performance.now();
-			const [formFieldRefsResult, protocolToolsResult] = await Promise.all([
+			const [formFieldRefsResult, protocolToolsResult, editToolsResult] = await Promise.all([
 				this.gateway.collection('tools_form_field_refs').getFullList(),
-				this.gateway.collection('tools_protocol').getFullList()
+				this.gateway.collection('tools_protocol').getFullList(),
+				this.gateway.collection('tools_edit').getFullList()
 			]);
 			console.log(`[DetailLoad] Phase 2 total: ${(performance.now() - p2Start).toFixed(1)}ms`);
 
-			// tools_edit was dropped. Keep editTools as an empty list so any
-			// remaining references don't crash.
-			this.editTools = [];
+			// Edit tools: keep stage-attached (matching this workflow's stages) and
+			// global. Connection-attached are excluded — those run in the transition
+			// flow. Server-side listRule already gates by self/any edit roles.
+			this.editTools = (editToolsResult as unknown as ToolEdit[]).filter((t) => {
+				if (t.is_global) return true;
+				if (t.connection_id && connectionIds.has(t.connection_id)) return true;
+				if (t.stage_id && t.stage_id.some((sid) => stageIds.has(sid))) return true;
+				return false;
+			});
 
 			// Filter refs to those whose form belongs to this workflow.
 			const formIds = new Set(this.forms.map(f => f.id));
@@ -524,6 +527,7 @@ export class WorkflowInstanceDetailState {
 				.map(ref => {
 					const def = byId.get(ref.field_def_id);
 					if (!def) return null;
+					const config = ref.config ?? ({} as Record<string, unknown>);
 					const ff: FormField = {
 						id: def.id,
 						field_def_id: def.id,
@@ -531,19 +535,18 @@ export class WorkflowInstanceDetailState {
 						form_id: ref.form_id,
 						field_label: def.label,
 						field_type: def.field_type,
-						field_order: ref.field_order ?? 0,
-						is_required: ref.is_required_override ?? def.is_required ?? false,
-						placeholder: ref.placeholder_override || def.placeholder || undefined,
-						help_text: ref.help_text_override || def.help_text || undefined,
+						field_order: (config.field_order as number) ?? 0,
+						is_required: (config.is_required as boolean) ?? false,
+						placeholder: (config.placeholder as string) || undefined,
+						help_text: (config.help_text as string) || undefined,
 						validation_rules: def.validation_rules ?? null,
 						field_options: this.parseFieldOptions(def.field_options),
-						conditional_logic: ref.conditional_logic ?? null,
-						page: ref.page ?? 1,
-						page_title: ref.page_title ?? '',
-						row_index: ref.row_index ?? 0,
-						column_position: this.normalizeColumnPosition(ref.column_position),
+						conditional_logic: (config.conditional_logic as Record<string, unknown>) ?? null,
+						page: (config.page as number) ?? 1,
+						row_index: (config.row_index as number) ?? 0,
+						column_position: this.normalizeColumnPosition(config.column_position),
 						write_mode: def.write_mode,
-						display_stage_id: def.display_stage_id || undefined
+						display_config: def.display_config ?? null
 					};
 					return ff;
 				})
@@ -590,9 +593,10 @@ export class WorkflowInstanceDetailState {
 				this.protocolEntries = [];
 			}
 
-			if (this.stages.length > 0 && !this.activeStageTab) {
-				const firstWithData = this.stages.find(s => this.stageHasData(s.id));
-				this.activeStageTab = firstWithData?.id || this.stages[0].id;
+			if (!this.activeDataTab) {
+				const tabs = this.getDataTabs();
+				const firstWithData = tabs.find(t => this.tabHasData(t.name));
+				this.activeDataTab = (firstWithData ?? tabs[0])?.name ?? DEFAULT_DATA_TAB;
 			}
 
 			console.log(`[DetailLoad] TOTAL: ${(performance.now() - t0).toFixed(1)}ms`);
@@ -608,68 +612,74 @@ export class WorkflowInstanceDetailState {
 		await this.load();
 	}
 
+	// =========================================================================
+	// Data tabs (participant "Data" view). Tabs are emergent — derived from the
+	// distinct `display_config.tab` values across the workflow's field defs.
+	// The default tab (empty key) collects every def with no display_config.
+	// =========================================================================
+
+	/** Tab key a field def belongs to — empty string = default "Data" tab. */
+	private getDataTabForDef(defId: string): string {
+		return this.fieldDefsById.get(defId)?.display_config?.tab || DEFAULT_DATA_TAB;
+	}
+
 	/**
-	 * Map a field def id to the stage that should "own" it for read-side rendering.
-	 *   1. Explicit display_stage_id wins.
-	 *   2. Otherwise: if the def is referenced from exactly one form, fall back to
-	 *      that form's stage (direct or via the form's connection's to_stage_id).
+	 * Emergent ordered list of data tabs. The default tab always sorts first;
+	 * custom tabs follow by `tabOrder` then name.
 	 */
-	private getDisplayStageIdForDef(defId: string): string | null {
-		const def = this.fieldDefsById.get(defId);
-		if (def?.display_stage_id) return def.display_stage_id;
-		const refs = this.formFieldRefs.filter(r => r.field_def_id === defId);
-		if (refs.length === 1) {
-			const form = this.forms.find(f => f.id === refs[0].form_id);
-			if (form) {
-				if (form.stage_id) return form.stage_id;
-				if (form.connection_id) {
-					const conn = this.connections.find(c => c.id === form.connection_id);
-					if (conn) return conn.to_stage_id;
-				}
-			}
-		}
-		// Fallback: stage where the value was actually recorded. Keeps data
-		// visible for defs that have no display_stage_id and are referenced
-		// by 0 or >1 forms (e.g. shared across connections).
-		const stageIds = new Set(this.stages.map(s => s.id));
-		const values = this.fieldValuesByDefId.get(defId) ?? [];
-		for (const v of values) {
-			const stageId = (v as any).recorded_at_stage as string | undefined;
-			if (stageId && stageIds.has(stageId)) return stageId;
-		}
-		return null;
-	}
-
-	/** Return field-def ids displayed on a given stage, deduplicated. */
-	private getFieldDefIdsForStage(stageId: string): string[] {
-		const out = new Set<string>();
+	getDataTabs(): Array<{ name: string; order: number; isDefault: boolean }> {
+		const byTab = new Map<string, number>();
+		byTab.set(DEFAULT_DATA_TAB, 0);
 		for (const def of this.fieldDefs) {
-			if (this.getDisplayStageIdForDef(def.id) === stageId) out.add(def.id);
+			const cfg = def.display_config;
+			const tab = cfg?.tab || DEFAULT_DATA_TAB;
+			const order = cfg?.tabOrder ?? 0;
+			if (!byTab.has(tab) || order < (byTab.get(tab) as number)) byTab.set(tab, order);
 		}
-		return [...out];
+		return [...byTab.entries()]
+			.map(([name, order]) => ({ name, order, isDefault: name === DEFAULT_DATA_TAB }))
+			.sort((a, b) => {
+				if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1;
+				return a.order - b.order || a.name.localeCompare(b.name);
+			});
 	}
 
-	/** Get field values for a specific stage (read view). */
-	getFieldValuesForStage(stageId: string): DisplayFieldValue[] {
-		const defIds = this.getFieldDefIdsForStage(stageId);
-		const out: DisplayFieldValue[] = [];
-		for (const defId of defIds) {
-			const def = this.fieldDefsById.get(defId);
-			if (!def) continue;
-			const values = this.fieldValuesByDefId.get(defId) ?? [];
-			// observation: take latest; singleton/computed: single row
-			const latest = values[0];
-			if (!latest) continue;
-			out.push({
-				id: latest.id,
-				label: def.label,
-				value: latest.value,
-				fileValue: latest.file_value || undefined,
-				type: def.field_type,
-				fieldKey: def.id
-			});
+	/** Field-def ids assigned to a data tab. */
+	private getFieldDefIdsForTab(tabName: string): string[] {
+		const out: string[] = [];
+		for (const def of this.fieldDefs) {
+			if (this.getDataTabForDef(def.id) === tabName) out.push(def.id);
 		}
 		return out;
+	}
+
+	/**
+	 * Data tabs visible to a participant with the given role ids. A tab is
+	 * included only if it has >=1 field def the role can view AND that has data.
+	 * Implements "hide tab + collapse rows".
+	 */
+	getVisibleDataTabs(roleIds: string[]): Array<{ name: string; isDefault: boolean }> {
+		return this.getDataTabs()
+			.filter((tab) => {
+				for (const defId of this.getFieldDefIdsForTab(tab.name)) {
+					if (!this.canViewDef(defId, roleIds)) continue;
+					const values = this.fieldValuesByDefId.get(defId) ?? [];
+					if (values.some((v) => this.hasValue(v))) return true;
+				}
+				return false;
+			})
+			.map(({ name, isDefault }) => ({ name, isDefault }));
+	}
+
+	/** Whether a participant role may view a field def (empty view_roles = all). */
+	private canViewDef(defId: string, roleIds: string[]): boolean {
+		const viewRoles = this.fieldDefsById.get(defId)?.view_roles;
+		if (!Array.isArray(viewRoles) || viewRoles.length === 0) return true;
+		return roleIds.some((rid) => viewRoles.includes(rid));
+	}
+
+	private hasValue(v: TFieldValue): boolean {
+		return (v.value !== undefined && v.value !== null && v.value !== '') || !!v.file_value;
 	}
 
 	private parseFieldOptions(options: unknown): Record<string, unknown> | null {
@@ -694,45 +704,42 @@ export class WorkflowInstanceDetailState {
 	}
 
 	/**
-	 * Get fields formatted for FormRenderer (with layout and values).
-	 * Iterates field defs displayed on the stage, prefilling from the latest
-	 * value (singleton row, or newest observation).
+	 * Get a data tab's fields formatted for FormRenderer (layout + values).
+	 * Layout comes from each field def's `display_config`; unconfigured defs
+	 * (the default tab) each get their own full-width row, ordered by `created`.
+	 * When `roleIds` is given, defs the role cannot view are omitted so their
+	 * rows collapse ("collapse empties").
 	 */
-	getFieldsForFormRenderer(stageId: string): Array<FormField & { value?: unknown; fileValue?: string; fileRecordId?: string; storedFiles?: Array<{ recordId: string; fileName: string }>; valueHistory?: Array<{ id: string; value: unknown; recorded_at: string }> }> {
-		const defIds = this.getFieldDefIdsForStage(stageId);
+	getFieldsForFormRenderer(tabName: string, roleIds?: string[]): Array<FormField & { value?: unknown; fileValue?: string; fileRecordId?: string; storedFiles?: Array<{ recordId: string; fileName: string }>; valueHistory?: Array<{ id: string; value: unknown; recorded_at: string }> }> {
+		const defIds = this.getFieldDefIdsForTab(tabName)
+			.filter((id) => !roleIds || this.canViewDef(id, roleIds));
+		// Unconfigured defs render in `created` order, one per row, below any
+		// explicitly-configured rows.
+		let maxConfiguredRow = -1;
+		for (const id of defIds) {
+			const cfg = this.fieldDefsById.get(id)?.display_config;
+			if (cfg) maxConfiguredRow = Math.max(maxConfiguredRow, cfg.row);
+		}
+		const unconfigured = defIds
+			.filter((id) => !this.fieldDefsById.get(id)?.display_config)
+			.sort((a, b) => {
+				const ca = (this.fieldDefsById.get(a) as any)?.created ?? '';
+				const cb = (this.fieldDefsById.get(b) as any)?.created ?? '';
+				return ca < cb ? -1 : ca > cb ? 1 : 0;
+			});
+		const fallbackRow = new Map<string, number>();
+		unconfigured.forEach((id, i) => fallbackRow.set(id, maxConfiguredRow + 1 + i));
+
 		const out: Array<FormField & { value?: unknown; fileValue?: string; fileRecordId?: string; storedFiles?: Array<{ recordId: string; fileName: string }>; valueHistory?: Array<{ id: string; value: unknown; recorded_at: string }> }> = [];
 		for (const defId of defIds) {
-			// Pick the first form-field row for this def (layout/labels). If no form
-			// references this def we fabricate a minimal row from the def itself.
-			const ff = this.formFields.find(f => f.id === defId);
 			const def = this.fieldDefsById.get(defId);
 			if (!def) continue;
+			const cfg = def.display_config;
 			const values = this.fieldValuesByDefId.get(defId) ?? [];
 			const storedFiles = values
 				.filter(v => v.file_value)
 				.map(v => ({ recordId: v.id, fileName: v.file_value }));
 			const firstValue = values.find(v => v.value);
-
-			const base: FormField = ff ?? {
-				id: def.id,
-				field_def_id: def.id,
-				ref_id: '',
-				form_id: '',
-				field_label: def.label,
-				field_type: def.field_type,
-				field_order: 0,
-				is_required: def.is_required ?? false,
-				placeholder: def.placeholder || undefined,
-				help_text: def.help_text || undefined,
-				validation_rules: def.validation_rules ?? null,
-				field_options: this.parseFieldOptions(def.field_options),
-				conditional_logic: null,
-				page: 1,
-				row_index: 0,
-				column_position: 'full',
-				write_mode: def.write_mode,
-				display_stage_id: def.display_stage_id || undefined
-			};
 
 			// History is available for every field now (workflow_field_values is
 			// append-only). The renderer decides whether to surface the expander
@@ -746,12 +753,24 @@ export class WorkflowInstanceDetailState {
 				}));
 
 			out.push({
-				...base,
-				field_options: this.parseFieldOptions(base.field_options),
-				page: base.page ?? 1,
-				row_index: base.row_index ?? 0,
-				column_position: base.column_position ?? 'full',
+				id: def.id,
+				field_def_id: def.id,
+				ref_id: '',
+				form_id: '',
+				field_label: def.label,
+				field_type: def.field_type,
+				field_order: 0,
+				is_required: false,
+				placeholder: undefined,
+				help_text: undefined,
+				validation_rules: def.validation_rules ?? null,
+				field_options: this.parseFieldOptions(def.field_options),
+				conditional_logic: null,
+				page: 1,
+				row_index: cfg?.row ?? fallbackRow.get(defId) ?? 0,
+				column_position: cfg?.column ?? 'full',
 				write_mode: def.write_mode,
+				display_config: cfg ?? null,
 				value: this.parseFieldValue(firstValue?.value),
 				fileValue: storedFiles[0]?.fileName || undefined,
 				fileRecordId: storedFiles[0]?.recordId || undefined,
@@ -761,7 +780,6 @@ export class WorkflowInstanceDetailState {
 		}
 
 		out.sort((a, b) => {
-			if ((a.page ?? 1) !== (b.page ?? 1)) return (a.page ?? 1) - (b.page ?? 1);
 			if ((a.row_index ?? 0) !== (b.row_index ?? 0)) return (a.row_index ?? 0) - (b.row_index ?? 0);
 			const posOrder = { left: 0, right: 1, full: 2 };
 			return (posOrder[a.column_position ?? 'full'] ?? 2) - (posOrder[b.column_position ?? 'full'] ?? 2);
@@ -770,9 +788,9 @@ export class WorkflowInstanceDetailState {
 		return out;
 	}
 
-	/** Check if a stage has any data */
-	stageHasData(stageId: string): boolean {
-		const defIds = new Set(this.getFieldDefIdsForStage(stageId));
+	/** Check if a data tab has any recorded values. */
+	tabHasData(tabName: string): boolean {
+		const defIds = new Set(this.getFieldDefIdsForTab(tabName));
 		if (defIds.size === 0) return false;
 		for (const fv of this.fieldValues) {
 			if (defIds.has((fv as any).field_def_id as string)) return true;
@@ -810,34 +828,6 @@ export class WorkflowInstanceDetailState {
 		}
 
 		return this.formFields.filter(f => reachedFormIds.has(f.form_id));
-	}
-
-	/**
-	 * @deprecated tools_edit was removed; this helper still exists so the
-	 * stale EditFieldsTool wrapper compiles. Groups the given field-def ids
-	 * by the stage that displays them.
-	 */
-	getEditableFieldsGroupedByStage(editableFieldIds: string[]): EditableFieldsByStage[] {
-		if (!this.instance || editableFieldIds.length === 0) return [];
-		const reached = this.getFormFieldsForReachedStages();
-		const editable = reached.filter(f => editableFieldIds.includes(f.id));
-
-		const stageFieldsMap = new Map<string, FormField[]>();
-		for (const field of editable) {
-			const stageId = this.getDisplayStageIdForDef(field.id);
-			if (!stageId) continue;
-			if (!stageFieldsMap.has(stageId)) stageFieldsMap.set(stageId, []);
-			stageFieldsMap.get(stageId)!.push(field);
-		}
-
-		const result: EditableFieldsByStage[] = [];
-		for (const stage of this.stages) {
-			const fields = stageFieldsMap.get(stage.id);
-			if (fields && fields.length > 0) {
-				result.push({ stageId: stage.id, stageName: stage.stage_name, fields });
-			}
-		}
-		return result;
 	}
 
 	getProtocolToolsForStage(stageId: string): ToolProtocol[] {
@@ -913,8 +903,8 @@ export class WorkflowInstanceDetailState {
 		await this.refresh();
 	}
 
-	setActiveStageTab(stageId: string): void {
-		this.activeStageTab = stageId;
+	setActiveDataTab(tabName: string): void {
+		this.activeDataTab = tabName;
 	}
 }
 

@@ -72,6 +72,8 @@
 		onDeletePage?: (page: number) => void;
 		/** Callback when a page title changes */
 		onPageTitleChange?: (page: number, title: string) => void;
+		/** Callback when a page description changes */
+		onPageDescriptionChange?: (page: number, description: string) => void;
 		/** Callback to close the form editor */
 		onClose?: () => void;
 		/** Callback when palette expanded state changes */
@@ -101,6 +103,7 @@
 		onAddPage,
 		onDeletePage,
 		onPageTitleChange,
+		onPageDescriptionChange,
 		onClose,
 		onPaletteExpandedChange,
 		onRolesChange,
@@ -575,9 +578,11 @@
 					onFieldDrop={handleFieldDrop}
 					onFieldRefDrop={(defId, page, rowIndex, columnPosition) => onAddFieldRef?.(defId, page, rowIndex, columnPosition)}
 					onFieldUpdate={handleFieldUpdateRouted}
+					pages={form.pages ?? []}
 					{onAddPage}
 					{onDeletePage}
 					{onPageTitleChange}
+					{onPageDescriptionChange}
 					scopeTinted={showLocalFields}
 				/>
 			</div>

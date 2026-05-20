@@ -493,6 +493,11 @@ export function createParticipantGateway(participantId: string, projectId: strin
 
 	type PageCallback = (loaded: number, total: number) => void;
 
+	// Identical background fetches in flight are collapsed to one network run.
+	// Prevents request storms when multiple callers (parallel load() paths,
+	// re-entrant effects) ask for the same collection at once.
+	const inFlightFetches = new Set<string>();
+
 	/**
 	 * Fetch from PocketBase in background and update IndexedDB if data changed.
 	 * This is fire-and-forget -- errors are logged but not thrown.
@@ -501,17 +506,28 @@ export function createParticipantGateway(participantId: string, projectId: strin
 	function backgroundFetchFullList(name: string, options?: ListOptions, onPage?: PageCallback): void {
 		if (typeof window === 'undefined' || !navigator.onLine) return;
 
+		const fetchKey = `${name}|${JSON.stringify(options ?? {})}`;
+		if (inFlightFetches.has(fetchKey)) return; // identical fetch already running
+
+		const run = () => {
+			if (inFlightFetches.has(fetchKey)) return;
+			inFlightFetches.add(fetchKey);
+			void doBackgroundFetchFullList(name, options, onPage).finally(() => {
+				inFlightFetches.delete(fetchKey);
+			});
+		};
+
 		// Skip if a live query is active for this collection and we already have sync data.
 		// The live query's own background fetch + realtime SSE keep data fresh.
 		if (liveCollections.has(name)) {
 			getDB().then(db => db.get('sync_metadata', name)).then(meta => {
 				if (meta) return; // Already synced, live query handles updates
-				doBackgroundFetchFullList(name, options, onPage);
+				run();
 			});
 			return;
 		}
 
-		doBackgroundFetchFullList(name, options, onPage);
+		run();
 	}
 
 	async function doBackgroundFetchFullList(name: string, options?: ListOptions, onPage?: PageCallback): Promise<void> {
@@ -520,6 +536,7 @@ export function createParticipantGateway(participantId: string, projectId: strin
 		let page = 1;
 		let totalPages = 1;
 		let latestTimestamp = '';
+		let anyChange = false;
 		const t0 = performance.now();
 
 		try {
@@ -571,6 +588,7 @@ export function createParticipantGateway(participantId: string, projectId: strin
 				// Notify after each page so live queries re-read from IDB
 				// and markers appear progressively on the map
 				if (changed) {
+					anyChange = true;
 					console.log(`[BgFetch:${name}] page ${page} changed, notifying`);
 					notifyDataChange(name);
 				}
@@ -590,11 +608,15 @@ export function createParticipantGateway(participantId: string, projectId: strin
 			}
 
 			console.log(`[BgFetch:${name}] complete in ${(performance.now() - t0).toFixed(0)}ms`);
-			// Final notification ensures loading state clears even if last page had no changes
-			notifyDataChange(name);
+			// Only notify if data actually changed. An unconditional notify here
+			// retriggers data-change consumers (live queries, the detail-state
+			// metadata listener) on every fetch, creating a self-sustaining
+			// refetch loop. Completion/loading state is cleared via onPage(0,0).
+			if (anyChange) notifyDataChange(name);
 			onPage?.(0, 0); // Signal completion (0,0 = done)
 		} catch (e) {
-			notifyDataChange(name);
+			// A failed fetch produced no new data -- do NOT notify, or a throttled
+			// request would retrigger consumers and amplify the throttling.
 			onPage?.(0, 0);
 			console.debug(`Background fetch failed for ${name}:`, e);
 		}

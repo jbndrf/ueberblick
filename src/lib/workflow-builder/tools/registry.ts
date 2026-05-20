@@ -10,7 +10,7 @@
  * 3. The UI will automatically show it in the right places based on attachableTo
  */
 
-import { FileText, Tag, Zap, ClipboardList } from '@lucide/svelte';
+import { FileText, Tag, Zap, ClipboardList, Pencil } from '@lucide/svelte';
 import type { ToolDefinition, AttachmentTarget } from './types';
 
 // =============================================================================
@@ -130,14 +130,25 @@ const protocolTool: ToolDefinition = {
 	defaultColor: '#059669'
 };
 
+// Edit tool - in-place edit mode on the participant detail view
+const editTool: ToolDefinition = {
+	toolType: 'edit',
+	displayName: 'Edit',
+	description: 'Let participants edit existing field values or the instance location',
+	icon: Pencil,
+	attachableTo: ['stage', 'global'],
+	defaultColor: '#6366F1'
+};
+
 // Register the built-in tools
 toolRegistry.register(formTool);
 toolRegistry.register(protocolTool);
 toolRegistry.register(fieldTagTool);
 toolRegistry.register(automationTool);
+toolRegistry.register(editTool);
 
 // =============================================================================
 // Export individual tool definitions for direct access if needed
 // =============================================================================
 
-export { formTool, protocolTool, fieldTagTool, automationTool };
+export { formTool, protocolTool, fieldTagTool, automationTool, editTool };

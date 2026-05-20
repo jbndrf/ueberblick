@@ -8,6 +8,5 @@ export {
 	type ToolForm,
 	type FormField,
 	type ToolEdit,
-	type DisplayFieldValue,
 	type ToolQueueItem
 } from './state.svelte';

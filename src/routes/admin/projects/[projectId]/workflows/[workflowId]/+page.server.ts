@@ -61,8 +61,7 @@ export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) 
 			}),
 			pb.collection('tools_form_field_refs').getFullList({
 				filter: `form_id.workflow_id = "${workflowId}"`,
-				fields: 'id,field_def_id,form_id,field_order',
-				sort: 'field_order'
+				fields: 'id,field_def_id,form_id'
 			}),
 			pb.collection('workflow_field_defs').getFullList({
 				filter: `workflow_id = "${workflowId}"`,
@@ -83,8 +82,7 @@ export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) 
 		const totalInstances = instancesResult.totalItems;
 
 		// Build fieldStageMap: field_def_id -> stage_id (first form-stage that
-		// references the def). TODO(field-def-redesign): consider sourcing from
-		// `display_stage_id` on the field def directly.
+		// references the def).
 		const formStageMap = new Map<string, string>();
 		for (const form of forms) {
 			if (form.stage_id) {

@@ -150,7 +150,7 @@
 				workflow_id: workflowId,
 				workflow_name: workflowNameById.get(workflowId) ?? workflowId,
 				field_def_id: def.id,
-				field_label: def.label ?? def.key ?? def.id,
+				field_label: def.label ?? def.id,
 				field_type: type as BuilderContext['filterableFields'][number]['field_type'],
 				options
 			});

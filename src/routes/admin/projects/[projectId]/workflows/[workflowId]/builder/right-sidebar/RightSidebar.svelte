@@ -7,6 +7,7 @@
 	import GlobalToolsPanel from './views/properties/panels/GlobalToolsPanel.svelte';
 	import { FormEditorView } from './views/form-editor';
 	import { ProtocolToolEditorView } from './views/protocol-tool-editor';
+	import { EditToolEditorView } from './views/edit-tool-editor';
 	import { FieldTagEditorView } from './views/field-tag-editor';
 	import { FieldLibraryView } from './views/field-library';
 	import { AutomationEditorView } from './views/automation-editor';
@@ -17,7 +18,6 @@
 		ToolsAutomation, AutomationStep, TriggerType, TriggerConfig, ExecutionMode,
 		TagMapping, SentryClause, WorkflowFieldDef
 	} from '$lib/workflow-builder';
-	import type { FormFieldWithValue } from '$lib/components/form-renderer';
 
 	type AncestorFieldGroup = {
 		stage: WorkflowStage;
@@ -79,7 +79,6 @@
 		// Handlers for property updates
 		onStageRename?: (stageId: string, newName: string) => void;
 		onStageDelete?: (stageId: string) => void;
-		onStageRolesChange?: (stageId: string, roleIds: string[]) => void;
 		onEdgeRename?: (edgeId: string, newName: string) => void;
 		onEdgeDelete?: (edgeId: string) => void;
 		onEdgeRolesChange?: (edgeId: string, roleIds: string[]) => void;
@@ -105,6 +104,7 @@
 		onFormAddPage?: (formId: string) => void;
 		onFormDeletePage?: (formId: string, page: number) => void;
 		onFormPageTitleChange?: (formId: string, page: number, title: string) => void;
+		onFormPageDescriptionChange?: (formId: string, page: number, description: string) => void;
 		onFormClose?: () => void;
 		onFormRolesChange?: (formId: string, roleIds: string[]) => void;
 		onFormVisualConfigChange?: (formId: string, config: VisualConfig) => void;
@@ -150,8 +150,6 @@
 		onCreateStageAndConnect?: (fromStageId: string) => void;
 		onHighlightEdge?: (edgeId: string | null) => void;
 		onHighlightStageTool?: (toolId: string | null) => void;
-		// PreviewView stage fields (grouped by form with role info)
-		stageFields?: Map<string, { formName: string; allowedRoles: string[]; fields: FormFieldWithValue[] }[]>;
 		onDeselect?: () => void;
 		// Field library
 		trackedFieldDefs?: import('$lib/workflow-builder').TrackedFieldDef[];
@@ -195,7 +193,6 @@
 		stagePreviewData = null,
 		onStageRename,
 		onStageDelete,
-		onStageRolesChange,
 		onEdgeRename,
 		onEdgeDelete,
 		onEdgeRolesChange,
@@ -218,6 +215,7 @@
 		onFormAddPage,
 		onFormDeletePage,
 		onFormPageTitleChange,
+		onFormPageDescriptionChange,
 		onFormClose,
 		onFormRolesChange,
 		onFormVisualConfigChange,
@@ -258,7 +256,6 @@
 		onCreateStageAndConnect,
 		onHighlightEdge,
 		onHighlightStageTool,
-		stageFields,
 		onDeselect,
 		trackedFieldDefs = [],
 		effectiveFieldDefs = trackedFieldDefs,
@@ -279,6 +276,9 @@
 
 	// Protocol tool editor mode
 	const isProtocolToolEditor = $derived(context.type === 'protocolTool');
+
+	// Edit tool editor mode
+	const isEditToolEditor = $derived(context.type === 'editTool' && selectedEditTool != null);
 
 	// Global tools panel mode
 	const isGlobalToolsPanel = $derived(context.type === 'globalTools');
@@ -304,7 +304,7 @@
 	);
 </script>
 
-<aside class="right-sidebar" class:wide={isFormEditor || isProtocolToolEditor || isStagePreview} class:expanded={isFormEditor && paletteExpanded}>
+<aside class="right-sidebar" class:wide={isFormEditor || isProtocolToolEditor || isEditToolEditor || isStagePreview} class:expanded={isFormEditor && paletteExpanded}>
 	{#if isFormEditor && selectedForm}
 		<FormEditorView
 			form={selectedForm}
@@ -321,6 +321,7 @@
 			onAddPage={() => onFormAddPage?.(selectedForm.id)}
 			onDeletePage={(page) => onFormDeletePage?.(selectedForm.id, page)}
 			onPageTitleChange={(page, title) => onFormPageTitleChange?.(selectedForm.id, page, title)}
+			onPageDescriptionChange={(page, description) => onFormPageDescriptionChange?.(selectedForm.id, page, description)}
 			onClose={onFormClose}
 			onPaletteExpandedChange={(expanded) => paletteExpanded = expanded}
 			onRolesChange={(roleIds) => onFormRolesChange?.(selectedForm.id, roleIds)}
@@ -340,10 +341,19 @@
 			onDelete={() => onProtocolToolDelete?.(selectedProtocolTool.id)}
 			onClose={onProtocolToolClose}
 		/>
+	{:else if isEditToolEditor && selectedEditTool}
+		<EditToolEditorView
+			editTool={selectedEditTool}
+			ancestorFields={editToolAncestorFields}
+			onNameChange={(name) => onEditToolNameChange?.(selectedEditTool.id, name)}
+			onFieldsChange={(fieldIds) => onEditToolFieldsChange?.(selectedEditTool.id, fieldIds)}
+			onEditModeChange={(mode) => onEditToolEditModeChange?.(selectedEditTool.id, mode)}
+			onDelete={() => onEditToolDelete?.(selectedEditTool.id)}
+			onClose={onEditToolClose}
+		/>
 	{:else if isFieldLibrary}
 		<FieldLibraryView
 			fieldDefs={trackedFieldDefs}
-			stages={allStages}
 			{roles}
 			{projectWorkflows}
 			onAdd={() => onFieldDefAdd?.() ?? ''}
@@ -399,7 +409,6 @@
 			availableTargetStages={stagePreviewData.availableTargetStages}
 			incomingForms={stagePreviewData.incomingForms}
 			{onStageRename}
-			{onStageRolesChange}
 			{onStageDelete}
 			onClose={onDeselect}
 			{onButtonLabelChange}
@@ -428,7 +437,6 @@
 			{connectionProtocolTools}
 			{onStageRename}
 			{onStageDelete}
-			{onStageRolesChange}
 			{onEdgeRename}
 			{onEdgeDelete}
 			{onEdgeRolesChange}
@@ -442,7 +450,15 @@
 			{onCreateRole}
 		/>
 	{:else}
-		<PreviewView {workflowName} {nodes} {edges} {roles} {stageFields} {onSelectStage} />
+		<PreviewView
+			{workflowName}
+			{nodes}
+			{edges}
+			{roles}
+			fieldDefs={effectiveFieldDefs}
+			{onFieldDefUpdate}
+			{onSelectStage}
+		/>
 	{/if}
 </aside>
 

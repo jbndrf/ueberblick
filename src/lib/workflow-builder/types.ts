@@ -18,7 +18,6 @@ export interface WorkflowStage {
 	stage_order?: number;
 	position_x?: number;
 	position_y?: number;
-	visible_to_roles?: string[];
 	visual_config?: Record<string, unknown>;
 }
 
@@ -93,6 +92,9 @@ export interface ToolsForm {
 	 * - If stage_id is set: USED (defines the button appearance)
 	 */
 	visual_config?: VisualConfig;
+	/** Per-page metadata (title + description). Index in array is irrelevant;
+	 *  each entry carries its own `page` number. */
+	pages?: FormPage[];
 	/**
 	 * Protocol-local inline fields. Only populated when this form backs a
 	 * protocol tool and the admin added fields that should NOT enter the
@@ -100,6 +102,13 @@ export interface ToolsForm {
 	 * only.
 	 */
 	local_fields?: ProtocolLocalFieldDef[];
+}
+
+/** Per-page metadata for a multi-page form. Stored on `tools_forms.pages`. */
+export interface FormPage {
+	page: number;
+	title: string;
+	description: string;
 }
 
 /**
@@ -250,6 +259,27 @@ export interface EntitySelectorOptions {
 export type ColumnPosition = 'left' | 'right' | 'full';
 
 /**
+ * The default data tab — used when a field def has no `display_config`.
+ * The empty string is the canonical tab key for the default tab.
+ */
+export const DEFAULT_DATA_TAB = '';
+
+/**
+ * Presentation layout for a field def on the participant detail "Data" view.
+ * Stored as the `display_config` JSON column on `workflow_field_defs`.
+ */
+export interface FieldDisplayConfig {
+	/** Tab name; also its label and identity. Empty = default "Data" tab. */
+	tab: string;
+	/** Tab ordering — denormalized across all defs in the tab. */
+	tabOrder: number;
+	/** Visual row within the tab (0-based). */
+	row: number;
+	/** Column within the row. */
+	column: ColumnPosition;
+}
+
+/**
  * Workflow-scoped field definition registry entry.
  * Mirrors the `workflow_field_defs` collection. The builder loads these
  * alongside `tools_form_field_refs` to render forms.
@@ -260,16 +290,19 @@ export type ColumnPosition = 'left' | 'right' | 'full';
 export interface WorkflowFieldDef {
 	id: string;
 	workflow_id: string;
-	key: string;
+	/** Field identity. Unique per workflow. Used for cross-project import matching. */
 	label: string;
 	field_type: FieldType;
 	write_mode: 'singleton' | 'observation' | 'computed';
 	output_type?: 'text' | 'number' | 'date' | 'json' | '';
-	display_stage_id?: string;
+	/**
+	 * Presentation config for the participant detail "Data" view. When null/empty
+	 * the def renders in the default "Data" tab, ordered by `created`. Tabs are
+	 * emergent — the set of tabs is the distinct `tab` values across a workflow's
+	 * field defs. Persisted as the `display_config` JSON column.
+	 */
+	display_config?: FieldDisplayConfig | null;
 	view_roles?: string[];
-	placeholder?: string;
-	help_text?: string;
-	is_required?: boolean;
 	validation_rules?: Record<string, unknown> | null;
 	field_options?: Record<string, unknown> | null;
 	/**
@@ -283,42 +316,50 @@ export interface WorkflowFieldDef {
 }
 
 /**
- * Form field reference — per-form layout/override over a `WorkflowFieldDef`.
- * Mirrors the `tools_form_field_refs` collection.
+ * Per-form presentation config for a field. Persisted as the `config` JSON
+ * column on `tools_form_field_refs`. Everything here is per-form — the same
+ * field def can carry different config in different forms.
+ */
+export interface FormFieldConfig {
+	field_order?: number;
+	page?: number;
+	row_index?: number;
+	column_position?: ColumnPosition;
+	is_required?: boolean;
+	placeholder?: string;
+	help_text?: string;
+	conditional_logic?: Record<string, unknown>;
+}
+
+/**
+ * Form field reference — a form pointing at a `WorkflowFieldDef`, plus the
+ * per-form presentation `config`. Mirrors the `tools_form_field_refs`
+ * collection.
  *
- * TODO(field-def-redesign): The builder currently treats this as a
- * combined "field+ref" object (legacy fields kept optional). Callers that
- * need definitional bits (label, type, options, validation) should look
- * them up via a `Map<string, WorkflowFieldDef>` keyed by `field_def_id`.
+ * The builder works with a flattened shape: `config` fields are spread onto
+ * the object and definitional bits (`field_label`, `field_type`, ...) are
+ * denormalized from the matching def by the +page.server.ts load layer. The
+ * save layer re-packs the presentation fields into the `config` JSON column.
  */
 export interface ToolsFormField {
 	id: string;
 	form_id: string;
 	field_def_id?: string;
+	// Presentation (persisted into `config` JSON).
 	field_order?: number;
 	page?: number;
-	page_title?: string;
 	row_index: number; // Which visual row (0-based)
 	column_position: ColumnPosition; // 'left'/'right' = half width, 'full' = full width
-	// Per-ref overrides
-	is_required_override?: boolean | null;
-	placeholder_override?: string;
-	help_text_override?: string;
-	conditional_logic?: Record<string, unknown>;
-	// TODO(field-def-redesign): The following are LEGACY definitional fields
-	// that used to live on `tools_form_fields` rows. The +page.server.ts load
-	// layer DENORMALIZES them onto the ref shape so the existing form-editor UI
-	// continues working unchanged. They remain required because the load layer
-	// always sets them. New code should prefer reading from a
-	// `Map<string, WorkflowFieldDef>` keyed by `field_def_id` instead.
-	field_label: string;
-	field_type: FieldType;
 	is_required?: boolean;
 	placeholder?: string;
 	help_text?: string;
+	conditional_logic?: Record<string, unknown>;
+	// Definitional bits denormalized from the matching WorkflowFieldDef by the
+	// load layer. Read-only mirror — edits to these go through updateFieldDef.
+	field_label: string;
+	field_type: FieldType;
 	validation_rules?: Record<string, unknown>;
 	field_options?: Record<string, unknown>;
-	// Field-def-level props surfaced through the form-editor.
 	write_mode?: 'singleton' | 'observation' | 'computed';
 	compute_expression?: string;
 }
@@ -330,13 +371,13 @@ export interface ToolsFormField {
 export type EditMode = 'form_fields' | 'location';
 
 /**
- * TODO(field-def-redesign): tools_edit was removed in the field-def redesign.
- * A Form referencing existing field defs IS the edit affordance. This
- * interface is retained temporarily so the workflow builder UI keeps
- * compiling; convert call sites to Forms in a follow-up pass.
+ * Edit tool: an in-place "edit mode" on the participant detail view. Backed by
+ * the tools_edit collection (recreated in migration 1779800000).
+ * `editable_fields` references workflow_field_defs ids.
  */
 export interface ToolsEdit {
 	id: string;
+	workflow_id: string;
 	connection_id?: string;
 	/**
 	 * Stage IDs this tool is attached to.
@@ -536,7 +577,6 @@ export interface StageData {
 	key: string;
 	stageType: StageType;
 	maxHours?: number | null;
-	visible_to_roles?: string[];
 	regions?: RegionInfo[];
 	tools?: ToolInstance[];
 	selectedToolId?: string;

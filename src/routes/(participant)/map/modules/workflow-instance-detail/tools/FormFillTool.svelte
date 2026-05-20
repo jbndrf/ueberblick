@@ -290,6 +290,7 @@
 				fields={formFields}
 				values={renderValues}
 				errors={errorRecord}
+				pages={formState?.form?.pages ?? []}
 				paginated={totalPages > 1}
 				currentPage={currentPage}
 				onValueChange={handleValueChange}

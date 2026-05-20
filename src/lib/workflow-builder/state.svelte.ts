@@ -32,8 +32,11 @@ import type {
 	ExecutionMode,
 	WorkflowFieldDef,
 	TrackedFieldDef,
-	FieldType
+	FieldType,
+	FieldDisplayConfig,
+	ColumnPosition
 } from './types';
+import { DEFAULT_DATA_TAB } from './types';
 
 // =============================================================================
 // State Class
@@ -85,15 +88,11 @@ export class WorkflowBuilderState {
 				data: {
 					id: defId,
 					workflow_id: this.workflowId,
-					key: '',
 					label: f.data.field_label ?? '',
 					field_type: f.data.field_type,
 					write_mode: f.data.write_mode ?? 'singleton',
 					output_type: '',
 					view_roles: [],
-					placeholder: f.data.placeholder ?? '',
-					help_text: f.data.help_text ?? '',
-					is_required: f.data.is_required ?? false,
 					validation_rules: f.data.validation_rules ?? null,
 					field_options: f.data.field_options ?? null,
 					compute_expression: f.data.compute_expression ?? '',
@@ -116,16 +115,12 @@ export class WorkflowBuilderState {
 		const def: WorkflowFieldDef = {
 			id: generateId(),
 			workflow_id: this.workflowId,
-			key: partial?.key ?? '',
 			label: partial?.label ?? '',
 			field_type: (partial?.field_type ?? 'short_text') as FieldType,
 			write_mode: partial?.write_mode ?? 'singleton',
 			output_type: partial?.output_type ?? '',
-			display_stage_id: partial?.display_stage_id,
+			display_config: partial?.display_config ?? null,
 			view_roles: partial?.view_roles ?? [],
-			placeholder: partial?.placeholder ?? '',
-			help_text: partial?.help_text ?? '',
-			is_required: partial?.is_required ?? false,
 			validation_rules: partial?.validation_rules ?? null,
 			field_options: partial?.field_options ?? null,
 			compute_expression: partial?.compute_expression ?? '',
@@ -141,11 +136,12 @@ export class WorkflowBuilderState {
 		def.data = { ...def.data, ...updates };
 		if (def.status === 'unchanged') def.status = 'modified';
 
-		// Form-fields denormalize a subset of def-level properties (label,
-		// type, write_mode, options, validation, required, placeholder,
-		// help_text, compute_expression) onto their ref row. Mirror def
-		// edits onto every form-field pointing at this def so the form
-		// builder and runtime see consistent values without a save+refresh.
+		// Form-fields denormalize the def-level properties (label, type,
+		// write_mode, options, validation, compute_expression) onto their ref
+		// row. Mirror def edits onto every form-field pointing at this def so
+		// the form builder and runtime see consistent values without a
+		// save+refresh. Presentation (placeholder, help_text, required) is NOT
+		// mirrored — it lives per-form on the ref's config.
 		for (const f of this.formFields) {
 			if (f.status === 'deleted') continue;
 			if (f.data.field_def_id !== id) continue;
@@ -153,11 +149,8 @@ export class WorkflowBuilderState {
 			if (updates.label !== undefined) patch.field_label = updates.label ?? '';
 			if (updates.field_type !== undefined) patch.field_type = updates.field_type;
 			if (updates.write_mode !== undefined) (patch as any).write_mode = updates.write_mode;
-			if (updates.is_required !== undefined) patch.is_required = updates.is_required ?? false;
 			if (updates.field_options !== undefined) patch.field_options = updates.field_options ?? undefined;
 			if (updates.validation_rules !== undefined) patch.validation_rules = updates.validation_rules ?? undefined;
-			if (updates.placeholder !== undefined) patch.placeholder = updates.placeholder ?? '';
-			if (updates.help_text !== undefined) patch.help_text = updates.help_text ?? '';
 			if (updates.compute_expression !== undefined) (patch as any).compute_expression = updates.compute_expression ?? '';
 			if (Object.keys(patch).length === 0) continue;
 			Object.assign(f.data, patch);
@@ -175,6 +168,95 @@ export class WorkflowBuilderState {
 			this.fieldDefs = this.fieldDefs.filter((d) => d.data.id !== id);
 		} else {
 			def.status = 'deleted';
+		}
+	}
+
+	// =========================================================================
+	// Data tabs (participant detail "Data" view). Tabs are emergent — derived
+	// from the distinct `display_config.tab` values across the workflow's field
+	// defs. The default tab (empty key) collects every def with no config.
+	// =========================================================================
+
+	/** Tab key for a field def — empty string = default "Data" tab. */
+	private defTab(def: WorkflowFieldDef): string {
+		return def.display_config?.tab || DEFAULT_DATA_TAB;
+	}
+
+	/**
+	 * Emergent ordered list of data tabs. The default tab is always present and
+	 * sorts first; custom tabs follow by `tabOrder` then name.
+	 */
+	getDataTabs(): Array<{ name: string; order: number; isDefault: boolean }> {
+		const byTab = new Map<string, number>();
+		byTab.set(DEFAULT_DATA_TAB, 0);
+		for (const d of this.visibleFieldDefs) {
+			const tab = this.defTab(d.data);
+			const order = d.data.display_config?.tabOrder ?? 0;
+			if (!byTab.has(tab) || order < (byTab.get(tab) as number)) byTab.set(tab, order);
+		}
+		return [...byTab.entries()]
+			.map(([name, order]) => ({ name, order, isDefault: name === DEFAULT_DATA_TAB }))
+			.sort((a, b) => {
+				if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1;
+				return a.order - b.order || a.name.localeCompare(b.name);
+			});
+	}
+
+	/** Field defs assigned to a tab, ordered by row then column. */
+	getFieldDefsForTab(tabName: string): TrackedFieldDef[] {
+		const colRank = { left: 0, full: 1, right: 2 };
+		return this.visibleFieldDefs
+			.filter((d) => this.defTab(d.data) === tabName)
+			.sort((a, b) => {
+				const ra = a.data.display_config?.row ?? 0;
+				const rb = b.data.display_config?.row ?? 0;
+				if (ra !== rb) return ra - rb;
+				return colRank[a.data.display_config?.column ?? 'full'] - colRank[b.data.display_config?.column ?? 'full'];
+			});
+	}
+
+	/** Move/place a field def into a tab at a given layout slot. */
+	moveFieldDefToTab(defId: string, tabName: string, row: number, column: ColumnPosition): void {
+		const def = this.fieldDefs.find((d) => d.data.id === defId);
+		if (!def) return;
+		const tabOrder = def.data.display_config?.tabOrder ?? this.tabOrderOf(tabName);
+		const config: FieldDisplayConfig = { tab: tabName, tabOrder, row, column };
+		this.updateFieldDef(defId, { display_config: config });
+	}
+
+	/** Current order value for an existing tab (0 for the default tab). */
+	private tabOrderOf(tabName: string): number {
+		if (tabName === DEFAULT_DATA_TAB) return 0;
+		const found = this.getDataTabs().find((t) => t.name === tabName);
+		return found?.order ?? this.getDataTabs().length;
+	}
+
+	/** Rename a tab — rewrites `display_config.tab` on every member def. */
+	renameDataTab(oldName: string, newName: string): void {
+		if (oldName === newName) return;
+		for (const d of this.getFieldDefsForTab(oldName)) {
+			const c = d.data.display_config;
+			if (!c) continue;
+			this.updateFieldDef(d.data.id, { display_config: { ...c, tab: newName } });
+		}
+	}
+
+	/** Reorder tabs — rewrites `tabOrder` on every member def of each tab. */
+	reorderDataTabs(orderedNames: string[]): void {
+		orderedNames.forEach((name, idx) => {
+			if (name === DEFAULT_DATA_TAB) return;
+			for (const d of this.getFieldDefsForTab(name)) {
+				const c = d.data.display_config;
+				if (!c) continue;
+				this.updateFieldDef(d.data.id, { display_config: { ...c, tabOrder: idx } });
+			}
+		});
+	}
+
+	/** Bulk-apply view_roles to every field def in a tab. */
+	setTabViewRoles(tabName: string, roleIds: string[]): void {
+		for (const d of this.getFieldDefsForTab(tabName)) {
+			this.updateFieldDef(d.data.id, { view_roles: [...roleIds] });
 		}
 	}
 
@@ -680,15 +762,11 @@ export class WorkflowBuilderState {
 			data: {
 				id: tempDefId,
 				workflow_id: this.workflowId,
-				key: '',
 				label: 'New Field',
 				field_type: fieldType,
 				write_mode: 'singleton',
 				output_type: '',
 				view_roles: [],
-				placeholder: '',
-				help_text: '',
-				is_required: false,
 				validation_rules: null,
 				field_options: null,
 				compute_expression: '',
@@ -726,9 +804,9 @@ export class WorkflowBuilderState {
 			page,
 			row_index: rowIndex,
 			column_position: columnPosition,
-			is_required: def.is_required ?? false,
-			placeholder: def.placeholder ?? '',
-			help_text: def.help_text ?? '',
+			is_required: false,
+			placeholder: '',
+			help_text: '',
 			validation_rules: def.validation_rules ?? undefined,
 			field_options: def.field_options ?? undefined,
 			write_mode: def.write_mode,
@@ -759,11 +837,8 @@ export class WorkflowBuilderState {
 			if (def) {
 				if (updates.field_label !== undefined) def.data.label = updates.field_label ?? '';
 				if (updates.field_type !== undefined) def.data.field_type = updates.field_type;
-				if (updates.is_required !== undefined) def.data.is_required = updates.is_required ?? false;
 				if (updates.field_options !== undefined) def.data.field_options = updates.field_options ?? null;
 				if (updates.validation_rules !== undefined) def.data.validation_rules = updates.validation_rules ?? null;
-				if (updates.placeholder !== undefined) def.data.placeholder = updates.placeholder ?? '';
-				if (updates.help_text !== undefined) def.data.help_text = updates.help_text ?? '';
 				if ((updates as any).write_mode !== undefined) def.data.write_mode = (updates as any).write_mode;
 				if ((updates as any).compute_expression !== undefined) def.data.compute_expression = (updates as any).compute_expression ?? '';
 			}
@@ -841,6 +916,7 @@ export class WorkflowBuilderState {
 
 		const newEditTool: ToolsEdit = {
 			id: generateId(),
+			workflow_id: this.workflowId,
 			connection_id: connectionId,
 			stage_id: isStageAttached ? [target.stageId] : undefined,
 			name: 'Edit Fields',
@@ -875,6 +951,7 @@ export class WorkflowBuilderState {
 
 		const newEditTool: ToolsEdit = {
 			id: generateId(),
+			workflow_id: this.workflowId,
 			connection_id: undefined,
 			stage_id: allStageIds,
 			name: editMode === 'location' ? 'Edit Location' : 'Edit Fields',

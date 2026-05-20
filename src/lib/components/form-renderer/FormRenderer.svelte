@@ -6,6 +6,7 @@
 		type FormValues,
 		type FieldContext,
 		type PageGroup,
+		type FormPage,
 		groupFieldsByLayout,
 		getColumnClass,
 		getTotalPages
@@ -26,6 +27,15 @@
 		onPageChange?: (page: number) => void;
 		errors?: Record<string, string>;
 		fileCollection?: string;
+		/** Per-page metadata (title + description). */
+		pages?: FormPage[];
+		/**
+		 * Per-field editability override. When provided, each field renders in
+		 * `edit` mode if its id is in this set, else `view` mode — `mode` is
+		 * ignored. Used by the participant detail-view edit tool. When omitted,
+		 * the single `mode` applies to every field (unchanged behavior).
+		 */
+		editableFieldIds?: string[];
 	}
 
 	let {
@@ -38,8 +48,17 @@
 		currentPage = 1,
 		onPageChange,
 		errors = {},
-		fileCollection = 'workflow_field_values'
+		fileCollection = 'workflow_field_values',
+		pages = [],
+		editableFieldIds
 	}: Props = $props();
+
+	const editableSet = $derived(editableFieldIds ? new Set(editableFieldIds) : null);
+
+	function fieldMode(fieldId: string): FormMode {
+		if (!editableSet) return mode;
+		return editableSet.has(fieldId) ? 'edit' : 'view';
+	}
 
 	// ==========================================================================
 	// Derived
@@ -54,7 +73,7 @@
 	});
 
 	// Group fields by layout (page -> row)
-	const pageGroups = $derived(groupFieldsByLayout(fieldsWithValues));
+	const pageGroups = $derived(groupFieldsByLayout(fieldsWithValues, pages));
 
 	// Total pages
 	const totalPages = $derived(getTotalPages(fields));
@@ -107,7 +126,7 @@
 		{#each row.fields as field (field.id)}
 			<div class={getColumnClass(field.column_position)}>
 				<FieldRenderer
-					{mode}
+					mode={fieldMode(field.id)}
 					{field}
 					value={values[field.id] ?? field.value}
 					error={errors[field.id]}
@@ -127,6 +146,12 @@
 			<h4 class="text-sm font-semibold text-foreground border-b border-border pb-2">
 				{pageGroup.pageTitle}
 			</h4>
+		{/if}
+
+		{#if pageGroup.pageDescription}
+			<p class="text-sm text-muted-foreground whitespace-pre-line">
+				{pageGroup.pageDescription}
+			</p>
 		{/if}
 
 		<div class="space-y-4">

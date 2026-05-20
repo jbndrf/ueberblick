@@ -37,7 +37,6 @@ export interface Stage {
   stage_type: 'start' | 'intermediate' | 'end';
   stage_order: number;
   max_duration_hours: number;
-  visible_to_roles: string[];
   position_x: number;
   position_y: number;
   visual_config: Record<string, any>;
