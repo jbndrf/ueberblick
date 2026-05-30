@@ -12,7 +12,7 @@
 	import ConnectedToolItem from '../shared/ConnectedToolItem.svelte';
 
 	import { toolRegistry } from '$lib/workflow-builder/tools';
-	import type { ToolsEdit, ToolsAutomation, VisualConfig } from '$lib/workflow-builder';
+	import type { ToolsEdit, ToolsForm, ToolsAutomation, VisualConfig } from '$lib/workflow-builder';
 	import {
 		commonEdit,
 		editToolAnyRolesLabel,
@@ -42,6 +42,8 @@
 	type Props = {
 		/** Global edit tools (is_global=true) */
 		globalEditTools: ToolsEdit[];
+		/** Global forms (no stage_id and no connection_id) */
+		globalForms?: ToolsForm[];
 		/** Automations for this workflow */
 		automations?: ToolsAutomation[];
 		/** Available roles */
@@ -68,6 +70,7 @@
 
 	let {
 		globalEditTools = [],
+		globalForms = [],
 		automations = [],
 		roles,
 		onToolRolesChange,
@@ -229,10 +232,22 @@
 			<!-- Tools Tab -->
 			<Tabs.Content value="tools" class="tab-content">
 				<PropertySection title={propertiesGlobalToolsTitle?.() ?? 'Global Tools'} defaultOpen={true}>
-					{#if globalEditTools.length === 0}
+					{#if globalEditTools.length === 0 && globalForms.length === 0}
 						<p class="empty-text">{propertiesGlobalToolsNoTools?.() ?? 'No global tools configured.'}</p>
 					{:else}
 						<div class="tools-list">
+							{#each globalForms as form (form.id)}
+								<ConnectedToolItem
+									toolType="form"
+									name={form.name}
+									visualConfig={form.visual_config || {}}
+									onVisualConfigChange={(config) => onToolVisualConfigChange?.(form.id, config)}
+									onSelect={() => onSelectTool?.('form', form.id)}
+									onDelete={() => onDeleteTool?.('form', form.id)}
+									defaultButtonLabel={toolRegistry.get('form')?.displayName ?? 'Form'}
+									defaultButtonColor={getToolColor('form')}
+								/>
+							{/each}
 							{#each globalEditTools as tool (tool.id)}
 								<ConnectedToolItem
 									toolType="edit"

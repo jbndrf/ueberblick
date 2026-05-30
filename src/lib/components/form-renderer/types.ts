@@ -2,6 +2,8 @@
 // Base Form Types (formerly in form-fill/types.ts)
 // ==========================================================================
 
+import type { ConditionalLogic } from '$lib/form-engine/conditional-logic';
+
 export type FieldType =
 	| 'short_text'
 	| 'long_text'
@@ -92,7 +94,7 @@ export interface FormField {
 	help_text?: string;
 	validation_rules?: ValidationRules | null;
 	field_options?: DateFieldOptions | FileFieldOptions | DropdownFieldOptions | SmartDropdownFieldOptions | CustomTableSelectorOptions | null;
-	conditional_logic?: Record<string, unknown> | null;
+	conditional_logic?: ConditionalLogic | null;
 	/** Phase 1 write modes. Drives CMMN-style rendering of observation history
 	 *  and computed-readonly badges in view mode. */
 	write_mode?: 'singleton' | 'observation' | 'computed';
@@ -262,14 +264,19 @@ export function hasLayoutMetadata(fields: FormField[]): boolean {
  * Get CSS class for column position
  */
 export function getColumnClass(position: ColumnPosition): string {
+	// `min-w-0` overrides the flexbox default `min-width: auto` so half-width
+	// fields can shrink below their content's intrinsic width and sit
+	// side-by-side in narrow containers (mobile participant drawer) instead of
+	// wrapping onto separate lines. Mirrors the admin FormPreview's
+	// `.field-row.half-width > * { flex: 1; min-width: 0 }`.
 	switch (position) {
 		case 'left':
-			return 'w-[calc(50%-0.5rem)]';
+			return 'w-[calc(50%-0.5rem)] min-w-0';
 		case 'right':
-			return 'w-[calc(50%-0.5rem)] ml-auto';
+			return 'w-[calc(50%-0.5rem)] min-w-0 ml-auto';
 		case 'full':
 		default:
-			return 'w-full';
+			return 'w-full min-w-0';
 	}
 }
 

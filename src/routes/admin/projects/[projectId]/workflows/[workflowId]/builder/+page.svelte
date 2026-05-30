@@ -16,19 +16,25 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 
-	import {
-		Save,
-		CircleHelp,
-		Loader2
-	} from '@lucide/svelte';
+	import { Save, CircleHelp, Loader2, ShieldCheck, Workflow } from '@lucide/svelte';
 
 	import type { PageData } from './$types';
 	import StageNode from './StageNode.svelte';
 	import EntryMarkerNode from './EntryMarkerNode.svelte';
 	import ActionEdge from './ActionEdge.svelte';
-	import { ContextSidebar, createContext, type SelectionContext, type StageData } from './context-sidebar';
+	import {
+		ContextSidebar,
+		createContext,
+		type SelectionContext,
+		type StageData
+	} from './context-sidebar';
 	import { RightSidebar } from './right-sidebar';
-	import type { StageAction, TimelineStage, IncomingFormGroup } from './right-sidebar/views/stage-preview';
+	import { PermissionsMatrixView } from './permissions-matrix';
+	import type {
+		StageAction,
+		TimelineStage,
+		IncomingFormGroup
+	} from './right-sidebar/views/stage-preview';
 	import {
 		createWorkflowBuilderState,
 		type WorkflowStage,
@@ -48,7 +54,14 @@
 		type AutomationStep,
 		type ExecutionMode
 	} from '$lib/workflow-builder';
-	import type { ToolInstance, FormToolConfig, EditToolConfig, AutomationToolConfig, ProtocolToolConfig, FieldTagToolConfig } from '$lib/workflow-builder/tools';
+	import type {
+		ToolInstance,
+		FormToolConfig,
+		EditToolConfig,
+		AutomationToolConfig,
+		ProtocolToolConfig,
+		FieldTagToolConfig
+	} from '$lib/workflow-builder/tools';
 	import { ToolBar } from '$lib/workflow-builder/components';
 	import type { ColumnPosition } from '$lib/workflow-builder';
 	import { deserialize } from '$app/forms';
@@ -67,7 +80,9 @@
 		workflowBuilderPageTitleDefault,
 		workflowBuilderSave,
 		workflowBuilderSaving,
-		workflowBuilderWorkflowNamePlaceholder
+		workflowBuilderWorkflowNamePlaceholder,
+		permMatrixCanvasLabel,
+		permMatrixViewLabel
 	} from '$lib/paraglide/messages';
 
 	let { data }: { data: PageData } = $props();
@@ -82,6 +97,11 @@
 	$effect(() => {
 		builderState.initFromServer({
 			workflowName: data.workflow?.name,
+			workflow: {
+				id: data.workflow.id,
+				visible_to_roles: data.workflow.visible_to_roles ?? [],
+				private_instances: data.workflow.private_instances ?? false
+			},
 			stages: data.stages,
 			connections: data.connections,
 			forms: data.forms,
@@ -97,6 +117,9 @@
 	// Saving state
 	let isSaving = $state(false);
 	let saveError = $state<string | null>(null);
+
+	// Top-level builder view: the canvas, or the full-width permissions matrix.
+	let builderView = $state<'canvas' | 'permissions'>('canvas');
 
 	async function handleSave() {
 		isSaving = true;
@@ -128,17 +151,22 @@
 			if (result.type === 'success') {
 				builderState.markAsSaved();
 			} else {
-				saveError = ((result as any).data as any)?.message || (workflowBuilderFailedToSave?.() ?? 'Failed to save');
+				saveError =
+					((result as any).data as any)?.message ||
+					(workflowBuilderFailedToSave?.() ?? 'Failed to save');
 			}
 		} catch (err) {
-			saveError = err instanceof Error ? err.message : (workflowBuilderFailedToSave?.() ?? 'Failed to save');
+			saveError =
+				err instanceof Error ? err.message : (workflowBuilderFailedToSave?.() ?? 'Failed to save');
 		}
 
 		isSaving = false;
 	}
 
 	// Create role callback for MobileMultiSelect components in property panels
-	async function createRole(name: string): Promise<{ id: string; name: string; description?: string }> {
+	async function createRole(
+		name: string
+	): Promise<{ id: string; name: string; description?: string }> {
 		const formData = new FormData();
 		formData.append('name', name);
 
@@ -213,7 +241,11 @@
 		const forms = builderState.getFormsForConnection(connectionId);
 		const editTools = builderState.getEditToolsForConnection(connectionId);
 		const protocolTools = builderState.getProtocolToolsForConnection(connectionId);
-		return [...formsToToolInstances(forms), ...editToolsToToolInstances(editTools), ...protocolToolsToToolInstances(protocolTools)];
+		return [
+			...formsToToolInstances(forms),
+			...editToolsToToolInstances(editTools),
+			...protocolToolsToToolInstances(protocolTools)
+		];
 	}
 
 	/**
@@ -223,7 +255,11 @@
 		const forms = builderState.getFormsForStage(stageId);
 		const editTools = builderState.getNonGlobalEditToolsForStage(stageId);
 		const protocolTools = builderState.getProtocolToolsForStage(stageId);
-		return [...formsToToolInstances(forms), ...editToolsToToolInstances(editTools), ...protocolToolsToToolInstances(protocolTools)];
+		return [
+			...formsToToolInstances(forms),
+			...editToolsToToolInstances(editTools),
+			...protocolToolsToToolInstances(protocolTools)
+		];
 	}
 
 	// ==========================================================================
@@ -303,7 +339,10 @@
 					y: targetY + 10 // Slightly below center for visual alignment
 				},
 				data: {
-					label: conn.visual_config?.button_label || conn.action_name || (workflowBuilderEntryLabel?.() ?? 'Entry'),
+					label:
+						conn.visual_config?.button_label ||
+						conn.action_name ||
+						(workflowBuilderEntryLabel?.() ?? 'Entry'),
 					connectionId: conn.id
 				},
 				draggable: false,
@@ -314,27 +353,44 @@
 
 	// Convert state connections to xyflow edges (including entry connections)
 	function connectionsToEdges(connections: WorkflowConnection[], highlighted: Set<string>): Edge[] {
-		// Detect bidirectional pairs (A->B and B->A)
-		const pairKeys = new Set<string>();
+		// Group directed connections by `${from}->${to}` so we can fan out
+		// connections that share the same stage pair (parallel and/or
+		// bidirectional) instead of letting them render on top of each other.
+		const PARALLEL_GAP = 28; // px between fanned-out parallel lanes
+		const BIDIR_BULGE = 45; // px base bulge when a reverse connection exists
+
+		const directedGroups = new Map<string, string[]>();
 		for (const conn of connections) {
-			if (conn.from_stage_id && conn.from_stage_id !== conn.to_stage_id) {
-				const reverseKey = `${conn.to_stage_id}->${conn.from_stage_id}`;
-				if (connections.some(c => c.from_stage_id === conn.to_stage_id && c.to_stage_id === conn.from_stage_id)) {
-					pairKeys.add(`${conn.from_stage_id}->${conn.to_stage_id}`);
-				}
-			}
+			if (!conn.from_stage_id || conn.from_stage_id === conn.to_stage_id) continue;
+			const key = `${conn.from_stage_id}->${conn.to_stage_id}`;
+			(directedGroups.get(key) ?? directedGroups.set(key, []).get(key)!).push(conn.id);
+		}
+
+		// Signed perpendicular offset (to the right of travel direction) for a
+		// connection. Same-direction duplicates fan symmetrically around the
+		// base; if a reverse connection exists, the whole fan is pushed to one
+		// side so the opposing direction's fan sits clear of it.
+		function curveOffsetFor(conn: WorkflowConnection): number {
+			if (!conn.from_stage_id || conn.from_stage_id === conn.to_stage_id) return 0;
+			const group = directedGroups.get(`${conn.from_stage_id}->${conn.to_stage_id}`);
+			if (!group) return 0;
+			const n = group.length;
+			const i = group.indexOf(conn.id);
+			const hasReverse = directedGroups.has(`${conn.to_stage_id}->${conn.from_stage_id}`);
+			const base = hasReverse ? BIDIR_BULGE : 0;
+			return base + (i - (n - 1) / 2) * PARALLEL_GAP;
 		}
 
 		return connections.map((conn) => {
 			const isEntryConnection = !conn.from_stage_id;
 			const isSelfLoop = !isEntryConnection && conn.from_stage_id === conn.to_stage_id;
-			const isBidirectional = !isEntryConnection && !isSelfLoop && pairKeys.has(`${conn.from_stage_id}->${conn.to_stage_id}`);
+			const curveOffset = isEntryConnection || isSelfLoop ? 0 : curveOffsetFor(conn);
 			const isHighlighted = highlighted.has(conn.id);
 
-			const classes = [
-				isEntryConnection ? 'entry-edge' : '',
-				isHighlighted ? 'highlighted' : ''
-			].filter(Boolean).join(' ') || undefined;
+			const classes =
+				[isEntryConnection ? 'entry-edge' : '', isHighlighted ? 'highlighted' : '']
+					.filter(Boolean)
+					.join(' ') || undefined;
 
 			return {
 				id: conn.id,
@@ -345,13 +401,14 @@
 				type: 'action',
 				animated: isSelfLoop,
 				class: classes,
-				style: !isEntryConnection && conn.visual_config?.button_color
-					? `stroke: ${conn.visual_config.button_color}`
-					: undefined,
+				style:
+					!isEntryConnection && conn.visual_config?.button_color
+						? `stroke: ${conn.visual_config.button_color}`
+						: undefined,
 				data: {
 					tools: getToolsForConnection(conn.id),
 					isSelfLoop,
-					isBidirectional,
+					curveOffset,
 					isEntry: isEntryConnection,
 					onSelectTool: (toolId: string) => handleSelectConnectionTool(conn.id, toolId),
 					onAddTool: () => handleAddProgressToolForEdge(conn.id),
@@ -373,7 +430,10 @@
 		)
 	]);
 	let edges = $state.raw<Edge[]>(
-		connectionsToEdges(builderState.visibleConnections.map((c) => c.data), new Set())
+		connectionsToEdges(
+			builderState.visibleConnections.map((c) => c.data),
+			new Set()
+		)
 	);
 
 	// Sync nodes/edges when state changes
@@ -418,7 +478,10 @@
 		const _connections = builderState.visibleConnections;
 		const _highlighted = highlightedEdgeIds;
 
-		edges = connectionsToEdges(_connections.map((c) => c.data), _highlighted);
+		edges = connectionsToEdges(
+			_connections.map((c) => c.data),
+			_highlighted
+		);
 	});
 
 	// Connection state
@@ -434,7 +497,7 @@
 
 		const selectedNodeId = ctx.type === 'stage' ? ctx.stageId : null;
 
-		const updatedNodes = untrack(() => nodes).map(n => {
+		const updatedNodes = untrack(() => nodes).map((n) => {
 			const shouldSelect = n.id === selectedNodeId;
 			if (!!n.selected === shouldSelect) return n;
 			return { ...n, selected: shouldSelect };
@@ -525,28 +588,28 @@
 	const stageEditTools = $derived.by((): ToolsEdit[] => {
 		if (selectionContext.type !== 'stage') return [];
 		const tools = builderState.getNonGlobalEditToolsForStage(selectionContext.stageId);
-		return tools.map(t => t.data);
+		return tools.map((t) => t.data);
 	});
 
 	// Connection forms for property view (when a connection/action is selected)
 	const connectionForms = $derived.by((): ToolsForm[] => {
 		if (selectionContext.type !== 'action') return [];
 		const forms = builderState.getFormsForConnection(selectionContext.actionId);
-		return forms.map(f => f.data);
+		return forms.map((f) => f.data);
 	});
 
 	// Connection edit tools for property view (when a connection/action is selected)
 	const connectionEditTools = $derived.by((): ToolsEdit[] => {
 		if (selectionContext.type !== 'action') return [];
 		const tools = builderState.getEditToolsForConnection(selectionContext.actionId);
-		return tools.map(t => t.data);
+		return tools.map((t) => t.data);
 	});
 
 	// Connection protocol tools for property view (when a connection/action is selected)
 	const connectionProtocolTools = $derived.by((): ToolsProtocol[] => {
 		if (selectionContext.type !== 'action') return [];
 		const tools = builderState.getProtocolToolsForConnection(selectionContext.actionId);
-		return tools.map(t => t.data);
+		return tools.map((t) => t.data);
 	});
 
 	// Allowed tool types for the selected connection (entry connections only allow 'form')
@@ -566,11 +629,16 @@
 		return builderState.getGlobalEditTools();
 	});
 
+	// Global forms (no stage_id and no connection_id, available on all stages)
+	const globalForms = $derived.by(() => {
+		return builderState.getGlobalForms();
+	});
+
 	// ==========================================================================
 	// Automation State
 	// ==========================================================================
 
-	const automations = $derived(builderState.visibleAutomations.map(a => a.data));
+	const automations = $derived(builderState.visibleAutomations.map((a) => a.data));
 
 	const selectedAutomation = $derived.by((): ToolsAutomation | null => {
 		if (selectionContext.type !== 'automation') return null;
@@ -580,19 +648,25 @@
 
 	// Stage options for automation dropdowns
 	const automationStages = $derived(
-		builderState.visibleStages.map(s => ({ id: s.data.id, name: s.data.stage_name }))
+		builderState.visibleStages.map((s) => ({ id: s.data.id, name: s.data.stage_name }))
 	);
 
-	// Field options for automation dropdowns (all form fields across the workflow)
+	// Field options for automation dropdowns (all form fields across the workflow).
+	// `key` carries the `field_def_id` — that is what the automation runtime
+	// matches against (`workflow_field_values.field_def_id`), not the per-form
+	// field ref id. The same field def can appear in multiple forms, so dedupe.
 	const automationFieldOptions = $derived.by(() => {
 		const options: { key: string; label: string }[] = [];
+		const seen = new Set<string>();
 		for (const form of builderState.visibleForms) {
 			const fields = builderState.getFieldsForForm(form.data.id);
 			for (const field of fields) {
-				// Use field ID as key (matches field_key in field_values)
+				const defId = field.data.field_def_id;
+				if (!defId || seen.has(defId)) continue;
+				seen.add(defId);
 				options.push({
-					key: field.data.id,
-					label: field.data.field_label || field.data.id
+					key: defId,
+					label: field.data.field_label || defId
 				});
 			}
 		}
@@ -612,7 +686,11 @@
 		return builderState.getAllFormFields();
 	});
 
-	function handleFieldTagMappingChange(tagType: string, fieldId: string | null, config?: Record<string, unknown>) {
+	function handleFieldTagMappingChange(
+		tagType: string,
+		fieldId: string | null,
+		config?: Record<string, unknown>
+	) {
 		builderState.setTagMapping(tagType, fieldId, config);
 	}
 
@@ -667,16 +745,14 @@
 			}));
 
 		// Stage forms (stage-attached, = form buttons)
-		const stageFormActions: StageAction[] = builderState
-			.getFormsForStage(stageId)
-			.map((f) => ({
-				type: 'stage_form' as const,
-				id: f.data.id,
-				buttonLabel: f.data.visual_config?.button_label || f.data.name,
-				buttonColor: f.data.visual_config?.button_color,
-				allowed_roles: f.data.allowed_roles || [],
-				form: f.data
-			}));
+		const stageFormActions: StageAction[] = builderState.getFormsForStage(stageId).map((f) => ({
+			type: 'stage_form' as const,
+			id: f.data.id,
+			buttonLabel: f.data.visual_config?.button_label || f.data.name,
+			buttonColor: f.data.visual_config?.button_color,
+			allowed_roles: f.data.allowed_roles || [],
+			form: f.data
+		}));
 
 		// Global tools (shown at every stage)
 		const globalToolActions: StageAction[] = builderState.getGlobalEditTools().map((t) => ({
@@ -691,14 +767,16 @@
 
 		// Incoming forms (from connections targeting this stage) for the Details tab
 		const incomingForms: IncomingFormGroup[] = [];
-		const incomingConnections = builderState.visibleConnections
-			.filter((c) => c.data.to_stage_id === stageId);
+		const incomingConnections = builderState.visibleConnections.filter(
+			(c) => c.data.to_stage_id === stageId
+		);
 		for (const c of incomingConnections) {
 			const connForms = builderState.getFormsForConnection(c.data.id);
 			for (const tf of connForms) {
 				const fields = builderState.getFieldsForForm(tf.data.id).map((f) => f.data);
 				incomingForms.push({
-					connectionName: c.data.action_name || (workflowBuilderConnectionFallback?.() ?? 'Connection'),
+					connectionName:
+						c.data.action_name || (workflowBuilderConnectionFallback?.() ?? 'Connection'),
 					form: tf.data,
 					fields
 				});
@@ -750,6 +828,7 @@
 
 	// Convert global edit tools to ToolInstances for ToolBar display
 	const globalToolInstances = $derived.by((): ToolInstance[] => {
+		const formInstances: ToolInstance[] = formsToToolInstances(globalForms);
 		const editInstances: ToolInstance[] = globalEditTools.map((tool, index) => ({
 			id: tool.data.id,
 			toolType: 'edit',
@@ -758,7 +837,7 @@
 				editableFields: tool.data.editable_fields || [],
 				buttonLabel: tool.data.name
 			} satisfies EditToolConfig,
-			order: index
+			order: formInstances.length + index
 		}));
 		const globalProtocolTools = builderState.getGlobalProtocolTools();
 		const protocolInstances: ToolInstance[] = globalProtocolTools.map((tool, index) => ({
@@ -768,7 +847,7 @@
 				toolType: 'protocol' as const,
 				buttonLabel: tool.data.name
 			} satisfies ProtocolToolConfig,
-			order: editInstances.length + index
+			order: formInstances.length + editInstances.length + index
 		}));
 		const automationInstances: ToolInstance[] = automations.map((a, index) => ({
 			id: a.id,
@@ -777,16 +856,21 @@
 				toolType: 'automation' as const,
 				buttonLabel: a.name
 			} satisfies AutomationToolConfig,
-			order: editInstances.length + protocolInstances.length + index
+			order: formInstances.length + editInstances.length + protocolInstances.length + index
 		}));
 		const ft = builderState.getFieldTagForWorkflow();
-		const result: ToolInstance[] = [...editInstances, ...protocolInstances, ...automationInstances];
+		const result: ToolInstance[] = [
+			...formInstances,
+			...editInstances,
+			...protocolInstances,
+			...automationInstances
+		];
 		if (ft) {
 			result.push({
 				id: '__field_tags__',
 				toolType: 'field_tag',
 				config: { toolType: 'field_tag' } satisfies FieldTagToolConfig,
-				order: editInstances.length + automationInstances.length
+				order: result.length
 			});
 		}
 		return result;
@@ -984,19 +1068,19 @@
 		const editTools = builderState.getEditToolsForStage(stageId);
 		const protocolTools = builderState.getProtocolToolsForStage(stageId);
 
-		const form = forms.find(f => f.data.id === toolId);
+		const form = forms.find((f) => f.data.id === toolId);
 		if (form) {
 			selectionContext = createContext.form(toolId, { type: 'stage', stageId });
 			return;
 		}
 
-		const editTool = editTools.find(e => e.data.id === toolId);
+		const editTool = editTools.find((e) => e.data.id === toolId);
 		if (editTool) {
 			selectionContext = createContext.editTool(toolId, { type: 'stage', stageId });
 			return;
 		}
 
-		const protocolTool = protocolTools.find(p => p.data.id === toolId);
+		const protocolTool = protocolTools.find((p) => p.data.id === toolId);
 		if (protocolTool) {
 			openProtocolTool(toolId, { type: 'stage', stageId });
 		}
@@ -1011,19 +1095,19 @@
 		const editTools = builderState.getEditToolsForConnection(connectionId);
 		const protocolTools = builderState.getProtocolToolsForConnection(connectionId);
 
-		const form = forms.find(f => f.data.id === toolId);
+		const form = forms.find((f) => f.data.id === toolId);
 		if (form) {
 			selectionContext = createContext.form(toolId, { type: 'connection', connectionId });
 			return;
 		}
 
-		const editTool = editTools.find(e => e.data.id === toolId);
+		const editTool = editTools.find((e) => e.data.id === toolId);
 		if (editTool) {
 			selectionContext = createContext.editTool(toolId, { type: 'connection', connectionId });
 			return;
 		}
 
-		const protocolTool = protocolTools.find(p => p.data.id === toolId);
+		const protocolTool = protocolTools.find((p) => p.data.id === toolId);
 		if (protocolTool) {
 			openProtocolTool(toolId, { type: 'connection', connectionId });
 		}
@@ -1034,7 +1118,7 @@
 	 */
 	function handleAddStageToolClick(stageId: string) {
 		// Select the stage and let sidebar show tool picker
-		const node = nodes.find(n => n.id === stageId);
+		const node = nodes.find((n) => n.id === stageId);
 		if (node) {
 			selectionContext = createContext.stage(node as Node<StageData>);
 		}
@@ -1061,7 +1145,10 @@
 		builderState.updateConnection(edgeId, { allowed_roles: roleIds });
 	}
 
-	function handleEdgeSentryChange(edgeId: string, sentry: import('$lib/workflow-builder').SentryClause[]) {
+	function handleEdgeSentryChange(
+		edgeId: string,
+		sentry: import('$lib/workflow-builder').SentryClause[]
+	) {
 		builderState.updateConnection(edgeId, { sentry: sentry.length === 0 ? null : sentry });
 	}
 
@@ -1093,7 +1180,13 @@
 		builderState.updateForm(formId, { name });
 	}
 
-	function handleAddFormField(formId: string, fieldType: string, page: number, rowIndex: number, columnPosition: ColumnPosition) {
+	function handleAddFormField(
+		formId: string,
+		fieldType: string,
+		page: number,
+		rowIndex: number,
+		columnPosition: ColumnPosition
+	) {
 		// Add the field with explicit row positioning
 		builderState.addFormField(
 			formId,
@@ -1104,7 +1197,13 @@
 		);
 	}
 
-	function handleAddFormFieldRef(formId: string, fieldDefId: string, page: number, rowIndex: number, columnPosition: ColumnPosition) {
+	function handleAddFormFieldRef(
+		formId: string,
+		fieldDefId: string,
+		page: number,
+		rowIndex: number,
+		columnPosition: ColumnPosition
+	) {
 		builderState.addFormFieldRef(formId, fieldDefId, rowIndex, columnPosition, page);
 	}
 
@@ -1200,7 +1299,10 @@
 		builderState.updateForm(formId, { visual_config: config });
 	}
 
-	function handleFormLocalFieldsChange(formId: string, next: import('$lib/workflow-builder').ProtocolLocalFieldDef[]) {
+	function handleFormLocalFieldsChange(
+		formId: string,
+		next: import('$lib/workflow-builder').ProtocolLocalFieldDef[]
+	) {
 		builderState.updateForm(formId, { local_fields: next });
 	}
 
@@ -1241,7 +1343,10 @@
 	 * a redundant click. Global/region protocols have no form and still use
 	 * the dedicated region editor.
 	 */
-	function openProtocolTool(toolId: string, attach: { type: 'stage'; stageId: string } | { type: 'connection'; connectionId: string }) {
+	function openProtocolTool(
+		toolId: string,
+		attach: { type: 'stage'; stageId: string } | { type: 'connection'; connectionId: string }
+	) {
 		const tool = builderState.getProtocolToolById(toolId);
 		if (tool && tool.data.is_global) {
 			selectionContext = createContext.protocolTool(toolId, attach);
@@ -1256,7 +1361,10 @@
 
 		if (tool.data.protocol_form_id) {
 			// Open existing protocol form
-			selectionContext = createContext.form(tool.data.protocol_form_id, { type: 'stage', stageId: tool.data.stage_id?.[0] || '' });
+			selectionContext = createContext.form(tool.data.protocol_form_id, {
+				type: 'stage',
+				stageId: tool.data.stage_id?.[0] || ''
+			});
 		} else {
 			// Create a new form and link it to the protocol tool
 			const stageId = tool.data.stage_id?.[0];
@@ -1285,6 +1393,10 @@
 	}
 
 	function handleToolVisualConfigChange(toolId: string, config: VisualConfig) {
+		if (builderState.getGlobalForms().some((f) => f.data.id === toolId)) {
+			builderState.updateForm(toolId, { visual_config: config });
+			return;
+		}
 		builderState.updateEditTool(toolId, { visual_config: config });
 	}
 
@@ -1293,21 +1405,36 @@
 		if (selectionContext.type === 'stage') {
 			// Tool on a stage
 			if (toolType === 'edit') {
-				selectionContext = createContext.editTool(toolId, { type: 'stage', stageId: selectionContext.stageId });
+				selectionContext = createContext.editTool(toolId, {
+					type: 'stage',
+					stageId: selectionContext.stageId
+				});
 			} else if (toolType === 'form') {
-				selectionContext = createContext.form(toolId, { type: 'stage', stageId: selectionContext.stageId });
+				selectionContext = createContext.form(toolId, {
+					type: 'stage',
+					stageId: selectionContext.stageId
+				});
 			} else if (toolType === 'protocol') {
 				openProtocolTool(toolId, { type: 'stage', stageId: selectionContext.stageId });
 			}
 		} else if (selectionContext.type === 'action') {
 			// Tool on a connection
 			if (toolType === 'edit') {
-				selectionContext = createContext.editTool(toolId, { type: 'connection', connectionId: selectionContext.actionId });
+				selectionContext = createContext.editTool(toolId, {
+					type: 'connection',
+					connectionId: selectionContext.actionId
+				});
 			} else if (toolType === 'form') {
-				selectionContext = createContext.form(toolId, { type: 'connection', connectionId: selectionContext.actionId });
+				selectionContext = createContext.form(toolId, {
+					type: 'connection',
+					connectionId: selectionContext.actionId
+				});
 			} else if (toolType === 'protocol') {
 				openProtocolTool(toolId, { type: 'connection', connectionId: selectionContext.actionId });
 			}
+		} else if (selectionContext.type === 'globalTools') {
+			// Tool listed in the Global Tools panel
+			handleSelectGlobalTool(toolId);
 		}
 	}
 
@@ -1329,7 +1456,10 @@
 	}
 
 	function handleAddGlobalTool(toolType: string) {
-		if (toolType === 'edit') {
+		if (toolType === 'form') {
+			const form = builderState.addForm({ isGlobal: true });
+			selectionContext = createContext.form(form.id, { type: 'global' });
+		} else if (toolType === 'edit') {
 			const tool = builderState.addGlobalEditTool('form_fields');
 			selectionContext = createContext.editTool(tool.id, { type: 'global' });
 		} else if (toolType === 'protocol') {
@@ -1349,7 +1479,14 @@
 			selectionContext = createContext.fieldTags();
 			return;
 		}
-		// Check if it's an automation, protocol tool, or edit tool
+		// Check if it's a global form, automation, protocol tool, or edit tool
+		const isGlobalForm = builderState
+			.getGlobalForms()
+			.some((f) => f.data.id === toolId);
+		if (isGlobalForm) {
+			selectionContext = createContext.form(toolId, { type: 'global' });
+			return;
+		}
 		const isAutomation = builderState.getAutomationById(toolId);
 		if (isAutomation) {
 			selectionContext = createContext.automation(toolId);
@@ -1368,7 +1505,9 @@
 	}
 
 	function handleDeleteGlobalTool(toolType: string, toolId: string) {
-		if (toolType === 'edit') {
+		if (toolType === 'form') {
+			builderState.deleteForm(toolId);
+		} else if (toolType === 'edit') {
 			builderState.deleteEditTool(toolId);
 		} else if (toolType === 'protocol') {
 			builderState.deleteProtocolTool(toolId);
@@ -1376,6 +1515,9 @@
 			builderState.deleteFieldTag();
 		}
 		// If we were viewing this tool, go back to global tools panel
+		if (selectionContext.type === 'form' && selectionContext.formId === toolId) {
+			selectionContext = createContext.globalTools();
+		}
 		if (selectionContext.type === 'editTool' && selectionContext.editToolId === toolId) {
 			selectionContext = createContext.globalTools();
 		}
@@ -1431,7 +1573,10 @@
 		builderState.updateAutomation(automationId, { steps });
 	}
 
-	function handleAutomationExecutionModeChange(automationId: string, execution_mode: ExecutionMode) {
+	function handleAutomationExecutionModeChange(
+		automationId: string,
+		execution_mode: ExecutionMode
+	) {
 		builderState.updateAutomation(automationId, { execution_mode });
 	}
 
@@ -1446,6 +1591,9 @@
 
 	// Currently selected global tool ID (for ToolBar highlighting)
 	const selectedGlobalToolId = $derived.by(() => {
+		if (selectionContext.type === 'form' && selectionContext.attachedTo.type === 'global') {
+			return selectionContext.formId;
+		}
 		if (selectionContext.type === 'editTool' && selectionContext.attachedTo.type === 'global') {
 			return selectionContext.editToolId;
 		}
@@ -1467,7 +1615,7 @@
 	}
 
 	function handleCreateStageAndConnect(fromStageId: string) {
-		const sourceNode = nodes.find(n => n.id === fromStageId);
+		const sourceNode = nodes.find((n) => n.id === fromStageId);
 		if (!sourceNode) {
 			const newStage = builderState.addStage('intermediate');
 			builderState.addConnection(fromStageId, newStage.id);
@@ -1476,7 +1624,7 @@
 
 		// Stack vertically when multiple stages branch from the same source
 		const existingOutgoing = edges.filter(
-			e => e.source === fromStageId && !e.data?.isEntry
+			(e) => e.source === fromStageId && !e.data?.isEntry
 		).length;
 
 		const position = {
@@ -1494,10 +1642,8 @@
 	function handleHighlightStageTool(toolId: string | null) {
 		const stageId = selectionContext.type === 'stage' ? selectionContext.stageId : null;
 		if (!stageId) return;
-		nodes = nodes.map(n =>
-			n.id === stageId
-				? { ...n, data: { ...n.data, selectedToolId: toolId } }
-				: n
+		nodes = nodes.map((n) =>
+			n.id === stageId ? { ...n, data: { ...n.data, selectedToolId: toolId } } : n
 		);
 	}
 
@@ -1593,9 +1739,15 @@
 	function handleSelectToolFromPreview(toolType: string, toolId: string) {
 		if (selectionContext.type === 'stage') {
 			if (toolType === 'form') {
-				selectionContext = createContext.form(toolId, { type: 'stage', stageId: selectionContext.stageId });
+				selectionContext = createContext.form(toolId, {
+					type: 'stage',
+					stageId: selectionContext.stageId
+				});
 			} else if (toolType === 'edit') {
-				selectionContext = createContext.editTool(toolId, { type: 'stage', stageId: selectionContext.stageId });
+				selectionContext = createContext.editTool(toolId, {
+					type: 'stage',
+					stageId: selectionContext.stageId
+				});
 			} else if (toolType === 'protocol') {
 				openProtocolTool(toolId, { type: 'stage', stageId: selectionContext.stageId });
 			}
@@ -1614,20 +1766,39 @@
 				disabled={isSaving || !builderState.isDirty}
 			>
 				{#if isSaving}
-					<Loader2 class="h-4 w-4 mr-2 animate-spin" />
+					<Loader2 class="mr-2 h-4 w-4 animate-spin" />
 					{workflowBuilderSaving?.() ?? 'Saving...'}
 				{:else}
-					<Save class="h-4 w-4 mr-2" />
+					<Save class="mr-2 h-4 w-4" />
 					{(workflowBuilderSave?.() ?? 'Save') + (builderState.isDirty ? '*' : '')}
 				{/if}
 			</Button>
+
+			<div class="view-toggle">
+				<Button
+					variant={builderView === 'canvas' ? 'default' : 'outline'}
+					size="sm"
+					onclick={() => (builderView = 'canvas')}
+				>
+					<Workflow class="mr-2 h-4 w-4" />
+					{permMatrixCanvasLabel?.() ?? 'Workflow'}
+				</Button>
+				<Button
+					variant={builderView === 'permissions' ? 'default' : 'outline'}
+					size="sm"
+					onclick={() => (builderView = 'permissions')}
+				>
+					<ShieldCheck class="mr-2 h-4 w-4" />
+					{permMatrixViewLabel?.() ?? 'Permissions'}
+				</Button>
+			</div>
 		</div>
 
 		<div class="toolbar-right">
 			<Input
 				value={builderState.workflowName}
 				oninput={(e) => (builderState.workflowName = e.currentTarget.value)}
-				class="w-64 h-8"
+				class="h-8 w-64"
 				placeholder={workflowBuilderWorkflowNamePlaceholder?.() ?? 'Workflow name...'}
 			/>
 			<Button variant="ghost" size="icon" class="h-8 w-8" title={workflowBuilderHelp?.() ?? 'Help'}>
@@ -1637,166 +1808,183 @@
 	</div>
 
 	<div class="builder-content">
-		<!-- Context Sidebar (left) -->
-		<ContextSidebar
-			context={selectionContext}
-			{hasStartStage}
-			onAddField={handleAddField}
-			onEditStage={handleEditStage}
-			onDeleteStage={handleDeleteStage}
-			onAddStageTool={handleAddStageTool}
-			onChangeActionType={handleChangeActionType}
-			onEditAction={handleEditAction}
-			onDeleteAction={handleDeleteAction}
-			onAddProgressTool={handleAddProgressTool}
-			{allowedConnectionToolTypes}
-			onToggleRequired={handleToggleRequired}
-			onMoveFieldUp={handleMoveFieldUp}
-			onMoveFieldDown={handleMoveFieldDown}
-			onDuplicateField={handleDuplicateField}
-			onEditField={handleEditField}
-			onDeleteField={handleDeleteField}
-			onAddGlobalTool={handleAddGlobalTool}
-		/>
+		{#if builderView === 'permissions'}
+			<PermissionsMatrixView
+				{builderState}
+				roles={(data.roles ?? []).map((r) => ({
+					id: String(r.id),
+					name: String(r.name ?? '')
+				}))}
+				projectId={String(data.workflow.project_id)}
+			/>
+		{:else}
+			<!-- Context Sidebar (left) -->
+			<ContextSidebar
+				context={selectionContext}
+				{hasStartStage}
+				onAddField={handleAddField}
+				onEditStage={handleEditStage}
+				onDeleteStage={handleDeleteStage}
+				onAddStageTool={handleAddStageTool}
+				onChangeActionType={handleChangeActionType}
+				onEditAction={handleEditAction}
+				onDeleteAction={handleDeleteAction}
+				onAddProgressTool={handleAddProgressTool}
+				{allowedConnectionToolTypes}
+				onToggleRequired={handleToggleRequired}
+				onMoveFieldUp={handleMoveFieldUp}
+				onMoveFieldDown={handleMoveFieldDown}
+				onDuplicateField={handleDuplicateField}
+				onEditField={handleEditField}
+				onDeleteField={handleDeleteField}
+				onAddGlobalTool={handleAddGlobalTool}
+			/>
 
-		<!-- Canvas (main area) -->
-		<div class="canvas-container">
-			<SvelteFlowProvider>
-				<WorkflowCanvas
-					bind:nodes
-					bind:edges
-					{nodeTypes}
-					{edgeTypes}
-					{hasStartStage}
-					{connectingFrom}
-					{onPaneClick}
-					{onNodeClick}
-					{onEdgeClick}
-					onNodeContextMenu={handleNodeContextMenu}
-					{onNodeAdded}
-					onConnect={handleConnect}
-				/>
-			</SvelteFlowProvider>
+			<!-- Canvas (main area) -->
+			<div class="canvas-container">
+				<SvelteFlowProvider>
+					<WorkflowCanvas
+						bind:nodes
+						bind:edges
+						{nodeTypes}
+						{edgeTypes}
+						{hasStartStage}
+						{connectingFrom}
+						{onPaneClick}
+						{onNodeClick}
+						{onEdgeClick}
+						onNodeContextMenu={handleNodeContextMenu}
+						{onNodeAdded}
+						onConnect={handleConnect}
+					/>
+				</SvelteFlowProvider>
 
-			<!-- Global Tools - same style as stage/edge toolbars -->
-			<div class="global-tools-bar">
-				<button class="global-tools-label" onclick={handleGlobalToolsLabelClick}>{workflowBuilderGlobalTools?.() ?? 'Global Tools'}</button>
-				<ToolBar
-					tools={globalToolInstances}
-					selectedToolId={selectedGlobalToolId}
-					onSelectTool={handleSelectGlobalTool}
-					onAddTool={handleOpenGlobalToolPicker}
-				/>
-				<button
-					class="global-tools-label"
-					onclick={() => (selectionContext = createContext.fieldLibrary())}
-					title="Workflow-scoped field definitions"
-				>
-					Fields
-				</button>
+				<!-- Global Tools - same style as stage/edge toolbars -->
+				<div class="global-tools-bar">
+					<button class="global-tools-label" onclick={handleGlobalToolsLabelClick}
+						>{workflowBuilderGlobalTools?.() ?? 'Global Tools'}</button
+					>
+					<ToolBar
+						tools={globalToolInstances}
+						selectedToolId={selectedGlobalToolId}
+						onSelectTool={handleSelectGlobalTool}
+						onAddTool={handleOpenGlobalToolPicker}
+					/>
+					<button
+						class="global-tools-label"
+						onclick={() => (selectionContext = createContext.fieldLibrary())}
+						title="Workflow-scoped field definitions"
+					>
+						Fields
+					</button>
+				</div>
 			</div>
-		</div>
 
-		<!-- Right Sidebar (context-aware: PropertyView when selected, PreviewView otherwise) -->
-		<RightSidebar
-			context={selectionContext}
-			workflowName={builderState.workflowName}
-			{nodes}
-			{edges}
-			roles={data.roles}
-			{selectedForm}
-			{formFields}
-			{ancestorFields}
-			{selectedEditTool}
-			{editToolAncestorFields}
-			{selectedProtocolTool}
-			{protocolToolAncestorFields}
-			{protocolFormFieldCount}
-			{stageEditTools}
-			{connectionForms}
-			{connectionEditTools}
-			{connectionProtocolTools}
-			globalEditTools={globalEditTools.map(t => t.data)}
-			{automations}
-			{selectedAutomation}
-			{automationStages}
-			{automationFieldOptions}
-			{fieldTagMappings}
-			{fieldTagAllFormFields}
-			onFieldTagMappingChange={handleFieldTagMappingChange}
-			onFieldTagConfigChange={handleFieldTagConfigChange}
-			onFieldTagDelete={handleDeleteFieldTags}
-			{stagePreviewData}
-			onStageRename={handleStageRename}
-			onStageDelete={handleDeleteStage}
-			onEdgeRename={handleEdgeRename}
-			onEdgeDelete={handleDeleteAction}
-			onEdgeRolesChange={handleEdgeRolesChange}
-			onEdgeSettingsChange={handleEdgeSettingsChange}
-			onEdgeSentryChange={handleEdgeSentryChange}
-			fieldDefs={data.fieldDefs}
-			onSelectAction={handleSelectAction}
-			onSelectStage={handleSelectStage}
-			onToolRolesChange={handleToolRolesChange}
-			onToolVisualConfigChange={handleToolVisualConfigChange}
-			onSelectTool={handleSelectToolFromSidebar}
-			onDeleteTool={handleDeleteToolFromSidebar}
-			onCreateRole={createRole}
-			onFormNameChange={handleFormNameChange}
-			onAddFormField={handleAddFormField}
-			onAddFormFieldRef={handleAddFormFieldRef}
-			onFormFieldUpdate={handleFormFieldUpdate}
-			onFormFieldDelete={handleFormFieldDelete}
-			onFormFieldsReorder={handleFormFieldsReorder}
-			onFormAddPage={handleFormAddPage}
-			onFormDeletePage={handleFormDeletePage}
-			onFormPageTitleChange={handleFormPageTitleChange}
-			onFormPageDescriptionChange={handleFormPageDescriptionChange}
-			onFormClose={handleFormClose}
-			onFormRolesChange={handleFormRolesChange}
-			onFormVisualConfigChange={handleFormVisualConfigChange}
-			onFormLocalFieldsChange={handleFormLocalFieldsChange}
-			allProtocolTools={builderState.visibleProtocolTools.map((p) => p.data)}
-			onEditToolNameChange={handleEditToolNameChange}
-			onEditToolFieldsChange={handleEditToolFieldsChange}
-			onEditToolEditModeChange={handleEditToolEditModeChange}
-			onEditToolDelete={handleEditToolDelete}
-			onEditToolClose={handleEditToolClose}
-			allStages={builderState.visibleStages.map(s => s.data)}
-			onProtocolToolNameChange={handleProtocolToolNameChange}
-			onProtocolToolStageIdsChange={handleProtocolToolStageIdsChange}
-			onEditProtocolForm={handleEditProtocolForm}
-			onProtocolToolDelete={handleProtocolToolDelete}
-			onProtocolToolClose={handleProtocolToolClose}
-			onGlobalToolDelete={handleDeleteGlobalTool}
-			onSelectAutomation={handleSelectAutomation}
-			onAddAutomation={handleAddAutomation}
-			onToggleAutomation={handleToggleAutomation}
-			onDeleteAutomation={handleDeleteAutomation}
-			onAutomationNameChange={handleAutomationNameChange}
-			onAutomationEnabledChange={handleAutomationEnabledChange}
-			onAutomationTriggerTypeChange={handleAutomationTriggerTypeChange}
-			onAutomationTriggerConfigChange={handleAutomationTriggerConfigChange}
-			onAutomationStepsChange={handleAutomationStepsChange}
-			onAutomationExecutionModeChange={handleAutomationExecutionModeChange}
-			onAutomationClose={handleAutomationClose}
-			onAddConnection={handleAddConnectionFromPreview}
-			onAddStageTool={handleAddStageToolFromPreview}
-			onButtonLabelChange={handleButtonLabelChange}
-			onButtonColorChange={handleButtonColorChange}
-			onButtonRolesChange={handleButtonRolesChange}
-			onButtonDelete={handleButtonDelete}
-			onCreateStageAndConnect={handleCreateStageAndConnect}
-			onHighlightEdge={handleHighlightEdge}
-			onHighlightStageTool={handleHighlightStageTool}
-			onDeselect={() => (selectionContext = createContext.none())}
-			trackedFieldDefs={builderState.fieldDefs}
-			effectiveFieldDefs={builderState.effectiveFieldDefs}
-			projectWorkflows={(data.projectWorkflows ?? []).map((w: any) => ({ id: String(w.id), name: String(w.name ?? '') }))}
-			onFieldDefAdd={() => builderState.addFieldDef().id}
-			onFieldDefUpdate={(id, updates) => builderState.updateFieldDef(id, updates)}
-			onFieldDefDelete={(id) => builderState.deleteFieldDef(id)}
-		/>
+			<!-- Right Sidebar (context-aware: PropertyView when selected, PreviewView otherwise) -->
+			<RightSidebar
+				context={selectionContext}
+				workflowName={builderState.workflowName}
+				{nodes}
+				{edges}
+				roles={data.roles}
+				{selectedForm}
+				{formFields}
+				{ancestorFields}
+				{selectedEditTool}
+				{editToolAncestorFields}
+				{selectedProtocolTool}
+				{protocolToolAncestorFields}
+				{protocolFormFieldCount}
+				{stageEditTools}
+				{connectionForms}
+				{connectionEditTools}
+				{connectionProtocolTools}
+				globalEditTools={globalEditTools.map((t) => t.data)}
+				globalForms={globalForms.map((t) => t.data)}
+				{automations}
+				{selectedAutomation}
+				{automationStages}
+				{automationFieldOptions}
+				{fieldTagMappings}
+				{fieldTagAllFormFields}
+				onFieldTagMappingChange={handleFieldTagMappingChange}
+				onFieldTagConfigChange={handleFieldTagConfigChange}
+				onFieldTagDelete={handleDeleteFieldTags}
+				{stagePreviewData}
+				onStageRename={handleStageRename}
+				onStageDelete={handleDeleteStage}
+				onEdgeRename={handleEdgeRename}
+				onEdgeDelete={handleDeleteAction}
+				onEdgeRolesChange={handleEdgeRolesChange}
+				onEdgeSettingsChange={handleEdgeSettingsChange}
+				onEdgeSentryChange={handleEdgeSentryChange}
+				fieldDefs={data.fieldDefs}
+				onSelectAction={handleSelectAction}
+				onSelectStage={handleSelectStage}
+				onToolRolesChange={handleToolRolesChange}
+				onToolVisualConfigChange={handleToolVisualConfigChange}
+				onSelectTool={handleSelectToolFromSidebar}
+				onDeleteTool={handleDeleteToolFromSidebar}
+				onCreateRole={createRole}
+				onFormNameChange={handleFormNameChange}
+				onAddFormField={handleAddFormField}
+				onAddFormFieldRef={handleAddFormFieldRef}
+				onFormFieldUpdate={handleFormFieldUpdate}
+				onFormFieldDelete={handleFormFieldDelete}
+				onFormFieldsReorder={handleFormFieldsReorder}
+				onFormAddPage={handleFormAddPage}
+				onFormDeletePage={handleFormDeletePage}
+				onFormPageTitleChange={handleFormPageTitleChange}
+				onFormPageDescriptionChange={handleFormPageDescriptionChange}
+				onFormClose={handleFormClose}
+				onFormRolesChange={handleFormRolesChange}
+				onFormVisualConfigChange={handleFormVisualConfigChange}
+				onFormLocalFieldsChange={handleFormLocalFieldsChange}
+				allProtocolTools={builderState.visibleProtocolTools.map((p) => p.data)}
+				onEditToolNameChange={handleEditToolNameChange}
+				onEditToolFieldsChange={handleEditToolFieldsChange}
+				onEditToolEditModeChange={handleEditToolEditModeChange}
+				onEditToolDelete={handleEditToolDelete}
+				onEditToolClose={handleEditToolClose}
+				allStages={builderState.visibleStages.map((s) => s.data)}
+				onProtocolToolNameChange={handleProtocolToolNameChange}
+				onProtocolToolStageIdsChange={handleProtocolToolStageIdsChange}
+				onEditProtocolForm={handleEditProtocolForm}
+				onProtocolToolDelete={handleProtocolToolDelete}
+				onProtocolToolClose={handleProtocolToolClose}
+				onGlobalToolDelete={handleDeleteGlobalTool}
+				onSelectAutomation={handleSelectAutomation}
+				onAddAutomation={handleAddAutomation}
+				onToggleAutomation={handleToggleAutomation}
+				onDeleteAutomation={handleDeleteAutomation}
+				onAutomationNameChange={handleAutomationNameChange}
+				onAutomationEnabledChange={handleAutomationEnabledChange}
+				onAutomationTriggerTypeChange={handleAutomationTriggerTypeChange}
+				onAutomationTriggerConfigChange={handleAutomationTriggerConfigChange}
+				onAutomationStepsChange={handleAutomationStepsChange}
+				onAutomationExecutionModeChange={handleAutomationExecutionModeChange}
+				onAutomationClose={handleAutomationClose}
+				onAddConnection={handleAddConnectionFromPreview}
+				onAddStageTool={handleAddStageToolFromPreview}
+				onButtonLabelChange={handleButtonLabelChange}
+				onButtonColorChange={handleButtonColorChange}
+				onButtonRolesChange={handleButtonRolesChange}
+				onButtonDelete={handleButtonDelete}
+				onCreateStageAndConnect={handleCreateStageAndConnect}
+				onHighlightEdge={handleHighlightEdge}
+				onHighlightStageTool={handleHighlightStageTool}
+				onDeselect={() => (selectionContext = createContext.none())}
+				trackedFieldDefs={builderState.fieldDefs}
+				effectiveFieldDefs={builderState.effectiveFieldDefs}
+				projectWorkflows={(data.projectWorkflows ?? []).map((w: any) => ({
+					id: String(w.id),
+					name: String(w.name ?? '')
+				}))}
+				onFieldDefAdd={() => builderState.addFieldDef().id}
+				onFieldDefUpdate={(id, updates) => builderState.updateFieldDef(id, updates)}
+				onFieldDefDelete={(id) => builderState.deleteFieldDef(id)}
+			/>
+		{/if}
 	</div>
 </div>
 
@@ -1831,6 +2019,12 @@
 		align-items: center;
 		gap: 0.5rem;
 		flex-wrap: wrap;
+	}
+
+	.view-toggle {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
 	}
 
 	.toolbar-right {

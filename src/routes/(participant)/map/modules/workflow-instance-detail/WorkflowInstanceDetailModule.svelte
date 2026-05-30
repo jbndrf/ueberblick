@@ -29,9 +29,6 @@
 		participantWorkflowInstanceDetailNoLocation,
 		participantWorkflowInstanceDetailTabActivity,
 		participantWorkflowInstanceDetailTabData,
-		participantWorkflowInstanceDetailTabProtocols,
-		participantWorkflowInstanceDetailProtocolHistoryEmpty,
-		participantWorkflowInstanceDetailProtocolAutologSummary,
 		participantWorkflowInstanceDetailUpdatedSuffix,
 		participantWorkflowInstanceDetailLoadOlder,
 		participantWorkflowInstanceDetailLoadOlderOfflineHint,
@@ -45,9 +42,15 @@
 		type WorkflowConnection,
 		type ToolQueueItem,
 		type ToolEdit,
+		type ToolForm,
 		type ToolProtocol,
 		type ToolUsageRecord
 	} from './state.svelte';
+	import {
+		buildActivitySections,
+		getEntryLabel as buildEntryLabel,
+		type ActivitySection
+	} from '$lib/utils/activity-sections';
 	import type { FieldValueCache } from '$lib/participant-state/field-value-cache.svelte';
 	import type { FieldDef } from '$lib/participant-state/types';
 	import type { WorkflowInstanceSelection } from '../types';
@@ -119,6 +122,10 @@
 	/** Guards the save handler against double-submits. */
 	let isEditSaving = $state(false);
 	let activeProtocolTool = $state<ToolProtocol | null>(null);
+	/** Stage-attached form opened ad-hoc from the action bar. Save persists field
+	 *  values on the current stage and logs a form_fill audit row but does NOT
+	 *  change current_stage_id. */
+	let activeStageForm = $state<ToolForm | null>(null);
 	let isLocationPickerActive = $state(false);
 	let activeLocationEditTool = $state<ToolEdit | null>(null);
 	let geometryDrawMode = $state<'line' | 'polygon' | null>(null);
@@ -129,6 +136,32 @@
 	// Conflict resolution state
 	let pendingConflicts = $state<SyncConflict[]>([]);
 	let showConflictTool = $state(false);
+
+	// Action row scroll-fade state
+	let actionRowEl = $state<HTMLDivElement | null>(null);
+	let editRowEl = $state<HTMLDivElement | null>(null);
+	let actionRowScrolledStart = $state(false);
+	let actionRowAtEnd = $state(true);
+	let editRowScrolledStart = $state(false);
+	let editRowAtEnd = $state(true);
+
+	function updateRowFade(el: HTMLDivElement | null, which: 'action' | 'edit') {
+		if (!el) return;
+		const start = el.scrollLeft > 4;
+		const end = el.scrollLeft + el.clientWidth >= el.scrollWidth - 1;
+		if (which === 'action') {
+			actionRowScrolledStart = start;
+			actionRowAtEnd = end;
+		} else {
+			editRowScrolledStart = start;
+			editRowAtEnd = end;
+		}
+	}
+
+	$effect(() => {
+		if (actionRowEl) updateRowFade(actionRowEl, 'action');
+		if (editRowEl) updateRowFade(editRowEl, 'edit');
+	});
 
 	// ==========================================================================
 	// Field-value write helper (unified across form / edit / protocol)
@@ -277,25 +310,8 @@
 
 	const tabs = [
 		{ id: 'activity', label: participantWorkflowInstanceDetailTabActivity?.() ?? 'Activity' },
-		{ id: 'data', label: participantWorkflowInstanceDetailTabData?.() ?? 'Data' },
-		{ id: 'protocols', label: participantWorkflowInstanceDetailTabProtocols?.() ?? 'Protocols' }
+		{ id: 'data', label: participantWorkflowInstanceDetailTabData?.() ?? 'Data' }
 	];
-
-	let expandedProtocolEntry = $state<string | null>(null);
-	function toggleProtocolEntry(id: string) {
-		expandedProtocolEntry = expandedProtocolEntry === id ? null : id;
-	}
-	function formatTimestamp(iso: string): string {
-		if (!iso) return '';
-		const d = new Date(iso);
-		if (Number.isNaN(d.getTime())) return iso;
-		return d.toLocaleString();
-	}
-	function renderProtocolValue(v: unknown): string {
-		if (v === null || v === undefined || v === '') return '—';
-		if (typeof v === 'object') return JSON.stringify(v);
-		return String(v);
-	}
 
 	// ==========================================================================
 	// Computed Values
@@ -373,6 +389,15 @@
 			onClick: () => handleEditToolClick(tool)
 		}));
 
+		// Stage-attached form actions (open form, save, no transition)
+		const stageFormActions = detailState.availableStageForms.map(form => ({
+			id: `stage-form-${form.id}`,
+			label: (form.visual_config?.button_label as string | undefined) || form.name,
+			color: form.visual_config?.button_color as string | undefined,
+			disabled: false,
+			onClick: () => handleStageFormClick(form)
+		}));
+
 		// Stage protocol tool actions
 		const currentStageId = detailState.instance?.current_stage_id as string;
 		const protocolActions = currentStageId
@@ -385,7 +410,7 @@
 			}))
 			: [];
 
-		return [...editActions, ...protocolActions, ...connectionActions];
+		return [...editActions, ...stageFormActions, ...protocolActions, ...connectionActions];
 	});
 
 	// ==========================================================================
@@ -431,146 +456,38 @@
 	// Activity: group entries into stage sections
 	// ==========================================================================
 
-	interface ActivitySection {
-		stageId: string;
-		stageName: string;
-		/** 1-based ordinal across visits to the same stage_id. */
-		visitIndex: number;
-		/** Total visits to the same stage_id across the whole timeline. */
-		visitTotal: number;
-		transitionEntry: ToolUsageRecord | null;
-		entries: ToolUsageRecord[];
-	}
-
-	// Chronological stage-visit segmentation. Circular workflows visit the same
-	// stage multiple times — each visit is its own segment so value rows
-	// recorded during that visit appear under the correct visit, not collapsed
-	// into a single per-stage bucket. Entries are bucketed by their own
-	// `stage_id` (which is the destination for form_fills authored while
-	// advancing) rather than strictly by executed_at, because form_fill is
-	// written a few ms BEFORE the stage_transition it accompanies — using
-	// strict time-window matching would mis-attribute it to the previous stage.
-	const activitySections = $derived.by((): ActivitySection[] => {
-		if (!detailState || detailState.toolUsageHistory.length === 0) return [];
-
-		const ascending = [...detailState.toolUsageHistory].sort((a, b) =>
-			a.executed_at.localeCompare(b.executed_at)
-		);
-
-		type Segment = {
-			stageId: string;
-			openedAt: string;
-			transition: ToolUsageRecord | null;
-			entries: ToolUsageRecord[];
-		};
-		const segments: Segment[] = [];
-
-		// Initial segment. Resolve its stage_id from the first transition's
-		// from_stage_id if available; otherwise fall back to the earliest
-		// non-transition entry's stage_id; otherwise the instance's current
-		// stage.
-		const firstTransition = ascending.find((e) => e.metadata?.action === 'stage_transition');
-		const initialStageId =
-			(firstTransition?.metadata?.from_stage_id as string | undefined) ||
-			(ascending.find((e) => e.metadata?.action !== 'stage_transition')?.stage_id as string | undefined) ||
-			((detailState.instance?.current_stage_id as string | undefined) ?? '');
-		segments.push({
-			stageId: initialStageId,
-			openedAt: (ascending[0]?.executed_at ?? new Date(0).toISOString()),
-			transition: null,
-			entries: []
-		});
-
-		for (const entry of ascending) {
-			if (entry.metadata?.action === 'stage_transition') {
-				const toStage =
-					(entry.metadata.to_stage_id as string | undefined) ?? (entry.stage_id as string);
-				if (!toStage) continue;
-				segments.push({ stageId: toStage, openedAt: entry.executed_at, transition: entry, entries: [] });
-			}
-		}
-
-		// Assign each non-transition entry to the segment whose stage_id matches
-		// AND whose openedAt is closest to (but at most slightly later than)
-		// the entry's executed_at. This handles form_fill-stamped-with-to-stage
-		// written just before its transition.
-		for (const entry of ascending) {
-			if (entry.metadata?.action === 'stage_transition') continue;
-			const entryStage = entry.stage_id as string | undefined;
-			if (!entryStage) continue;
-			const candidates = segments.filter((s) => s.stageId === entryStage);
-			let target: Segment | null = null;
-			if (candidates.length === 1) {
-				target = candidates[0];
-			} else if (candidates.length > 1) {
-				// Prefer the segment whose openedAt is the latest value still
-				// <= entry.executed_at + 5s (small skew tolerance for form_fill
-				// written just before its transition).
-				const SKEW_MS = 5_000;
-				const entryT = Date.parse(entry.executed_at);
-				let best: Segment | null = null;
-				let bestDelta = Infinity;
-				for (const c of candidates) {
-					const openedT = Date.parse(c.openedAt);
-					if (openedT - entryT > SKEW_MS) continue; // segment opens too far in the future
-					const delta = Math.abs(entryT - openedT);
-					if (delta < bestDelta) { best = c; bestDelta = delta; }
-				}
-				target = best ?? candidates[candidates.length - 1];
-			}
-			if (target) target.entries.push(entry);
-		}
-
-		const filtered = segments.filter((s) => s.transition || s.entries.length > 0);
-
-		const totalsByStage = new Map<string, number>();
-		for (const s of filtered) totalsByStage.set(s.stageId, (totalsByStage.get(s.stageId) ?? 0) + 1);
-		const seenByStage = new Map<string, number>();
-
-		const sections: ActivitySection[] = filtered.map((s) => {
-			const idx = (seenByStage.get(s.stageId) ?? 0) + 1;
-			seenByStage.set(s.stageId, idx);
-			return {
-				stageId: s.stageId,
-				stageName: getStageName(s.stageId) || s.stageId,
-				visitIndex: idx,
-				visitTotal: totalsByStage.get(s.stageId) ?? 1,
-				transitionEntry: s.transition,
-				// Newest-first within a segment, matching the previous UX.
-				entries: [...s.entries].sort((a, b) => b.executed_at.localeCompare(a.executed_at))
-			};
-		});
-
-		sections.reverse();
-		return sections;
-	});
+	// Stage-grouped activity feed — logic in $lib/utils/activity-sections.
+	const activitySections = $derived<ActivitySection[]>(
+		detailState
+			? buildActivitySections(
+					detailState.toolUsageHistory,
+					(detailState.instance?.current_stage_id as string | undefined) ?? '',
+					getStageName
+				)
+			: []
+	);
 
 	function getEntryLabel(metadata: ToolUsageRecord['metadata']): string {
-		if (!metadata?.action) return (participantWorkflowInstanceDetailEntryAction?.() ?? 'Action');
-		switch (metadata.action) {
-			case 'instance_created':
-				return (participantWorkflowInstanceDetailEntryCreated?.() ?? 'Created');
-			case 'form_fill':
-				return (participantWorkflowInstanceDetailEntryDataRecorded?.() ?? 'Data recorded');
-			case 'edit':
-			case 'admin_edit': {
-				if (metadata.changes?.length === 1) {
-					const fieldDef = detailState?.formFields.find(f => f.id === metadata.changes![0].field_key);
-					return `${fieldDef?.field_label || (participantWorkflowInstanceDetailFieldFallback?.() ?? 'Field')} ${(participantWorkflowInstanceDetailUpdatedSuffix?.() ?? 'updated')}`;
-				}
-				return metadata.action === 'admin_edit'
-					? `${(participantWorkflowInstanceDetailAdminUpdated?.() ?? 'Admin updated')} ${metadata.changes?.length || ''} ${(participantWorkflowInstanceDetailFieldsNoun?.() ?? 'fields')}`
-					: `${metadata.changes?.length || ''} ${(participantWorkflowInstanceDetailFieldsUpdated?.() ?? 'fields updated')}`;
+		return buildEntryLabel(metadata, {
+			resolveFieldLabel: (key) =>
+				detailState?.formFields.find((f) => f.id === key)?.field_label,
+			t: {
+				action: participantWorkflowInstanceDetailEntryAction?.() ?? 'Action',
+				created: participantWorkflowInstanceDetailEntryCreated?.() ?? 'Created',
+				dataRecorded: participantWorkflowInstanceDetailEntryDataRecorded?.() ?? 'Data recorded',
+				fieldFallback: participantWorkflowInstanceDetailFieldFallback?.() ?? 'Field',
+				updatedSuffix: participantWorkflowInstanceDetailUpdatedSuffix?.() ?? 'updated',
+				adminUpdated: participantWorkflowInstanceDetailAdminUpdated?.() ?? 'Admin updated',
+				fieldsNoun: participantWorkflowInstanceDetailFieldsNoun?.() ?? 'fields',
+				fieldsUpdated: participantWorkflowInstanceDetailFieldsUpdated?.() ?? 'fields updated',
+				locationUpdated:
+					participantWorkflowInstanceDetailEntryLocationUpdated?.() ?? 'Location updated',
+				inspectionRecorded:
+					participantWorkflowInstanceDetailEntryInspectionRecorded?.() ?? 'Inspection recorded',
+				conflictResolved:
+					participantWorkflowInstanceDetailEntryConflictResolved?.() ?? 'Sync conflict resolved'
 			}
-			case 'location_edit':
-				return (participantWorkflowInstanceDetailEntryLocationUpdated?.() ?? 'Location updated');
-			case 'protocol':
-				return (participantWorkflowInstanceDetailEntryInspectionRecorded?.() ?? 'Inspection recorded');
-			case 'conflict_resolution':
-				return (participantWorkflowInstanceDetailEntryConflictResolved?.() ?? 'Sync conflict resolved');
-			default:
-				return (participantWorkflowInstanceDetailEntryAction?.() ?? 'Action');
-		}
+		});
 	}
 
 	// ==========================================================================
@@ -671,6 +588,78 @@
 	}
 
 	// ==========================================================================
+	// Stage-attached form flow (open / save / close — does NOT transition)
+	// ==========================================================================
+
+	function handleStageFormClick(form: ToolForm) {
+		activeStageForm = form;
+	}
+
+	function handleStageFormCancel() {
+		activeStageForm = null;
+	}
+
+	async function handleStageFormSubmit(formValues: Record<string, unknown>) {
+		if (!activeStageForm || !detailState || !gateway) return;
+
+		const form = activeStageForm;
+		const stageId = detailState.instance?.current_stage_id as string;
+
+		try {
+			const refDefIds = new Set(
+				detailState.formFieldRefs.filter(r => r.form_id === form.id).map(r => r.field_def_id)
+			);
+
+			const fieldEntries = Object.entries(formValues).filter(
+				([fieldId, value]) => refDefIds.has(fieldId) && isMeaningfulValue(value)
+			);
+
+			const createdFields = fieldEntries.map(([fieldId]) => ({
+				field_key: fieldId,
+				field_name: getFieldName(fieldId) || fieldId
+			}));
+
+			const toolUsage = await gateway.collection('workflow_instance_tool_usage').create({
+				instance_id: detailState.instanceId,
+				stage_id: stageId,
+				executed_by: gateway.participantId,
+				executed_at: new Date().toISOString(),
+				metadata: {
+					action: 'form_fill',
+					stage_name: getStageName(stageId) || stageId,
+					created_fields: createdFields
+				}
+			}) as { id: string };
+
+			for (const [fieldId, value] of fieldEntries) {
+				const def = detailState.fieldDefsById.get(fieldId);
+				if (!def) continue;
+				if (Array.isArray(value) && value.length > 0 && value[0] instanceof File) {
+					for (const file of value as File[]) {
+						await writeFieldValue(def, file, {
+							instanceId: detailState.instanceId,
+							stageId,
+							toolUsageId: toolUsage.id
+						});
+					}
+				} else {
+					await writeFieldValue(def, serializeValue(value), {
+						instanceId: detailState.instanceId,
+						stageId,
+						toolUsageId: toolUsage.id
+					});
+				}
+			}
+
+			await detailState.refresh();
+			activeStageForm = null;
+		} catch (error) {
+			console.error('Failed to submit stage form:', error);
+			throw error;
+		}
+	}
+
+	// ==========================================================================
 	// Helpers: resolve IDs to human-readable names for audit trail
 	// ==========================================================================
 
@@ -718,6 +707,12 @@
 				field_key: fieldId,
 				field_name: getFieldName(fieldId) || fieldId
 			}));
+
+			// Nothing meaningful submitted — skip audit + value writes entirely.
+			if (fieldEntries.length === 0) {
+				advanceToolFlow();
+				return;
+			}
 
 			// 1. Create tool_usage record with actual data (audit trail)
 			const toolUsage = await gateway.collection('workflow_instance_tool_usage').create({
@@ -860,7 +855,9 @@
 			}
 		}
 
-		return null;
+		// Global form (no stage_id, no connection_id): attribute values to the
+		// stage the participant is currently on.
+		return (detailState.instance?.current_stage_id as string) ?? null;
 	}
 
 	// Entity lookup maps for resolving IDs in history display
@@ -1500,29 +1497,6 @@
 	error={detailState?.loadError}
 	onClose={handleClose}
 >
-	{#snippet headerActions()}
-		{#if activeEditTool}
-			<Button
-				variant="ghost"
-				size="icon"
-				onclick={handleEditCancel}
-				disabled={isEditSaving}
-				aria-label={participantEditToolCancel?.() ?? 'Cancel'}
-			>
-				<X class="w-4 h-4" />
-			</Button>
-			<Button
-				variant="ghost"
-				size="icon"
-				onclick={handleEditSave}
-				disabled={isEditSaving}
-				aria-label={participantEditToolSave?.() ?? 'Save'}
-			>
-				<Check class="w-4 h-4" />
-			</Button>
-		{/if}
-	{/snippet}
-
 	{#snippet content()}
 		<!-- Check if we're in a tool flow or edit mode -->
 		{#if activeToolFlow}
@@ -1543,6 +1517,8 @@
 					instanceId={detailState.instanceId}
 					protocolFormFields={protocolToolInFlow.protocol_form_id ? detailState.getProtocolFormFields(protocolToolInFlow.protocol_form_id) : []}
 					localFields={detailState.getProtocolLocalFields(protocolToolInFlow.protocol_form_id)}
+					pages={detailState.getProtocolFormPages(protocolToolInFlow.protocol_form_id)}
+					prefillValues={detailState.getProtocolPrefillValues(protocolToolInFlow)}
 					onSave={async (caseValues, localValues) => {
 						await saveProtocol(protocolToolInFlow, caseValues, localValues);
 						advanceToolFlow();
@@ -1550,6 +1526,15 @@
 					onCancel={handleToolFlowCancel}
 				/>
 			{/if}
+		{:else if activeStageForm && detailState}
+			<FormFillTool
+				workflowId={activeStageForm.workflow_id}
+				formId={activeStageForm.id}
+				existingFieldValues={detailState.fieldValues}
+				{participantRoleIds}
+				onSubmit={async (values) => { await handleStageFormSubmit(values); }}
+				onCancel={handleStageFormCancel}
+			/>
 		{:else if showConflictTool && pendingConflicts.length > 0 && detailState}
 			<ConflictResolutionTool
 				conflicts={pendingConflicts}
@@ -1563,6 +1548,8 @@
 				instanceId={detailState.instanceId}
 				protocolFormFields={activeProtocolTool.protocol_form_id ? detailState.getProtocolFormFields(activeProtocolTool.protocol_form_id) : []}
 				localFields={detailState.getProtocolLocalFields(activeProtocolTool.protocol_form_id)}
+				pages={detailState.getProtocolFormPages(activeProtocolTool.protocol_form_id)}
+				prefillValues={detailState.getProtocolPrefillValues(activeProtocolTool)}
 				onSave={handleProtocolSave}
 				onCancel={handleProtocolCancel}
 			/>
@@ -1585,28 +1572,82 @@
 				{/if}
 
 				<!-- Action Roll Bar -->
-				{#if actions.length > 0}
+				{#if activeEditTool}
 					<div class="mb-4">
-						<div class="flex gap-2.5 overflow-x-auto pb-2 scrollbar-thin">
-							{#each actions as action}
+						<div
+							class="action-row-fade"
+							class:is-scrolled-start={editRowScrolledStart}
+							class:is-at-end={editRowAtEnd}
+						>
+							<div
+								class="flex gap-2.5 overflow-x-auto pb-2 scrollbar-thin pr-6"
+								bind:this={editRowEl}
+								onscroll={() => updateRowFade(editRowEl, 'edit')}
+							>
 								<button
-									class="action-btn group relative flex flex-col items-center justify-center
-										min-w-[72px] max-w-[120px] min-h-[56px] px-3 py-2.5
+									class="action-btn action-btn-default group relative flex flex-col items-center justify-center
+										min-w-[72px] max-w-[104px] min-h-[56px] px-3 py-2.5
 										rounded-xl flex-shrink-0
 										transition-all duration-200 ease-out
 										hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98]
 										disabled:opacity-50 disabled:pointer-events-none"
-									class:action-btn-colored={action.color}
-									class:action-btn-default={!action.color}
-									style={action.color ? `--btn-color: ${action.color}` : undefined}
-									disabled={action.disabled}
-									onclick={action.onClick}
+									disabled={isEditSaving}
+									onclick={handleEditCancel}
 								>
 									<span class="text-xs font-semibold text-center leading-snug line-clamp-2">
-										{action.label}
+										{participantEditToolCancel?.() ?? 'Discard'}
 									</span>
 								</button>
-							{/each}
+								<button
+									class="action-btn action-btn-colored group relative flex flex-col items-center justify-center
+										min-w-[72px] max-w-[104px] min-h-[56px] px-3 py-2.5
+										rounded-xl flex-shrink-0
+										transition-all duration-200 ease-out
+										hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98]
+										disabled:opacity-50 disabled:pointer-events-none"
+									style="--btn-color: #16a34a"
+									disabled={isEditSaving}
+									onclick={handleEditSave}
+								>
+									<span class="text-xs font-semibold text-center leading-snug line-clamp-2">
+										{participantEditToolSave?.() ?? 'Save'}
+									</span>
+								</button>
+							</div>
+						</div>
+					</div>
+				{:else if actions.length > 0}
+					<div class="mb-4">
+						<div
+							class="action-row-fade"
+							class:is-scrolled-start={actionRowScrolledStart}
+							class:is-at-end={actionRowAtEnd}
+						>
+							<div
+								class="flex gap-2.5 overflow-x-auto pb-2 scrollbar-thin pr-6"
+								bind:this={actionRowEl}
+								onscroll={() => updateRowFade(actionRowEl, 'action')}
+							>
+								{#each actions as action}
+									<button
+										class="action-btn group relative flex flex-col items-center justify-center
+											min-w-[72px] max-w-[104px] min-h-[56px] px-3 py-2.5
+											rounded-xl flex-shrink-0
+											transition-all duration-200 ease-out
+											hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98]
+											disabled:opacity-50 disabled:pointer-events-none"
+										class:action-btn-colored={action.color}
+										class:action-btn-default={!action.color}
+										style={action.color ? `--btn-color: ${action.color}` : undefined}
+										disabled={action.disabled}
+										onclick={action.onClick}
+									>
+										<span class="text-xs font-semibold text-center leading-snug line-clamp-2">
+											{action.label}
+										</span>
+									</button>
+								{/each}
+							</div>
 						</div>
 					</div>
 				{/if}
@@ -1866,76 +1907,6 @@
 							{/if}
 						</div>
 					</Tabs.Content>
-
-					<Tabs.Content value="protocols" class="pt-4">
-						{@const ds = detailState}
-						{#if !ds || ds.protocolEntries.length === 0}
-							<div class="text-center py-12 text-muted-foreground">
-								<p class="text-sm">{participantWorkflowInstanceDetailProtocolHistoryEmpty?.() ?? 'No protocols recorded for this case yet.'}</p>
-							</div>
-						{:else}
-							<div class="space-y-2">
-								{#each ds.protocolEntries as entry (entry.id)}
-									{@const expanded = expandedProtocolEntry === entry.id}
-									<div class="rounded-lg border border-border bg-background">
-										<button
-											type="button"
-											class="w-full flex items-center justify-between p-3 text-left hover:bg-muted/40"
-											onclick={() => toggleProtocolEntry(entry.id)}
-										>
-											<div class="flex flex-col">
-												<span class="text-sm font-medium">
-													{entry.tool_name ?? (entry.kind === 'global_autolog' ? 'Audit log' : 'Protocol')}
-												</span>
-												<span class="text-xs text-muted-foreground">
-													{formatTimestamp(entry.recorded_at)}
-												</span>
-											</div>
-											<span class="text-xs text-muted-foreground">
-												{entry.kind === 'global_autolog' ? 'auto' : 'manual'}
-											</span>
-										</button>
-
-										{#if expanded}
-											<div class="border-t border-border p-3 space-y-3">
-												{#if entry.kind === 'global_autolog' && entry.autolog}
-													<p class="text-xs text-muted-foreground">
-														{participantWorkflowInstanceDetailProtocolAutologSummary?.({
-															count: entry.autolog.entries.length,
-															from: formatTimestamp(entry.autolog.from),
-															to: formatTimestamp(entry.autolog.to)
-														}) ?? `${entry.autolog.entries.length} audit entries between ${formatTimestamp(entry.autolog.from)} and ${formatTimestamp(entry.autolog.to)}.`}
-													</p>
-												{/if}
-
-												{#if entry.case_fields.length > 0}
-													<dl class="text-xs space-y-1">
-														{#each entry.case_fields as cf (cf.field_def_id)}
-															<div class="flex justify-between gap-3">
-																<dt class="text-muted-foreground">{cf.label}</dt>
-																<dd class="font-medium text-right break-all">{renderProtocolValue(cf.value)}</dd>
-															</div>
-														{/each}
-													</dl>
-												{/if}
-
-												{#if entry.local_fields.length > 0}
-													<dl class="text-xs space-y-1 pt-2 border-t border-border">
-														{#each entry.local_fields as lf (lf.key)}
-															<div class="flex justify-between gap-3">
-																<dt class="text-muted-foreground italic">{lf.label}</dt>
-																<dd class="font-medium text-right break-all">{renderProtocolValue(lf.value)}</dd>
-															</div>
-														{/each}
-													</dl>
-												{/if}
-											</div>
-										{/if}
-									</div>
-								{/each}
-							</div>
-						{/if}
-					</Tabs.Content>
 				</Tabs.Root>
 			</div>
 		{/if}
@@ -2049,6 +2020,50 @@
 	:global(.dark) .action-btn-colored:hover {
 		background-color: color-mix(in srgb, var(--btn-color) 95%, black);
 		filter: brightness(1.1);
+	}
+
+	/* Scrollable action row with peek + edge fade */
+	.action-row-fade {
+		/* Default: content overflows and is at start — fade right edge only. */
+		-webkit-mask-image: linear-gradient(
+			to right,
+			#000 0,
+			#000 calc(100% - 32px),
+			transparent 100%
+		);
+		mask-image: linear-gradient(
+			to right,
+			#000 0,
+			#000 calc(100% - 32px),
+			transparent 100%
+		);
+	}
+	.action-row-fade.is-scrolled-start:not(.is-at-end) {
+		/* Mid-scroll: fade both sides. */
+		-webkit-mask-image: linear-gradient(
+			to right,
+			transparent 0,
+			#000 32px,
+			#000 calc(100% - 32px),
+			transparent 100%
+		);
+		mask-image: linear-gradient(
+			to right,
+			transparent 0,
+			#000 32px,
+			#000 calc(100% - 32px),
+			transparent 100%
+		);
+	}
+	.action-row-fade.is-scrolled-start.is-at-end {
+		/* Scrolled to end: fade left only. */
+		-webkit-mask-image: linear-gradient(to right, transparent 0, #000 32px, #000 100%);
+		mask-image: linear-gradient(to right, transparent 0, #000 32px, #000 100%);
+	}
+	.action-row-fade.is-at-end:not(.is-scrolled-start) {
+		/* Content fits — no fade. */
+		-webkit-mask-image: none;
+		mask-image: none;
 	}
 
 	/* Line clamp for button text */

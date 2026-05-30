@@ -90,13 +90,13 @@ export const toolRegistry = new ToolRegistry();
 // Register Built-in Tools
 // =============================================================================
 
-// Form tool - collects data via form fields (connections only)
+// Form tool - collects data via form fields (stages, connections, or global)
 const formTool: ToolDefinition = {
 	toolType: 'form',
 	displayName: 'Form',
 	description: 'Collect data via form fields',
 	icon: FileText,
-	attachableTo: ['connection'],
+	attachableTo: ['stage', 'connection', 'global'],
 	defaultColor: '#3B82F6'
 };
 

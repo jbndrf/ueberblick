@@ -59,6 +59,7 @@
 		getRowId,
 		enableRowSelection = false,
 		onRowSelectionChange,
+		onRowClick,
 		enableShiftSelect = true,
 		globalFilterFn,
 		rowActions,
@@ -704,11 +705,22 @@
 						{#each virtualItems as virtualRow (allRows[virtualRow.index]?.id ?? virtualRow.index)}
 							{@const row = allRows[virtualRow.index]}
 							{#if row}
-								<Table.Row class="group {row.getIsSelected() ? 'bg-muted/50' : ''}" style="height: {ROW_HEIGHT}px">
+								<Table.Row
+									class="group {row.getIsSelected() ? 'bg-muted/50' : ''} {onRowClick && !editMode ? 'cursor-pointer' : ''}"
+									style="height: {ROW_HEIGHT}px"
+									onclick={() => {
+										if (onRowClick && !editMode) onRowClick(row.original);
+									}}
+								>
 									{#each row.getVisibleCells() as cell}
 										<Table.Cell
 											class="{cell.column.id === 'select' ? 'pl-6 pr-2' : cell.column.id === 'actions' ? 'pl-2 pr-6' : 'px-6'} py-4 {cell.column.id === 'select' ? 'whitespace-nowrap sticky left-0 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] bg-card group-hover:!bg-muted/50' : 'overflow-hidden'} {cell.column.id === 'actions' ? 'sticky right-0 z-10 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)] bg-card group-hover:!bg-muted/50' : ''} {(cell.column.id === 'select' || cell.column.id === 'actions') && row.getIsSelected() ? '!bg-muted/50' : ''}"
 											style={colStyle(cell.column.id)}
+											onclick={(e: MouseEvent) => {
+												if (cell.column.id === 'select' || cell.column.id === 'actions') {
+													e.stopPropagation();
+												}
+											}}
 										>
 											<FlexRender
 												content={cell.column.columnDef.cell}

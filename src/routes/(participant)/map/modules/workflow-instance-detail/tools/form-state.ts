@@ -7,6 +7,7 @@
 
 import type { ParticipantGateway } from '$lib/participant-state/gateway.svelte';
 import type { Form, FormField, FormValues, FieldError, DateFieldOptions } from '$lib/components/form-renderer/types';
+import { evaluateShowIf } from '$lib/form-engine/conditional-logic';
 
 /**
  * Returns true if the participant's roles satisfy the field def's `view_roles`
@@ -300,11 +301,17 @@ function validateField(field: FormField, value: unknown): string | null {
 	return null;
 }
 
-export function validatePage(state: FormFillState, page: number): FieldError[] {
+export function validatePage(
+	state: FormFillState,
+	page: number,
+	extraValues: Record<string, unknown> = {}
+): FieldError[] {
 	const pageFields = state.fields.filter(f => (f.page || 1) === page);
 	const newErrors: FieldError[] = [];
+	const ctx = { ...extraValues, ...state.values };
 
 	for (const field of pageFields) {
+		if (!evaluateShowIf(field.conditional_logic, ctx)) continue;
 		const value = state.values[field.id];
 		const error = validateField(field, value);
 		if (error) {
@@ -315,10 +322,15 @@ export function validatePage(state: FormFillState, page: number): FieldError[] {
 	return newErrors;
 }
 
-export function validateAll(state: FormFillState): FieldError[] {
+export function validateAll(
+	state: FormFillState,
+	extraValues: Record<string, unknown> = {}
+): FieldError[] {
 	const newErrors: FieldError[] = [];
+	const ctx = { ...extraValues, ...state.values };
 
 	for (const field of state.fields) {
+		if (!evaluateShowIf(field.conditional_logic, ctx)) continue;
 		const value = state.values[field.id];
 		const error = validateField(field, value);
 		if (error) {
@@ -327,6 +339,31 @@ export function validateAll(state: FormFillState): FieldError[] {
 	}
 
 	return newErrors;
+}
+
+/**
+ * Drop values of fields whose `conditional_logic` evaluates to hidden against
+ * the merged value context. Returns a new `FormValues` bag — call with the
+ * post-change values so the hide takes effect immediately.
+ */
+export function pruneHiddenValues(
+	fields: FormField[],
+	values: FormValues,
+	extraValues: Record<string, unknown> = {}
+): FormValues {
+	const ctx = { ...extraValues, ...values };
+	const out: FormValues = { ...values };
+	let changed = false;
+	for (const field of fields) {
+		if (!field.conditional_logic) continue;
+		if (!evaluateShowIf(field.conditional_logic, ctx)) {
+			if (field.id in out) {
+				delete out[field.id];
+				changed = true;
+			}
+		}
+	}
+	return changed ? out : values;
 }
 
 // ==========================================================================
@@ -455,6 +492,37 @@ export async function loadConnectionForm(
 		return state;
 	} catch (err) {
 		console.error('Failed to load connection form:', err);
+		state.loadError = err instanceof Error ? err.message : 'Failed to load form';
+		state.isLoading = false;
+		return state;
+	}
+}
+
+/**
+ * Load a single form by id (used for stage-attached forms opened ad-hoc from
+ * the detail view). No connection_id is involved — the form is saved as a
+ * routine entry on the current stage and does not advance the workflow.
+ */
+export async function loadStageForm(
+	gateway: ParticipantGateway,
+	workflowId: string,
+	formId: string,
+	participantRoleIds: string[] = []
+): Promise<FormFillState> {
+	const state = createInitialState();
+	state.isLoading = true;
+	state.workflowId = workflowId;
+	state.connectionId = '';
+
+	try {
+		const form = await gateway.collection('tools_forms').getOne(formId) as unknown as Form;
+		state.form = form;
+		state.fields = await fetchFormFields(gateway, [form.id], participantRoleIds);
+		state.values = initializeValues(state.fields);
+		state.isLoading = false;
+		return state;
+	} catch (err) {
+		console.error('Failed to load stage form:', err);
 		state.loadError = err instanceof Error ? err.message : 'Failed to load form';
 		state.isLoading = false;
 		return state;

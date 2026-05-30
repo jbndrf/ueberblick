@@ -13,6 +13,7 @@ export {
 // Types
 export type {
 	WorkflowStage,
+	WorkflowPermissions,
 	WorkflowConnection,
 	SentryClause,
 	WorkflowFieldDef,
@@ -80,6 +81,9 @@ export { DEFAULT_DATA_TAB } from './types';
 
 // Utilities
 export { generateId, arraysEqual, deepEqual } from './utils';
+
+// Permission helpers
+export { roleHasAccess, toggleRoleInList } from './permissions';
 
 // Tool definitions (re-export from tools/)
 export * from './tools';

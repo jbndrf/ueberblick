@@ -107,8 +107,10 @@
 				<option value="">{fieldTagEditorSlotSelectField?.() ?? '-- Select a field --'}</option>
 				{#each compatibleFieldGroups as group}
 					<optgroup label="{group.stage.stage_name} / {group.form.name}">
-						{#each group.fields as field}
-							<option value={field.id}>{field.field_label}</option>
+						<!-- value is the field_def_id: the participant runtime matches
+						     tag mappings against workflow_field_values.field_def_id. -->
+						{#each group.fields.filter((f) => f.field_def_id) as field}
+							<option value={field.field_def_id}>{field.field_label}</option>
 						{/each}
 					</optgroup>
 				{/each}

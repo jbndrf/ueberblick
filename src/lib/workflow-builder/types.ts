@@ -4,6 +4,8 @@
  * These types match the database schema from the migration.
  */
 
+import type { ConditionalLogic } from '$lib/form-engine/conditional-logic';
+
 // =============================================================================
 // Stage Types
 // =============================================================================
@@ -19,6 +21,27 @@ export interface WorkflowStage {
 	position_x?: number;
 	position_y?: number;
 	visual_config?: Record<string, unknown>;
+	/** Roles that can see instances currently in this stage. Empty/missing = all. */
+	visible_to_roles?: string[];
+}
+
+// =============================================================================
+// Workflow-Level Permissions
+// =============================================================================
+
+/**
+ * Workflow-level permission fields, mirroring columns on the `workflows` record.
+ * Tracked separately in builder state because the workflow row itself is not a
+ * list-shaped entity. `entry_allowed_roles` is intentionally omitted — it is
+ * derived from the entry connection's `allowed_roles` by the save action.
+ */
+export interface WorkflowPermissions {
+	/** The `workflows` record id. */
+	id: string;
+	/** Roles that can see this workflow's instances at all. Empty/missing = all. */
+	visible_to_roles: string[];
+	/** When true, only an instance's creator can see it. */
+	private_instances: boolean;
 }
 
 // =============================================================================
@@ -126,6 +149,7 @@ export interface ProtocolLocalFieldDef {
 	page: number;
 	row_index: number;
 	column_position: 'left' | 'right' | 'full';
+	conditional_logic?: ConditionalLogic | null;
 }
 
 // =============================================================================
@@ -328,7 +352,7 @@ export interface FormFieldConfig {
 	is_required?: boolean;
 	placeholder?: string;
 	help_text?: string;
-	conditional_logic?: Record<string, unknown>;
+	conditional_logic?: ConditionalLogic | null;
 }
 
 /**
@@ -353,7 +377,7 @@ export interface ToolsFormField {
 	is_required?: boolean;
 	placeholder?: string;
 	help_text?: string;
-	conditional_logic?: Record<string, unknown>;
+	conditional_logic?: ConditionalLogic | null;
 	// Definitional bits denormalized from the matching WorkflowFieldDef by the
 	// load layer. Read-only mirror — edits to these go through updateFieldDef.
 	field_label: string;
@@ -527,7 +551,7 @@ export interface ToolsAutomation {
 
 export interface TagMapping {
 	tagType: string;
-	fieldId: string | null; // null when filterBy='stage', otherwise references tools_form_fields.id
+	fieldId: string | null; // null when filterBy='stage'; otherwise a workflow_field_defs id (matched against workflow_field_values.field_def_id)
 	config: Record<string, unknown>;
 }
 
@@ -596,7 +620,12 @@ export interface ConnectionEdgeData {
 	tools?: ToolInstance[];
 	selectedToolId?: string;
 	isSelfLoop?: boolean;
-	isBidirectional?: boolean;
+	/**
+	 * Signed perpendicular curve offset in px, to the right of travel direction.
+	 * 0 renders a plain bezier; non-zero bulges the edge so that connections
+	 * sharing the same stage pair (parallel and/or bidirectional) don't overlap.
+	 */
+	curveOffset?: number;
 	onSelectTool?: (toolId: string) => void;
 	onAddTool?: () => void;
 	[key: string]: unknown;

@@ -9,6 +9,7 @@
 
 import { z } from 'zod';
 import { toolConfigSchema } from '$lib/workflow-builder/tools';
+import { conditionalLogicSchema } from '$lib/form-engine/conditional-logic';
 
 /**
  * Workflow Schema
@@ -59,7 +60,7 @@ export const formFieldConfigSchema = z.object({
   is_required: z.boolean().default(false),
   placeholder: z.string().max(255).optional(),
   help_text: z.string().max(1000).optional(),
-  conditional_logic: z.record(z.string(), z.unknown()).nullable().optional()
+  conditional_logic: conditionalLogicSchema.nullable().optional()
 });
 
 /**

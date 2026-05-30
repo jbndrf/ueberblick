@@ -24,10 +24,9 @@
 
 	import type { ConditionGroup, ConditionLeaf, ConditionOperator } from '$lib/workflow-builder';
 
-	// TODO(field-def-redesign): `key` here is the field id selected by the user;
-	// for the new schema this should hold a `field_def_id`. Storage uses
-	// `field_key` strings; renaming requires coordinated updates in automation.js
-	// and the trigger/condition storage shape.
+	// `key` holds a `field_def_id` — the automation runtime matches it against
+	// `workflow_field_values.field_def_id`. The config property is still named
+	// `field_key` (legacy JSON shape); only the name is legacy.
 	type FieldOption = { key: string; label: string };
 	type StageOption = { id: string; name: string };
 

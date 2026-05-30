@@ -27,8 +27,7 @@
 			type: 'set_field_value' as const,
 			label: automationActionTypePaletteSetField?.() ?? 'Set Field',
 			icon: Pencil,
-			// TODO(field-def-redesign): rename `field_key` to `field_def_id` once the
-			// AutomationAction storage schema is migrated.
+			// `field_key` carries a `field_def_id` value (legacy JSON key name).
 			create: (): AutomationAction => ({
 				type: 'set_field_value',
 				params: { field_key: '', value: '' }

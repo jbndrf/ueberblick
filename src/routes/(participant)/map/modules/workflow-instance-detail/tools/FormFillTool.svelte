@@ -28,10 +28,12 @@
 	import {
 		loadConnectionForm,
 		loadEntryForm,
+		loadStageForm,
 		getTotalPages,
 		canGoNext,
 		canGoPrevious,
 		validateAll,
+		pruneHiddenValues,
 		getPages,
 		errorsByPage,
 		type FormFillState
@@ -48,6 +50,9 @@
 		workflowId: string;
 		/** Optional connection ID - if provided, loads form for this specific connection */
 		connectionId?: string;
+		/** Optional form ID — if provided, loads that single form directly (used for
+		 *  stage-attached forms opened ad-hoc; save does NOT advance the workflow). */
+		formId?: string;
 		/** Existing field values from the current instance (used as read-only context
 		 *  so dependent fields like smart_dropdown can resolve their source values). */
 		existingFieldValues?: FieldValue[];
@@ -59,7 +64,7 @@
 		onCancel: () => void;
 	}
 
-	let { workflowId, connectionId, existingFieldValues, participantRoleIds = [], onSubmit, onCancel }: Props = $props();
+	let { workflowId, connectionId, formId, existingFieldValues, participantRoleIds = [], onSubmit, onCancel }: Props = $props();
 
 	const gateway = getParticipantGateway();
 
@@ -153,7 +158,10 @@
 	async function loadForm() {
 		if (!gateway) return;
 
-		if (connectionId) {
+		if (formId) {
+			// Stage-attached form opened ad-hoc — no connection involved.
+			formState = await loadStageForm(gateway, workflowId, formId, participantRoleIds);
+		} else if (connectionId) {
 			// Load form for specific connection (tool flow from existing instance)
 			formState = await loadConnectionForm(gateway, workflowId, connectionId, participantRoleIds);
 		} else {
@@ -169,9 +177,12 @@
 	function handleValueChange(fieldId: string, value: unknown) {
 		if (!formState) return;
 
-		const newValues = { ...formState.values, [fieldId]: value };
-		const newErrors = formState.errors.filter(e => e.fieldId !== fieldId);
-		formState = { ...formState, values: newValues, errors: newErrors };
+		const updated = { ...formState.values, [fieldId]: value };
+		const pruned = pruneHiddenValues(formState.fields, updated, priorValues);
+		const newErrors = formState.errors.filter(
+			e => e.fieldId !== fieldId && e.fieldId in pruned
+		);
+		formState = { ...formState, values: pruned, errors: newErrors };
 	}
 
 	function handleFileChange(fieldId: string, files: File[]) {
@@ -210,7 +221,7 @@
 		if (!formState || isSubmitting) return;
 
 		// Validate all pages
-		const errors = validateAll(formState);
+		const errors = validateAll(formState, priorValues);
 		formState = { ...formState, errors };
 
 		if (errors.length > 0) {

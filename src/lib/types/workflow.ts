@@ -15,6 +15,7 @@
  */
 
 import type { ToolConfig } from '$lib/workflow-builder/tools';
+import type { ConditionalLogic } from '$lib/form-engine/conditional-logic';
 
 export interface Workflow {
   id: string;
@@ -89,7 +90,7 @@ export interface FormField {
   help_text: string;
   validation_rules: Record<string, any>;
   field_options: Record<string, any>;
-  conditional_logic: Record<string, any>;
+  conditional_logic: ConditionalLogic | null;
   page: number;
   page_title: string;
   source_field_id?: string; // For smart dropdowns

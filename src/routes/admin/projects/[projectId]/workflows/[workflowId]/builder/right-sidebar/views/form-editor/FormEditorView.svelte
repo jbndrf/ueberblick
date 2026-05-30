@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { X, ChevronLeft, ChevronRight, Settings2 } from '@lucide/svelte';
+	import { X, ChevronLeft, ChevronRight, Settings2, Braces, LayoutGrid } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
@@ -9,6 +9,7 @@
 	import LibraryFieldsPalette from './LibraryFieldsPalette.svelte';
 	import FieldConfigPanel from './FieldConfigPanel.svelte';
 	import FormPreview from './FormPreview.svelte';
+	import FormJsonView from './FormJsonView.svelte';
 
 	import type { ToolsForm, ToolsFormField, TrackedFormField, WorkflowStage, ColumnPosition, VisualConfig, WorkflowFieldDef, ProtocolLocalFieldDef, FieldType } from '$lib/workflow-builder';
 	import {
@@ -28,7 +29,9 @@
 		formEditorViewRequiresConfirmationDesc,
 		formEditorViewRolesHelp,
 		formEditorScopeLifecycle,
-		formEditorScopeLocal
+		formEditorScopeLocal,
+		formEditorViewToggleBuilder,
+		formEditorViewToggleJson
 	} from '$lib/paraglide/messages';
 
 	type AncestorFieldGroup = {
@@ -125,8 +128,9 @@
 
 	const usedDefIds = $derived(new Set(fields.filter((f) => f.status !== 'deleted' && f.data.field_def_id).map((f) => f.data.field_def_id as string)));
 
-	// Determine if this is a stage-attached form (has its own config)
-	const isStageAttached = $derived(!!form.stage_id && !form.connection_id);
+	// Stage-attached and global forms have their own button/role config;
+	// connection-attached forms inherit it from the connection.
+	const hasOwnButtonConfig = $derived(!form.connection_id);
 
 	/**
 	 * Local fields are rendered in the same FormPreview as library refs by
@@ -151,7 +155,8 @@
 				is_required: lf.required,
 				placeholder: lf.placeholder ?? undefined,
 				help_text: lf.help_text ?? undefined,
-				field_options: lf.field_options ?? undefined
+				field_options: lf.field_options ?? undefined,
+				conditional_logic: lf.conditional_logic ?? null
 			} as ToolsFormField,
 			original: null,
 			status: 'unchanged'
@@ -190,7 +195,11 @@
 				row_index: updates.row_index ?? lf.row_index,
 				column_position:
 					(updates.column_position as ProtocolLocalFieldDef['column_position'] | undefined) ??
-					lf.column_position
+					lf.column_position,
+				conditional_logic:
+					updates.conditional_logic !== undefined
+						? updates.conditional_logic ?? null
+						: lf.conditional_logic ?? null
 			};
 		});
 		onLocalFieldsChange?.(next);
@@ -225,12 +234,18 @@
 		const localOrder = fieldIds.filter(isLocalId).map(localKeyFromId);
 		if (localOrder.length > 0 && (localFields?.length ?? 0) > 0) {
 			const byKey = new Map((localFields ?? []).map((lf) => [lf.key, lf]));
-			const next = localOrder
-				.map((k, idx) => {
-					const lf = byKey.get(k);
-					return lf ? { ...lf, row_index: idx } : null;
-				})
-				.filter((x): x is ProtocolLocalFieldDef => x !== null);
+			// Reorder the array to match the new visual order but PRESERVE each
+			// field's row_index/column_position — those are owned by the drop and
+			// config handlers (patchLocalField). Rewriting row_index here forced
+			// one local field per row, so two local fields could never share a
+			// row (left/right). Library fields aren't affected because their
+			// reorder only updates field_order, never row_index.
+			const reordered = localOrder
+				.map((k) => byKey.get(k))
+				.filter((x): x is ProtocolLocalFieldDef => x != null);
+			const seen = new Set(localOrder);
+			const rest = (localFields ?? []).filter((lf) => !seen.has(lf.key));
+			const next = [...reordered, ...rest];
 			if (next.length > 0) onLocalFieldsChange?.(next);
 		}
 	}
@@ -240,6 +255,7 @@
 
 	// Palette expanded state (for field types view)
 	let paletteExpanded = $state(false);
+	let viewMode = $state<'builder' | 'json'>('builder');
 
 	// Currently selected field for editing
 	let selectedFieldId = $state<string | null>(null);
@@ -377,7 +393,7 @@
 					placeholder={formEditorViewFormNamePlaceholder?.() ?? 'Form name...'}
 				/>
 			</div>
-			{#if isStageAttached}
+			{#if hasOwnButtonConfig}
 				<Button
 					variant={showSettings ? 'secondary' : 'ghost'}
 					size="icon"
@@ -388,6 +404,19 @@
 					<Settings2 class="h-4 w-4" />
 				</Button>
 			{/if}
+			<Button
+				variant={viewMode === 'json' ? 'secondary' : 'ghost'}
+				size="icon"
+				onclick={() => (viewMode = viewMode === 'json' ? 'builder' : 'json')}
+				class="settings-btn"
+				title={viewMode === 'json' ? (formEditorViewToggleBuilder?.() ?? 'Builder view') : (formEditorViewToggleJson?.() ?? 'JSON view')}
+			>
+				{#if viewMode === 'json'}
+					<LayoutGrid class="h-4 w-4" />
+				{:else}
+					<Braces class="h-4 w-4" />
+				{/if}
+			</Button>
 			<Button variant="ghost" size="icon" onclick={onClose} class="close-btn">
 				<X class="h-4 w-4" />
 			</Button>
@@ -396,7 +425,9 @@
 
 	<!-- Main content area -->
 	<div class="form-editor-content">
-		{#if showSettings && isStageAttached}
+		{#if viewMode === 'json'}
+			<FormJsonView {form} fields={mergedFields} onFieldUpdate={handleFieldUpdateRouted} />
+		{:else if showSettings && hasOwnButtonConfig}
 			<!-- Settings Panel (replaces form editor when open) -->
 			<div class="settings-panel">
 				<div class="settings-section">

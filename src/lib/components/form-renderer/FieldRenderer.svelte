@@ -513,7 +513,7 @@
 	<!-- VIEW MODE - Read-only display -->
 	<!-- ============================================================== -->
 	{#if isViewMode}
-		<CmmnFieldChrome writeMode={field.write_mode} valueHistory={field.valueHistory}>
+		<CmmnFieldChrome writeMode={field.write_mode} {field} valueHistory={field.valueHistory}>
 		{#if field.field_type === 'instance_reference'}
 			{@const refOpts = (field.field_options ?? {}) as Record<string, any>}
 			<InstanceReferenceField

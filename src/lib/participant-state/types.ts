@@ -362,6 +362,8 @@ export interface ToolForm {
 	description: string;
 	allowed_roles: string[];
 	visual_config: Record<string, unknown> | null;
+	/** Per-page metadata (title + description) for multi-page forms. */
+	pages: FormPage[] | null;
 	/**
 	 * Protocol-local inline field defs. Populated on forms that back a
 	 * protocol tool when the admin adds fields that should NOT join the
@@ -390,6 +392,7 @@ export interface ProtocolLocalField {
 	page: number;
 	row_index: number;
 	column_position: 'left' | 'right' | 'full';
+	conditional_logic?: import('$lib/form-engine/conditional-logic').ConditionalLogic | null;
 }
 
 /**
@@ -510,7 +513,7 @@ export interface FormFieldConfig {
 	is_required: boolean;
 	placeholder: string;
 	help_text: string;
-	conditional_logic: Record<string, unknown> | null;
+	conditional_logic: import('$lib/form-engine/conditional-logic').ConditionalLogic | null;
 }
 
 /**

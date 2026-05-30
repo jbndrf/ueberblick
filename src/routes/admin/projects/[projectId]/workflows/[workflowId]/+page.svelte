@@ -1031,6 +1031,10 @@
 		{globalFilterFn}
 		enableRowSelection={true}
 		enableShiftSelect={true}
+		onRowClick={(row) =>
+			goto(
+				`/admin/projects/${data.workflow.project_id}/workflows/${data.workflow.id}/instances/${row.id}`
+			)}
 		showToolbar={true}
 		showEditMode={true}
 		editModeLabel={workflowDetailEditMode?.() ?? 'Edit mode'}

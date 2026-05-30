@@ -12,6 +12,7 @@ import { getPocketBase } from '$lib/pocketbase';
 import type { Snippet } from 'svelte';
 import type { FieldDef, FieldDisplayConfig, FieldValue as TFieldValue, ToolFormFieldRef, WriteMode } from '$lib/participant-state/types';
 import { connectionIsAvailable } from '$lib/workflow-builder/sentry';
+import type { ToolUsageRecord } from '$lib/utils/activity-sections';
 
 /** Tab key for the default "Data" tab — field defs with no display_config. */
 const DEFAULT_DATA_TAB = '';
@@ -64,6 +65,7 @@ export interface ToolForm {
 	tool_order?: number;
 	allowed_roles: string[];
 	visual_config?: Record<string, unknown>;
+	pages?: import('$lib/participant-state/types').FormPage[] | null;
 	local_fields?: import('$lib/participant-state/types').ProtocolLocalField[] | null;
 }
 
@@ -117,34 +119,6 @@ export interface ToolEdit {
 	visual_config?: Record<string, unknown>;
 }
 
-/**
- * Past protocol-entry view. Built by hydrating workflow_protocol_entries with
- * their canonical snapshot shape (see ProtocolEntrySnapshot in participant-state).
- * Labels are read from the snapshot, never re-resolved from the live field defs.
- */
-export interface ProtocolEntryView {
-	id: string;
-	tool_id: string;
-	tool_name: string | null;
-	stage_id: string;
-	recorded_at: string;
-	recorded_by: string;
-	kind: 'manual' | 'global_autolog';
-	case_fields: Array<{
-		field_def_id: string;
-		key: string;
-		label: string;
-		value: unknown;
-		write_mode: string;
-	}>;
-	local_fields: Array<{ key: string; label: string; value: unknown }>;
-	autolog: {
-		from: string;
-		to: string;
-		entries: Array<Record<string, unknown>>;
-	} | null;
-}
-
 export interface ToolProtocol {
 	id: string;
 	connection_id?: string;
@@ -173,37 +147,8 @@ export interface ActionButton {
 }
 
 
-export interface ToolUsageRecord {
-	id: string;
-	instance_id: string;
-	stage_id?: string;
-	executed_by: string;
-	executed_at: string;
-	metadata: {
-		action: 'instance_created' | 'form_fill' | 'edit' | 'admin_edit' | 'location_edit' | 'stage_transition' | 'protocol' | 'conflict_resolution';
-		stage_name?: string;
-		centroid?: { lat: number; lon: number } | null;
-		geometry_type?: 'Point' | 'LineString' | 'Polygon' | null;
-		// INVARIANT: tool_usage.metadata must NEVER carry raw field values.
-		// Values live exclusively in workflow_field_values (gated row-by-row by
-		// workflow_field_defs.view_roles). Only identifiers go here, so the
-		// audit UI cannot leak role-restricted values through this collection.
-		created_fields?: Array<{ field_key: string; field_name?: string }>;
-		changes?: Array<{ field_key: string; field_name?: string }>;
-		before?: { lat: number; lon: number } | null;
-		after?: { lat: number; lon: number };
-		from_stage_id?: string;
-		from_stage_name?: string;
-		to_stage_id?: string;
-		to_stage_name?: string;
-		connection_id?: string;
-		protocol_entry_id?: string;
-	};
-	created: string;
-	expand?: {
-		executed_by?: { name?: string; email?: string };
-	};
-}
+/** Tool-usage audit row. Shape lives in the shared activity-feed module. */
+export type { ToolUsageRecord };
 
 // =============================================================================
 // State Class
@@ -232,9 +177,14 @@ export class WorkflowInstanceDetailState {
 	/** Edit tools for this workflow (stage-attached + global). */
 	editTools = $state<ToolEdit[]>([]);
 	protocolTools = $state<ToolProtocol[]>([]);
+	/**
+	 * IDs of every tools_forms record that backs a protocol tool in this workflow
+	 * (via tools_protocol.protocol_form_id). These are the body of a protocol and
+	 * must never surface as standalone form buttons. Captured from the unfiltered
+	 * protocol list so even global/unreachable protocols' forms are excluded.
+	 */
+	protocolBackingFormIds = $state<Set<string>>(new Set());
 	toolUsageHistory = $state<ToolUsageRecord[]>([]);
-	/** Past protocol entries for this instance (manual + global_autolog). Loaded by load(). */
-	protocolEntries = $state<ProtocolEntryView[]>([]);
 
 	isLoading = $state(true);
 	loadError = $state<string | null>(null);
@@ -262,13 +212,39 @@ export class WorkflowInstanceDetailState {
 	 * attached edit tools are excluded (handled in the transition flow).
 	 * Server-side listRule already gates these by self/any edit roles.
 	 */
+	/**
+	 * Forms openable from the instance's current stage: stage-attached forms
+	 * whose stage_id matches the current stage, plus global forms (no stage_id
+	 * and no connection_id, available on every stage). Excludes transition forms
+	 * (those have a connection_id) and protocol backing forms (those are the body
+	 * of a protocol tool, referenced via tools_protocol.protocol_form_id, and must
+	 * not surface as standalone form buttons). Role gating is enforced server-side
+	 * via listRule on tools_forms; we trust the list we already loaded.
+	 */
+	availableStageForms = $derived.by((): ToolForm[] => {
+		if (!this.instance) return [];
+		const currentStageId = this.instance.current_stage_id as string;
+		return this.forms.filter(
+			f =>
+				!f.connection_id &&
+				(f.stage_id === currentStageId || !f.stage_id) &&
+				!this.protocolBackingFormIds.has(f.id)
+		);
+	});
+
 	availableStageEditTools = $derived.by((): ToolEdit[] => {
 		if (!this.instance) return [];
 		const currentStageId = this.instance.current_stage_id as string;
-		return this.editTools.filter((t) => {
-			if (t.connection_id) return false;
-			return t.is_global || (t.stage_id?.includes(currentStageId) ?? false);
-		});
+		const seen = new Set<string>();
+		const out: ToolEdit[] = [];
+		for (const t of this.editTools) {
+			if (seen.has(t.id)) continue;
+			if (t.connection_id) continue;
+			if (!(t.is_global || (t.stage_id?.includes(currentStageId) ?? false))) continue;
+			seen.add(t.id);
+			out.push(t);
+		}
+		return out;
 	});
 
 	progressPercentage = $derived.by((): number => {
@@ -510,7 +486,11 @@ export class WorkflowInstanceDetailState {
 			// Edit tools: keep stage-attached (matching this workflow's stages) and
 			// global. Connection-attached are excluded — those run in the transition
 			// flow. Server-side listRule already gates by self/any edit roles.
+			const seenEditToolIds = new Set<string>();
 			this.editTools = (editToolsResult as unknown as ToolEdit[]).filter((t) => {
+				if (seenEditToolIds.has(t.id)) return false;
+				if (t.workflow_id !== workflowId) return false;
+				seenEditToolIds.add(t.id);
 				if (t.is_global) return true;
 				if (t.connection_id && connectionIds.has(t.connection_id)) return true;
 				if (t.stage_id && t.stage_id.some((sid) => stageIds.has(sid))) return true;
@@ -552,46 +532,22 @@ export class WorkflowInstanceDetailState {
 				})
 				.filter((f): f is FormField => f !== null);
 
-			this.protocolTools = (protocolToolsResult as unknown as ToolProtocol[]).filter(p => {
+			const workflowProtocols = (protocolToolsResult as unknown as ToolProtocol[]).filter(
+				p => !workflowId || p.workflow_id === workflowId
+			);
+
+			// Every protocol backing form, regardless of whether the protocol is
+			// reachable/global — these must never render as standalone form buttons.
+			this.protocolBackingFormIds = new Set(
+				workflowProtocols.map(p => p.protocol_form_id).filter((id): id is string => !!id)
+			);
+
+			this.protocolTools = workflowProtocols.filter(p => {
 				if (p.is_global) return false;
 				if (p.connection_id && connectionIds.has(p.connection_id)) return true;
 				if (p.stage_id && p.stage_id.some(sid => stageIds.has(sid))) return true;
 				return false;
 			});
-
-			// Load protocol-entry history for this instance (manual + global_autolog).
-			try {
-				const entriesResult = await this.gateway.collection('workflow_protocol_entries').getFullList({
-					filter: `instance_id = "${this.instanceId}"`,
-					sort: '-recorded_at'
-				});
-				this.protocolEntries = (entriesResult as unknown as Array<Record<string, unknown>>).map((row) => {
-					let snapshot: any = {};
-					const raw = row.snapshot;
-					if (typeof raw === 'string') {
-						try { snapshot = JSON.parse(raw); } catch { snapshot = {}; }
-					} else if (raw && typeof raw === 'object') {
-						snapshot = raw;
-					}
-					const toolId = row.tool_id as string;
-					const tool = this.protocolTools.find((t) => t.id === toolId);
-					return {
-						id: row.id as string,
-						tool_id: toolId,
-						tool_name: tool?.name ?? null,
-						stage_id: row.stage_id as string,
-						recorded_at: row.recorded_at as string,
-						recorded_by: row.recorded_by as string,
-						kind: (snapshot.kind as 'manual' | 'global_autolog') ?? 'manual',
-						case_fields: Array.isArray(snapshot.case_fields) ? snapshot.case_fields : [],
-						local_fields: Array.isArray(snapshot.local_fields) ? snapshot.local_fields : [],
-						autolog: snapshot.autolog ?? null
-					};
-				});
-			} catch (error) {
-				console.warn('[DetailState] failed to load protocol entries:', error);
-				this.protocolEntries = [];
-			}
 
 			if (!this.activeDataTab) {
 				const tabs = this.getDataTabs();
@@ -869,6 +825,30 @@ export class WorkflowInstanceDetailState {
 				if ((a.page ?? 0) !== (b.page ?? 0)) return (a.page ?? 0) - (b.page ?? 0);
 				return (a.row_index ?? 0) - (b.row_index ?? 0);
 			});
+	}
+
+	/** Per-page metadata (titles/descriptions) from the protocol's backing form. */
+	getProtocolFormPages(protocolFormId: string | undefined): import('$lib/participant-state/types').FormPage[] {
+		if (!protocolFormId) return [];
+		const form = this.forms.find((f) => f.id === protocolFormId);
+		return (form?.pages ?? []) as import('$lib/participant-state/types').FormPage[];
+	}
+
+	/**
+	 * Initial case-field values for a protocol, sourced from the instance's
+	 * current field values for every field the tool's `prefill_config` enables.
+	 * Keyed by `field_def_id` (the FormField `id`), values parsed to their JS shape.
+	 */
+	getProtocolPrefillValues(protocolTool: ToolProtocol): Record<string, unknown> {
+		const cfg = protocolTool.prefill_config ?? {};
+		const out: Record<string, unknown> = {};
+		for (const [defId, enabled] of Object.entries(cfg)) {
+			if (!enabled) continue;
+			const values = this.fieldValuesByDefId.get(defId) ?? [];
+			const firstValue = values.find((v) => v.value !== undefined && v.value !== null && v.value !== '');
+			if (firstValue) out[defId] = this.parseFieldValue(firstValue.value);
+		}
+		return out;
 	}
 
 	getToolsForConnection(connectionId: string): ToolQueueItem[] {

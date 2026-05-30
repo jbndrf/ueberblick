@@ -37,8 +37,9 @@
 	} from '$lib/workflow-builder';
 
 	type StageOption = { id: string; name: string };
-	// TODO(field-def-redesign): `key` here will need to hold `field_def_id` once
-	// trigger storage migrates from `field_key`.
+	// `key` holds a `field_def_id` — the automation runtime matches it against
+	// `workflow_field_values.field_def_id`. The config property is still named
+	// `field_key` (legacy JSON shape); only the name is legacy.
 	type FieldOption = { key: string; label: string };
 
 	type Props = {

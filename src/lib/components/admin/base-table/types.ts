@@ -77,6 +77,10 @@ export interface BaseTableConfig<TData = any> {
 	onRowSelectionChange?: (selection: RowSelectionState) => void;
 	enableShiftSelect?: boolean;
 
+	// Row navigation — when set, clicking a data row (outside the select/actions
+	// cells and outside edit mode) invokes this handler.
+	onRowClick?: (row: TData) => void;
+
 	// Filtering
 	globalFilterFn?: FilterFn<TData>;
 

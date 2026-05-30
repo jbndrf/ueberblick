@@ -56,6 +56,7 @@
 		/** All protocol tools in the workflow — used to detect whether the selected form backs a protocol. */
 		allProtocolTools?: ToolsProtocol[];
 		globalEditTools?: ToolsEdit[];
+		globalForms?: ToolsForm[];
 		// Automation props
 		automations?: ToolsAutomation[];
 		selectedAutomation?: ToolsAutomation | null;
@@ -181,6 +182,7 @@
 		connectionProtocolTools = [],
 		allProtocolTools = [],
 		globalEditTools = [],
+		globalForms = [],
 		automations = [],
 		selectedAutomation = null,
 		automationStages = [],
@@ -387,6 +389,7 @@
 	{:else if isGlobalToolsPanel}
 		<GlobalToolsPanel
 			{globalEditTools}
+			{globalForms}
 			{automations}
 			{roles}
 			onToolRolesChange={onToolRolesChange}

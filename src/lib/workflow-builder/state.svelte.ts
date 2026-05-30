@@ -31,6 +31,7 @@ import type {
 	TransitionTriggerConfig,
 	ExecutionMode,
 	WorkflowFieldDef,
+	WorkflowPermissions,
 	TrackedFieldDef,
 	FieldType,
 	FieldDisplayConfig,
@@ -47,6 +48,21 @@ export class WorkflowBuilderState {
 	workflowId: string;
 	workflowName = $state<string>('');
 	private initialized = false;
+
+	// Workflow-level permissions (the `workflows` record itself — not list-shaped,
+	// so tracked as a single field with its own original snapshot). The original
+	// starts deep-equal to the initial value so the builder is not flagged dirty
+	// before initFromServer runs.
+	workflowPermissions = $state<WorkflowPermissions>({
+		id: '',
+		visible_to_roles: [],
+		private_instances: false
+	});
+	private workflowPermissionsOriginal: WorkflowPermissions = {
+		id: '',
+		visible_to_roles: [],
+		private_instances: false
+	};
 
 	// Tracked collections
 	stages = $state<TrackedStage[]>([]);
@@ -149,9 +165,12 @@ export class WorkflowBuilderState {
 			if (updates.label !== undefined) patch.field_label = updates.label ?? '';
 			if (updates.field_type !== undefined) patch.field_type = updates.field_type;
 			if (updates.write_mode !== undefined) (patch as any).write_mode = updates.write_mode;
-			if (updates.field_options !== undefined) patch.field_options = updates.field_options ?? undefined;
-			if (updates.validation_rules !== undefined) patch.validation_rules = updates.validation_rules ?? undefined;
-			if (updates.compute_expression !== undefined) (patch as any).compute_expression = updates.compute_expression ?? '';
+			if (updates.field_options !== undefined)
+				patch.field_options = updates.field_options ?? undefined;
+			if (updates.validation_rules !== undefined)
+				patch.validation_rules = updates.validation_rules ?? undefined;
+			if (updates.compute_expression !== undefined)
+				(patch as any).compute_expression = updates.compute_expression ?? '';
 			if (Object.keys(patch).length === 0) continue;
 			Object.assign(f.data, patch);
 			if (f.status === 'unchanged' && !deepEqual(f.data, f.original)) {
@@ -211,7 +230,10 @@ export class WorkflowBuilderState {
 				const ra = a.data.display_config?.row ?? 0;
 				const rb = b.data.display_config?.row ?? 0;
 				if (ra !== rb) return ra - rb;
-				return colRank[a.data.display_config?.column ?? 'full'] - colRank[b.data.display_config?.column ?? 'full'];
+				return (
+					colRank[a.data.display_config?.column ?? 'full'] -
+					colRank[b.data.display_config?.column ?? 'full']
+				);
 			});
 	}
 
@@ -260,6 +282,15 @@ export class WorkflowBuilderState {
 		}
 	}
 
+	// =========================================================================
+	// Workflow-Level Permissions
+	// =========================================================================
+
+	/** Patch the workflow-level permission fields (visibility, private instances). */
+	updateWorkflowPermissions(updates: Partial<WorkflowPermissions>): void {
+		this.workflowPermissions = { ...this.workflowPermissions, ...updates };
+	}
+
 	// Derived: dirty state
 	isDirty = $derived(
 		this.stages.some((s) => s.status !== 'unchanged') ||
@@ -270,7 +301,8 @@ export class WorkflowBuilderState {
 			this.protocolTools.some((p) => p.status !== 'unchanged') ||
 			this.automations.some((a) => a.status !== 'unchanged') ||
 			this.fieldTags.some((ft) => ft.status !== 'unchanged') ||
-			this.fieldDefs.some((d) => d.status !== 'unchanged')
+			this.fieldDefs.some((d) => d.status !== 'unchanged') ||
+			!deepEqual(this.workflowPermissions, this.workflowPermissionsOriginal)
 	);
 
 	// Derived: visible items (exclude deleted)
@@ -283,9 +315,7 @@ export class WorkflowBuilderState {
 	visibleAutomations = $derived(this.automations.filter((a) => a.status !== 'deleted'));
 
 	// Derived: has start stage
-	hasStartStage = $derived(
-		this.visibleStages.some((s) => s.data.stage_type === 'start')
-	);
+	hasStartStage = $derived(this.visibleStages.some((s) => s.data.stage_type === 'start'));
 
 	constructor(workflowId: string) {
 		this.workflowId = workflowId;
@@ -297,6 +327,7 @@ export class WorkflowBuilderState {
 
 	initFromServer(data: {
 		workflowName?: string;
+		workflow?: { id: string; visible_to_roles?: string[]; private_instances?: boolean };
 		stages?: WorkflowStage[];
 		connections?: WorkflowConnection[];
 		forms?: ToolsForm[];
@@ -312,6 +343,15 @@ export class WorkflowBuilderState {
 		this.initialized = true;
 
 		this.workflowName = data.workflowName || '';
+
+		this.workflowPermissions = {
+			id: data.workflow?.id ?? this.workflowId,
+			visible_to_roles: data.workflow?.visible_to_roles ?? [],
+			private_instances: data.workflow?.private_instances ?? false
+		};
+		// $state.snapshot (not structuredClone) — workflowPermissions is now a
+		// reactive proxy, which structuredClone cannot clone.
+		this.workflowPermissionsOriginal = $state.snapshot(this.workflowPermissions);
 
 		this.stages = (data.stages || []).map((s) => ({
 			data: s,
@@ -641,11 +681,12 @@ export class WorkflowBuilderState {
 			...this.getEditToolsForConnection(connectionId),
 			...this.getProtocolToolsForConnection(connectionId)
 		];
-		return Math.max(-1, ...existing.map(t => t.data.tool_order ?? 0)) + 1;
+		return Math.max(-1, ...existing.map((t) => t.data.tool_order ?? 0)) + 1;
 	}
 
-	addForm(target: { connectionId: string } | { stageId: string }): ToolsForm {
+	addForm(target: { connectionId: string } | { stageId: string } | { isGlobal: true }): ToolsForm {
 		const isStageAttached = 'stageId' in target;
+		const isGlobal = 'isGlobal' in target;
 		const connectionId = 'connectionId' in target ? target.connectionId : undefined;
 
 		const newForm: ToolsForm = {
@@ -655,11 +696,12 @@ export class WorkflowBuilderState {
 			stage_id: isStageAttached ? target.stageId : undefined,
 			name: 'New Form',
 			...(connectionId && { tool_order: this.getNextToolOrder(connectionId) }),
-			// Stage-attached forms need their own config; connection-attached forms inherit
-			...(isStageAttached && {
+			// Stage-attached and global forms need their own button/role config;
+			// connection-attached forms inherit from the connection.
+			...((isStageAttached || isGlobal) && {
 				allowed_roles: [],
 				visual_config: {
-					button_label: 'Submit',
+					button_label: 'Submit'
 				}
 			})
 		};
@@ -708,12 +750,23 @@ export class WorkflowBuilderState {
 
 	getFormsForConnection(connectionId: string): TrackedForm[] {
 		const protocolFormIds = this.getProtocolFormIds();
-		return this.visibleForms.filter((f) => f.data.connection_id === connectionId && !protocolFormIds.has(f.data.id));
+		return this.visibleForms.filter(
+			(f) => f.data.connection_id === connectionId && !protocolFormIds.has(f.data.id)
+		);
 	}
 
 	getFormsForStage(stageId: string): TrackedForm[] {
 		const protocolFormIds = this.getProtocolFormIds();
-		return this.visibleForms.filter((f) => f.data.stage_id === stageId && !protocolFormIds.has(f.data.id));
+		return this.visibleForms.filter(
+			(f) => f.data.stage_id === stageId && !protocolFormIds.has(f.data.id)
+		);
+	}
+
+	getGlobalForms(): TrackedForm[] {
+		const protocolFormIds = this.getProtocolFormIds();
+		return this.visibleForms.filter(
+			(f) => !f.data.stage_id && !f.data.connection_id && !protocolFormIds.has(f.data.id)
+		);
 	}
 
 	// =========================================================================
@@ -837,10 +890,14 @@ export class WorkflowBuilderState {
 			if (def) {
 				if (updates.field_label !== undefined) def.data.label = updates.field_label ?? '';
 				if (updates.field_type !== undefined) def.data.field_type = updates.field_type;
-				if (updates.field_options !== undefined) def.data.field_options = updates.field_options ?? null;
-				if (updates.validation_rules !== undefined) def.data.validation_rules = updates.validation_rules ?? null;
-				if ((updates as any).write_mode !== undefined) def.data.write_mode = (updates as any).write_mode;
-				if ((updates as any).compute_expression !== undefined) def.data.compute_expression = (updates as any).compute_expression ?? '';
+				if (updates.field_options !== undefined)
+					def.data.field_options = updates.field_options ?? null;
+				if (updates.validation_rules !== undefined)
+					def.data.validation_rules = updates.validation_rules ?? null;
+				if ((updates as any).write_mode !== undefined)
+					def.data.write_mode = (updates as any).write_mode;
+				if ((updates as any).compute_expression !== undefined)
+					def.data.compute_expression = (updates as any).compute_expression ?? '';
 			}
 		}
 	}
@@ -929,7 +986,7 @@ export class WorkflowBuilderState {
 				self_edit_roles: [],
 				any_edit_roles: [],
 				visual_config: {
-					button_label: 'Edit',
+					button_label: 'Edit'
 				}
 			})
 		};
@@ -961,7 +1018,7 @@ export class WorkflowBuilderState {
 			self_edit_roles: [],
 			any_edit_roles: [],
 			visual_config: {
-				button_label: editMode === 'location' ? 'Location' : 'Edit',
+				button_label: editMode === 'location' ? 'Location' : 'Edit'
 			}
 		};
 
@@ -1059,12 +1116,14 @@ export class WorkflowBuilderState {
 	// Protocol Tool Operations
 	// =========================================================================
 
-	addProtocolTool(opts: { stageId?: string; connectionId?: string; isGlobal?: boolean }): ToolsProtocol {
+	addProtocolTool(opts: {
+		stageId?: string;
+		connectionId?: string;
+		isGlobal?: boolean;
+	}): ToolsProtocol {
 		// Global protocol tools = region definitions, start with empty stage_ids
 		// (admin picks which stages form the region)
-		const stageId = opts.isGlobal
-			? []
-			: opts.stageId ? [opts.stageId] : [];
+		const stageId = opts.isGlobal ? [] : opts.stageId ? [opts.stageId] : [];
 
 		const isStageAttached = !opts.connectionId && !opts.isGlobal;
 
@@ -1081,7 +1140,7 @@ export class WorkflowBuilderState {
 			...(opts.connectionId && { tool_order: this.getNextToolOrder(opts.connectionId) }),
 			...(isStageAttached && {
 				visual_config: {
-					button_label: 'Protocol',
+					button_label: 'Protocol'
 				}
 			})
 		};
@@ -1166,11 +1225,12 @@ export class WorkflowBuilderState {
 	// =========================================================================
 
 	addAutomation(triggerType: TriggerType = 'on_transition'): ToolsAutomation {
-		const defaultConfig: TriggerConfig = triggerType === 'on_transition'
-			? { from_stage_id: null, to_stage_id: null }
-			: triggerType === 'on_field_change'
-				? { stage_id: null, field_key: null }
-				: { cron: '0 2 * * 1-5', target_stage_id: null };
+		const defaultConfig: TriggerConfig =
+			triggerType === 'on_transition'
+				? { from_stage_id: null, to_stage_id: null }
+				: triggerType === 'on_field_change'
+					? { stage_id: null, field_key: null }
+					: { cron: '0 2 * * 1-5', target_stage_id: null };
 
 		const newAutomation: ToolsAutomation = {
 			id: generateId(),
@@ -1384,9 +1444,7 @@ export class WorkflowBuilderState {
 		if (!connection || !connection.data.from_stage_id) return [];
 
 		// Include the source stage itself plus its ancestors
-		const sourceStage = this.visibleStages.find(
-			(s) => s.data.id === connection.data.from_stage_id
-		);
+		const sourceStage = this.visibleStages.find((s) => s.data.id === connection.data.from_stage_id);
 		const ancestors = this.getAncestorStages(connection.data.from_stage_id);
 
 		if (sourceStage) {
@@ -1646,6 +1704,7 @@ export class WorkflowBuilderState {
 			d.status = 'unchanged';
 			d.original = $state.snapshot(d.data);
 		}
+		this.workflowPermissionsOriginal = $state.snapshot(this.workflowPermissions);
 	}
 
 	// =========================================================================
@@ -1660,42 +1719,62 @@ export class WorkflowBuilderState {
 		return {
 			stages: {
 				new: this.stages.filter((s) => s.status === 'new').map((s) => $state.snapshot(s.data)),
-				modified: this.stages.filter((s) => s.status === 'modified').map((s) => $state.snapshot(s.data)),
+				modified: this.stages
+					.filter((s) => s.status === 'modified')
+					.map((s) => $state.snapshot(s.data)),
 				deleted: this.stages.filter((s) => s.status === 'deleted').map((s) => s.data.id)
 			},
 			connections: {
 				new: this.connections.filter((c) => c.status === 'new').map((c) => $state.snapshot(c.data)),
-				modified: this.connections.filter((c) => c.status === 'modified').map((c) => $state.snapshot(c.data)),
+				modified: this.connections
+					.filter((c) => c.status === 'modified')
+					.map((c) => $state.snapshot(c.data)),
 				deleted: this.connections.filter((c) => c.status === 'deleted').map((c) => c.data.id)
 			},
 			forms: {
 				new: this.forms.filter((f) => f.status === 'new').map((f) => $state.snapshot(f.data)),
-				modified: this.forms.filter((f) => f.status === 'modified').map((f) => $state.snapshot(f.data)),
+				modified: this.forms
+					.filter((f) => f.status === 'modified')
+					.map((f) => $state.snapshot(f.data)),
 				deleted: this.forms.filter((f) => f.status === 'deleted').map((f) => f.data.id)
 			},
 			formFields: {
 				new: this.formFields.filter((f) => f.status === 'new').map((f) => $state.snapshot(f.data)),
-				modified: this.formFields.filter((f) => f.status === 'modified').map((f) => $state.snapshot(f.data)),
+				modified: this.formFields
+					.filter((f) => f.status === 'modified')
+					.map((f) => $state.snapshot(f.data)),
 				deleted: this.formFields.filter((f) => f.status === 'deleted').map((f) => f.data.id)
 			},
 			editTools: {
 				new: this.editTools.filter((e) => e.status === 'new').map((e) => $state.snapshot(e.data)),
-				modified: this.editTools.filter((e) => e.status === 'modified').map((e) => $state.snapshot(e.data)),
+				modified: this.editTools
+					.filter((e) => e.status === 'modified')
+					.map((e) => $state.snapshot(e.data)),
 				deleted: this.editTools.filter((e) => e.status === 'deleted').map((e) => e.data.id)
 			},
 			protocolTools: {
-				new: this.protocolTools.filter((p) => p.status === 'new').map((p) => $state.snapshot(p.data)),
-				modified: this.protocolTools.filter((p) => p.status === 'modified').map((p) => $state.snapshot(p.data)),
+				new: this.protocolTools
+					.filter((p) => p.status === 'new')
+					.map((p) => $state.snapshot(p.data)),
+				modified: this.protocolTools
+					.filter((p) => p.status === 'modified')
+					.map((p) => $state.snapshot(p.data)),
 				deleted: this.protocolTools.filter((p) => p.status === 'deleted').map((p) => p.data.id)
 			},
 			automations: {
 				new: this.automations.filter((a) => a.status === 'new').map((a) => $state.snapshot(a.data)),
-				modified: this.automations.filter((a) => a.status === 'modified').map((a) => $state.snapshot(a.data)),
+				modified: this.automations
+					.filter((a) => a.status === 'modified')
+					.map((a) => $state.snapshot(a.data)),
 				deleted: this.automations.filter((a) => a.status === 'deleted').map((a) => a.data.id)
 			},
 			fieldTags: {
-				new: this.fieldTags.filter((ft) => ft.status === 'new').map((ft) => $state.snapshot(ft.data)),
-				modified: this.fieldTags.filter((ft) => ft.status === 'modified').map((ft) => $state.snapshot(ft.data)),
+				new: this.fieldTags
+					.filter((ft) => ft.status === 'new')
+					.map((ft) => $state.snapshot(ft.data)),
+				modified: this.fieldTags
+					.filter((ft) => ft.status === 'modified')
+					.map((ft) => $state.snapshot(ft.data)),
 				deleted: this.fieldTags.filter((ft) => ft.status === 'deleted').map((ft) => ft.data.id)
 			},
 			fieldDefs: {
@@ -1711,6 +1790,15 @@ export class WorkflowBuilderState {
 				deleted: this.fieldDefs
 					.filter((d) => d.status === 'deleted' && !d.data.id.startsWith('_temp_'))
 					.map((d) => d.data.id)
+			},
+			// Workflow-level permission fields. `dirty` lets the save action skip
+			// the `workflows` update when nothing here changed. `entry_allowed_roles`
+			// is NOT sent — the save action derives it from the entry connection.
+			workflow: {
+				id: this.workflowPermissions.id,
+				visible_to_roles: $state.snapshot(this.workflowPermissions.visible_to_roles) ?? [],
+				private_instances: this.workflowPermissions.private_instances ?? false,
+				dirty: !deepEqual(this.workflowPermissions, this.workflowPermissionsOriginal)
 			}
 		};
 	}

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import FieldRenderer from './FieldRenderer.svelte';
+	import { evaluateShowIf } from '$lib/form-engine/conditional-logic';
 	import {
 		type FormMode,
 		type FormFieldWithValue,
@@ -124,6 +125,7 @@
 {#snippet renderRow(row: { rowIndex: number; fields: FormFieldWithValue[] })}
 	<div class="flex flex-wrap gap-4">
 		{#each row.fields as field (field.id)}
+			{#if evaluateShowIf(field.conditional_logic, fieldContext.values)}
 			<div class={getColumnClass(field.column_position)}>
 				<FieldRenderer
 					mode={fieldMode(field.id)}
@@ -136,6 +138,7 @@
 					onFileChange={(files) => handleFileChange(field.id, files)}
 				/>
 			</div>
+			{/if}
 		{/each}
 	</div>
 {/snippet}

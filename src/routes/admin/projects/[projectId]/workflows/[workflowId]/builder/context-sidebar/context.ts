@@ -28,8 +28,11 @@ export type FormFieldData = {
 // Form context data
 export type FormContextData = {
 	formId: string;
-	/** Connection or stage this form is attached to */
-	attachedTo: { type: 'connection'; connectionId: string } | { type: 'stage'; stageId: string };
+	/** Connection, stage, or global (all stages) this form is attached to */
+	attachedTo:
+		| { type: 'connection'; connectionId: string }
+		| { type: 'stage'; stageId: string }
+		| { type: 'global' };
 };
 
 // Edit tool context data

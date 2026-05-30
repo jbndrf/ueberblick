@@ -113,11 +113,16 @@
 
 	const eligibleByStage = $derived.by((): EligibleFieldsByStage[] => {
 		const stageMap = new Map<string, EligibleFieldsByStage>();
+		const seenFieldByStage = new Map<string, Set<string>>();
 		for (const ef of eligibleFields) {
 			const key = ef.stage.id;
 			if (!stageMap.has(key)) {
 				stageMap.set(key, { stage: ef.stage, fields: [] });
+				seenFieldByStage.set(key, new Set());
 			}
+			const seen = seenFieldByStage.get(key)!;
+			if (seen.has(ef.field.id)) continue;
+			seen.add(ef.field.id);
 			stageMap.get(key)!.fields.push(ef);
 		}
 		return Array.from(stageMap.values());

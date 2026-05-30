@@ -20,7 +20,7 @@
 
 	const tools = $derived(data?.tools ?? []);
 	const isSelfLoop = $derived(data?.isSelfLoop ?? false);
-	const isBidirectional = $derived(data?.isBidirectional ?? false);
+	const curveOffset = $derived(data?.curveOffset ?? 0);
 
 	// For self-loops, create a circular looping path above the node
 	function getSelfLoopPath(sx: number, sy: number, tx: number, ty: number) {
@@ -39,18 +39,19 @@
 		return [path, labelX, labelY] as const;
 	}
 
-	// For bidirectional edges, build a quadratic bezier that bulges to the
-	// "right" side of the travel direction. A->B bulges one way, B->A the other.
-	function getBidirectionalPath(sx: number, sy: number, tx: number, ty: number) {
+	// Build a quadratic bezier bulging perpendicular to the travel direction by
+	// `offset` px (to the right of travel). Used to separate connections that
+	// share the same stage pair — parallel duplicates fan out, and opposing
+	// directions bulge to opposite screen sides since the perpendicular flips.
+	function getOffsetPath(sx: number, sy: number, tx: number, ty: number, offset: number) {
 		const mx = (sx + tx) / 2;
 		const my = (sy + ty) / 2;
 		const dx = tx - sx;
 		const dy = ty - sy;
 		const len = Math.sqrt(dx * dx + dy * dy) || 1;
 		// Perpendicular offset to the right of travel direction
-		const bulge = Math.max(40, len * 0.2);
-		const nx = (dy / len) * bulge;
-		const ny = (-dx / len) * bulge;
+		const nx = (dy / len) * offset;
+		const ny = (-dx / len) * offset;
 		const cpx = mx + nx;
 		const cpy = my + ny;
 		// Label sits at the quadratic midpoint (t=0.5)
@@ -64,8 +65,8 @@
 	const pathData = $derived.by(() => {
 		if (isSelfLoop) {
 			return getSelfLoopPath(sourceX, sourceY, targetX, targetY);
-		} else if (isBidirectional) {
-			return getBidirectionalPath(sourceX, sourceY, targetX, targetY);
+		} else if (curveOffset !== 0) {
+			return getOffsetPath(sourceX, sourceY, targetX, targetY, curveOffset);
 		} else {
 			return getBezierPath({
 				sourceX,
