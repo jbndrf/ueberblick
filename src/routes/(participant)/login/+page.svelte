@@ -8,7 +8,16 @@
 	import { Label } from '$lib/components/ui/label';
 	import * as Card from '$lib/components/ui/card';
 	import * as Tabs from '$lib/components/ui/tabs';
-	import { AlertCircle, QrCode, KeyRound, Camera, Upload, Loader2 } from '@lucide/svelte';
+	import {
+		AlertCircle,
+		QrCode,
+		KeyRound,
+		Camera,
+		Upload,
+		Loader2,
+		Eye,
+		EyeOff
+	} from '@lucide/svelte';
 	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
 	import ThemeToggle from '$lib/components/theme-toggle.svelte';
 	import ConsentModal from '$lib/components/consent-modal.svelte';
@@ -19,20 +28,18 @@
 	let { data } = $props();
 	const loginReturnTo = $derived($page.url.pathname + $page.url.search);
 
+	// No `use:enhance`: the login form submits natively so browsers fire their built-in
+	// "save password" prompt and autofill the token on return. superForm is still used for
+	// schema-shaped $formData / $errors / $message, which repopulate from the server-returned
+	// form after the native POST.
 	const form = superForm(data.form, {
-		validators: zod4Client(participantLoginSchema),
-		onResult: ({ result }) => {
-			// Explicitly handle redirect responses
-			if (result.type === 'redirect') {
-				// Force a full page navigation to follow the redirect
-				window.location.href = result.location;
-			}
-		}
+		validators: zod4Client(participantLoginSchema)
 	});
 
-	const { form: formData, enhance, errors, message, delayed } = form;
+	const { form: formData, errors, message } = form;
 
 	let activeTab = $state('token');
+	let showToken = $state(false);
 	let qrScanner: any = $state(null);
 	let scannerReady = $state(false);
 	let scannerError = $state<string | null>(null);
@@ -67,7 +74,10 @@
 		} catch (err: any) {
 			scanningActive = false;
 			console.error('Camera error:', err);
-			scannerError = err?.message || (m.participantLoginQrCameraError?.() ?? 'Could not access camera. Try uploading an image instead.');
+			scannerError =
+				err?.message ||
+				(m.participantLoginQrCameraError?.() ??
+					'Could not access camera. Try uploading an image instead.');
 		}
 	}
 
@@ -93,7 +103,9 @@
 			onQrCodeScanned(result);
 		} catch (err: any) {
 			console.error('File scan error:', err);
-			scannerError = m.participantLoginQrFileError?.() ?? 'Could not read QR code from image. Make sure the image contains a valid QR code.';
+			scannerError =
+				m.participantLoginQrFileError?.() ??
+				'Could not read QR code from image. Make sure the image contains a valid QR code.';
 		}
 		// Reset input so same file can be selected again
 		input.value = '';
@@ -133,14 +145,18 @@
 	class="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-4 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900"
 >
 	<!-- Theme and Language Controls -->
-	<div class="fixed right-4 top-4 flex items-center gap-2">
+	<div class="fixed top-4 right-4 flex items-center gap-2">
 		<LanguageSwitcher />
 		<ThemeToggle />
 	</div>
 
 	<Card.Root class="w-full max-w-md">
 		<Card.Header class="space-y-1 text-center">
-			<img src="/icons/logo-light.png" alt="Überblick" class="mx-auto mb-4 h-16 w-16 object-contain dark:invert" />
+			<img
+				src="/icons/logo-light.png"
+				alt="Überblick"
+				class="mx-auto mb-4 h-16 w-16 object-contain dark:invert"
+			/>
 			<Card.Title class="text-2xl font-bold">{m.participantLoginTitle()}</Card.Title>
 			<Card.Description>{m.participantLoginSubtitle()}</Card.Description>
 		</Card.Header>
@@ -160,22 +176,38 @@
 
 				<!-- Token Login Tab -->
 				<Tabs.Content value="token" class="mt-4">
-					<form method="POST" action="?/login" use:enhance bind:this={formElement} class="space-y-4">
+					<form method="POST" action="?/login" bind:this={formElement} class="space-y-4">
 						<div class="space-y-2">
 							<Label for="token">{m.participantLoginTokenLabel()}</Label>
-							<Input
-								id="token"
-								name="token"
-								type="text"
-								placeholder={m.participantLoginTokenPlaceholder()}
-								autocomplete="off"
-								autocapitalize="none"
-								spellcheck="false"
-								required
-								bind:value={$formData.token}
-								class={$errors.token ? 'border-destructive' : ''}
-								data-testid="token-input"
-							/>
+							<div class="relative">
+								<Input
+									id="token"
+									name="token"
+									type={showToken ? 'text' : 'password'}
+									placeholder={m.participantLoginTokenPlaceholder()}
+									autocomplete="current-password"
+									autocapitalize="none"
+									spellcheck="false"
+									required
+									bind:value={$formData.token}
+									class="pr-10 {$errors.token ? 'border-destructive' : ''}"
+									data-testid="token-input"
+								/>
+								<button
+									type="button"
+									class="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+									onclick={() => (showToken = !showToken)}
+									aria-label={showToken
+										? m.participantLoginHideToken()
+										: m.participantLoginShowToken()}
+								>
+									{#if showToken}
+										<EyeOff class="h-4 w-4" />
+									{:else}
+										<Eye class="h-4 w-4" />
+									{/if}
+								</button>
+							</div>
 							{#if $errors.token}
 								<p class="text-sm text-destructive">{$errors.token}</p>
 							{/if}
@@ -192,18 +224,15 @@
 						{/if}
 
 						<!-- Submit Button -->
-						<Button type="submit" class="w-full" disabled={$delayed} data-testid="login-button">
-							{#if $delayed}
-								{m.participantLoginSubmitting()}
-							{:else}
-								{m.participantLoginSubmit()}
-							{/if}
+						<Button type="submit" class="w-full" data-testid="login-button">
+							{m.participantLoginSubmit()}
 						</Button>
 					</form>
 
 					<div class="mt-4 text-center text-sm text-muted-foreground">
 						<p>
-							{m.participantLoginOr?.() ?? 'Or'} <button
+							{m.participantLoginOr?.() ?? 'Or'}
+							<button
 								type="button"
 								class="text-primary hover:underline"
 								onclick={() => (activeTab = 'qr')}
@@ -244,15 +273,12 @@
 									disabled={!scannerReady}
 								>
 									<Camera class="mr-2 h-4 w-4" />
-									{scannerReady ? (m.participantLoginStartCamera?.() ?? 'Start Camera') : (m.participantLoginLoading?.() ?? 'Loading...')}
+									{scannerReady
+										? (m.participantLoginStartCamera?.() ?? 'Start Camera')
+										: (m.participantLoginLoading?.() ?? 'Loading...')}
 								</Button>
 							{:else}
-								<Button
-									type="button"
-									variant="outline"
-									class="flex-1"
-									onclick={stopCameraScanning}
-								>
+								<Button type="button" variant="outline" class="flex-1" onclick={stopCameraScanning}>
 									<Loader2 class="mr-2 h-4 w-4 animate-spin" />
 									{m.participantLoginStopCamera?.() ?? 'Stop Camera'}
 								</Button>
@@ -262,12 +288,7 @@
 								<label class="flex cursor-pointer items-center justify-center">
 									<Upload class="mr-2 h-4 w-4" />
 									{m.participantLoginUploadQrImage?.() ?? 'Upload QR Image'}
-									<input
-										type="file"
-										accept="image/*"
-										class="hidden"
-										onchange={handleFileUpload}
-									/>
+									<input type="file" accept="image/*" class="hidden" onchange={handleFileUpload} />
 								</label>
 							</Button>
 						</div>
@@ -278,7 +299,8 @@
 
 						<div class="text-center text-sm text-muted-foreground">
 							<p>
-								{m.participantLoginOr?.() ?? 'Or'} <button
+								{m.participantLoginOr?.() ?? 'Or'}
+								<button
 									type="button"
 									class="text-primary hover:underline"
 									onclick={() => (activeTab = 'token')}

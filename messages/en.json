@@ -382,6 +382,8 @@
 	"participantLoginTokenPlaceholder": "Enter your participant token",
 	"participantLoginSubmit": "Login",
 	"participantLoginSubmitting": "Logging in...",
+	"participantLoginShowToken": "Show token",
+	"participantLoginHideToken": "Hide token",
 	"participantLoginTabToken": "Token Login",
 	"participantLoginTabQr": "QR Code",
 	"participantLoginQrInstructions": "Position your QR code within the frame to login",

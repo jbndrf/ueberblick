@@ -10,6 +10,7 @@
 import { zipSync, strToU8, type Zippable } from 'fflate';
 import type PocketBase from 'pocketbase';
 import { fetchParticipantNameMapForProject } from '$lib/admin/workflow-rows';
+import { resolveFieldEntities } from './entity-resolution';
 import {
 	exportProjectSchema,
 	importProjectSchema,
@@ -24,9 +25,7 @@ const MAX_IMPORT_TOTAL_UNCOMPRESSED = 5 * 1024 * 1024 * 1024; // 5 GB
 const MAX_IMPORT_PER_ENTRY_SIZE = 50 * 1024 * 1024; // 50 MB
 const MAX_IMPORT_COMPRESSION_RATIO = 1000;
 
-type ZipDirectory = Awaited<
-	ReturnType<Awaited<ReturnType<typeof getUnzipper>>['Open']['file']>
->;
+type ZipDirectory = Awaited<ReturnType<Awaited<ReturnType<typeof getUnzipper>>['Open']['file']>>;
 type ZipEntry = ZipDirectory['files'][number];
 
 export type ImportProgress = (pct: number, label?: string) => void | Promise<void>;
@@ -264,8 +263,7 @@ export async function exportProjectArchive(
 	const project = await pb.collection('projects').getOne(projectId);
 	const schema = await exportProjectSchema(pb, projectId);
 	const participantNameById = await fetchParticipantNameMapForProject(pb, projectId);
-	const nameOf = (id: string | undefined | null) =>
-		id ? (participantNameById.get(id) ?? '') : '';
+	const nameOf = (id: string | undefined | null) => (id ? (participantNameById.get(id) ?? '') : '');
 
 	const zipFiles: Zippable = {};
 	const counts: Record<string, number> = {};
@@ -282,13 +280,60 @@ export async function exportProjectArchive(
 	};
 
 	// Pre-load form fields keyed by id (used to label instance value columns)
-	const allFormFields = await pb.collection('tools_form_fields').getFullList({ sort: 'field_order' });
+	const allFormFields = await pb
+		.collection('tools_form_fields')
+		.getFullList({ sort: 'field_order' });
 	const fieldById = new Map<string, any>();
 	for (const f of allFormFields) fieldById.set(f.id, f);
 
 	const stagesByWorkflow = new Map<string, any[]>();
 	for (const wf of schema.workflows) {
 		stagesByWorkflow.set(wf.record.id, wf.stages);
+	}
+
+	// Human-readable lookups for the CSV-only export. The full archive keeps raw IDs
+	// (the importer remaps them via mapping.json), so these are only built when csvOnly.
+	const globalStageNameById = new Map<string, string>();
+	const roleNameById = new Map<string, string>();
+	const categoryNameById = new Map<string, string>();
+	const relationLabelByField = new Map<string, Map<string, string>>();
+	if (options.csvOnly) {
+		for (const wf of schema.workflows) {
+			for (const s of wf.stages) globalStageNameById.set(s.id, s.name);
+		}
+		const fieldDefs = allFormFields.map((f: any) => {
+			let fieldOptions = f.field_options;
+			if (typeof fieldOptions === 'string') {
+				try {
+					fieldOptions = JSON.parse(fieldOptions);
+				} catch {
+					fieldOptions = null;
+				}
+			}
+			return { id: f.id, type: f.field_type, fieldOptions };
+		});
+		const [entitiesByField, rolesList, categories] = await Promise.all([
+			resolveFieldEntities(pb, projectId, fieldDefs),
+			pb
+				.collection('roles')
+				.getFullList({
+					filter: `project_id = "${projectId}"`,
+					fields: 'id,name',
+					requestKey: null
+				}),
+			pb.collection('marker_categories').getFullList({
+				filter: `project_id = "${projectId}"`,
+				fields: 'id,name',
+				requestKey: null
+			})
+		]);
+		for (const [fieldId, ents] of entitiesByField) {
+			const lookup = new Map<string, string>();
+			for (const e of ents) lookup.set(e.id, e.label);
+			relationLabelByField.set(fieldId, lookup);
+		}
+		for (const r of rolesList) roleNameById.set(r.id, r.name);
+		for (const c of categories) categoryNameById.set(c.id, c.name);
 	}
 
 	// ---------- workflows: instances + field_values (wide) ----------
@@ -385,6 +430,20 @@ export async function exportProjectArchive(
 
 		const allCols = [...sysCols, ...fieldCols];
 
+		// CSV-only: drop the raw `created_by` ID column (the readable `created_by_name`
+		// is kept and renamed to `created_by` in the header below).
+		const emitSysCols = options.csvOnly
+			? sysCols.filter((c) => c.system_field !== 'created_by')
+			: sysCols;
+		// CSV-only header overrides for ID columns that now carry readable values.
+		const headerName = (c: ArchiveColumn): string => {
+			if (!options.csvOnly) return c.name;
+			if (c.name === 'current_stage_id') return 'current_stage';
+			if (c.name === 'created_by_name') return 'created_by';
+			return c.name;
+		};
+		const emitCols = [...emitSysCols, ...fieldCols];
+
 		// Load instances + field values for this workflow
 		const instances = await pb
 			.collection('workflow_instances')
@@ -421,7 +480,7 @@ export async function exportProjectArchive(
 				if (bytes) zipFiles[path] = bytes;
 			}
 
-			for (const col of sysCols) {
+			for (const col of emitSysCols) {
 				switch (col.system_field) {
 					case 'id':
 						row.push(inst.id);
@@ -430,7 +489,11 @@ export async function exportProjectArchive(
 						row.push(inst.status);
 						break;
 					case 'current_stage_id':
-						row.push(inst.current_stage_id);
+						row.push(
+							options.csvOnly
+								? (globalStageNameById.get(inst.current_stage_id) ?? inst.current_stage_id ?? '')
+								: inst.current_stage_id
+						);
 						break;
 					case 'created_by':
 						row.push(inst.created_by ?? '');
@@ -478,18 +541,22 @@ export async function exportProjectArchive(
 							paths.push(path);
 							continue;
 						}
-						const bytes = await fetchPbFile(
-							pb,
-							'workflow_instance_field_values',
-							v.id,
-							fname
-						);
+						const bytes = await fetchPbFile(pb, 'workflow_instance_field_values', v.id, fname);
 						if (bytes) {
 							zipFiles[path] = bytes;
 							paths.push(path);
 						}
 					}
 					row.push(paths.join(';'));
+				} else if (options.csvOnly && relationLabelByField.has(col.field_id!)) {
+					// Relation (custom_table_selector) values are raw IDs; resolve to labels.
+					// Multi-selects are stored as multiple rows -> join their labels.
+					const lookup = relationLabelByField.get(col.field_id!)!;
+					const labels = arr
+						.map((v: any) => v.value)
+						.filter((v: any) => v !== '' && v != null)
+						.map((v: string) => lookup.get(v) ?? v);
+					row.push(labels.join('; '));
 				} else {
 					row.push(arr[0].value ?? '');
 				}
@@ -498,7 +565,7 @@ export async function exportProjectArchive(
 			rows.push(row);
 		}
 
-		const csv = buildCsv(allCols.map((c) => c.name), rows);
+		const csv = buildCsv(emitCols.map(headerName), rows);
 		zipFiles[csvPath] = strToU8(csv);
 		counts[`workflow_instances:${wfRecord.name}`] = instances.length;
 
@@ -514,24 +581,38 @@ export async function exportProjectArchive(
 	// ---------- protocol_entries.csv ----------
 	{
 		const entries = await pb.collection('workflow_protocol_entries').getFullList({
-			filter: schema.workflows
-				.map((w: any) => `instance_id.workflow_id = "${w.record.id}"`)
-				.join(' || ') || 'id = ""',
+			filter:
+				schema.workflows
+					.map((w: any) => `instance_id.workflow_id = "${w.record.id}"`)
+					.join(' || ') || 'id = ""',
 			sort: 'created'
 		});
-		const headers = [
-			'id',
-			'instance_id',
-			'stage_id',
-			'tool_id',
-			'recorded_by',
-			'recorded_by_name',
-			'recorded_at',
-			'snapshot_hash',
-			'snapshot_json',
-			'field_values_json',
-			'files'
-		];
+		const headers = options.csvOnly
+			? [
+					'id',
+					'instance_id',
+					'stage',
+					'tool_id',
+					'recorded_by',
+					'recorded_at',
+					'snapshot_hash',
+					'snapshot_json',
+					'field_values_json',
+					'files'
+				]
+			: [
+					'id',
+					'instance_id',
+					'stage_id',
+					'tool_id',
+					'recorded_by',
+					'recorded_by_name',
+					'recorded_at',
+					'snapshot_hash',
+					'snapshot_json',
+					'field_values_json',
+					'files'
+				];
 		const rows: unknown[][] = [];
 		for (const e of entries) {
 			const filePaths: string[] = [];
@@ -542,19 +623,34 @@ export async function exportProjectArchive(
 				const bytes = await fetchPbFile(pb, 'workflow_protocol_entries', e.id, fname);
 				if (bytes) zipFiles[path] = bytes;
 			}
-			rows.push([
-				e.id,
-				e.instance_id,
-				e.stage_id,
-				e.tool_id ?? '',
-				e.recorded_by ?? '',
-				nameOf(e.recorded_by),
-				e.recorded_at,
-				e.snapshot_hash ?? '',
-				e.snapshot ? JSON.stringify(e.snapshot) : '',
-				e.field_values ? JSON.stringify(e.field_values) : '',
-				filePaths.join(';')
-			]);
+			rows.push(
+				options.csvOnly
+					? [
+							e.id,
+							e.instance_id,
+							globalStageNameById.get(e.stage_id) ?? e.stage_id ?? '',
+							e.tool_id ?? '',
+							nameOf(e.recorded_by),
+							e.recorded_at,
+							e.snapshot_hash ?? '',
+							e.snapshot ? JSON.stringify(e.snapshot) : '',
+							e.field_values ? JSON.stringify(e.field_values) : '',
+							filePaths.join(';')
+						]
+					: [
+							e.id,
+							e.instance_id,
+							e.stage_id,
+							e.tool_id ?? '',
+							e.recorded_by ?? '',
+							nameOf(e.recorded_by),
+							e.recorded_at,
+							e.snapshot_hash ?? '',
+							e.snapshot ? JSON.stringify(e.snapshot) : '',
+							e.field_values ? JSON.stringify(e.field_values) : '',
+							filePaths.join(';')
+						]
+			);
 		}
 		zipFiles['protocol_entries.csv'] = strToU8(buildCsv(headers, rows));
 		counts['protocol_entries'] = entries.length;
@@ -563,29 +659,43 @@ export async function exportProjectArchive(
 	// ---------- tool_usage.csv ----------
 	{
 		const usage = await pb.collection('workflow_instance_tool_usage').getFullList({
-			filter: schema.workflows
-				.map((w: any) => `instance_id.workflow_id = "${w.record.id}"`)
-				.join(' || ') || 'id = ""',
+			filter:
+				schema.workflows
+					.map((w: any) => `instance_id.workflow_id = "${w.record.id}"`)
+					.join(' || ') || 'id = ""',
 			sort: 'executed_at'
 		});
-		const headers = [
-			'id',
-			'instance_id',
-			'stage_id',
-			'executed_by',
-			'executed_by_name',
-			'executed_at',
-			'metadata_json'
-		];
-		const rows = usage.map((u: any) => [
-			u.id,
-			u.instance_id,
-			u.stage_id ?? '',
-			u.executed_by ?? '',
-			nameOf(u.executed_by),
-			u.executed_at,
-			u.metadata ? JSON.stringify(u.metadata) : ''
-		]);
+		const headers = options.csvOnly
+			? ['id', 'instance_id', 'stage', 'executed_by', 'executed_at', 'metadata_json']
+			: [
+					'id',
+					'instance_id',
+					'stage_id',
+					'executed_by',
+					'executed_by_name',
+					'executed_at',
+					'metadata_json'
+				];
+		const rows = usage.map((u: any) =>
+			options.csvOnly
+				? [
+						u.id,
+						u.instance_id,
+						globalStageNameById.get(u.stage_id) ?? u.stage_id ?? '',
+						nameOf(u.executed_by),
+						u.executed_at,
+						u.metadata ? JSON.stringify(u.metadata) : ''
+					]
+				: [
+						u.id,
+						u.instance_id,
+						u.stage_id ?? '',
+						u.executed_by ?? '',
+						nameOf(u.executed_by),
+						u.executed_at,
+						u.metadata ? JSON.stringify(u.metadata) : ''
+					]
+		);
 		zipFiles['tool_usage.csv'] = strToU8(buildCsv(headers, rows));
 		counts['tool_usage'] = usage.length;
 	}
@@ -597,7 +707,7 @@ export async function exportProjectArchive(
 			.getFullList({ filter: `project_id = "${projectId}"`, sort: 'created' });
 		const headers = [
 			'id',
-			'category_id',
+			options.csvOnly ? 'category' : 'category_id',
 			'title',
 			'description',
 			'lat',
@@ -609,14 +719,20 @@ export async function exportProjectArchive(
 		];
 		const rows = markers.map((m: any) => [
 			m.id,
-			m.category_id,
+			options.csvOnly
+				? (categoryNameById.get(m.category_id) ?? m.category_id ?? '')
+				: m.category_id,
 			m.title,
 			m.description ?? '',
 			m.location?.lat ?? '',
 			m.location?.lon ?? '',
 			m.properties ? JSON.stringify(m.properties) : '',
-			Array.isArray(m.visible_to_roles) ? m.visible_to_roles.join(';') : '',
-			m.created_by ?? '',
+			Array.isArray(m.visible_to_roles)
+				? m.visible_to_roles
+						.map((rid: string) => (options.csvOnly ? (roleNameById.get(rid) ?? rid) : rid))
+						.join(';')
+				: '',
+			options.csvOnly ? nameOf(m.created_by) : (m.created_by ?? ''),
 			m.created
 		]);
 		zipFiles['markers.csv'] = strToU8(buildCsv(headers, rows));
@@ -823,9 +939,7 @@ export async function importProjectArchive(
 		if (csvText) {
 			const { headers, rows } = parseCsv(csvText);
 			const idx = (n: string) => headers.indexOf(n);
-			const existing = await pb
-				.collection('participants')
-				.getFullList({ fields: 'email' });
+			const existing = await pb.collection('participants').getFullList({ fields: 'email' });
 			const usedEmails = new Set(existing.map((p: any) => p.email).filter(Boolean));
 			const batcher = createBatcher(pb);
 			let count = 0;
@@ -1273,7 +1387,9 @@ async function rebuildIdMapsFromImport(
 			const newFields = await pb
 				.collection('tools_form_fields')
 				.getFullList({ filter: `form_id = "${newFormId}"`, sort: 'field_order' });
-			const sortedOld = oldFields.slice().sort((a, b) => (a.field_order ?? 0) - (b.field_order ?? 0));
+			const sortedOld = oldFields
+				.slice()
+				.sort((a, b) => (a.field_order ?? 0) - (b.field_order ?? 0));
 			for (let i = 0; i < sortedOld.length && i < newFields.length; i++) {
 				maps.formFields.set(sortedOld[i].id, newFields[i].id);
 			}
@@ -1283,7 +1399,11 @@ async function rebuildIdMapsFromImport(
 		const newProtocols = await pb.collection('tools_protocol').getFullList();
 		const newProtosByName = new Map(
 			newProtocols
-				.filter((p: any) => Array.isArray(p.stage_id) && p.stage_id.some((sid: string) => newStages.find((ns: any) => ns.id === sid)))
+				.filter(
+					(p: any) =>
+						Array.isArray(p.stage_id) &&
+						p.stage_id.some((sid: string) => newStages.find((ns: any) => ns.id === sid))
+				)
 				.map((p: any) => [p.name, p.id])
 		);
 		for (const oldProto of wfExport.protocol_tools || []) {

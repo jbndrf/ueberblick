@@ -382,6 +382,8 @@
 	"participantLoginTokenPlaceholder": "Geben Sie Ihr Zugangstoken ein",
 	"participantLoginSubmit": "Anmelden",
 	"participantLoginSubmitting": "Wird angemeldet...",
+	"participantLoginShowToken": "Token anzeigen",
+	"participantLoginHideToken": "Token verbergen",
 	"participantLoginTabToken": "Token-Anmeldung",
 	"participantLoginTabQr": "QR-Code",
 	"participantLoginQrInstructions": "Positionieren Sie Ihren QR-Code im Rahmen zur Anmeldung",
