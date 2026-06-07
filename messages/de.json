@@ -380,6 +380,8 @@
 	"participantLoginSubtitle": "Geben Sie Ihr Zugangstoken ein oder scannen Sie den QR-Code",
 	"participantLoginTokenLabel": "Zugangstoken",
 	"participantLoginTokenPlaceholder": "Geben Sie Ihr Zugangstoken ein",
+	"participantLoginShowToken": "Token anzeigen",
+	"participantLoginHideToken": "Token verbergen",
 	"participantLoginSubmit": "Anmelden",
 	"participantLoginSubmitting": "Wird angemeldet...",
 	"participantLoginTabToken": "Token-Anmeldung",

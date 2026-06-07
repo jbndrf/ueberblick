@@ -380,6 +380,8 @@
 	"participantLoginSubtitle": "Enter your access token or scan QR code",
 	"participantLoginTokenLabel": "Access Token",
 	"participantLoginTokenPlaceholder": "Enter your participant token",
+	"participantLoginShowToken": "Show token",
+	"participantLoginHideToken": "Hide token",
 	"participantLoginSubmit": "Login",
 	"participantLoginSubmitting": "Logging in...",
 	"participantLoginTabToken": "Token Login",

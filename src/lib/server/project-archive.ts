@@ -10,6 +10,7 @@
 import { zipSync, strToU8, type Zippable } from 'fflate';
 import type PocketBase from 'pocketbase';
 import { fetchParticipantNameMapForProject } from '$lib/admin/workflow-rows';
+import { resolveFieldEntities } from '$lib/admin/resolve-field-entities';
 import {
 	exportProjectSchema,
 	importProjectSchema,
@@ -293,6 +294,50 @@ export async function exportProjectArchive(
 	const fieldRefById = new Map<string, any>();
 	for (const r of allFormFieldRefs) fieldRefById.set(r.id, r);
 
+	// Human-readable lookups built from the already-loaded schema. These drive
+	// the companion `*_name` columns (stage/category/role) and the csvOnly
+	// custom_table_selector label resolution, so exported CSVs show names instead
+	// of raw IDs. The full (re-importable) archive keeps the raw-ID columns too.
+	const stageNameById = new Map<string, string>();
+	for (const wf of schema.workflows) {
+		for (const s of wf.stages) stageNameById.set(s.id, s.name);
+	}
+	const roleNameById = new Map<string, string>();
+	for (const r of (schema.roles ?? []) as Array<{ id: string; name: string }>) {
+		roleNameById.set(r.id, r.name);
+	}
+	const categoryNameById = new Map<string, string>();
+	for (const c of (schema.marker_categories ?? []) as Array<{ id: string; name: string }>) {
+		categoryNameById.set(c.id, c.name);
+	}
+	const stageNameOf = (id: string | undefined | null) =>
+		id ? (stageNameById.get(id) ?? id) : '';
+	const categoryNameOf = (id: string | undefined | null) =>
+		id ? (categoryNameById.get(id) ?? id) : '';
+	const roleNamesOf = (ids: unknown) =>
+		Array.isArray(ids) ? ids.map((r: string) => roleNameById.get(r) ?? r).join(';') : '';
+
+	// custom_table_selector value-id -> label, per field def, for the csvOnly
+	// export. Reuses v2's resolver (new unified-field-defs model).
+	const relationLabelByField = new Map<string, Map<string, string>>();
+	{
+		const resolved = await resolveFieldEntities(
+			pb,
+			allFieldDefs.map((d: any) => ({
+				id: d.id,
+				field_type: d.field_type,
+				field_options: d.field_options
+			})),
+			projectId,
+			(schema.roles ?? []).map((r: any) => ({ id: r.id, name: r.name }))
+		);
+		for (const [fieldId, ents] of Object.entries(resolved)) {
+			const lookup = new Map<string, string>();
+			for (const e of ents) lookup.set(e.id, e.label);
+			relationLabelByField.set(fieldId, lookup);
+		}
+	}
+
 	const stagesByWorkflow = new Map<string, any[]>();
 	for (const wf of schema.workflows) {
 		stagesByWorkflow.set(wf.record.id, wf.stages);
@@ -341,6 +386,12 @@ export async function exportProjectArchive(
 				kind: 'system',
 				value_type: 'id',
 				system_field: 'current_stage_id'
+			},
+			{
+				name: 'current_stage_name',
+				kind: 'system',
+				value_type: 'text',
+				system_field: 'current_stage_name'
 			},
 			{ name: 'created_by', kind: 'system', value_type: 'id', system_field: 'created_by' },
 			{
@@ -444,6 +495,9 @@ export async function exportProjectArchive(
 					case 'current_stage_id':
 						row.push(inst.current_stage_id);
 						break;
+					case 'current_stage_name':
+						row.push(stageNameOf(inst.current_stage_id));
+						break;
 					case 'created_by':
 						row.push(inst.created_by ?? '');
 						break;
@@ -502,6 +556,19 @@ export async function exportProjectArchive(
 						}
 					}
 					row.push(paths.join(';'));
+				} else if (
+					options.csvOnly &&
+					relationLabelByField.get(col.field_id!)?.size
+				) {
+					// custom_table_selector values are raw IDs; resolve to labels for
+					// the human-readable CSV export. Multi-select is stored as multiple
+					// value rows -> join their labels. The full archive keeps raw IDs.
+					const lookup = relationLabelByField.get(col.field_id!)!;
+					const labels = arr
+						.map((v: any) => v.value)
+						.filter((id: unknown): id is string => !!id)
+						.map((id: string) => lookup.get(id) ?? id);
+					row.push(labels.join('; '));
 				} else {
 					row.push(arr[0].value ?? '');
 				}
@@ -535,6 +602,7 @@ export async function exportProjectArchive(
 			'id',
 			'instance_id',
 			'stage_id',
+			'stage_name',
 			'tool_id',
 			'recorded_by',
 			'recorded_by_name',
@@ -558,6 +626,7 @@ export async function exportProjectArchive(
 				e.id,
 				e.instance_id,
 				e.stage_id,
+				stageNameOf(e.stage_id),
 				e.tool_id ?? '',
 				e.recorded_by ?? '',
 				nameOf(e.recorded_by),
@@ -584,6 +653,7 @@ export async function exportProjectArchive(
 			'id',
 			'instance_id',
 			'stage_id',
+			'stage_name',
 			'executed_by',
 			'executed_by_name',
 			'executed_at',
@@ -593,6 +663,7 @@ export async function exportProjectArchive(
 			u.id,
 			u.instance_id,
 			u.stage_id ?? '',
+			stageNameOf(u.stage_id),
 			u.executed_by ?? '',
 			nameOf(u.executed_by),
 			u.executed_at,
@@ -610,24 +681,28 @@ export async function exportProjectArchive(
 		const headers = [
 			'id',
 			'category_id',
+			'category_name',
 			'title',
 			'description',
 			'lat',
 			'lon',
 			'properties_json',
 			'visible_to_roles',
+			'visible_to_roles_names',
 			'created_by',
 			'created'
 		];
 		const rows = markers.map((m: any) => [
 			m.id,
 			m.category_id,
+			categoryNameOf(m.category_id),
 			m.title,
 			m.description ?? '',
 			m.location?.lat ?? '',
 			m.location?.lon ?? '',
 			m.properties ? JSON.stringify(m.properties) : '',
 			Array.isArray(m.visible_to_roles) ? m.visible_to_roles.join(';') : '',
+			roleNamesOf(m.visible_to_roles),
 			m.created_by ?? '',
 			m.created
 		]);
@@ -689,6 +764,7 @@ export async function exportProjectArchive(
 			'email',
 			'phone',
 			'role_ids',
+			'role_names',
 			'is_active',
 			'expires_at',
 			'token',
@@ -700,6 +776,7 @@ export async function exportProjectArchive(
 			p.email,
 			p.phone ?? '',
 			Array.isArray(p.role_id) ? p.role_id.join(';') : '',
+			roleNamesOf(p.role_id),
 			p.is_active ? 'true' : 'false',
 			p.expires_at ?? '',
 			options.includeParticipantTokens ? (p.token ?? '') : '',

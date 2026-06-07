@@ -9,6 +9,8 @@
 		participantLoginQrFileError,
 		participantLoginQrHint,
 		participantLoginQrInitError,
+		participantLoginShowToken,
+		participantLoginHideToken,
 		participantLoginStartCamera,
 		participantLoginStopCamera,
 		participantLoginSubmit,
@@ -28,7 +30,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import * as Card from '$lib/components/ui/card';
 	import * as Tabs from '$lib/components/ui/tabs';
-	import { AlertCircle, QrCode, KeyRound, Camera, Upload, Loader2 } from '@lucide/svelte';
+	import { AlertCircle, QrCode, KeyRound, Camera, Upload, Loader2, Eye, EyeOff } from '@lucide/svelte';
 	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
 	import ThemeToggle from '$lib/components/theme-toggle.svelte';
 	import ConsentModal from '$lib/components/consent-modal.svelte';
@@ -60,6 +62,7 @@
 	let qrScanner: any = $state(null);
 	let scannerReady = $state(false);
 	let scannerError = $state<string | null>(null);
+	let showToken = $state(false);
 	let scanningActive = $state(false);
 	let formElement: HTMLFormElement | null = $state(null);
 
@@ -187,19 +190,33 @@
 					<form method="POST" action="?/login" use:enhance bind:this={formElement} class="space-y-4">
 						<div class="space-y-2">
 							<Label for="token">{participantLoginTokenLabel()}</Label>
-							<Input
-								id="token"
-								name="token"
-								type="text"
-								placeholder={participantLoginTokenPlaceholder()}
-								autocomplete="off"
-								autocapitalize="none"
-								spellcheck="false"
-								required
-								bind:value={$formData.token}
-								class={$errors.token ? 'border-destructive' : ''}
-								data-testid="token-input"
-							/>
+							<div class="relative">
+								<Input
+									id="token"
+									name="token"
+									type={showToken ? 'text' : 'password'}
+									placeholder={participantLoginTokenPlaceholder()}
+									autocomplete="current-password"
+									autocapitalize="none"
+									spellcheck="false"
+									required
+									bind:value={$formData.token}
+									class="pr-10 {$errors.token ? 'border-destructive' : ''}"
+									data-testid="token-input"
+								/>
+								<button
+									type="button"
+									class="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+									onclick={() => (showToken = !showToken)}
+									aria-label={showToken ? participantLoginHideToken() : participantLoginShowToken()}
+								>
+									{#if showToken}
+										<EyeOff class="h-4 w-4" />
+									{:else}
+										<Eye class="h-4 w-4" />
+									{/if}
+								</button>
+							</div>
 							{#if $errors.token}
 								<p class="text-sm text-destructive">{$errors.token}</p>
 							{/if}
