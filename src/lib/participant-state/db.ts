@@ -50,7 +50,21 @@ export interface CachedFile {
 export interface SyncMetadata {
 	collection: string;
 	lastSyncTimestamp: string;
+	/**
+	 * Wall-clock time of the last sync that actually reached the server. Only
+	 * stored on the reserved GLOBAL_SYNC_KEY record (see get/setLastSuccessfulSyncAt),
+	 * not on per-collection records. Drives the "last synced X ago" UI and the
+	 * stale-data warning. Distinct from lastSyncTimestamp, which is a server
+	 * record-watermark, not a clock.
+	 */
+	lastSuccessfulSyncAt?: string;
 }
+
+/**
+ * Reserved sync_metadata key holding the global wall-clock freshness marker.
+ * Not a real collection name (collections can't start with "__").
+ */
+export const GLOBAL_SYNC_KEY = '__global_sync__';
 
 /**
  * Stored conflict when server version wins during push sync.
@@ -547,6 +561,29 @@ export function initDB(): Promise<IDBPDatabase<ParticipantStateDB>> {
  */
 export function getDB(): Promise<IDBPDatabase<ParticipantStateDB>> {
 	return initDB();
+}
+
+/**
+ * Read the wall-clock time of the last sync that actually reached the server,
+ * or null if a successful sync has never been recorded on this device.
+ */
+export async function getLastSuccessfulSyncAt(): Promise<string | null> {
+	const db = await getDB();
+	const meta = await db.get('sync_metadata', GLOBAL_SYNC_KEY);
+	return meta?.lastSuccessfulSyncAt ?? null;
+}
+
+/**
+ * Record that a sync just succeeded against the live server. Pass an ISO
+ * timestamp (callers stamp it so the value is testable/deterministic).
+ */
+export async function setLastSuccessfulSyncAt(iso: string): Promise<void> {
+	const db = await getDB();
+	await db.put('sync_metadata', {
+		collection: GLOBAL_SYNC_KEY,
+		lastSyncTimestamp: '',
+		lastSuccessfulSyncAt: iso
+	});
 }
 
 /**

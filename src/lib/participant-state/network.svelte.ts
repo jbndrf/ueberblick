@@ -11,7 +11,7 @@ import type { NetworkStatus } from './types';
 // =============================================================================
 
 // Global reactive network status
-let networkState = $state<NetworkStatus>({
+const networkState = $state<NetworkStatus>({
 	online: typeof navigator !== 'undefined' ? navigator.onLine : true,
 	type: 'unknown'
 });
@@ -100,11 +100,14 @@ export function initNetworkListeners(): () => void {
 	const updateStatus = () => {
 		const connection = getNetworkConnection();
 
-		networkState = {
-			online: navigator.onLine,
-			type: connection?.type || 'unknown',
-			effectiveType: connection?.effectiveType
-		};
+		// Mutate in place rather than reassign: consumers capture the object
+		// reference (e.g. `const network = getNetworkStatus()`), so a fresh
+		// object would silently stop updating them.
+		networkState.online = navigator.onLine;
+		networkState.type = connection?.type || 'unknown';
+		networkState.effectiveType = connection?.effectiveType;
+		// A drop to offline invalidates the last reachability probe.
+		if (!navigator.onLine) networkState.reachable = false;
 	};
 
 	// Listen for online/offline events
@@ -177,17 +180,19 @@ export async function whenOnline<T>(fn: () => T | Promise<T>): Promise<T> {
 
 /**
  * Ping the server to verify actual connectivity
- * (navigator.onLine can be unreliable)
+ * (navigator.onLine can be unreliable -- it reports true on captive portals,
+ * upstream-less wifi, and when PocketBase specifically is unreachable).
+ *
+ * Targets PocketBase's /api/health endpoint (proxied in dev, see vite.config.ts).
  */
-export async function pingServer(url?: string, timeoutMs = 5000): Promise<boolean> {
-	const pingUrl = url || '/api/ping';
-
+export async function pingServer(url = '/api/health', timeoutMs = 5000): Promise<boolean> {
+	if (typeof navigator !== 'undefined' && !navigator.onLine) return false;
 	try {
 		const controller = new AbortController();
 		const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-		const response = await fetch(pingUrl, {
-			method: 'HEAD',
+		const response = await fetch(url, {
+			method: 'GET',
 			cache: 'no-store',
 			signal: controller.signal
 		});
@@ -197,6 +202,18 @@ export async function pingServer(url?: string, timeoutMs = 5000): Promise<boolea
 	} catch {
 		return false;
 	}
+}
+
+/**
+ * Verify the backend is actually reachable and record the result on the reactive
+ * network state (`reachable`). Use this instead of trusting `navigator.onLine`
+ * before declaring the app online or starting a sync.
+ */
+export async function checkBackendReachable(timeoutMs = 5000): Promise<boolean> {
+	const reachable = await pingServer('/api/health', timeoutMs);
+	// Mutate in place so captured references stay reactive (see updateStatus).
+	networkState.reachable = reachable;
+	return reachable;
 }
 
 // =============================================================================

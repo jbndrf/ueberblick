@@ -46,6 +46,25 @@ export function getParticipantPocketBase(): PocketBase {
 }
 
 /**
+ * Persist the participant client's current auth token to the pb_auth_participant
+ * cookie. The server hook normally re-writes this on every server-reached
+ * request, but a client-side authRefresh() (e.g. on PWA startup served from the
+ * SW cache, where no server request runs) must write it back itself. Mirrors the
+ * server's exportAuthToNamedCookie: same name, 90-day maxAge, httpOnly:false.
+ */
+export function persistParticipantAuthCookie(): void {
+	if (typeof document === 'undefined') return;
+	const pb = getParticipantPocketBase();
+	const cookieStr = pb.authStore.exportToCookie({
+		httpOnly: false,
+		secure: typeof location !== 'undefined' && location.protocol === 'https:',
+		sameSite: 'Lax',
+		maxAge: 60 * 60 * 24 * 90 // keep in sync with hooks.server.ts
+	});
+	document.cookie = cookieStr.replace(/^pb_auth=/, `${PARTICIPANT_COOKIE}=`);
+}
+
+/**
  * Surface-aware client. Picks based on URL: /admin/* → admin, else → participant.
  * Prefer the explicit getters in code that knows which surface it serves.
  */
@@ -90,4 +109,46 @@ export function onAuthStateChange(callback: (user: RecordModel | null) => void) 
 	const pb = getPocketBase();
 	callback(pb.authStore.model);
 	return pb.authStore.onChange((_token, model) => callback(model));
+}
+
+// =============================================================================
+// Participant session expiry
+// =============================================================================
+//
+// A participant token can be rejected by the server (401) while the client still
+// believes it is authenticated -- e.g. the token expired, was rotated, or the
+// participant was deleted. The data layer (sync/gateway) detects this and calls
+// notifyParticipantSessionExpired(); the participant layout registers a handler
+// that sends the user to /login. Fires at most once until reset on next login.
+
+let sessionExpiredHandler: (() => void) | null = null;
+let sessionExpiredFired = false;
+
+/**
+ * True only for a token-level auth failure (401). A 403 is a per-record/
+ * collection rule denial and must NOT invalidate the whole session.
+ */
+export function isParticipantAuthError(e: unknown): boolean {
+	return !!e && typeof e === 'object' && (e as { status?: number }).status === 401;
+}
+
+/** Register the handler that reacts to participant session expiry (e.g. redirect to /login). */
+export function onParticipantSessionExpired(cb: () => void): () => void {
+	sessionExpiredHandler = cb;
+	return () => {
+		if (sessionExpiredHandler === cb) sessionExpiredHandler = null;
+	};
+}
+
+/** Called by the data layer on a 401. Clears auth and notifies the handler once. */
+export function notifyParticipantSessionExpired(): void {
+	if (sessionExpiredFired) return;
+	sessionExpiredFired = true;
+	getParticipantPocketBase().authStore.clear();
+	sessionExpiredHandler?.();
+}
+
+/** Reset the one-shot guard after a successful (re-)login. */
+export function resetParticipantSessionExpiry(): void {
+	sessionExpiredFired = false;
 }

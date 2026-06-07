@@ -11,7 +11,11 @@
  */
 
 import { getDB, initDB, onParticipantSwitch, type CachedRecord, requestPersistentStorage } from './db';
-import { getPocketBase } from '$lib/pocketbase';
+import {
+	getPocketBase,
+	isParticipantAuthError,
+	notifyParticipantSessionExpired
+} from '$lib/pocketbase';
 import { query } from './query';
 import { storeFileBlob, buildFileKey } from './file-cache';
 import { generateId, cleanRecord } from './utils';
@@ -337,6 +341,7 @@ async function refreshSelectableParticipants(fieldId: string): Promise<void> {
 		} as unknown as CachedRecord);
 		notifyDataChange(SELECTABLE_PARTICIPANTS_COLLECTION, fieldId, 'update');
 	} catch (e) {
+		if (isParticipantAuthError(e)) notifyParticipantSessionExpired();
 		console.debug(`[selectable-participants] refresh failed for ${fieldId}:`, e);
 	}
 }
@@ -615,6 +620,9 @@ export function createParticipantGateway(participantId: string, projectId: strin
 			if (anyChange) notifyDataChange(name);
 			onPage?.(0, 0); // Signal completion (0,0 = done)
 		} catch (e) {
+			// A 401 means the session is dead -- send the participant to /login
+			// instead of leaving them on silently-stale cached data.
+			if (isParticipantAuthError(e)) notifyParticipantSessionExpired();
 			// A failed fetch produced no new data -- do NOT notify, or a throttled
 			// request would retrigger consumers and amplify the throttling.
 			onPage?.(0, 0);
@@ -665,6 +673,7 @@ export function createParticipantGateway(participantId: string, projectId: strin
 			await db.put('records', cached);
 			notifyDataChange(name, record.id as string, 'update');
 		} catch (e) {
+			if (isParticipantAuthError(e)) notifyParticipantSessionExpired();
 			console.debug(`Background fetch one failed for ${name}/${id}:`, e);
 		}
 	}

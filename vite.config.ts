@@ -81,18 +81,16 @@ export default defineConfig({
 							networkTimeoutSeconds: 10
 						}
 					},
-					// Cache PocketBase API responses for offline access
+					// PocketBase data reads (/api/collections/*) are deliberately
+					// NOT cached by the service worker. IndexedDB (src/lib/
+					// participant-state/) is the offline data store and owns
+					// freshness. A NetworkFirst cache here would hand back a stale
+					// 200 indistinguishable from a live response, so the app would
+					// show old data while believing it just fetched fresh data.
+					// NetworkOnly: a successful read means the server was reached.
 					{
 						urlPattern: /^https?:\/\/.*\/api\/collections\/.*/,
-						handler: 'NetworkFirst',
-						options: {
-							cacheName: 'api-cache',
-							expiration: {
-								maxEntries: 100,
-								maxAgeSeconds: 60 * 60 * 24 // 24 hours
-							},
-							networkTimeoutSeconds: 10
-						}
+						handler: 'NetworkOnly'
 					},
 					// Cache package archive files (ZIP) with CacheFirst
 					{
