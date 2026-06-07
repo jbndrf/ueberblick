@@ -2,6 +2,14 @@
 	import { page } from '$app/stores';
 	import { onMount, onDestroy } from 'svelte';
 	import { browser, dev } from '$app/environment';
+	import { goto } from '$app/navigation';
+	import {
+		getParticipantPocketBase,
+		persistParticipantAuthCookie,
+		onParticipantSessionExpired,
+		isParticipantAuthError
+	} from '$lib/pocketbase';
+	import { checkBackendReachable } from '$lib/participant-state/network.svelte';
 	import * as m from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { UserCircle, Layers, Filter, Navigation, Settings, Plus, Wrench, Clock } from '@lucide/svelte';
@@ -157,8 +165,19 @@
 	// structurally impossible. Same participant with a changed role or
 	// project triggers a scoped reset of *that* participant's DB so
 	// role-gated workflows/tools don't bleed across role changes.
+	// The SSR-provided data.participant can be stale. When the app boots from the
+	// service-worker page cache (offline / slow / backend down), the server auth
+	// hook never ran, so data.participant reflects whoever was authenticated when
+	// the page was cached -- NOT whether the session is still alive. Re-validate
+	// the token locally (authStore.isValid decodes the JWT exp, no network needed)
+	// before trusting it. If it's dead we skip gateway setup and redirect to
+	// /login in onMount, so an expired session can never render cached data.
+	let sessionExpired = $state(
+		browser && !!data.participant && !getParticipantPocketBase().authStore.isValid
+	);
+
 	let rolePendingReset: Promise<void> | null = null;
-	if (data.participant) {
+	if (data.participant && !sessionExpired) {
 		const participant = data.participant;
 		const newId = participant.id;
 		const newRoleIds = normalizeRoleIds(participant.role_id);
@@ -233,6 +252,9 @@
 	// The sync init block above handles the first mount; this effect handles
 	// live changes (e.g. form-based re-auth without a full reload).
 	$effect(() => {
+		// Expired session (local token check failed) -- do not build a gateway or
+		// render cached data; onMount redirects to /login.
+		if (sessionExpired) return;
 		const participant = data.participant;
 		if (!participant) {
 			// Auth lost -- tear down but keep IndexedDB on disk so a later
@@ -407,6 +429,43 @@
 			console.error('Failed to initialize gateway:', error);
 		}
 	}
+
+	// Session lifecycle: redirect an expired session to /login, react to 401s from
+	// the data layer, and renew the 90-day token on every online startup. The
+	// renewal matters when the page was served from the SW cache and the server
+	// auth hook never ran -- without it the token would only ever refresh on a
+	// true network navigation.
+	onMount(() => {
+		if (!browser) return;
+
+		// Any 401 surfaced by the sync/gateway layer lands here.
+		const offSessionExpired = onParticipantSessionExpired(() => goto('/login'));
+
+		// Local token check (set during init) said the session is dead despite the
+		// SSR-baked auth state -- bail to /login before any cached data renders.
+		if (sessionExpired) {
+			getParticipantPocketBase().authStore.clear();
+			goto('/login');
+			return offSessionExpired;
+		}
+
+		if (data.participant) {
+			void (async () => {
+				if (await checkBackendReachable()) {
+					try {
+						await getParticipantPocketBase().collection('participants').authRefresh();
+						persistParticipantAuthCookie();
+					} catch (e) {
+						// A 401 means the token is dead -> /login. Other failures are
+						// transient; the regular catch-up sync will retry.
+						if (isParticipantAuthError(e)) goto('/login');
+					}
+				}
+			})();
+		}
+
+		return offSessionExpired;
+	});
 </script>
 
 {#if isLoginPage}

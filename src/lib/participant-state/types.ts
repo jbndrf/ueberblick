@@ -256,6 +256,12 @@ export interface NetworkStatus {
 	online: boolean;
 	type?: 'wifi' | 'cellular' | 'ethernet' | 'unknown';
 	effectiveType?: '4g' | '3g' | '2g' | 'slow-2g';
+	/**
+	 * Whether the PocketBase backend was actually reachable at the last check.
+	 * `online` (navigator.onLine) only means a network link exists; `reachable`
+	 * means a real request to the server succeeded. `undefined` = not yet checked.
+	 */
+	reachable?: boolean;
 }
 
 // =============================================================================

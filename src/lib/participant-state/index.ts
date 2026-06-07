@@ -116,7 +116,8 @@ export {
 	initNetworkListeners,
 	waitForOnline,
 	whenOnline,
-	pingServer
+	pingServer,
+	checkBackendReachable
 } from './network.svelte';
 
 // =============================================================================

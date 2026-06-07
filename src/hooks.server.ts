@@ -62,7 +62,10 @@ function exportAuthToNamedCookie(pb: PocketBase, name: string): string {
 		httpOnly: false,
 		secure: env.SECURE_COOKIES === 'true',
 		sameSite: 'Lax',
-		maxAge: 60 * 60 * 24 * 7 // 1 week
+		// Match the participants auth-token duration (90 days, see
+		// pb_migrations/1780200000_participants_token_duration.js) so the cookie
+		// never outlives -- or dies before -- the token it carries.
+		maxAge: 60 * 60 * 24 * 90
 	});
 	return cookieStr.replace(/^pb_auth=/, `${name}=`);
 }

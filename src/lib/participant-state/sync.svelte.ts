@@ -8,8 +8,15 @@
  * - No polling loop -- realtime SSE is the primary update mechanism
  */
 
-import { getPocketBase } from '$lib/pocketbase';
-import { getDB, type CachedRecord, type SyncConflict } from './db';
+import {
+	getPocketBase,
+	getParticipantPocketBase,
+	persistParticipantAuthCookie,
+	isParticipantAuthError,
+	notifyParticipantSessionExpired
+} from '$lib/pocketbase';
+import { getDB, setLastSuccessfulSyncAt, type CachedRecord, type SyncConflict } from './db';
+import { checkBackendReachable } from './network.svelte';
 import { getFilesForRecord, deleteLocalFilesForRecord, deleteFilesForRecord } from './file-cache';
 import { notifyDataChange, onDataChange, getLiveCollectionNames } from './gateway.svelte';
 import type { ParticipantGateway } from './gateway.svelte';
@@ -292,7 +299,14 @@ async function pullChanges(collection: string, runSignal?: AbortSignal): Promise
 
 		return updatedCount;
 	} catch (e) {
-		// Collection might not be accessible - skip silently
+		// A 401 means the session itself is dead -- escalate so the participant
+		// is sent to /login instead of staring at silently-stale data.
+		if (isParticipantAuthError(e)) {
+			notifyParticipantSessionExpired();
+			throw e;
+		}
+		// Otherwise the collection might just not be accessible (403/404) or the
+		// server was unreachable -- skip this collection for this run.
 		console.debug(`Pull failed for ${collection}:`, e);
 		return 0;
 	}
@@ -982,7 +996,10 @@ export function startPushListener(gateway: ParticipantGateway): () => void {
  * Called on PB_CONNECT reconnect and on tab regaining focus.
  */
 export async function runCatchUpSync(gateway: ParticipantGateway): Promise<void> {
-	if (!navigator.onLine) return;
+	// Verify the backend is actually reachable -- navigator.onLine reports true
+	// on captive portals / upstream-less wifi / when PocketBase is down, and we
+	// must not stamp "last synced = now" off a sync that never reached the server.
+	if (!(await checkBackendReachable())) return;
 	// Coalesce: if a run is already in progress, treat that as "catch-up
 	// already happening" and don't queue another. (Unlike triggerSync, which
 	// is user-initiated and should always do something.)
@@ -990,6 +1007,7 @@ export async function runCatchUpSync(gateway: ParticipantGateway): Promise<void>
 
 	catchUpCount++;
 
+	let reachedServer = false;
 	try {
 		await withRun(async (signal) => {
 			const total = syncCollections.length;
@@ -1006,6 +1024,9 @@ export async function runCatchUpSync(gateway: ParticipantGateway): Promise<void>
 			for (let i = 0; i < total; i += concurrency) {
 				const batch = syncCollections.slice(i, i + concurrency);
 				const batchResults = await Promise.allSettled(batch.map((c) => pullChanges(c, signal)));
+
+				// Any fulfilled pull (even 0 changes) proves we reached the server.
+				if (batchResults.some((r) => r.status === 'fulfilled')) reachedServer = true;
 
 				for (let j = 0; j < batch.length; j++) {
 					const result = batchResults[j];
@@ -1063,6 +1084,11 @@ export async function runCatchUpSync(gateway: ParticipantGateway): Promise<void>
 		syncStatus.current = null;
 	}
 
+	// Record freshness only if we genuinely reached the server this run.
+	if (reachedServer) {
+		await setLastSuccessfulSyncAt(new Date().toISOString());
+	}
+
 	// Edits made during this catch-up are not visible to the snapshot taken
 	// at the start of uploadChanges; pick them up immediately. Wrapped in
 	// withRun so the watchdog still owns this work.
@@ -1084,13 +1110,31 @@ export async function runCatchUpSync(gateway: ParticipantGateway): Promise<void>
  * longer access.
  */
 export async function triggerSync(gateway: ParticipantGateway): Promise<boolean> {
-	if (!navigator.onLine) {
+	// Reachability, not navigator.onLine: the button must report "can't reach
+	// server" honestly rather than silently no-op or claim a false success.
+	if (!(await checkBackendReachable())) {
 		return false;
+	}
+
+	// Renew the participant token first, so "Sync Now" also extends the 90-day
+	// session (not just refreshes data). A 401 here means the session is truly
+	// dead -> escalate to /login. Other refresh failures are non-fatal; proceed
+	// with the data sync.
+	try {
+		await getParticipantPocketBase().collection('participants').authRefresh();
+		persistParticipantAuthCookie();
+	} catch (e) {
+		if (isParticipantAuthError(e)) {
+			notifyParticipantSessionExpired();
+			return false;
+		}
+		console.warn('Token refresh during manual sync failed:', e);
 	}
 
 	// Unlike runCatchUpSync, the user explicitly asked for this -- always
 	// queue it. withRun() awaits any in-flight run before starting fresh, so
 	// "Sync Now" can never be silently dropped.
+	let reachedServer = false;
 	try {
 		await withRun(async (signal) => {
 			// Manual sync: give previously-failed records another chance by
@@ -1120,6 +1164,8 @@ export async function triggerSync(gateway: ParticipantGateway): Promise<boolean>
 
 			// 3. Pull all records in parallel (full pull since timestamps are cleared)
 			const pullResults = await batchedParallel(syncCollections, (c) => pullChanges(c, signal), 5);
+			// Any fulfilled pull (even 0 records) proves the server was reached.
+			if (pullResults.some((r) => r.status === 'fulfilled')) reachedServer = true;
 			let totalPulled = 0;
 			for (let i = 0; i < syncCollections.length; i++) {
 				const result = pullResults[i];
@@ -1148,6 +1194,15 @@ export async function triggerSync(gateway: ParticipantGateway): Promise<boolean>
 		});
 	} catch (error) {
 		console.error('Full resync failed:', error);
+		if (isParticipantAuthError(error)) {
+			notifyParticipantSessionExpired();
+			return false;
+		}
+	}
+
+	// Record freshness only if we genuinely reached the server.
+	if (reachedServer) {
+		await setLastSuccessfulSyncAt(new Date().toISOString());
 	}
 
 	// Pick up any edits that were queued while we were in the pull phase.
@@ -1157,7 +1212,7 @@ export async function triggerSync(gateway: ParticipantGateway): Promise<boolean>
 		);
 	}
 
-	return true;
+	return reachedServer;
 }
 
 // =============================================================================

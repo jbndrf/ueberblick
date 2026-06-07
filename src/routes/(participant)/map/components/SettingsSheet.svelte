@@ -25,8 +25,10 @@
 	import { sanitizeHtml } from '$lib/sanitize-html';
 	import { getParticipantGateway } from '$lib/participant-state/context.svelte';
 	import { getFullLocalCopyMode, setFullLocalCopyMode } from '$lib/participant-state/context.svelte';
-	import { getNetworkStatus } from '$lib/participant-state/network.svelte';
+	import { getNetworkStatus, checkBackendReachable } from '$lib/participant-state/network.svelte';
 	import { triggerSync } from '$lib/participant-state/sync.svelte';
+	import { getLocale } from '$lib/paraglide/runtime';
+	import { daysSinceSync, isStaleSync, STALE_THRESHOLD_DAYS } from '$lib/participant-state/freshness';
 	import {
 		getDownloadProgress,
 		deletePack,
@@ -37,7 +39,7 @@
 	import { deleteDownloadedFiles } from '$lib/participant-state/file-cache';
 	import { createPersistedTab } from '$lib/participant-state/ui-state.svelte';
 	import { getPocketBase } from '$lib/pocketbase';
-	import { getDB, getStorageStats, type DownloadedPackage, type StorageStats } from '$lib/participant-state/db';
+	import { getDB, getStorageStats, getLastSuccessfulSyncAt, type DownloadedPackage, type StorageStats } from '$lib/participant-state/db';
 	import { createPWAState, initPWAInstallListeners } from '$lib/utils/pwa-detection.svelte';
 	import { onMount } from 'svelte';
 	import PackageSelector from '$lib/components/map/package-selector.svelte';
@@ -96,6 +98,35 @@
 	let isSyncing = $state(false);
 	let syncError = $state<string | null>(null);
 
+	// Data freshness: wall-clock time of the last sync that actually reached the
+	// server (null = never). Drives the "last synced X ago" line and the stale
+	// warning so the participant is never silently working on very old data.
+	let lastSyncedAt = $state<string | null>(null);
+	// `now` is sampled when the sheet opens / a sync completes so the relative
+	// label and staleness recompute without a ticking timer.
+	let now = $state(Date.now());
+
+	async function refreshLastSynced() {
+		lastSyncedAt = await getLastSuccessfulSyncAt();
+		now = Date.now();
+	}
+
+	function formatAgo(iso: string): string {
+		const diffMs = now - new Date(iso).getTime();
+		const rtf = new Intl.RelativeTimeFormat(getLocale(), { numeric: 'auto' });
+		const mins = Math.round(diffMs / 60_000);
+		if (Math.abs(mins) < 60) return rtf.format(-mins, 'minute');
+		const hours = Math.round(mins / 60);
+		if (Math.abs(hours) < 24) return rtf.format(-hours, 'hour');
+		return rtf.format(-Math.round(hours / 24), 'day');
+	}
+
+	const staleDays = $derived(daysSinceSync(lastSyncedAt, now));
+	const isStale = $derived(isStaleSync(lastSyncedAt, now, STALE_THRESHOLD_DAYS));
+	// "Reachable" is the honest online signal: navigator.onLine AND a real ping
+	// succeeded (reachable !== false). undefined = not yet checked -> trust online.
+	const reachable = $derived(network.online && network.reachable !== false);
+
 	// Delete confirmation
 	let showDeleteConfirm = $state(false);
 	let isDeleting = $state(false);
@@ -141,10 +172,13 @@
 		storageStats = await getStorageStats();
 	});
 
-	// Refresh storage stats when the sheet opens
+	// Refresh storage stats + freshness when the sheet opens, and re-check that
+	// the backend is actually reachable (not just navigator.onLine).
 	$effect(() => {
 		if (open) {
 			getStorageStats().then((s) => (storageStats = s));
+			refreshLastSynced();
+			checkBackendReachable();
 		}
 	});
 
@@ -212,11 +246,17 @@
 		syncError = null;
 
 		try {
-			await triggerSync(gateway);
+			// triggerSync renews the token and full-re-pulls when the backend is
+			// reachable; it returns false (no throw) when it can't reach the server.
+			const ok = await triggerSync(gateway);
+			if (!ok) {
+				syncError = m.participantSettingsSheetCantReachServer?.() ?? 'Can’t reach server.';
+			}
 		} catch (error) {
 			syncError = error instanceof Error ? error.message : 'Sync failed';
 		} finally {
 			isSyncing = false;
+			await refreshLastSynced();
 		}
 	}
 
@@ -276,10 +316,10 @@
 			<Tabs.Content value="profile" class="overflow-y-auto py-4 pr-1">
 				<div class="space-y-3">
 					<!-- Connection Status -->
-					<div class="rounded-lg border p-3 {network.online ? 'border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950' : 'border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950'}">
+					<div class="rounded-lg border p-3 {reachable ? 'border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950' : 'border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950'}">
 						<div class="flex items-center justify-between">
 							<div class="flex items-center gap-2">
-								{#if network.online}
+								{#if reachable}
 									<Wifi class="h-4 w-4 text-green-600 dark:text-green-400" />
 									<span class="text-sm font-medium text-green-700 dark:text-green-300">{m.participantSettingsSheetOnline?.() ?? 'Online'}</span>
 								{:else}
@@ -292,7 +332,7 @@
 									variant="outline"
 									size="sm"
 									onclick={handleManualSync}
-									disabled={isSyncing || !network.online}
+									disabled={isSyncing || !reachable}
 								>
 									{#if isSyncing}
 										<Loader2 class="mr-1 h-3 w-3 animate-spin" />
@@ -305,6 +345,19 @@
 							{/if}
 						</div>
 						{#if gateway}
+							<!-- Last successful sync (freshness) -->
+							<p class="mt-1 text-xs text-muted-foreground">
+								{#if lastSyncedAt}
+									{m.participantSettingsSheetLastSynced?.({ ago: formatAgo(lastSyncedAt) }) ?? `Last synced ${formatAgo(lastSyncedAt)}`}
+								{:else}
+									{m.participantSettingsSheetNeverSynced?.() ?? 'Never synced'}
+								{/if}
+							</p>
+							{#if isStale && staleDays !== null}
+								<p class="mt-1 text-xs font-medium text-orange-600 dark:text-orange-400">
+									{m.participantSettingsSheetStaleWarning?.({ days: staleDays }) ?? `Your data is ${staleDays} days old. Connect to refresh.`}
+								</p>
+							{/if}
 							{#if syncError}
 								<p class="mt-1 text-xs text-destructive">{syncError}</p>
 							{:else if gateway.pendingCount > 0}
@@ -312,8 +365,8 @@
 									{m.participantSettingsSheetPendingChanges?.({ count: gateway.pendingCount }) ?? `${gateway.pendingCount} unsaved change${gateway.pendingCount === 1 ? '' : 's'} waiting to upload.`}
 								</p>
 							{:else}
-								<p class="mt-1 text-xs {network.online ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}">
-									{(network.online ? (m.participantSettingsSheetNoChanges?.() ?? 'No changes to sync.') : (m.participantSettingsSheetOfflineQueue?.() ?? 'No pending changes, but new edits will queue locally.'))}
+								<p class="mt-1 text-xs {reachable ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}">
+									{(reachable ? (m.participantSettingsSheetNoChanges?.() ?? 'No changes to sync.') : (m.participantSettingsSheetOfflineQueue?.() ?? 'No pending changes, but new edits will queue locally.'))}
 								</p>
 							{/if}
 						{/if}
