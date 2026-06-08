@@ -5,6 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev --host",
+		"dev:http": "DEV_HTTP=true vite dev --host",
 		"dev:backend": "cd pb && modd",
 		"backend": "cd pb && ./dev-entrypoint.sh",
 		"build:backend": "cd pb && go build",

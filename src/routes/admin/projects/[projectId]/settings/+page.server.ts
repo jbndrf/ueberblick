@@ -1,6 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { superValidate } from 'sveltekit-superforms';
+import { generateRawToken } from '$lib/server/api-token';
 import {
 	infoPagesCreateError,
 	infoPagesUpdateError,
@@ -68,7 +69,7 @@ const DEFAULT_MAP_SETTINGS: ProjectMapDefaults = {
 	center: { lat: 51.1657, lng: 10.4515 }
 };
 
-export const load: PageServerLoad = async ({ locals: { pbAdmin: pb }, params }) => {
+export const load: PageServerLoad = async ({ locals: { pbAdmin: pb, user }, params }) => {
 	const { projectId } = params;
 
 	try {
@@ -76,6 +77,17 @@ export const load: PageServerLoad = async ({ locals: { pbAdmin: pb }, params }) 
 		const project = await pb.collection('projects').getOne(projectId, {
 			fields: 'id, name, settings, icon, chat_enabled, chat_visible_to_roles'
 		});
+
+		// Read-only API tokens for QGIS/GIS access, scoped to this admin + project
+		// (plus their account-wide tokens). token_hash is never surfaced to the client.
+		const apiTokens = user
+			? await pb.collection('api_tokens').getFullList({
+					filter: `user_id = "${user.id}" && (project_id = "${projectId}" || project_id = "")`,
+					sort: '-created',
+					fields: 'id,label,last_four,project_id,expires_at,last_used_at,revoked,created',
+					requestKey: null
+				})
+			: [];
 
 		// Build icon URL using relative path (works with Vite proxy and nginx)
 		let iconUrl: string | null = null;
@@ -157,27 +169,28 @@ export const load: PageServerLoad = async ({ locals: { pbAdmin: pb }, params }) 
 		// Data needed to build a filter preset editor on the Advanced tab.
 		// Mirrors the participant map's `builderCtx` (+page.svelte ~line 714) so
 		// the admin sees the same filterable fields the participant will.
-		const [workflows, workflowStages, toolsForms, workflowFieldDefs, toolsFieldTags] = await Promise.all([
-			pb.collection('workflows').getFullList({
-				filter: `project_id = "${projectId}" && is_active = true`,
-				fields: 'id, name',
-				sort: 'name'
-			}),
-			pb.collection('workflow_stages').getFullList({
-				fields: 'id, workflow_id, stage_name'
-			}),
-			pb.collection('tools_forms').getFullList({
-				fields: 'id, workflow_id'
-			}),
-			pb.collection('workflow_field_defs').getFullList({
-				fields: 'id, workflow_id, key, label, field_type, field_options'
-			}),
-			// Filterable-tag mappings per workflow. Used to render the per-value
-			// default-visibility toggles inside the "Sichtbare Workflows" section.
-			pb.collection('tools_field_tags').getFullList({
-				fields: 'id, workflow_id, tag_mappings'
-			})
-		]);
+		const [workflows, workflowStages, toolsForms, workflowFieldDefs, toolsFieldTags] =
+			await Promise.all([
+				pb.collection('workflows').getFullList({
+					filter: `project_id = "${projectId}" && is_active = true`,
+					fields: 'id, name',
+					sort: 'name'
+				}),
+				pb.collection('workflow_stages').getFullList({
+					fields: 'id, workflow_id, stage_name'
+				}),
+				pb.collection('tools_forms').getFullList({
+					fields: 'id, workflow_id'
+				}),
+				pb.collection('workflow_field_defs').getFullList({
+					fields: 'id, workflow_id, key, label, field_type, field_options'
+				}),
+				// Filterable-tag mappings per workflow. Used to render the per-value
+				// default-visibility toggles inside the "Sichtbare Workflows" section.
+				pb.collection('tools_field_tags').getFullList({
+					fields: 'id, workflow_id, tag_mappings'
+				})
+			]);
 
 		// Initialize forms
 		const layerForm = await superValidate(zod4(mapLayerSchema));
@@ -201,7 +214,8 @@ export const load: PageServerLoad = async ({ locals: { pbAdmin: pb }, params }) 
 			workflowStages,
 			toolsForms,
 			workflowFieldDefs,
-			toolsFieldTags
+			toolsFieldTags,
+			apiTokens
 		};
 	} catch (err) {
 		console.error('Error loading project settings:', err);
@@ -239,7 +253,10 @@ export const actions: Actions = {
 			return { form, success: true };
 		} catch (err) {
 			console.error('Error saving map defaults:', err);
-			return fail(500, { form, message: settingsServerSaveMapDefaultsError?.() ?? 'Failed to save map defaults' });
+			return fail(500, {
+				form,
+				message: settingsServerSaveMapDefaultsError?.() ?? 'Failed to save map defaults'
+			});
 		}
 	},
 
@@ -280,7 +297,10 @@ export const actions: Actions = {
 			return { form, success: true };
 		} catch (err) {
 			console.error('Error creating map layer:', err);
-			return fail(500, { form, message: settingsServerCreateLayerError?.() ?? 'Failed to create map layer' });
+			return fail(500, {
+				form,
+				message: settingsServerCreateLayerError?.() ?? 'Failed to create map layer'
+			});
 		}
 	},
 
@@ -389,7 +409,9 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error adding tile layer:', err);
-			return fail(500, { message: settingsServerAddTileLayerError?.() ?? 'Failed to add tile layer' });
+			return fail(500, {
+				message: settingsServerAddTileLayerError?.() ?? 'Failed to add tile layer'
+			});
 		}
 	},
 
@@ -406,9 +428,14 @@ export const actions: Actions = {
 		const version = formData.get('version') as string;
 		const layerType = (formData.get('layer_type') as string) || 'overlay';
 
-		if (!name?.trim()) return fail(400, { message: settingsServerNameRequired?.() ?? 'Name is required' });
-		if (!url?.trim()) return fail(400, { message: settingsServerUrlRequired?.() ?? 'URL is required' });
-		if (!layers?.trim()) return fail(400, { message: settingsServerWmsLayersRequired?.() ?? 'WMS layers parameter is required' });
+		if (!name?.trim())
+			return fail(400, { message: settingsServerNameRequired?.() ?? 'Name is required' });
+		if (!url?.trim())
+			return fail(400, { message: settingsServerUrlRequired?.() ?? 'URL is required' });
+		if (!layers?.trim())
+			return fail(400, {
+				message: settingsServerWmsLayersRequired?.() ?? 'WMS layers parameter is required'
+			});
 
 		try {
 			const config: WmsSourceConfig = { layers: layers.trim() };
@@ -430,7 +457,9 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error adding WMS layer:', err);
-			return fail(500, { message: settingsServerAddWmsLayerError?.() ?? 'Failed to add WMS layer' });
+			return fail(500, {
+				message: settingsServerAddWmsLayerError?.() ?? 'Failed to add WMS layer'
+			});
 		}
 	},
 
@@ -477,7 +506,10 @@ export const actions: Actions = {
 			return { form, success: true };
 		} catch (err) {
 			console.error('Error updating map layer:', err);
-			return fail(500, { form, message: settingsServerUpdateLayerError?.() ?? 'Failed to update map layer' });
+			return fail(500, {
+				form,
+				message: settingsServerUpdateLayerError?.() ?? 'Failed to update map layer'
+			});
 		}
 	},
 
@@ -527,7 +559,9 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error toggling layer type:', err);
-			return fail(500, { message: settingsServerToggleLayerTypeError?.() ?? 'Failed to toggle layer type' });
+			return fail(500, {
+				message: settingsServerToggleLayerTypeError?.() ?? 'Failed to toggle layer type'
+			});
 		}
 	},
 
@@ -545,7 +579,9 @@ export const actions: Actions = {
 		try {
 			roleIds = JSON.parse(roleIdsJson);
 		} catch {
-			return fail(400, { message: settingsServerInvalidRoleIdsFormat?.() ?? 'Invalid role IDs format' });
+			return fail(400, {
+				message: settingsServerInvalidRoleIdsFormat?.() ?? 'Invalid role IDs format'
+			});
 		}
 
 		try {
@@ -555,7 +591,9 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating layer roles:', err);
-			return fail(500, { message: settingsServerUpdateLayerRolesError?.() ?? 'Failed to update layer roles' });
+			return fail(500, {
+				message: settingsServerUpdateLayerRolesError?.() ?? 'Failed to update layer roles'
+			});
 		}
 	},
 
@@ -606,16 +644,17 @@ export const actions: Actions = {
 				...currentConfig,
 				default_zoom: defaultZoom ? Number(defaultZoom) : undefined,
 				default_center:
-					centerLat && centerLng
-						? { lat: Number(centerLat), lng: Number(centerLng) }
-						: undefined
+					centerLat && centerLng ? { lat: Number(centerLat), lng: Number(centerLng) } : undefined
 			};
 
 			await pb.collection('map_layers').update(layerId, { config: newConfig });
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating base layer defaults:', err);
-			return fail(500, { message: settingsServerUpdateBaseLayerDefaultsError?.() ?? 'Failed to update base layer defaults' });
+			return fail(500, {
+				message:
+					settingsServerUpdateBaseLayerDefaultsError?.() ?? 'Failed to update base layer defaults'
+			});
 		}
 	},
 
@@ -631,18 +670,24 @@ export const actions: Actions = {
 		const visibleToRolesJson = formData.get('visible_to_roles') as string;
 
 		if (!name?.trim()) {
-			return fail(400, { message: settingsServerPackageNameRequired?.() ?? 'Package name is required' });
+			return fail(400, {
+				message: settingsServerPackageNameRequired?.() ?? 'Package name is required'
+			});
 		}
 
 		if (!regionGeojsonStr?.trim()) {
-			return fail(400, { message: settingsServerRegionGeojsonRequired?.() ?? 'Region GeoJSON is required' });
+			return fail(400, {
+				message: settingsServerRegionGeojsonRequired?.() ?? 'Region GeoJSON is required'
+			});
 		}
 
 		let regionGeojson: object;
 		try {
 			regionGeojson = JSON.parse(regionGeojsonStr);
 			if (!isValidPolygon(regionGeojson)) {
-				return fail(400, { message: settingsServerInvalidGeojsonPolygon?.() ?? 'Invalid GeoJSON polygon' });
+				return fail(400, {
+					message: settingsServerInvalidGeojsonPolygon?.() ?? 'Invalid GeoJSON polygon'
+				});
 			}
 		} catch {
 			return fail(400, { message: settingsServerInvalidJsonFormat?.() ?? 'Invalid JSON format' });
@@ -652,10 +697,14 @@ export const actions: Actions = {
 		try {
 			layerIds = JSON.parse(layersJson);
 			if (!Array.isArray(layerIds) || layerIds.length === 0) {
-				return fail(400, { message: settingsServerAtLeastOneLayer?.() ?? 'At least one layer must be selected' });
+				return fail(400, {
+					message: settingsServerAtLeastOneLayer?.() ?? 'At least one layer must be selected'
+				});
 			}
 		} catch {
-			return fail(400, { message: settingsServerInvalidLayersFormat?.() ?? 'Invalid layers format' });
+			return fail(400, {
+				message: settingsServerInvalidLayersFormat?.() ?? 'Invalid layers format'
+			});
 		}
 
 		let visibleToRoles: string[] = [];
@@ -688,13 +737,15 @@ export const actions: Actions = {
 			});
 		} catch (err) {
 			console.error('Error creating package record:', err);
-			return fail(500, { message: settingsServerCreatePackageError?.() ?? 'Failed to create package' });
+			return fail(500, {
+				message: settingsServerCreatePackageError?.() ?? 'Failed to create package'
+			});
 		}
 
 		// Fetch layer details (source data is now inline)
 		try {
 			const layerRecords = await pb.collection('map_layers').getFullList<MapLayer>({
-				filter: layerIds.map(id => `id = "${id}"`).join(' || ')
+				filter: layerIds.map((id) => `id = "${id}"`).join(' || ')
 			});
 
 			console.log(`[createPackage] Found ${layerRecords.length} layers`);
@@ -703,7 +754,9 @@ export const actions: Actions = {
 			const tileSources: TileSource[] = [];
 			const httpSourceTypes = ['tile', 'preset'];
 			for (const layer of layerRecords) {
-				console.log(`[createPackage] Layer "${layer.name}": source_type=${layer.source_type}, url=${layer.url}`);
+				console.log(
+					`[createPackage] Layer "${layer.name}": source_type=${layer.source_type}, url=${layer.url}`
+				);
 
 				// Handle uploaded layers (read from filesystem)
 				if (layer.source_type === 'uploaded' && layer.status === 'completed') {
@@ -728,9 +781,10 @@ export const actions: Actions = {
 			}
 
 			if (tileSources.length === 0) {
-				const errorMsg = layerRecords.length === 0
-					? 'No layers found with the given IDs'
-					: 'No tile sources found in selected layers. Only tile-based layers (tile, preset, uploaded) can be packaged.';
+				const errorMsg =
+					layerRecords.length === 0
+						? 'No layers found with the given IDs'
+						: 'No tile sources found in selected layers. Only tile-based layers (tile, preset, uploaded) can be packaged.';
 				await pb.collection('offline_packages').update(pkg.id, {
 					status: 'failed',
 					error_message: errorMsg
@@ -753,7 +807,9 @@ export const actions: Actions = {
 				}
 			});
 
-			console.log(`[createPackage] Package created: ${result.tileCount} tiles, ${result.fileSizeBytes} bytes`);
+			console.log(
+				`[createPackage] Package created: ${result.tileCount} tiles, ${result.fileSizeBytes} bytes`
+			);
 
 			// Upload the ZIP file to PocketBase
 			const zipBlob = new Blob([new Uint8Array(result.zipBuffer)], { type: 'application/zip' });
@@ -783,7 +839,9 @@ export const actions: Actions = {
 				// Ignore update error
 			}
 
-			return fail(500, { message: settingsServerCreateTilePackageError?.() ?? 'Failed to create tile package' });
+			return fail(500, {
+				message: settingsServerCreateTilePackageError?.() ?? 'Failed to create tile package'
+			});
 		}
 	},
 
@@ -793,7 +851,9 @@ export const actions: Actions = {
 		const id = formData.get('id') as string;
 
 		if (!id) {
-			return fail(400, { message: settingsServerPackageIdRequired?.() ?? 'Package ID is required' });
+			return fail(400, {
+				message: settingsServerPackageIdRequired?.() ?? 'Package ID is required'
+			});
 		}
 
 		try {
@@ -801,7 +861,9 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error deleting package:', err);
-			return fail(500, { message: settingsServerDeletePackageError?.() ?? 'Failed to delete package' });
+			return fail(500, {
+				message: settingsServerDeletePackageError?.() ?? 'Failed to delete package'
+			});
 		}
 	},
 
@@ -812,14 +874,18 @@ export const actions: Actions = {
 		const roleIdsJson = formData.get('roleIds') as string;
 
 		if (!packageId) {
-			return fail(400, { message: settingsServerPackageIdRequired?.() ?? 'Package ID is required' });
+			return fail(400, {
+				message: settingsServerPackageIdRequired?.() ?? 'Package ID is required'
+			});
 		}
 
 		let roleIds: string[] = [];
 		try {
 			roleIds = JSON.parse(roleIdsJson);
 		} catch {
-			return fail(400, { message: settingsServerInvalidRoleIdsFormat?.() ?? 'Invalid role IDs format' });
+			return fail(400, {
+				message: settingsServerInvalidRoleIdsFormat?.() ?? 'Invalid role IDs format'
+			});
 		}
 
 		try {
@@ -829,7 +895,9 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating package roles:', err);
-			return fail(500, { message: settingsServerUpdatePackageRolesError?.() ?? 'Failed to update package roles' });
+			return fail(500, {
+				message: settingsServerUpdatePackageRolesError?.() ?? 'Failed to update package roles'
+			});
 		}
 	},
 
@@ -880,7 +948,8 @@ export const actions: Actions = {
 
 		if (!id) return fail(400, { message: settingsServerIdRequired?.() ?? 'ID is required' });
 		if (!title?.trim()) return fail(400, { message: 'Title is required' });
-		if (!content?.trim()) return fail(400, { message: settingsServerContentRequired?.() ?? 'Content is required' });
+		if (!content?.trim())
+			return fail(400, { message: settingsServerContentRequired?.() ?? 'Content is required' });
 
 		try {
 			const record = await pb.collection('info_pages').getOne(id);
@@ -957,6 +1026,50 @@ export const actions: Actions = {
 		throw redirect(303, '/admin/projects');
 	},
 
+	// Create a read-only API token (for QGIS/GIS access) scoped to this project.
+	// The raw token is returned ONCE; only its sha256 hash is stored.
+	createApiToken: async ({ request, locals: { pbAdmin: pb, user }, params }) => {
+		const { projectId } = params;
+		if (!user || user.collectionName !== 'users') return fail(401, { message: 'Unauthorized' });
+
+		const formData = await request.formData();
+		const label = ((formData.get('label') as string) || '').trim().slice(0, 255);
+		const expiresAt = ((formData.get('expires_at') as string) || '').trim();
+
+		const { raw, hash, lastFour } = generateRawToken();
+		try {
+			await pb.collection('api_tokens').create({
+				user_id: user.id,
+				project_id: projectId,
+				label,
+				token_hash: hash,
+				last_four: lastFour,
+				expires_at: expiresAt || null,
+				revoked: false
+			});
+			return { success: true, rawToken: raw };
+		} catch (err) {
+			console.error('Error creating API token:', err);
+			return fail(500, { message: 'Failed to create API token' });
+		}
+	},
+
+	// Revoke (delete) an API token the admin owns.
+	revokeApiToken: async ({ request, locals: { pbAdmin: pb, user } }) => {
+		if (!user || user.collectionName !== 'users') return fail(401, { message: 'Unauthorized' });
+		const formData = await request.formData();
+		const tokenId = (formData.get('token_id') as string) || '';
+		if (!tokenId) return fail(400, { message: 'Token ID is required' });
+		try {
+			// Ownership is enforced by the collection's deleteRule (user_id = auth.id).
+			await pb.collection('api_tokens').delete(tokenId);
+			return { success: true };
+		} catch (err) {
+			console.error('Error revoking API token:', err);
+			return fail(500, { message: 'Failed to revoke API token' });
+		}
+	},
+
 	// Update display name shown in participant app
 	updateDisplayName: async ({ request, locals: { pbAdmin: pb }, params }) => {
 		const { projectId } = params;
@@ -977,7 +1090,9 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error saving display name:', err);
-			return fail(500, { message: settingsServerSaveDisplayNameError?.() ?? 'Failed to save display name' });
+			return fail(500, {
+				message: settingsServerSaveDisplayNameError?.() ?? 'Failed to save display name'
+			});
 		}
 	},
 

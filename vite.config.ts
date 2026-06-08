@@ -5,9 +5,14 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { SvelteKitPWA } from '@vite-pwa/sveltekit';
 import basicSsl from '@vitejs/plugin-basic-ssl';
 
+// Set DEV_HTTP=true to run the dev server over plain HTTP (no self-signed cert).
+// Useful for desktop GIS clients (QGIS/GDAL) that reject the basic-ssl cert.
+// Leave unset for the normal HTTPS dev flow (PWA/service worker need a secure context).
+const DEV_HTTP = process.env.DEV_HTTP === 'true';
+
 export default defineConfig({
 	plugins: [
-		basicSsl(),
+		...(DEV_HTTP ? [] : [basicSsl()]),
 		tailwindcss(),
 		sveltekit(),
 		SvelteKitPWA({

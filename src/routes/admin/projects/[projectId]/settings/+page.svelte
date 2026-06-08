@@ -16,7 +16,9 @@
 		settingsNavLayers,
 		settingsNavMapDefaults,
 		settingsNavOfflinePacks,
-		settingsNavStartup
+		settingsNavStartup,
+		settingsGroupIntegrations,
+		settingsNavApiTokens
 	} from '$lib/paraglide/messages';
 	import {
 		Image,
@@ -28,7 +30,8 @@
 		Package,
 		Filter,
 		CircleDot,
-		AlertTriangle
+		AlertTriangle,
+		KeyRound
 	} from '@lucide/svelte';
 	import SettingsSidebar, { type SidebarGroup, type SidebarStatus } from './SettingsSidebar.svelte';
 	import BrandingSection from './sections/BrandingSection.svelte';
@@ -41,6 +44,7 @@
 	import FieldFiltersSection from './sections/FieldFiltersSection.svelte';
 	import ClusterSection from './sections/ClusterSection.svelte';
 	import DangerZoneSection from './sections/DangerZoneSection.svelte';
+	import ApiTokensSection from './sections/ApiTokensSection.svelte';
 
 	let { data } = $props();
 
@@ -55,6 +59,7 @@
 		'offline-packs',
 		'field-filters',
 		'cluster',
+		'api-tokens',
 		'danger-zone'
 	]);
 
@@ -161,6 +166,16 @@
 			]
 		},
 		{
+			caption: settingsGroupIntegrations?.() ?? 'Integrationen',
+			items: [
+				{
+					id: 'api-tokens',
+					label: settingsNavApiTokens?.() ?? 'GIS-Zugang',
+					icon: KeyRound
+				}
+			]
+		},
+		{
 			caption: settingsGroupDanger?.() ?? 'Gefahrenzone',
 			items: [
 				{
@@ -205,6 +220,8 @@
 				<FieldFiltersSection {data} />
 			{:else if currentSection === 'cluster'}
 				<ClusterSection {data} />
+			{:else if currentSection === 'api-tokens'}
+				<ApiTokensSection {data} />
 			{:else if currentSection === 'danger-zone'}
 				<DangerZoneSection {data} />
 			{/if}
