@@ -2,7 +2,7 @@ name: Build and Push Docker Images
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
     tags: ['v*']
 
 jobs:
@@ -17,26 +17,30 @@ jobs:
       - name: Login to GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Set version tag
+      - name: Set version and channel tags
         run: |
+          echo "TAG=${{ github.sha }}" >> $GITHUB_ENV
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
             echo "TAG=${{ github.ref_name }}" >> $GITHUB_ENV
+            echo "CHANNEL=latest" >> $GITHUB_ENV
+          elif [[ "${{ github.ref }}" == refs/heads/dev ]]; then
+            echo "CHANNEL=dev" >> $GITHUB_ENV
           else
-            echo "TAG=${{ github.sha }}" >> $GITHUB_ENV
+            echo "CHANNEL=latest" >> $GITHUB_ENV
           fi
 
       - name: Build and push backend
         run: |
           docker build -f Dockerfile.backend \
-            -t ghcr.io/jbndrf/ueberblick-backend:latest \
+            -t ghcr.io/jbndrf/ueberblick-backend:${{ env.CHANNEL }} \
             -t ghcr.io/jbndrf/ueberblick-backend:${{ env.TAG }} . \
-          && docker push ghcr.io/jbndrf/ueberblick-backend:latest \
+          && docker push ghcr.io/jbndrf/ueberblick-backend:${{ env.CHANNEL }} \
           && docker push ghcr.io/jbndrf/ueberblick-backend:${{ env.TAG }}
 
       - name: Build and push frontend
         run: |
           docker build -f Dockerfile.frontend \
-            -t ghcr.io/jbndrf/ueberblick-frontend:latest \
+            -t ghcr.io/jbndrf/ueberblick-frontend:${{ env.CHANNEL }} \
             -t ghcr.io/jbndrf/ueberblick-frontend:${{ env.TAG }} . \
-          && docker push ghcr.io/jbndrf/ueberblick-frontend:latest \
+          && docker push ghcr.io/jbndrf/ueberblick-frontend:${{ env.CHANNEL }} \
           && docker push ghcr.io/jbndrf/ueberblick-frontend:${{ env.TAG }}
