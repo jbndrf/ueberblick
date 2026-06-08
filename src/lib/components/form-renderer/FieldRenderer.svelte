@@ -24,6 +24,7 @@
 		CustomTableSelectorOptions
 	} from './types';
 	import { isImageFile } from './types';
+	import { orderByCanonical } from './option-order';
 
 	// ==========================================================================
 	// Props
@@ -440,27 +441,30 @@
 		return true;
 	});
 
-	// Get display labels for selected options (for view mode badges)
+	// Get display labels for selected options (for view mode badges).
+	// Badges render in canonical option order (not stored click order), matching
+	// the edit-mode chips in MobileMultiSelect.
 	const selectedLabels = $derived.by((): string[] => {
 		if (!hasValue) return [];
 
 		// For dropdown/multiple_choice - options are already labels
 		if (field.field_type === 'dropdown' || field.field_type === 'multiple_choice') {
-			if (Array.isArray(value)) return value as string[];
-			return [value as string];
+			const selected = Array.isArray(value) ? (value as string[]) : [value as string];
+			return orderByCanonical(selected, dropdownSelectOptions.map((o) => o.id));
 		}
 
 		// For smart_dropdown
 		if (field.field_type === 'smart_dropdown') {
-			if (Array.isArray(value)) return value as string[];
-			return [value as string];
+			const selected = Array.isArray(value) ? (value as string[]) : [value as string];
+			return orderByCanonical(selected, smartDropdownSelectOptions.map((o) => o.id));
 		}
 
 		// For custom_table_selector - need to look up labels from customEntities
 		if (field.field_type === 'custom_table_selector') {
-			const ids = Array.isArray(value) ? value : [value];
-			return ids.map(id => {
-				const entity = customEntities.find(e => e.id === id);
+			const ids = Array.isArray(value) ? (value as string[]) : [value as string];
+			const ordered = orderByCanonical(ids, customEntities.map((e) => e.id));
+			return ordered.map((id) => {
+				const entity = customEntities.find((e) => e.id === id);
 				return entity?.label || String(id);
 			});
 		}

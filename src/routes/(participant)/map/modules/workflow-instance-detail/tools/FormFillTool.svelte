@@ -99,12 +99,26 @@
 	// Read-only context from prior instance values (e.g. earlier-stage form
 	// answers), used so dependent fields like smart_dropdown can resolve their
 	// source values. Keys are field ids; values are parsed where possible.
+	//
+	// workflow_field_values is append-only: a field (incl. singleton) can have
+	// many rows per field_def_id. The current value is the newest by
+	// `recorded_at` — `existingFieldValues` arrives unsorted (Map insertion
+	// order from the field-value cache), so we must collapse by recency here,
+	// not by array position, or a stale earlier row can win. Mirrors the
+	// newest-wins semantics of WorkflowInstanceDetailState.indexFieldValues.
 	const priorValues = $derived.by((): Record<string, unknown> => {
-		const out: Record<string, unknown> = {};
+		const newestByKey: Record<string, FieldValue> = {};
 		for (const fv of existingFieldValues ?? []) {
 			if (!fv.value) continue;
-			const key = (fv as any).field_def_id as string | undefined;
+			const key = (fv as { field_def_id?: string }).field_def_id;
 			if (!key) continue;
+			const prev = newestByKey[key];
+			if (!prev || (fv.recorded_at ?? '') > (prev.recorded_at ?? '')) {
+				newestByKey[key] = fv;
+			}
+		}
+		const out: Record<string, unknown> = {};
+		for (const [key, fv] of Object.entries(newestByKey)) {
 			try {
 				out[key] =
 					fv.value.startsWith('[') || fv.value.startsWith('{')

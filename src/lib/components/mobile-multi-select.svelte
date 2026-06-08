@@ -149,11 +149,13 @@
 	let highlightedIndex = $state(-1); // For keyboard navigation on desktop
 	let openUpward = $state(false); // Whether dropdown opens upward (when near bottom of viewport)
 
-	// Derived state
+	// Derived state.
+	// Render selected chips in canonical `options` order (not click order) so a
+	// checklist always reads top-to-bottom. Display-only: `selectedIds` and the
+	// emitted order are untouched, so stored order stays as the user entered it.
+	// Options not in `options` (e.g. a removed option) are dropped, as before.
 	const selectedOptions = $derived(
-		(selectedIds || [])
-			.map((id) => options?.find((opt) => getOptionId(opt) === id))
-			.filter((opt): opt is T => opt !== undefined)
+		(options || []).filter((opt) => (selectedIds || []).includes(getOptionId(opt)))
 	);
 
 	const filteredOptions = $derived(
