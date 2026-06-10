@@ -260,7 +260,7 @@ Single relation vs multi-relation:
 { name: "project_id", type: "relation", collectionId: projectsId, maxSelect: 1 }
 
 // Multi-relation (many-to-many)
-{ name: "visible_to_roles", type: "relation", collectionId: rolesId, maxSelect: 99 }
+{ name: "view_roles", type: "relation", collectionId: rolesId, maxSelect: 99 }
 ```
 
 ## API Rules Reference
@@ -279,10 +279,10 @@ When checking if a user's multi-relation field contains a value from another mul
 
 ```javascript
 // Wrong -- fails silently
-`@request.auth.role_id ?= visible_to_roles`
+`@request.auth.role_id ?= view_roles`
 
 // Correct
-`@request.auth.role_id.id ?= visible_to_roles.id`
+`@request.auth.role_id.id ?= view_roles.id`
 ```
 
 ### "Empty = all" convention

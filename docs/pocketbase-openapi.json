@@ -12,6 +12,356 @@
     }
   ],
   "paths": {
+    "/api/geo/projects/{projectId}": {
+      "get": {
+        "summary": "GIS API: list a project's GeoJSON layers",
+        "description": "SvelteKit app route (NOT a PocketBase `/collections/*` route). Returns a layer index for the project: one entry per workflow plus a markers layer, each with a feature count and a ready-to-paste `.geojson` URL for GIS clients such as QGIS. Authenticated with a GIS bearer token (`gisBearer`).",
+        "tags": [
+          "GIS API"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "description": "PocketBase id of the project.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Layer index for the project.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "project_id": {
+                      "type": "string"
+                    },
+                    "layers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "workflow",
+                              "markers"
+                            ]
+                          },
+                          "id": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Workflow id for workflow layers; null for the markers layer."
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "geometry_type": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "feature_count": {
+                            "type": "integer"
+                          },
+                          "url": {
+                            "type": "string",
+                            "format": "uri",
+                            "description": "Absolute `.geojson` URL for this layer."
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "name",
+                          "feature_count",
+                          "url"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "project_id",
+                    "layers"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, or expired API token."
+          },
+          "403": {
+            "description": "Token is scoped to a different project."
+          },
+          "404": {
+            "description": "Project not found (or not visible to the token's owning admin)."
+          }
+        },
+        "security": [
+          {
+            "gisBearer": []
+          }
+        ]
+      }
+    },
+    "/api/geo/projects/{projectId}/markers.geojson": {
+      "get": {
+        "summary": "GIS API: project markers as GeoJSON",
+        "description": "SvelteKit app route (NOT a PocketBase `/collections/*` route). Returns the project's markers as a GeoJSON FeatureCollection of Point features (WGS84, `[lon, lat]`). Markers without a valid location are skipped. Authenticated with a GIS bearer token (`gisBearer`).",
+        "tags": [
+          "GIS API"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "description": "PocketBase id of the project.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "GeoJSON FeatureCollection of marker Points.",
+            "content": {
+              "application/geo+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "FeatureCollection"
+                      ]
+                    },
+                    "features": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "Feature"
+                            ]
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "geometry": {
+                            "type": "object",
+                            "description": "GeoJSON Point geometry, WGS84 `[lon, lat]`.",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "Point"
+                                ]
+                              },
+                              "coordinates": {
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                }
+                              }
+                            }
+                          },
+                          "properties": {
+                            "type": "object",
+                            "description": "Marker attributes. Fixed keys `id`, `title`, `description`, `category` (resolved to the category name), `created`, `created_by`, plus the flattened entries of the marker's `properties` JSON (objects are JSON-stringified; keys colliding with the fixed ones are skipped).",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "description": {
+                                "type": "string"
+                              },
+                              "category": {
+                                "type": "string"
+                              },
+                              "created": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "created_by": {
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": true
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "id",
+                          "geometry",
+                          "properties"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "features"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, or expired API token."
+          },
+          "403": {
+            "description": "Token is scoped to a different project."
+          },
+          "404": {
+            "description": "Project not found (or not visible to the token's owning admin)."
+          }
+        },
+        "security": [
+          {
+            "gisBearer": []
+          }
+        ]
+      }
+    },
+    "/api/geo/projects/{projectId}/workflows/{workflowId}.geojson": {
+      "get": {
+        "summary": "GIS API: workflow instances as GeoJSON",
+        "description": "SvelteKit app route (NOT a PocketBase `/collections/*` route). Returns a workflow's instances as a GeoJSON FeatureCollection (WGS84, RFC 7946). Geometry is emitted verbatim from `workflow_instances.geometry`; Point workflows whose geometry is null fall back to the derived centroid. Authenticated with a GIS bearer token (`gisBearer`).",
+        "tags": [
+          "GIS API"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "description": "PocketBase id of the project.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workflowId",
+            "in": "path",
+            "required": true,
+            "description": "PocketBase id of the workflow. Must belong to `projectId`, otherwise 404.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "GeoJSON FeatureCollection of workflow instances.",
+            "content": {
+              "application/geo+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "FeatureCollection"
+                      ]
+                    },
+                    "features": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "Feature"
+                            ]
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "geometry": {
+                            "type": "object",
+                            "nullable": true,
+                            "description": "GeoJSON geometry copied verbatim from the instance (any GeoJSON type, WGS84 `[lon, lat]`). For Point workflows with no stored geometry, the derived centroid Point is used; otherwise null when absent.",
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              },
+                              "coordinates": {}
+                            }
+                          },
+                          "properties": {
+                            "type": "object",
+                            "description": "Instance attributes. System fields `id`, `status`, `current_stage` (resolved stage name), `created_by` (resolved participant name), `created`, `last_activity_at`, plus one property per `workflow_field_defs` entry keyed by its label (collisions disambiguated). Relation/selector ids are resolved to labels; array values are joined with \"; \"; file fields list their file names joined with \"; \".",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "current_stage": {
+                                "type": "string"
+                              },
+                              "created_by": {
+                                "type": "string"
+                              },
+                              "created": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "last_activity_at": {
+                                "type": "string",
+                                "format": "date-time",
+                                "nullable": true
+                              }
+                            },
+                            "additionalProperties": true
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "id",
+                          "geometry",
+                          "properties"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "features"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, or expired API token."
+          },
+          "403": {
+            "description": "Token is scoped to a different project."
+          },
+          "404": {
+            "description": "Project or workflow not found, or the workflow does not belong to the project."
+          }
+        },
+        "security": [
+          {
+            "gisBearer": []
+          }
+        ]
+      }
+    },
     "/collections/participants/records": {
       "post": {
         "summary": "Register new Participants Collection",
@@ -4147,7 +4497,7 @@
             "schema": {
               "type": "string"
             },
-            "example": "connection_id, connection_id.workflow_id, connection_id.workflow_id.project_id, connection_id.workflow_id.entry_allowed_roles, connection_id.workflow_id.visible_to_roles, connection_id.from_stage_id, connection_id.from_stage_id.workflow_id, connection_id.from_stage_id.visible_to_roles, connection_id.to_stage_id, connection_id.to_stage_id.workflow_id, connection_id.to_stage_id.visible_to_roles, connection_id.allowed_roles, connection_id.allowed_roles.project_id, editable_fields, editable_fields.form_id, editable_fields.form_id.workflow_id, editable_fields.form_id.connection_id, editable_fields.form_id.stage_id, editable_fields.form_id.allowed_roles, allowed_roles, allowed_roles.project_id, allowed_roles.project_id.owner_id, stage_id, stage_id.workflow_id, stage_id.workflow_id.project_id, stage_id.workflow_id.entry_allowed_roles, stage_id.workflow_id.visible_to_roles, stage_id.visible_to_roles, stage_id.visible_to_roles.project_id"
+            "example": "workflow_id, workflow_id.project_id, workflow_id.entry_allowed_roles, workflow_id.visible_to_roles, connection_id, connection_id.workflow_id, connection_id.workflow_id.project_id, connection_id.workflow_id.entry_allowed_roles, connection_id.workflow_id.visible_to_roles, connection_id.from_stage_id, connection_id.from_stage_id.workflow_id, connection_id.to_stage_id, connection_id.to_stage_id.workflow_id, connection_id.allowed_roles, connection_id.allowed_roles.project_id, editable_fields, editable_fields.workflow_id, editable_fields.workflow_id.project_id, editable_fields.view_roles, editable_fields.view_roles.project_id, self_edit_roles, self_edit_roles.project_id, any_edit_roles, any_edit_roles.project_id, stage_id, stage_id.workflow_id, stage_id.workflow_id.project_id, stage_id.workflow_id.entry_allowed_roles"
           }
         ],
         "responses": {
@@ -4183,7 +4533,7 @@
           }
         },
         "x-notes": {
-          "description": "### Expansion Options\n\nThis endpoint supports expanding relations. Use the `expand` parameter with any of the following paths:\n\n- `connection_id`\n- `connection_id.workflow_id`\n- `connection_id.workflow_id.project_id`\n- `connection_id.workflow_id.entry_allowed_roles`\n- `connection_id.workflow_id.visible_to_roles`\n- `connection_id.from_stage_id`\n- `connection_id.from_stage_id.workflow_id`\n- `connection_id.from_stage_id.visible_to_roles`\n- `connection_id.to_stage_id`\n- `connection_id.to_stage_id.workflow_id`\n- `connection_id.to_stage_id.visible_to_roles`\n- `connection_id.allowed_roles`\n- `connection_id.allowed_roles.project_id`\n- `editable_fields`\n- `editable_fields.form_id`\n- `editable_fields.form_id.workflow_id`\n- `editable_fields.form_id.connection_id`\n- `editable_fields.form_id.stage_id`\n- `editable_fields.form_id.allowed_roles`\n- `allowed_roles`\n- `allowed_roles.project_id`\n- `allowed_roles.project_id.owner_id`\n- `stage_id`\n- `stage_id.workflow_id`\n- `stage_id.workflow_id.project_id`\n- `stage_id.workflow_id.entry_allowed_roles`\n- `stage_id.workflow_id.visible_to_roles`\n- `stage_id.visible_to_roles`\n- `stage_id.visible_to_roles.project_id`\n\nYou can also combine multiple expansions with commas (e.g., `expand=field1,field2.nested`)."
+          "description": "### Expansion Options\n\nThis endpoint supports expanding relations. Use the `expand` parameter with any of the following paths:\n\n- `workflow_id`\n- `workflow_id.project_id`\n- `workflow_id.entry_allowed_roles`\n- `workflow_id.visible_to_roles`\n- `connection_id`\n- `connection_id.workflow_id`\n- `connection_id.workflow_id.project_id`\n- `connection_id.workflow_id.entry_allowed_roles`\n- `connection_id.workflow_id.visible_to_roles`\n- `connection_id.from_stage_id`\n- `connection_id.from_stage_id.workflow_id`\n- `connection_id.to_stage_id`\n- `connection_id.to_stage_id.workflow_id`\n- `connection_id.allowed_roles`\n- `connection_id.allowed_roles.project_id`\n- `editable_fields`\n- `editable_fields.workflow_id`\n- `editable_fields.workflow_id.project_id`\n- `editable_fields.view_roles`\n- `editable_fields.view_roles.project_id`\n- `self_edit_roles`\n- `self_edit_roles.project_id`\n- `any_edit_roles`\n- `any_edit_roles.project_id`\n- `stage_id`\n- `stage_id.workflow_id`\n- `stage_id.workflow_id.project_id`\n- `stage_id.workflow_id.entry_allowed_roles`\n\nYou can also combine multiple expansions with commas (e.g., `expand=field1,field2.nested`)."
         },
         "security": [
           {
@@ -4246,7 +4596,7 @@
             "schema": {
               "type": "string"
             },
-            "example": "connection_id, connection_id.workflow_id, connection_id.workflow_id.project_id, connection_id.workflow_id.entry_allowed_roles, connection_id.workflow_id.visible_to_roles, connection_id.from_stage_id, connection_id.from_stage_id.workflow_id, connection_id.from_stage_id.visible_to_roles, connection_id.to_stage_id, connection_id.to_stage_id.workflow_id, connection_id.to_stage_id.visible_to_roles, connection_id.allowed_roles, connection_id.allowed_roles.project_id, editable_fields, editable_fields.form_id, editable_fields.form_id.workflow_id, editable_fields.form_id.connection_id, editable_fields.form_id.stage_id, editable_fields.form_id.allowed_roles, allowed_roles, allowed_roles.project_id, allowed_roles.project_id.owner_id, stage_id, stage_id.workflow_id, stage_id.workflow_id.project_id, stage_id.workflow_id.entry_allowed_roles, stage_id.workflow_id.visible_to_roles, stage_id.visible_to_roles, stage_id.visible_to_roles.project_id"
+            "example": "workflow_id, workflow_id.project_id, workflow_id.entry_allowed_roles, workflow_id.visible_to_roles, connection_id, connection_id.workflow_id, connection_id.workflow_id.project_id, connection_id.workflow_id.entry_allowed_roles, connection_id.workflow_id.visible_to_roles, connection_id.from_stage_id, connection_id.from_stage_id.workflow_id, connection_id.to_stage_id, connection_id.to_stage_id.workflow_id, connection_id.allowed_roles, connection_id.allowed_roles.project_id, editable_fields, editable_fields.workflow_id, editable_fields.workflow_id.project_id, editable_fields.view_roles, editable_fields.view_roles.project_id, self_edit_roles, self_edit_roles.project_id, any_edit_roles, any_edit_roles.project_id, stage_id, stage_id.workflow_id, stage_id.workflow_id.project_id, stage_id.workflow_id.entry_allowed_roles"
           }
         ],
         "responses": {
@@ -4262,7 +4612,7 @@
           }
         },
         "x-notes": {
-          "description": "### Expansion Options\n\nThis endpoint supports expanding relations. Use the `expand` parameter with any of the following paths:\n\n- `connection_id`\n- `connection_id.workflow_id`\n- `connection_id.workflow_id.project_id`\n- `connection_id.workflow_id.entry_allowed_roles`\n- `connection_id.workflow_id.visible_to_roles`\n- `connection_id.from_stage_id`\n- `connection_id.from_stage_id.workflow_id`\n- `connection_id.from_stage_id.visible_to_roles`\n- `connection_id.to_stage_id`\n- `connection_id.to_stage_id.workflow_id`\n- `connection_id.to_stage_id.visible_to_roles`\n- `connection_id.allowed_roles`\n- `connection_id.allowed_roles.project_id`\n- `editable_fields`\n- `editable_fields.form_id`\n- `editable_fields.form_id.workflow_id`\n- `editable_fields.form_id.connection_id`\n- `editable_fields.form_id.stage_id`\n- `editable_fields.form_id.allowed_roles`\n- `allowed_roles`\n- `allowed_roles.project_id`\n- `allowed_roles.project_id.owner_id`\n- `stage_id`\n- `stage_id.workflow_id`\n- `stage_id.workflow_id.project_id`\n- `stage_id.workflow_id.entry_allowed_roles`\n- `stage_id.workflow_id.visible_to_roles`\n- `stage_id.visible_to_roles`\n- `stage_id.visible_to_roles.project_id`\n\nYou can also combine multiple expansions with commas (e.g., `expand=field1,field2.nested`)."
+          "description": "### Expansion Options\n\nThis endpoint supports expanding relations. Use the `expand` parameter with any of the following paths:\n\n- `workflow_id`\n- `workflow_id.project_id`\n- `workflow_id.entry_allowed_roles`\n- `workflow_id.visible_to_roles`\n- `connection_id`\n- `connection_id.workflow_id`\n- `connection_id.workflow_id.project_id`\n- `connection_id.workflow_id.entry_allowed_roles`\n- `connection_id.workflow_id.visible_to_roles`\n- `connection_id.from_stage_id`\n- `connection_id.from_stage_id.workflow_id`\n- `connection_id.to_stage_id`\n- `connection_id.to_stage_id.workflow_id`\n- `connection_id.allowed_roles`\n- `connection_id.allowed_roles.project_id`\n- `editable_fields`\n- `editable_fields.workflow_id`\n- `editable_fields.workflow_id.project_id`\n- `editable_fields.view_roles`\n- `editable_fields.view_roles.project_id`\n- `self_edit_roles`\n- `self_edit_roles.project_id`\n- `any_edit_roles`\n- `any_edit_roles.project_id`\n- `stage_id`\n- `stage_id.workflow_id`\n- `stage_id.workflow_id.project_id`\n- `stage_id.workflow_id.entry_allowed_roles`\n\nYou can also combine multiple expansions with commas (e.g., `expand=field1,field2.nested`)."
         },
         "security": [
           {
@@ -4596,12 +4946,12 @@
         ]
       }
     },
-    "/collections/tools_form_fields/records": {
+    "/collections/tools_form_field_refs/records": {
       "get": {
-        "summary": "List Tools_form_fields Collection",
-        "description": "Retrieves a paginated list of Tools_form_fields Collection records. Supports filtering, sorting, and expanding relations.",
+        "summary": "List Tools_form_field_refs Collection",
+        "description": "Retrieves a paginated list of Tools_form_field_refs Collection records. Supports filtering, sorting, and expanding relations.",
         "tags": [
-          "Tools_form_fields Collection"
+          "Tools_form_field_refs Collection"
         ],
         "parameters": [
           {
@@ -4661,12 +5011,12 @@
             "schema": {
               "type": "string"
             },
-            "example": "form_id, form_id.workflow_id, form_id.workflow_id.project_id, form_id.workflow_id.entry_allowed_roles, form_id.workflow_id.visible_to_roles, form_id.connection_id, form_id.connection_id.workflow_id, form_id.connection_id.from_stage_id, form_id.connection_id.to_stage_id, form_id.connection_id.allowed_roles, form_id.stage_id, form_id.stage_id.workflow_id, form_id.stage_id.visible_to_roles, form_id.allowed_roles, form_id.allowed_roles.project_id"
+            "example": "form_id, form_id.workflow_id, form_id.workflow_id.project_id, form_id.workflow_id.entry_allowed_roles, form_id.workflow_id.visible_to_roles, form_id.connection_id, form_id.connection_id.workflow_id, form_id.connection_id.from_stage_id, form_id.connection_id.to_stage_id, form_id.connection_id.allowed_roles, form_id.stage_id, form_id.stage_id.workflow_id, form_id.stage_id.visible_to_roles, form_id.allowed_roles, form_id.allowed_roles.project_id, field_def_id, field_def_id.workflow_id, field_def_id.workflow_id.project_id, field_def_id.view_roles, field_def_id.view_roles.project_id"
           }
         ],
         "responses": {
           "200": {
-            "description": "List of Tools_form_fields Collection",
+            "description": "List of Tools_form_field_refs Collection",
             "content": {
               "application/json": {
                 "schema": {
@@ -4687,7 +5037,7 @@
                     "items": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/tools_form_fieldsRecord"
+                        "$ref": "#/components/schemas/tools_form_field_refsRecord"
                       }
                     }
                   }
@@ -4697,7 +5047,7 @@
           }
         },
         "x-notes": {
-          "description": "### Expansion Options\n\nThis endpoint supports expanding relations. Use the `expand` parameter with any of the following paths:\n\n- `form_id`\n- `form_id.workflow_id`\n- `form_id.workflow_id.project_id`\n- `form_id.workflow_id.entry_allowed_roles`\n- `form_id.workflow_id.visible_to_roles`\n- `form_id.connection_id`\n- `form_id.connection_id.workflow_id`\n- `form_id.connection_id.from_stage_id`\n- `form_id.connection_id.to_stage_id`\n- `form_id.connection_id.allowed_roles`\n- `form_id.stage_id`\n- `form_id.stage_id.workflow_id`\n- `form_id.stage_id.visible_to_roles`\n- `form_id.allowed_roles`\n- `form_id.allowed_roles.project_id`\n\nYou can also combine multiple expansions with commas (e.g., `expand=field1,field2.nested`)."
+          "description": "### Expansion Options\n\nThis endpoint supports expanding relations. Use the `expand` parameter with any of the following paths:\n\n- `form_id`\n- `form_id.workflow_id`\n- `form_id.workflow_id.project_id`\n- `form_id.workflow_id.entry_allowed_roles`\n- `form_id.workflow_id.visible_to_roles`\n- `form_id.connection_id`\n- `form_id.connection_id.workflow_id`\n- `form_id.connection_id.from_stage_id`\n- `form_id.connection_id.to_stage_id`\n- `form_id.connection_id.allowed_roles`\n- `form_id.stage_id`\n- `form_id.stage_id.workflow_id`\n- `form_id.stage_id.visible_to_roles`\n- `form_id.allowed_roles`\n- `form_id.allowed_roles.project_id`\n- `field_def_id`\n- `field_def_id.workflow_id`\n- `field_def_id.workflow_id.project_id`\n- `field_def_id.view_roles`\n- `field_def_id.view_roles.project_id`\n\nYou can also combine multiple expansions with commas (e.g., `expand=field1,field2.nested`)."
         },
         "security": [
           {
@@ -4706,15 +5056,15 @@
         ]
       },
       "post": {
-        "summary": "Create Tools_form_fields Collection Record",
+        "summary": "Create Tools_form_field_refs Collection Record",
         "tags": [
-          "Tools_form_fields Collection"
+          "Tools_form_field_refs Collection"
         ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/tools_form_fieldsRecord"
+                "$ref": "#/components/schemas/tools_form_field_refsRecord"
               }
             }
           }
@@ -4725,7 +5075,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/tools_form_fieldsRecord"
+                  "$ref": "#/components/schemas/tools_form_field_refsRecord"
                 }
               }
             }
@@ -4738,11 +5088,11 @@
         ]
       }
     },
-    "/collections/tools_form_fields/records/{id}": {
+    "/collections/tools_form_field_refs/records/{id}": {
       "get": {
-        "summary": "Get Tools_form_fields Collection by ID",
+        "summary": "Get Tools_form_field_refs Collection by ID",
         "tags": [
-          "Tools_form_fields Collection"
+          "Tools_form_field_refs Collection"
         ],
         "parameters": [
           {
@@ -4760,7 +5110,7 @@
             "schema": {
               "type": "string"
             },
-            "example": "form_id, form_id.workflow_id, form_id.workflow_id.project_id, form_id.workflow_id.entry_allowed_roles, form_id.workflow_id.visible_to_roles, form_id.connection_id, form_id.connection_id.workflow_id, form_id.connection_id.from_stage_id, form_id.connection_id.to_stage_id, form_id.connection_id.allowed_roles, form_id.stage_id, form_id.stage_id.workflow_id, form_id.stage_id.visible_to_roles, form_id.allowed_roles, form_id.allowed_roles.project_id"
+            "example": "form_id, form_id.workflow_id, form_id.workflow_id.project_id, form_id.workflow_id.entry_allowed_roles, form_id.workflow_id.visible_to_roles, form_id.connection_id, form_id.connection_id.workflow_id, form_id.connection_id.from_stage_id, form_id.connection_id.to_stage_id, form_id.connection_id.allowed_roles, form_id.stage_id, form_id.stage_id.workflow_id, form_id.stage_id.visible_to_roles, form_id.allowed_roles, form_id.allowed_roles.project_id, field_def_id, field_def_id.workflow_id, field_def_id.workflow_id.project_id, field_def_id.view_roles, field_def_id.view_roles.project_id"
           }
         ],
         "responses": {
@@ -4769,14 +5119,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/tools_form_fieldsRecord"
+                  "$ref": "#/components/schemas/tools_form_field_refsRecord"
                 }
               }
             }
           }
         },
         "x-notes": {
-          "description": "### Expansion Options\n\nThis endpoint supports expanding relations. Use the `expand` parameter with any of the following paths:\n\n- `form_id`\n- `form_id.workflow_id`\n- `form_id.workflow_id.project_id`\n- `form_id.workflow_id.entry_allowed_roles`\n- `form_id.workflow_id.visible_to_roles`\n- `form_id.connection_id`\n- `form_id.connection_id.workflow_id`\n- `form_id.connection_id.from_stage_id`\n- `form_id.connection_id.to_stage_id`\n- `form_id.connection_id.allowed_roles`\n- `form_id.stage_id`\n- `form_id.stage_id.workflow_id`\n- `form_id.stage_id.visible_to_roles`\n- `form_id.allowed_roles`\n- `form_id.allowed_roles.project_id`\n\nYou can also combine multiple expansions with commas (e.g., `expand=field1,field2.nested`)."
+          "description": "### Expansion Options\n\nThis endpoint supports expanding relations. Use the `expand` parameter with any of the following paths:\n\n- `form_id`\n- `form_id.workflow_id`\n- `form_id.workflow_id.project_id`\n- `form_id.workflow_id.entry_allowed_roles`\n- `form_id.workflow_id.visible_to_roles`\n- `form_id.connection_id`\n- `form_id.connection_id.workflow_id`\n- `form_id.connection_id.from_stage_id`\n- `form_id.connection_id.to_stage_id`\n- `form_id.connection_id.allowed_roles`\n- `form_id.stage_id`\n- `form_id.stage_id.workflow_id`\n- `form_id.stage_id.visible_to_roles`\n- `form_id.allowed_roles`\n- `form_id.allowed_roles.project_id`\n- `field_def_id`\n- `field_def_id.workflow_id`\n- `field_def_id.workflow_id.project_id`\n- `field_def_id.view_roles`\n- `field_def_id.view_roles.project_id`\n\nYou can also combine multiple expansions with commas (e.g., `expand=field1,field2.nested`)."
         },
         "security": [
           {
@@ -4785,9 +5135,9 @@
         ]
       },
       "patch": {
-        "summary": "Update Tools_form_fields Collection Record",
+        "summary": "Update Tools_form_field_refs Collection Record",
         "tags": [
-          "Tools_form_fields Collection"
+          "Tools_form_field_refs Collection"
         ],
         "parameters": [
           {
@@ -4803,7 +5153,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/tools_form_fieldsRecord"
+                "$ref": "#/components/schemas/tools_form_field_refsRecord"
               }
             }
           }
@@ -4814,7 +5164,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/tools_form_fieldsRecord"
+                  "$ref": "#/components/schemas/tools_form_field_refsRecord"
                 }
               }
             }
@@ -4827,9 +5177,9 @@
         ]
       },
       "delete": {
-        "summary": "Delete Tools_form_fields Collection Record",
+        "summary": "Delete Tools_form_field_refs Collection Record",
         "tags": [
-          "Tools_form_fields Collection"
+          "Tools_form_field_refs Collection"
         ],
         "parameters": [
           {
@@ -5110,6 +5460,520 @@
         ]
       }
     },
+    "/collections/tools_protocol/records": {
+      "get": {
+        "summary": "List Tools_protocol Collection",
+        "description": "Retrieves a paginated list of Tools_protocol Collection records. Supports filtering, sorting, and expanding relations.",
+        "tags": [
+          "Tools_protocol Collection"
+        ],
+        "parameters": [
+          {
+            "name": "filter",
+            "in": "query",
+            "description": "Filtering expression (e.g., 'created > \"2022-01-01\"')",
+            "schema": {
+              "type": "string"
+            },
+            "example": "name ~ \"example\""
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Comma-separated list of fields to sort by. Prefix with '-' for descending order.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "-created,name"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number (starting from 1)",
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "minimum": 1
+            },
+            "example": 1
+          },
+          {
+            "name": "perPage",
+            "in": "query",
+            "description": "Number of records per page (max 500)",
+            "schema": {
+              "type": "integer",
+              "default": 30,
+              "minimum": 1,
+              "maximum": 500
+            },
+            "example": 30
+          },
+          {
+            "name": "skipTotal",
+            "in": "query",
+            "description": "Set to true to skip the total count (improves performance for large collections)",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "expand",
+            "in": "query",
+            "description": "Comma-separated list of relations to expand. Use dot notation for nested relations.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "workflow_id, connection_id, stage_id, protocol_form_id, allowed_roles"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of Tools_protocol Collection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "page": {
+                      "type": "number"
+                    },
+                    "perPage": {
+                      "type": "number"
+                    },
+                    "totalItems": {
+                      "type": "number"
+                    },
+                    "totalPages": {
+                      "type": "number"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/tools_protocolRecord"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-notes": {
+          "description": "### Expansion Options\n\nThis endpoint supports expanding relations. Use the `expand` parameter with any of the following paths:\n\n- `workflow_id`\n- `connection_id`\n- `stage_id`\n- `protocol_form_id`\n- `allowed_roles`\n\nYou can also combine multiple expansions with commas (e.g., `expand=field1,field2.nested`)."
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "Create Tools_protocol Collection Record",
+        "tags": [
+          "Tools_protocol Collection"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tools_protocolRecord"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tools_protocolRecord"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/collections/tools_protocol/records/{id}": {
+      "get": {
+        "summary": "Get Tools_protocol Collection by ID",
+        "tags": [
+          "Tools_protocol Collection"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "expand",
+            "in": "query",
+            "description": "Comma-separated list of relations to expand. Use dot notation for nested relations.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "workflow_id, connection_id, stage_id, protocol_form_id, allowed_roles"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Single record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tools_protocolRecord"
+                }
+              }
+            }
+          }
+        },
+        "x-notes": {
+          "description": "### Expansion Options\n\nThis endpoint supports expanding relations. Use the `expand` parameter with any of the following paths:\n\n- `workflow_id`\n- `connection_id`\n- `stage_id`\n- `protocol_form_id`\n- `allowed_roles`\n\nYou can also combine multiple expansions with commas (e.g., `expand=field1,field2.nested`)."
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "patch": {
+        "summary": "Update Tools_protocol Collection Record",
+        "tags": [
+          "Tools_protocol Collection"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tools_protocolRecord"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tools_protocolRecord"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "summary": "Delete Tools_protocol Collection Record",
+        "tags": [
+          "Tools_protocol Collection"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Record deleted"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/collections/workflow_protocol_entries/records": {
+      "get": {
+        "summary": "List Workflow_protocol_entries Collection",
+        "description": "Retrieves a paginated list of Workflow_protocol_entries Collection records. Supports filtering, sorting, and expanding relations.",
+        "tags": [
+          "Workflow_protocol_entries Collection"
+        ],
+        "parameters": [
+          {
+            "name": "filter",
+            "in": "query",
+            "description": "Filtering expression (e.g., 'created > \"2022-01-01\"')",
+            "schema": {
+              "type": "string"
+            },
+            "example": "recorded_at > \"2022-01-01\""
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Comma-separated list of fields to sort by. Prefix with '-' for descending order.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "-recorded_at"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number (starting from 1)",
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "minimum": 1
+            },
+            "example": 1
+          },
+          {
+            "name": "perPage",
+            "in": "query",
+            "description": "Number of records per page (max 500)",
+            "schema": {
+              "type": "integer",
+              "default": 30,
+              "minimum": 1,
+              "maximum": 500
+            },
+            "example": 30
+          },
+          {
+            "name": "skipTotal",
+            "in": "query",
+            "description": "Set to true to skip the total count (improves performance for large collections)",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "expand",
+            "in": "query",
+            "description": "Comma-separated list of relations to expand. Use dot notation for nested relations.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "instance_id, stage_id, tool_id, recorded_by"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of Workflow_protocol_entries Collection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "page": {
+                      "type": "number"
+                    },
+                    "perPage": {
+                      "type": "number"
+                    },
+                    "totalItems": {
+                      "type": "number"
+                    },
+                    "totalPages": {
+                      "type": "number"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/workflow_protocol_entriesRecord"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-notes": {
+          "description": "### Expansion Options\n\nThis endpoint supports expanding relations. Use the `expand` parameter with any of the following paths:\n\n- `instance_id`\n- `stage_id`\n- `tool_id`\n- `recorded_by`\n\nYou can also combine multiple expansions with commas (e.g., `expand=field1,field2.nested`)."
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "Create Workflow_protocol_entries Collection Record",
+        "tags": [
+          "Workflow_protocol_entries Collection"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/workflow_protocol_entriesRecord"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/workflow_protocol_entriesRecord"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/collections/workflow_protocol_entries/records/{id}": {
+      "get": {
+        "summary": "Get Workflow_protocol_entries Collection by ID",
+        "tags": [
+          "Workflow_protocol_entries Collection"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "expand",
+            "in": "query",
+            "description": "Comma-separated list of relations to expand. Use dot notation for nested relations.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "instance_id, stage_id, tool_id, recorded_by"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Single record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/workflow_protocol_entriesRecord"
+                }
+              }
+            }
+          }
+        },
+        "x-notes": {
+          "description": "### Expansion Options\n\nThis endpoint supports expanding relations. Use the `expand` parameter with any of the following paths:\n\n- `instance_id`\n- `stage_id`\n- `tool_id`\n- `recorded_by`\n\nYou can also combine multiple expansions with commas (e.g., `expand=field1,field2.nested`)."
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "patch": {
+        "summary": "Update Workflow_protocol_entries Collection Record",
+        "tags": [
+          "Workflow_protocol_entries Collection"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/workflow_protocol_entriesRecord"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/workflow_protocol_entriesRecord"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "summary": "Delete Workflow_protocol_entries Collection Record",
+        "tags": [
+          "Workflow_protocol_entries Collection"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Record deleted"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/collections/workflow_connections/records": {
       "get": {
         "summary": "List Workflow_connections Collection",
@@ -5367,12 +6231,12 @@
         ]
       }
     },
-    "/collections/workflow_instance_field_values/records": {
+    "/collections/workflow_field_values/records": {
       "get": {
-        "summary": "List Workflow_instance_field_values Collection",
-        "description": "Retrieves a paginated list of Workflow_instance_field_values Collection records. Supports filtering, sorting, and expanding relations.",
+        "summary": "List Workflow_field_values Collection",
+        "description": "Retrieves a paginated list of Workflow_field_values Collection records. Supports filtering, sorting, and expanding relations.",
         "tags": [
-          "Workflow_instance_field_values Collection"
+          "Workflow_field_values Collection"
         ],
         "parameters": [
           {
@@ -5432,12 +6296,12 @@
             "schema": {
               "type": "string"
             },
-            "example": "instance_id, instance_id.workflow_id, instance_id.workflow_id.project_id, instance_id.workflow_id.entry_allowed_roles, instance_id.workflow_id.visible_to_roles, instance_id.current_stage_id, instance_id.current_stage_id.workflow_id, instance_id.current_stage_id.visible_to_roles, instance_id.created_by, instance_id.created_by.project_id, instance_id.created_by.role_id, stage_id, stage_id.workflow_id, stage_id.workflow_id.project_id, stage_id.workflow_id.entry_allowed_roles, stage_id.workflow_id.visible_to_roles, stage_id.visible_to_roles, stage_id.visible_to_roles.project_id, created_by_action, created_by_action.instance_id, created_by_action.instance_id.workflow_id, created_by_action.instance_id.current_stage_id, created_by_action.instance_id.created_by, created_by_action.stage_id, created_by_action.stage_id.workflow_id, created_by_action.stage_id.visible_to_roles, created_by_action.executed_by, created_by_action.executed_by.project_id, created_by_action.executed_by.role_id, last_modified_by_action, last_modified_by_action.instance_id, last_modified_by_action.instance_id.workflow_id, last_modified_by_action.instance_id.current_stage_id, last_modified_by_action.instance_id.created_by, last_modified_by_action.stage_id, last_modified_by_action.stage_id.workflow_id, last_modified_by_action.stage_id.visible_to_roles, last_modified_by_action.executed_by, last_modified_by_action.executed_by.project_id, last_modified_by_action.executed_by.role_id"
+            "example": "instance_id, instance_id.workflow_id, instance_id.workflow_id.project_id, instance_id.workflow_id.entry_allowed_roles, instance_id.workflow_id.visible_to_roles, instance_id.current_stage_id, instance_id.current_stage_id.workflow_id, instance_id.current_stage_id.visible_to_roles, instance_id.created_by, instance_id.created_by.project_id, instance_id.created_by.role_id, field_def_id, field_def_id.workflow_id, field_def_id.workflow_id.project_id, field_def_id.view_roles, field_def_id.view_roles.project_id, recorded_at_stage, recorded_at_stage.workflow_id, recorded_at_stage.workflow_id.project_id, recorded_at_stage.workflow_id.entry_allowed_roles, recorded_at_stage.workflow_id.visible_to_roles, recorded_at_stage.visible_to_roles, recorded_at_stage.visible_to_roles.project_id, recorded_by_action, recorded_by_action.instance_id, recorded_by_action.instance_id.workflow_id, recorded_by_action.instance_id.current_stage_id, recorded_by_action.instance_id.created_by, recorded_by_action.stage_id, recorded_by_action.stage_id.workflow_id, recorded_by_action.stage_id.visible_to_roles, recorded_by_action.executed_by, recorded_by_action.executed_by.project_id, recorded_by_action.executed_by.role_id"
           }
         ],
         "responses": {
           "200": {
-            "description": "List of Workflow_instance_field_values Collection",
+            "description": "List of Workflow_field_values Collection",
             "content": {
               "application/json": {
                 "schema": {
@@ -5458,7 +6322,7 @@
                     "items": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/workflow_instance_field_valuesRecord"
+                        "$ref": "#/components/schemas/workflow_field_valuesRecord"
                       }
                     }
                   }
@@ -5468,7 +6332,7 @@
           }
         },
         "x-notes": {
-          "description": "### Expansion Options\n\nThis endpoint supports expanding relations. Use the `expand` parameter with any of the following paths:\n\n- `instance_id`\n- `instance_id.workflow_id`\n- `instance_id.workflow_id.project_id`\n- `instance_id.workflow_id.entry_allowed_roles`\n- `instance_id.workflow_id.visible_to_roles`\n- `instance_id.current_stage_id`\n- `instance_id.current_stage_id.workflow_id`\n- `instance_id.current_stage_id.visible_to_roles`\n- `instance_id.created_by`\n- `instance_id.created_by.project_id`\n- `instance_id.created_by.role_id`\n- `stage_id`\n- `stage_id.workflow_id`\n- `stage_id.workflow_id.project_id`\n- `stage_id.workflow_id.entry_allowed_roles`\n- `stage_id.workflow_id.visible_to_roles`\n- `stage_id.visible_to_roles`\n- `stage_id.visible_to_roles.project_id`\n- `created_by_action`\n- `created_by_action.instance_id`\n- `created_by_action.instance_id.workflow_id`\n- `created_by_action.instance_id.current_stage_id`\n- `created_by_action.instance_id.created_by`\n- `created_by_action.stage_id`\n- `created_by_action.stage_id.workflow_id`\n- `created_by_action.stage_id.visible_to_roles`\n- `created_by_action.executed_by`\n- `created_by_action.executed_by.project_id`\n- `created_by_action.executed_by.role_id`\n- `last_modified_by_action`\n- `last_modified_by_action.instance_id`\n- `last_modified_by_action.instance_id.workflow_id`\n- `last_modified_by_action.instance_id.current_stage_id`\n- `last_modified_by_action.instance_id.created_by`\n- `last_modified_by_action.stage_id`\n- `last_modified_by_action.stage_id.workflow_id`\n- `last_modified_by_action.stage_id.visible_to_roles`\n- `last_modified_by_action.executed_by`\n- `last_modified_by_action.executed_by.project_id`\n- `last_modified_by_action.executed_by.role_id`\n\nYou can also combine multiple expansions with commas (e.g., `expand=field1,field2.nested`)."
+          "description": "### Expansion Options\n\nThis endpoint supports expanding relations. Use the `expand` parameter with any of the following paths:\n\n- `instance_id`\n- `instance_id.workflow_id`\n- `instance_id.workflow_id.project_id`\n- `instance_id.workflow_id.entry_allowed_roles`\n- `instance_id.workflow_id.visible_to_roles`\n- `instance_id.current_stage_id`\n- `instance_id.current_stage_id.workflow_id`\n- `instance_id.current_stage_id.visible_to_roles`\n- `instance_id.created_by`\n- `instance_id.created_by.project_id`\n- `instance_id.created_by.role_id`\n- `field_def_id`\n- `field_def_id.workflow_id`\n- `field_def_id.workflow_id.project_id`\n- `field_def_id.view_roles`\n- `field_def_id.view_roles.project_id`\n- `recorded_at_stage`\n- `recorded_at_stage.workflow_id`\n- `recorded_at_stage.workflow_id.project_id`\n- `recorded_at_stage.workflow_id.entry_allowed_roles`\n- `recorded_at_stage.workflow_id.visible_to_roles`\n- `recorded_at_stage.visible_to_roles`\n- `recorded_at_stage.visible_to_roles.project_id`\n- `recorded_by_action`\n- `recorded_by_action.instance_id`\n- `recorded_by_action.instance_id.workflow_id`\n- `recorded_by_action.instance_id.current_stage_id`\n- `recorded_by_action.instance_id.created_by`\n- `recorded_by_action.stage_id`\n- `recorded_by_action.stage_id.workflow_id`\n- `recorded_by_action.stage_id.visible_to_roles`\n- `recorded_by_action.executed_by`\n- `recorded_by_action.executed_by.project_id`\n- `recorded_by_action.executed_by.role_id`\n\nYou can also combine multiple expansions with commas (e.g., `expand=field1,field2.nested`)."
         },
         "security": [
           {
@@ -5477,15 +6341,15 @@
         ]
       },
       "post": {
-        "summary": "Create Workflow_instance_field_values Collection Record",
+        "summary": "Create Workflow_field_values Collection Record",
         "tags": [
-          "Workflow_instance_field_values Collection"
+          "Workflow_field_values Collection"
         ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/workflow_instance_field_valuesRecord"
+                "$ref": "#/components/schemas/workflow_field_valuesRecord"
               }
             }
           }
@@ -5496,7 +6360,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/workflow_instance_field_valuesRecord"
+                  "$ref": "#/components/schemas/workflow_field_valuesRecord"
                 }
               }
             }
@@ -5509,11 +6373,11 @@
         ]
       }
     },
-    "/collections/workflow_instance_field_values/records/{id}": {
+    "/collections/workflow_field_values/records/{id}": {
       "get": {
-        "summary": "Get Workflow_instance_field_values Collection by ID",
+        "summary": "Get Workflow_field_values Collection by ID",
         "tags": [
-          "Workflow_instance_field_values Collection"
+          "Workflow_field_values Collection"
         ],
         "parameters": [
           {
@@ -5531,7 +6395,7 @@
             "schema": {
               "type": "string"
             },
-            "example": "instance_id, instance_id.workflow_id, instance_id.workflow_id.project_id, instance_id.workflow_id.entry_allowed_roles, instance_id.workflow_id.visible_to_roles, instance_id.current_stage_id, instance_id.current_stage_id.workflow_id, instance_id.current_stage_id.visible_to_roles, instance_id.created_by, instance_id.created_by.project_id, instance_id.created_by.role_id, stage_id, stage_id.workflow_id, stage_id.workflow_id.project_id, stage_id.workflow_id.entry_allowed_roles, stage_id.workflow_id.visible_to_roles, stage_id.visible_to_roles, stage_id.visible_to_roles.project_id, created_by_action, created_by_action.instance_id, created_by_action.instance_id.workflow_id, created_by_action.instance_id.current_stage_id, created_by_action.instance_id.created_by, created_by_action.stage_id, created_by_action.stage_id.workflow_id, created_by_action.stage_id.visible_to_roles, created_by_action.executed_by, created_by_action.executed_by.project_id, created_by_action.executed_by.role_id, last_modified_by_action, last_modified_by_action.instance_id, last_modified_by_action.instance_id.workflow_id, last_modified_by_action.instance_id.current_stage_id, last_modified_by_action.instance_id.created_by, last_modified_by_action.stage_id, last_modified_by_action.stage_id.workflow_id, last_modified_by_action.stage_id.visible_to_roles, last_modified_by_action.executed_by, last_modified_by_action.executed_by.project_id, last_modified_by_action.executed_by.role_id"
+            "example": "instance_id, instance_id.workflow_id, instance_id.workflow_id.project_id, instance_id.workflow_id.entry_allowed_roles, instance_id.workflow_id.visible_to_roles, instance_id.current_stage_id, instance_id.current_stage_id.workflow_id, instance_id.current_stage_id.visible_to_roles, instance_id.created_by, instance_id.created_by.project_id, instance_id.created_by.role_id, field_def_id, field_def_id.workflow_id, field_def_id.workflow_id.project_id, field_def_id.view_roles, field_def_id.view_roles.project_id, recorded_at_stage, recorded_at_stage.workflow_id, recorded_at_stage.workflow_id.project_id, recorded_at_stage.workflow_id.entry_allowed_roles, recorded_at_stage.workflow_id.visible_to_roles, recorded_at_stage.visible_to_roles, recorded_at_stage.visible_to_roles.project_id, recorded_by_action, recorded_by_action.instance_id, recorded_by_action.instance_id.workflow_id, recorded_by_action.instance_id.current_stage_id, recorded_by_action.instance_id.created_by, recorded_by_action.stage_id, recorded_by_action.stage_id.workflow_id, recorded_by_action.stage_id.visible_to_roles, recorded_by_action.executed_by, recorded_by_action.executed_by.project_id, recorded_by_action.executed_by.role_id"
           }
         ],
         "responses": {
@@ -5540,14 +6404,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/workflow_instance_field_valuesRecord"
+                  "$ref": "#/components/schemas/workflow_field_valuesRecord"
                 }
               }
             }
           }
         },
         "x-notes": {
-          "description": "### Expansion Options\n\nThis endpoint supports expanding relations. Use the `expand` parameter with any of the following paths:\n\n- `instance_id`\n- `instance_id.workflow_id`\n- `instance_id.workflow_id.project_id`\n- `instance_id.workflow_id.entry_allowed_roles`\n- `instance_id.workflow_id.visible_to_roles`\n- `instance_id.current_stage_id`\n- `instance_id.current_stage_id.workflow_id`\n- `instance_id.current_stage_id.visible_to_roles`\n- `instance_id.created_by`\n- `instance_id.created_by.project_id`\n- `instance_id.created_by.role_id`\n- `stage_id`\n- `stage_id.workflow_id`\n- `stage_id.workflow_id.project_id`\n- `stage_id.workflow_id.entry_allowed_roles`\n- `stage_id.workflow_id.visible_to_roles`\n- `stage_id.visible_to_roles`\n- `stage_id.visible_to_roles.project_id`\n- `created_by_action`\n- `created_by_action.instance_id`\n- `created_by_action.instance_id.workflow_id`\n- `created_by_action.instance_id.current_stage_id`\n- `created_by_action.instance_id.created_by`\n- `created_by_action.stage_id`\n- `created_by_action.stage_id.workflow_id`\n- `created_by_action.stage_id.visible_to_roles`\n- `created_by_action.executed_by`\n- `created_by_action.executed_by.project_id`\n- `created_by_action.executed_by.role_id`\n- `last_modified_by_action`\n- `last_modified_by_action.instance_id`\n- `last_modified_by_action.instance_id.workflow_id`\n- `last_modified_by_action.instance_id.current_stage_id`\n- `last_modified_by_action.instance_id.created_by`\n- `last_modified_by_action.stage_id`\n- `last_modified_by_action.stage_id.workflow_id`\n- `last_modified_by_action.stage_id.visible_to_roles`\n- `last_modified_by_action.executed_by`\n- `last_modified_by_action.executed_by.project_id`\n- `last_modified_by_action.executed_by.role_id`\n\nYou can also combine multiple expansions with commas (e.g., `expand=field1,field2.nested`)."
+          "description": "### Expansion Options\n\nThis endpoint supports expanding relations. Use the `expand` parameter with any of the following paths:\n\n- `instance_id`\n- `instance_id.workflow_id`\n- `instance_id.workflow_id.project_id`\n- `instance_id.workflow_id.entry_allowed_roles`\n- `instance_id.workflow_id.visible_to_roles`\n- `instance_id.current_stage_id`\n- `instance_id.current_stage_id.workflow_id`\n- `instance_id.current_stage_id.visible_to_roles`\n- `instance_id.created_by`\n- `instance_id.created_by.project_id`\n- `instance_id.created_by.role_id`\n- `field_def_id`\n- `field_def_id.workflow_id`\n- `field_def_id.workflow_id.project_id`\n- `field_def_id.view_roles`\n- `field_def_id.view_roles.project_id`\n- `recorded_at_stage`\n- `recorded_at_stage.workflow_id`\n- `recorded_at_stage.workflow_id.project_id`\n- `recorded_at_stage.workflow_id.entry_allowed_roles`\n- `recorded_at_stage.workflow_id.visible_to_roles`\n- `recorded_at_stage.visible_to_roles`\n- `recorded_at_stage.visible_to_roles.project_id`\n- `recorded_by_action`\n- `recorded_by_action.instance_id`\n- `recorded_by_action.instance_id.workflow_id`\n- `recorded_by_action.instance_id.current_stage_id`\n- `recorded_by_action.instance_id.created_by`\n- `recorded_by_action.stage_id`\n- `recorded_by_action.stage_id.workflow_id`\n- `recorded_by_action.stage_id.visible_to_roles`\n- `recorded_by_action.executed_by`\n- `recorded_by_action.executed_by.project_id`\n- `recorded_by_action.executed_by.role_id`\n\nYou can also combine multiple expansions with commas (e.g., `expand=field1,field2.nested`)."
         },
         "security": [
           {
@@ -5556,9 +6420,9 @@
         ]
       },
       "patch": {
-        "summary": "Update Workflow_instance_field_values Collection Record",
+        "summary": "Update Workflow_field_values Collection Record",
         "tags": [
-          "Workflow_instance_field_values Collection"
+          "Workflow_field_values Collection"
         ],
         "parameters": [
           {
@@ -5574,7 +6438,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/workflow_instance_field_valuesRecord"
+                "$ref": "#/components/schemas/workflow_field_valuesRecord"
               }
             }
           }
@@ -5585,7 +6449,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/workflow_instance_field_valuesRecord"
+                  "$ref": "#/components/schemas/workflow_field_valuesRecord"
                 }
               }
             }
@@ -5598,9 +6462,266 @@
         ]
       },
       "delete": {
-        "summary": "Delete Workflow_instance_field_values Collection Record",
+        "summary": "Delete Workflow_field_values Collection Record",
         "tags": [
-          "Workflow_instance_field_values Collection"
+          "Workflow_field_values Collection"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Record deleted"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/collections/workflow_field_defs/records": {
+      "get": {
+        "summary": "List Workflow_field_defs Collection",
+        "description": "Retrieves a paginated list of Workflow_field_defs Collection records. Supports filtering, sorting, and expanding relations.",
+        "tags": [
+          "Workflow_field_defs Collection"
+        ],
+        "parameters": [
+          {
+            "name": "filter",
+            "in": "query",
+            "description": "Filtering expression (e.g., 'created > \"2022-01-01\"')",
+            "schema": {
+              "type": "string"
+            },
+            "example": "title ~ \"example\""
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Comma-separated list of fields to sort by. Prefix with '-' for descending order.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "-created,title"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number (starting from 1)",
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "minimum": 1
+            },
+            "example": 1
+          },
+          {
+            "name": "perPage",
+            "in": "query",
+            "description": "Number of records per page (max 500)",
+            "schema": {
+              "type": "integer",
+              "default": 30,
+              "minimum": 1,
+              "maximum": 500
+            },
+            "example": 30
+          },
+          {
+            "name": "skipTotal",
+            "in": "query",
+            "description": "Set to true to skip the total count (improves performance for large collections)",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "expand",
+            "in": "query",
+            "description": "Comma-separated list of relations to expand. Use dot notation for nested relations.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "workflow_id, workflow_id.project_id, workflow_id.entry_allowed_roles, workflow_id.visible_to_roles, view_roles, view_roles.project_id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of Workflow_field_defs Collection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "page": {
+                      "type": "number"
+                    },
+                    "perPage": {
+                      "type": "number"
+                    },
+                    "totalItems": {
+                      "type": "number"
+                    },
+                    "totalPages": {
+                      "type": "number"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/workflow_field_defsRecord"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-notes": {
+          "description": "### Expansion Options\n\nThis endpoint supports expanding relations. Use the `expand` parameter with any of the following paths:\n\n- `workflow_id`\n- `workflow_id.project_id`\n- `workflow_id.entry_allowed_roles`\n- `workflow_id.visible_to_roles`\n- `view_roles`\n- `view_roles.project_id`\n\nYou can also combine multiple expansions with commas (e.g., `expand=field1,field2.nested`)."
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "Create Workflow_field_defs Collection Record",
+        "tags": [
+          "Workflow_field_defs Collection"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/workflow_field_defsRecord"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/workflow_field_defsRecord"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/collections/workflow_field_defs/records/{id}": {
+      "get": {
+        "summary": "Get Workflow_field_defs Collection by ID",
+        "tags": [
+          "Workflow_field_defs Collection"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "expand",
+            "in": "query",
+            "description": "Comma-separated list of relations to expand. Use dot notation for nested relations.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "workflow_id, workflow_id.project_id, workflow_id.entry_allowed_roles, workflow_id.visible_to_roles, view_roles, view_roles.project_id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Single record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/workflow_field_defsRecord"
+                }
+              }
+            }
+          }
+        },
+        "x-notes": {
+          "description": "### Expansion Options\n\nThis endpoint supports expanding relations. Use the `expand` parameter with any of the following paths:\n\n- `workflow_id`\n- `workflow_id.project_id`\n- `workflow_id.entry_allowed_roles`\n- `workflow_id.visible_to_roles`\n- `view_roles`\n- `view_roles.project_id`\n\nYou can also combine multiple expansions with commas (e.g., `expand=field1,field2.nested`)."
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "patch": {
+        "summary": "Update Workflow_field_defs Collection Record",
+        "tags": [
+          "Workflow_field_defs Collection"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/workflow_field_defsRecord"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/workflow_field_defsRecord"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "summary": "Delete Workflow_field_defs Collection Record",
+        "tags": [
+          "Workflow_field_defs Collection"
         ],
         "parameters": [
           {
@@ -6655,6 +7776,64 @@
   },
   "components": {
     "schemas": {
+      "api_tokensRecord": {
+        "type": "object",
+        "description": "An admin-issued, read-only personal access token for the GIS API. The raw token is shown once in the SECTOR UI when minted and is never stored or returned by the API; only its sha256 hash (`token_hash`) and the last four characters (`last_four`) are persisted.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique record identifier"
+          },
+          "user_id": {
+            "type": "string",
+            "description": "Relation field (users). The admin who owns the token; data reads run impersonating this user, so PocketBase access rules scope what the token can see. When expanded, this becomes the related record object."
+          },
+          "project_id": {
+            "type": "string",
+            "description": "Relation field (projects). Optional project scope. When set, the token may only access this project; requests for any other project return 403. When expanded, this becomes the related record object."
+          },
+          "label": {
+            "type": "string",
+            "description": "Human-readable label for the token (shown in the SECTOR token list)."
+          },
+          "token_hash": {
+            "type": "string",
+            "description": "sha256 hex hash of the raw token. The raw token is never stored or returned by the API; lookups hash the presented Bearer token and match it against this value."
+          },
+          "last_four": {
+            "type": "string",
+            "description": "Last four characters of the raw token, kept only to help the admin recognise a token in the SECTOR list."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Expiry timestamp. A token whose `expires_at` is in the past is rejected with 401."
+          },
+          "last_used_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp of the last successful use (throttled best-effort update)."
+          },
+          "revoked": {
+            "type": "boolean",
+            "description": "When true, the token is rejected with 401 regardless of expiry."
+          },
+          "created": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "user_id",
+          "label",
+          "token_hash",
+          "last_four"
+        ]
+      },
       "participantsRecord": {
         "type": "object",
         "properties": {
@@ -6725,6 +7904,10 @@
           },
           "verified": {
             "type": "boolean"
+          },
+          "self_joined": {
+            "type": "boolean",
+            "description": "Whether this participant joined the project via a role's public self-join link."
           }
         },
         "required": [
@@ -7331,6 +8514,18 @@
           "updated": {
             "type": "string",
             "format": "date-time"
+          },
+          "self_joinable": {
+            "type": "boolean",
+            "description": "Whether participants can self-join this role via its public join link."
+          },
+          "join_slug": {
+            "type": "string",
+            "description": "URL slug used to build the public self-join link for this role."
+          },
+          "max_instances": {
+            "type": "number",
+            "description": "Per-participant cap on how many workflow instances a participant in this role may create (0 or empty means unlimited; the most-permissive non-zero cap wins across a participant's roles)."
           }
         },
         "required": [
@@ -7400,6 +8595,10 @@
             "type": "string",
             "description": "Unique record identifier"
           },
+          "workflow_id": {
+            "type": "string",
+            "description": "Relation field. When expanded, this becomes the related record object. Use the 'expand' query parameter to expand relations."
+          },
           "connection_id": {
             "type": "string",
             "description": "Relation field. When expanded, this becomes the related record object. Use the 'expand' query parameter to expand relations."
@@ -7409,14 +8608,24 @@
             "items": {
               "type": "string"
             },
-            "description": "Relation field. When expanded, this becomes an array of the related records. Use the 'expand' query parameter to expand relations."
+            "description": "Relation field targeting workflow_field_defs (the fields this edit tool exposes). When expanded, this becomes an array of the related workflow_field_defs records. Use the 'expand' query parameter to expand relations."
           },
-          "allowed_roles": {
+          "self_edit_roles": {
             "type": "array",
             "items": {
               "type": "string"
             },
             "description": "Relation field. When expanded, this becomes an array of the related records. Use the 'expand' query parameter to expand relations."
+          },
+          "any_edit_roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Relation field. When expanded, this becomes an array of the related records. Use the 'expand' query parameter to expand relations."
+          },
+          "tool_order": {
+            "type": "number"
           },
           "created": {
             "type": "string",
@@ -7485,7 +8694,7 @@
           "workflow_id"
         ]
       },
-      "tools_form_fieldsRecord": {
+      "tools_form_field_refsRecord": {
         "type": "object",
         "properties": {
           "id": {
@@ -7496,57 +8705,11 @@
             "type": "string",
             "description": "Relation field. When expanded, this becomes the related record object. Use the 'expand' query parameter to expand relations."
           },
-          "field_label": {
+          "field_def_id": {
             "type": "string",
-            "maxLength": 255
+            "description": "Relation field. When expanded, this becomes the related record object. Use the 'expand' query parameter to expand relations."
           },
-          "field_type": {
-            "type": "string",
-            "enum": [
-              "short_text",
-              "long_text",
-              "number",
-              "email",
-              "date",
-              "file",
-              "dropdown",
-              "multiple_choice",
-              "smart_dropdown",
-              "custom_table_selector"
-            ]
-          },
-          "field_order": {
-            "type": "number",
-            "minimum": 0
-          },
-          "page": {
-            "type": "number",
-            "minimum": 1
-          },
-          "page_title": {
-            "type": "string",
-            "maxLength": 255
-          },
-          "is_required": {
-            "type": "boolean"
-          },
-          "placeholder": {
-            "type": "string",
-            "maxLength": 255
-          },
-          "help_text": {
-            "type": "string",
-            "maxLength": 1000
-          },
-          "validation_rules": {
-            "type": "object",
-            "additionalProperties": true
-          },
-          "field_options": {
-            "type": "object",
-            "additionalProperties": true
-          },
-          "conditional_logic": {
+          "config": {
             "type": "object",
             "additionalProperties": true
           },
@@ -7557,24 +8720,11 @@
           "updated": {
             "type": "string",
             "format": "date-time"
-          },
-          "row_index": {
-            "type": "number",
-            "minimum": 0
-          },
-          "column_position": {
-            "type": "string",
-            "enum": [
-              "left",
-              "right",
-              "full"
-            ]
           }
         },
         "required": [
           "form_id",
-          "field_label",
-          "field_type"
+          "field_def_id"
         ]
       },
       "tools_formsRecord": {
@@ -7622,11 +8772,138 @@
           "visual_config": {
             "type": "object",
             "additionalProperties": true
+          },
+          "tool_order": {
+            "type": "number"
+          },
+          "pages": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "local_fields": {
+            "type": "object",
+            "additionalProperties": true
           }
         },
         "required": [
           "workflow_id",
           "name"
+        ]
+      },
+      "tools_protocolRecord": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique record identifier"
+          },
+          "workflow_id": {
+            "type": "string",
+            "description": "Relation field. When expanded, this becomes the related record object. Use the 'expand' query parameter to expand relations."
+          },
+          "connection_id": {
+            "type": "string",
+            "description": "Relation field. When expanded, this becomes the related record object. Use the 'expand' query parameter to expand relations."
+          },
+          "stage_id": {
+            "type": "string",
+            "description": "Relation field. When expanded, this becomes the related record object. Use the 'expand' query parameter to expand relations."
+          },
+          "is_global": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "prefill_config": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "protocol_form_id": {
+            "type": "string",
+            "description": "Relation field. When expanded, this becomes the related record object. Use the 'expand' query parameter to expand relations."
+          },
+          "allowed_roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Relation field. When expanded, this becomes an array of the related records. Use the 'expand' query parameter to expand relations."
+          },
+          "visual_config": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "tool_order": {
+            "type": "number"
+          },
+          "created": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "workflow_id",
+          "name"
+        ]
+      },
+      "workflow_protocol_entriesRecord": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique record identifier"
+          },
+          "instance_id": {
+            "type": "string",
+            "description": "Relation field. When expanded, this becomes the related record object. Use the 'expand' query parameter to expand relations."
+          },
+          "stage_id": {
+            "type": "string",
+            "description": "Relation field. When expanded, this becomes the related record object. Use the 'expand' query parameter to expand relations."
+          },
+          "tool_id": {
+            "type": "string",
+            "description": "Relation field. When expanded, this becomes the related record object. Use the 'expand' query parameter to expand relations."
+          },
+          "recorded_by": {
+            "type": "string",
+            "description": "Relation field. When expanded, this becomes the related record object. Use the 'expand' query parameter to expand relations."
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "snapshot_hash": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "created": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "instance_id"
         ]
       },
       "workflow_connectionsRecord": {
@@ -7670,6 +8947,10 @@
           "updated": {
             "type": "string",
             "format": "date-time"
+          },
+          "sentry": {
+            "type": "object",
+            "additionalProperties": true
           }
         },
         "required": [
@@ -7678,7 +8959,90 @@
           "action_name"
         ]
       },
-      "workflow_instance_field_valuesRecord": {
+      "workflow_field_defsRecord": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique record identifier"
+          },
+          "workflow_id": {
+            "type": "string",
+            "description": "Relation field. When expanded, this becomes the related record object. Use the 'expand' query parameter to expand relations."
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "field_type": {
+            "type": "string",
+            "enum": [
+              "short_text",
+              "long_text",
+              "number",
+              "email",
+              "date",
+              "file",
+              "dropdown",
+              "multiple_choice",
+              "smart_dropdown",
+              "custom_table_selector",
+              "instance_reference"
+            ]
+          },
+          "write_mode": {
+            "type": "string",
+            "enum": [
+              "singleton",
+              "observation",
+              "computed"
+            ]
+          },
+          "output_type": {
+            "type": "string",
+            "enum": [
+              "text",
+              "number",
+              "date",
+              "json"
+            ]
+          },
+          "display_config": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "view_roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Relation field. When expanded, this becomes an array of the related records. Use the 'expand' query parameter to expand relations."
+          },
+          "validation_rules": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "field_options": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "created": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "workflow_id",
+          "label",
+          "field_type",
+          "write_mode"
+        ]
+      },
+      "workflow_field_valuesRecord": {
         "type": "object",
         "properties": {
           "id": {
@@ -7689,9 +9053,17 @@
             "type": "string",
             "description": "Relation field. When expanded, this becomes the related record object. Use the 'expand' query parameter to expand relations."
           },
-          "field_key": {
+          "field_def_id": {
             "type": "string",
-            "maxLength": 255
+            "description": "Relation field. When expanded, this becomes the related record object. Use the 'expand' query parameter to expand relations."
+          },
+          "write_mode": {
+            "type": "string",
+            "enum": [
+              "singleton",
+              "observation",
+              "computed"
+            ]
           },
           "value": {
             "type": "string"
@@ -7699,21 +9071,17 @@
           "file_value": {
             "type": "string"
           },
-          "stage_id": {
-            "type": "string",
-            "description": "Relation field. When expanded, this becomes the related record object. Use the 'expand' query parameter to expand relations."
-          },
-          "created_by_action": {
-            "type": "string",
-            "description": "Relation field. When expanded, this becomes the related record object. Use the 'expand' query parameter to expand relations."
-          },
-          "last_modified_by_action": {
-            "type": "string",
-            "description": "Relation field. When expanded, this becomes the related record object. Use the 'expand' query parameter to expand relations."
-          },
-          "last_modified_at": {
+          "recorded_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "recorded_by_action": {
+            "type": "string",
+            "description": "Relation field. When expanded, this becomes the related record object. Use the 'expand' query parameter to expand relations."
+          },
+          "recorded_at_stage": {
+            "type": "string",
+            "description": "Relation field. When expanded, this becomes the related record object. Use the 'expand' query parameter to expand relations."
           },
           "created": {
             "type": "string",
@@ -7726,8 +9094,10 @@
         },
         "required": [
           "instance_id",
-          "field_key",
-          "stage_id"
+          "field_def_id",
+          "write_mode",
+          "recorded_at",
+          "recorded_at_stage"
         ]
       },
       "workflow_instance_tool_usageRecord": {
@@ -7966,10 +9336,19 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT"
+      },
+      "gisBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Read-only personal access token for the GIS API (SECTOR-minted, raw form `ubk_<base64url>`). Present it as `Authorization: Bearer ubk_...`. The raw token is shown to the admin once in the SECTOR UI and is never stored or returned by the API — only its sha256 hash lives in the `api_tokens` collection. Distinct from `bearerAuth`, which is a PocketBase JWT for the `/collections/*` routes."
       }
     }
   },
   "tags": [
+    {
+      "name": "GIS API",
+      "description": "Read-only GeoJSON export endpoints for external GIS clients (QGIS). SvelteKit app routes under /api/geo, authenticated with a SECTOR-minted bearer token."
+    },
     {
       "name": "Participants Collection",
       "description": "Operations for Participants Collection"
@@ -8031,8 +9410,8 @@
       "description": "Operations for Tools_field_tags Collection"
     },
     {
-      "name": "Tools_form_fields Collection",
-      "description": "Operations for Tools_form_fields Collection"
+      "name": "Tools_form_field_refs Collection",
+      "description": "Operations for Tools_form_field_refs Collection"
     },
     {
       "name": "Tools_forms Collection",
@@ -8043,8 +9422,12 @@
       "description": "Operations for Workflow_connections Collection"
     },
     {
-      "name": "Workflow_instance_field_values Collection",
-      "description": "Operations for Workflow_instance_field_values Collection"
+      "name": "Workflow_field_defs Collection",
+      "description": "Operations for Workflow_field_defs Collection"
+    },
+    {
+      "name": "Workflow_field_values Collection",
+      "description": "Operations for Workflow_field_values Collection"
     },
     {
       "name": "Workflow_instance_tool_usage Collection",

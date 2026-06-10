@@ -40,6 +40,14 @@ Wenn Sie ein neues Projekt anlegen, vergeben Sie einen **Namen** und optional ei
 
 Ueber den Schalter **Aktiv** steuern Sie, ob ein Projekt fuer Teilnehmer sichtbar ist. Solange ein Projekt inaktiv ist, koennen Sie in Ruhe konfigurieren, ohne dass Teilnehmer bereits darauf zugreifen.
 
+Die weiteren Einstellungen eines Projekts sind in Gruppen gegliedert:
+
+- **Allgemein** -- Branding und Erststart-Verhalten.
+- **Karte** -- Kartenebenen und Standardansicht.
+- **Funktionen** -- zuschaltbare Funktionen, darunter der projektweite [Chat](chat.md), Info-Seiten, Offline-Pakete, Filter & Felder sowie Cluster.
+- **Integrationen** -- der [GIS-Zugang](gis-zugang.md) (API-Tokens fuer den lesenden Datenexport an GIS-Programme).
+- **Gefahrenzone** -- das endgueltige Loeschen des Projekts.
+
 
 ## Gut zu wissen
 

@@ -26,6 +26,16 @@ Bei jeder Verbindung koennen Sie den Button-Text, die Button-Farbe und einen opt
 
 Verbindungen koennen auch von einer Stufe zu sich selbst fuehren (sogenannte Self-Loops). Das ermoeglicht Bearbeitungen ohne Stufenwechsel -- z.B. ein Bearbeitungs-Tool, das Felder aktualisiert, waehrend der Eintrag in derselben Stufe bleibt. In der Praxis wird das haeufig genutzt, um Teilnehmern eine Korrekturmoeglichkeit zu geben, ohne den Fortschritt im Workflow zu beeinflussen.
 
+### Bedingte Verfuegbarkeit von Verbindungen (Waechter)
+
+Sie koennen festlegen, dass der Button einer Verbindung nur dann erscheint, wenn bestimmte **Bedingungen** erfuellt sind. Diese Bedingungen wirken wie ein Waechter vor dem Uebergang: Solange sie nicht zutreffen, bleibt die Schaltfläche fuer den Teilnehmer verborgen. Konfiguriert wird das im Workflow-Builder, wenn Sie eine Verbindung anklicken, im Abschnitt **Verfuegbarkeit**.
+
+Jede Bedingung prueft den Wert eines Feldes. Mehrere Bedingungen werden **mit UND verknuepft** -- der Button erscheint also erst, wenn *alle* Bedingungen gleichzeitig zutreffen. Zur Verfuegung stehen die Vergleiche **gleich**, **ungleich**, **enthaelt**, **ist leer**, **ist nicht leer** sowie **groesser**, **groesser/gleich**, **kleiner** und **kleiner/gleich** fuer numerische Werte. Bei Feldern mit Verlauf (Schreibmodus "Beobachtung") wird stets der zuletzt erfasste Wert geprueft.
+
+Ein Beispiel: Bei einer Sicherheitsbegehung soll der Button "Zur Freigabe weiterleiten" erst auftauchen, wenn das Feld "Massnahme" nicht leer ist und das Feld "Risikoklasse" den Wert "gering" hat. Erst wenn beides zutrifft, kann der Teilnehmer den Vorgang weiterreichen.
+
+Die Bedingungen werden direkt auf dem Geraet des Teilnehmers ausgewertet, sodass sich der Button sofort beim Ausfuellen ein- oder ausblendet -- auch offline. Die Rollenberechtigung bleibt davon unberuehrt: Wer die Verbindung laut Rolle nicht nutzen darf, sieht den Button auch dann nicht, wenn alle Bedingungen erfuellt sind. Bedingungen und Rollenfreigabe wirken also zusammen.
+
 **[Tools](tools.md)** sind Funktionsbausteine, die Sie an Verbindungen oder Stufen anhaengen. So koennen Sie z.B. beim Uebergang von "Erfasst" zu "Bewertet" ein Bewertungsformular einblenden oder bei einer Statusaenderung automatisch einen Wert setzen lassen.
 
 **Eintraege** (auch Instanzen genannt) sind die konkreten Vorgaenge, die den Workflow durchlaufen -- also der einzelne Raum, der gereinigt wird, oder der einzelne Mangel, der bearbeitet wird.

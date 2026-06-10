@@ -132,10 +132,12 @@ Das Edit Tool hat zwei Modi (`edit_mode`):
 
 | Modus | Beschreibung |
 |-------|-------------|
-| `form_fields` | Ausgewaehlte Formularfelder bearbeiten |
-| `location` | Standort der Instanz aendern (nur bei `incident`-Typ) |
+| `form_fields` | Ausgewaehlte Formularfelder bearbeiten (`editable_fields` -- eine explizite Auswahl von Feld-Definitionen; berechnete Felder sind ausgeschlossen) |
+| `location` | Geometrie des Eintrags auf der Karte aendern (Karten-Picker; fuer alle kartenbasierten Eintraege) |
 
 In unserem Fall verwenden wir `form_fields`.
+
+> **Rollen-Zugriff:** Bei Stufen- und Global-Edit-Tools steuern zwei Listen, wer bearbeiten darf: `self_edit_roles` (nur eigene, selbst erstellte Eintraege) und `any_edit_roles` (beliebige Eintraege). Ueberschneiden sich beide, gewinnt `any_edit_roles`.
 
 ### Ergebnis in der Teilnehmer-App
 
@@ -162,7 +164,7 @@ Wenn ein Supervisor oder Analyst nun den Button **review-to-resolved** klickt, m
 | Tool | Anhaengepunkt | Wer | Was |
 |------|--------------|-----|-----|
 | Initial Report Form (erweitert) | Entry-Verbindung | Supervisor | 7 Felder inkl. Smart Dropdown und Custom Table Selector |
-| Edit Tool | Stufe Review | Alle (oder per `allowed_roles` einschraenkbar) | Priority und Due Date bearbeiten |
+| Edit Tool | Stufe Review | per `self_edit_roles` (nur eigene Eintraege) / `any_edit_roles` (beliebige Eintraege) | Priority und Due Date bearbeiten |
 | Review Summary | Verbindung review-to-resolved | Supervisor, Analyst | Resolution und Resolved By erfassen |
 
 Weiter: [Tutorial 4 -- Automatisierungen](04-automatisierungen.md)

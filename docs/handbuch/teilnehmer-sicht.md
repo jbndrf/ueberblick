@@ -1,123 +1,78 @@
-# Was sieht der Teilnehmer?
+# Überblick
 
-Zentrale Referenz: Was bewirkt jede Admin-Einstellung in der Teilnehmer-App?
+Wörtlich genommen bedeutet Überblick genau das: Ein Blick von oben. Auf irgendetwas. Wie wäre es mit einem Blick auf deine Daten?
+Überblick hilft dir und deinem Team raumbezogene Daten zu verwalten und verbindet sie mit kollaborativen Prozessen.
+Dafür definieren Admins die Prozesse die jeder Punkt auf der Karte durchleben soll und eine Teilnehmer Anwendung generiert sich aus den definierten Prozessen. Überblick ist bewusst so gebaut, dass leichte und selbsterklärende Anwendungen gebaut werden können.
 
-## Workflow-Sichtbarkeit
 
-| Admin-Einstellung | Teilnehmer sieht... |
-|---|---|
-| Workflow inaktiv | Workflow komplett unsichtbar. Keine Marker, kein Eintrag in der Auswahl. |
-| Workflow aktiv | Workflow in der Auswahl, Marker auf Karte. |
-| Einstiegsrollen leer | "+"-Button fuer alle Teilnehmer. |
-| Einstiegsrollen gesetzt | "+"-Button nur fuer Teilnehmer mit passender Rolle. |
-| Private Instanzen aktiv | Nur eigene Instanzen sichtbar. |
+## Du bekommst hier 2 Anwendungen
 
-## Workflow-Typ
 
-| Typ | Teilnehmer-Erlebnis |
-|---|---|
-| Kartenbasiert (incident) | Standortwahl auf Karte **vor** dem Formular. Instanz erscheint als Marker. |
-| Formular (survey) | Formular oeffnet sich direkt. Kein Marker auf der Karte. |
+**Überblick** ist die Teilnehmer-App. Sie ist responsiv, fürs Smartphone gebaut
+und gibt dir eine Karte zum Arbeiten. Das ist die App für den Einsatz vor Ort.
+Sie läuft im Browser, funktioniert offline und lässt sich als PWA installieren.
+Teilnehmer installieren nichts weiter. Sie scannen einen QR-Code und legen los. Als Gäste oder auch als ausgewiesene Teilnehmer.
 
-## Stage-Sichtbarkeit
+**Überblick SECTOR** ist die Admin-App. SECTOR steht für Spatial Engine
+Coordinating Teams, Operations & Records. Hier baust du die Workflows, Rollen
+und Karten, aus denen sich die Teilnehmer-App automatisch zusammensetzt.
 
-| Admin-Einstellung | Teilnehmer sieht... |
-|---|---|
-| Stage-Name | **Immer sichtbar** in Zeitleiste (strukturelle Transparenz). |
-| Aktuelle Stage | **Immer sichtbar** -- Teilnehmer weiss, wo die Instanz steht. |
-| Fortschritt | **Immer sichtbar** -- "Stage 2 von 4". |
-| Stufensichtbarkeit leer | Formulardaten dieser Stage fuer alle sichtbar. |
-| Stufensichtbarkeit gesetzt | Formulardaten nur fuer ausgewaehlte Rollen. Andere sehen Stage-Name, aber keine Daten. |
+Es gibt gute Tools mit denen sich Karten bauen lassen und Überblick versucht nicht diese zu ersetzen. Im Gegenteil, für diene Daten gibt es keinen Lock in. Du kannst Sie immer exportieren und in anderer Software analysieren oder weiter verarbeiten. Was wir schaffen wollen, ist ein Interface mit dme Leute auch arbeiten können. So, dass Marker auf der Karte nicht statisch sein müssen. Du legst fest, wer welche
+Aktion an welchem Datensatz ausführen darf, welche Rolle welche Daten sieht,
+wer einen Marker setzen darf, wer eine Kartenebene sieht und wer welche Felder
+ändert. Wenn nötig, definierst du Automationen, die im Hintergrund ablaufen.
+Daher der Name: SECTOR gibt dir präzise Kontrolle darüber, wie deine Nutzer mit
+deinen Daten arbeiten.
 
-## Connection-Buttons
+Für die Teilnehmer fällt dieser Aufbau weg. Sie sehen nur die Werte, die sie
+sehen dürfen, und nur Buttons für Aktionen, die sie ausführen dürfen. Das
+Prinzip ist von CMMN und BPMN inspiriert: Jeder bekommt zum richtigen Zeitpunkt
+genau die Werkzeuge, die er gerade braucht. So erledigt jede Person ihre
+Aufgaben, ohne den Overhead komplizierter Datenmodelle.
 
-| Admin-Einstellung | Teilnehmer sieht... |
-|---|---|
-| Rollenfeld leer | Button fuer alle sichtbar. |
-| Rollen gesetzt | Button nur fuer passende Rollen. Andere sehen keinen Button. |
-| Button-Text gesetzt | Button mit dem konfigurierten Text (z.B. "Genehmigen"). |
-| Button-Farbe gesetzt | Farbiger Button (z.B. gruen fuer Bestaetigungen, rot fuer Ablehnungen). |
-| Bestaetigung aktiv | Bestaetigungsdialog vor Ausfuehrung. |
 
-## Tool-Sichtbarkeit
+## Schnellstart
 
-| Szenario | Teilnehmer sieht... |
-|---|---|
-| Tool an Verbindung | Kein eigener Button. Tool laeuft beim Klick auf den Verbindungs-Button. |
-| Tool an Stufe (Rollen leer) | Eigener Button auf dieser Stufe fuer alle. |
-| Tool an Stufe (Rollen gesetzt) | Button nur fuer passende Rollen. |
-| Globales Bearbeitungs-Tool | Button auf **jeder** Stufe. |
-| Bearbeitung: Felder | Zeigt nur Felder aus bereits durchlaufenen Stufen. |
-| Bearbeitung: Standort | Kartenansicht zum Verschieben des Markers. |
+Selbst hosten mit Docker:
 
-## Formular-Darstellung
+```bash
+cp .env.example .env
+# POCKETBASE_ADMIN_EMAIL und POCKETBASE_ADMIN_PASSWORD eintragen
+docker-compose up --build
+```
 
-| Admin-Einstellung | Teilnehmer sieht... |
-|---|---|
-| Pflichtfeld aktiv | Feld mit Pflichtfeld-Markierung, Absenden blockiert ohne Wert. |
-| Platzhalter gesetzt | Grauer Hinweistext im leeren Feld. |
-| Hilfetext gesetzt | Kleiner Text unter dem Feld. |
-| Mehrseitiges Formular | Seiten-Navigation (Weiter/Zurueck). |
-| Position links/rechts | Zwei Felder nebeneinander (Desktop). Auf Mobile: untereinander. |
-| Datenauswahl | Dropdown mit Eintraegen der referenzierten Tabelle. |
-| Abhaengige Auswahl | Optionen aendern sich basierend auf Wert eines anderen Feldes. |
+Das Frontend läuft danach auf http://localhost:8080. Das PocketBase-Admin-UI
+bleibt verborgen. Setze `EXPOSE_PB_ADMIN=true` in der `.env`, um es unter `/_/`
+zu öffnen.
 
-## Karten-Darstellung
+Lokal entwickeln, Backend und Frontend in zwei Terminals:
 
-| Admin-Einstellung | Teilnehmer sieht... |
-|---|---|
-| Layer inaktiv | Layer nicht verfuegbar. |
-| Layer aktiv | Layer im Layer-Switcher schaltbar. |
-| Kein Hintergrund-Layer aktiv | Leere Karte (Fehler). |
-| Kartenstandards (Zentrum/Zoom) | Karte oeffnet sich an dieser Position. |
-| Offline-Paket vorhanden | Kartenbereich auch ohne Internet verfuegbar. |
+```bash
+npm install
+npm run backend   # PocketBase auf :8090
+npm run dev       # Vite auf :5173
+```
 
-## Automatisierungen aus Teilnehmersicht
+Weitere Skripte: `npm run check`, `npm run lint`, `npm run test:unit`,
+`npm run test:e2e` und `npm run db:clear`, um die lokalen PocketBase-Daten zu
+verwerfen.
 
-Automatisierungen laufen unsichtbar im Hintergrund. Der Teilnehmer bemerkt nur die Auswirkungen:
+## Dokumentation
 
-| Automatisierung | Was der Teilnehmer sieht |
-|---|---|
-| Stufe setzen | Instanz springt in eine andere Stufe. |
-| Feldwert setzen | Feldwert aendert sich (z.B. berechnetes Feld). |
-| Status aendern | Status aendert sich (z.B. automatisch abgeschlossen). |
-| Zeitgesteuert (Cron) | Aenderungen treten zum Zeitpunkt des naechsten Laufs ein. |
+- [Handbuch](docs/handbuch/index.md): Konzepte für Admins und Projektmanager.
+- [Was sieht der Teilnehmer?](docs/handbuch/teilnehmer-sicht.md): Matrix von
+  Admin-Einstellung zu Teilnehmer-Erlebnis.
+- [Tutorials](docs/tutorials/index.md): Schritt für Schritt zum ersten Workflow.
+- [Referenz](docs/reference/admin-cheatsheet.md): Jedes Admin-Feld im Detail.
+- [Entwicklung](docs/dev/index.md): Architektur und Konventionen.
 
----
+## Tech-Stack
 
-## Haeufige Szenarien und Tipps
+SvelteKit 5 und Svelte 5 im Frontend, Tailwind 4 und Leaflet für die Karte.
+PocketBase (Go) im Backend. Offline-Daten über IndexedDB. Formulare mit
+Superforms und Zod. Übersetzungen über Paraglide (Deutsch, Englisch). Tests mit
+Vitest und Playwright.
 
-### Szenarien
+## Lizenz
 
-**"Nur Manager duerfen genehmigen"** -- Rollen der Verbindung zur Genehmigungs-Stufe auf "Manager" setzen.
-
-**"Interne Pruefungsdaten verbergen"** -- Stufensichtbarkeit der Pruefungs-Stufe auf die gewuenschten Rollen setzen. Andere sehen den Stufennamen, aber keine Daten.
-
-**"Alle duerfen melden, nur Inspektoren pruefen"** -- Einstiegsrollen leer lassen (alle duerfen anlegen), Verbindung zur Pruefung nur fuer Inspektoren freigeben.
-
-**"Feld nach Einreichung bearbeitbar"** -- Bearbeitungs-Tool auf der gewuenschten Stufe. Modus "Felder bearbeiten", Felder auswaehlen, Rollen festlegen.
-
-**"Kartenstandort nachtraeglich aendern"** -- Bearbeitungs-Tool mit Modus "Standort" auf der gewuenschten Stufe.
-
-**"Instanzen nach 7 Tagen automatisch abschliessen"** -- Zeitgesteuerte Automatisierung: taeglich, Inaktivitaet 7 Tage, Aktion: Status auf "abgeschlossen".
-
-**"Summe aus Feldern berechnen"** -- Automatisierung mit Trigger "Bei Feldaenderung" auf das Mengen-Feld, Aktion: Feldwert setzen mit Ausdruck.
-
-**"Kreislauf ohne Endpunkt"** -- Zwei Stufen: Offen (Start) und Erledigt (Intermediate, nicht End). Verbindungen in beide Richtungen. Zeitgesteuerte Automatisierung setzt Erledigt zurueck auf Offen.
-
-### Stolperfallen
-
-- **Entry-Verbindung nicht sichtbar** -- Entry-Verbindungen erscheinen nicht als Pfeil auf dem Canvas. Konfiguration ueber die Startstufe anklicken.
-- **Stufensichtbarkeit geaendert -- wirkt sofort** -- Aenderungen gelten sofort fuer alle bestehenden Daten, nicht nur fuer zukuenftige.
-- **Ersteller sieht eigene Daten nicht** -- Es gibt kein Ersteller-Privileg. Loesung: Rolle des Erstellers in der Stufensichtbarkeit aufnehmen.
-- **Bearbeitungs-Tool zeigt keine Felder** -- Bearbeitungs-Tools zeigen nur Felder aus Stufen, die der Eintrag bereits durchlaufen hat.
-- **Automatisierung loest nicht aus** -- Zeitgesteuert: Minimum 15 Minuten. Pruefen: Ist sie aktiviert? Stimmt die Ziel-Stufe? Stimmen die Bedingungen?
-
-### Tipps
-
-- **Iterativ arbeiten.** Zuerst alle Rollenfelder leer lassen (alles offen), Workflow verifizieren, dann schrittweise einschraenken.
-- **Berechtigungsuebersicht nutzen.** Unter Rollen > Tab "Berechtigungen" sehen Sie auf einen Blick, welche Rolle was darf -- und koennen dort direkt toggeln.
-- **Mit verschiedenen Rollen testen.** Test-Teilnehmer pro Rolle anlegen und durchspielen.
-- **Stage Preview nutzen.** Im Builder eine Stufe anklicken -- zeigt die Teilnehmersicht mit Buttons und Tools.
-- **Regelmaessig speichern.** Der Builder haelt Aenderungen im Speicher. Ungespeicherte Aenderungen gehen beim Schliessen verloren.
-- **Self-Loops fuer Bearbeitungen.** Verbindung von einer Stufe zu sich selbst + Bearbeitungs-Tool = Bearbeitung ohne Stufenwechsel.
+AGPL v3. Siehe `LICENSE`.

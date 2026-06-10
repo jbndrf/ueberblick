@@ -35,9 +35,9 @@ Defined in `pb/pb_hooks/automation.js`.
 
 `new Field({ options: { values: [...] } })` does **nothing** -- properties like `values`, `maxSelect`, `min`, `max`, `collectionId` must be at the top level. See the conventions doc for examples.
 
-## IndexedDB version is 8
+## IndexedDB version is 11
 
-Defined in `src/lib/participant-state/db.ts` as `DB_VERSION = 8`. If you add/remove stores or indexes, **bump this number**. The tile cache index is named `by_layer` (keyed on `layerId`).
+Defined in `src/lib/participant-state/db.ts` as `DB_VERSION = 11`. If you add/remove stores or indexes, **bump this number**. The tile cache index is named `by_layer` (keyed on `layerId`).
 
 Version history is documented at the top of `db.ts`.
 
@@ -47,9 +47,11 @@ Version history is documented at the top of `db.ts`.
 
 ## Service worker registration is manual
 
-The participant layout (`src/routes/participant/+layout.svelte`) registers the service worker manually with `navigator.serviceWorker.register('/sw.js')` instead of using `virtual:pwa-register`. Reason: the virtual module generates a relative `./sw.js` path that breaks on sub-paths like `/participant/map`.
+The participant layout (`src/routes/(participant)/+layout.svelte`) registers the service worker manually with `navigator.serviceWorker.register('/sw.js')` instead of using `virtual:pwa-register`. Reason: the virtual module generates a relative `./sw.js` path that breaks on sub-paths like `/map`. (The `(participant)` route group mounts at root, so the routes are `/map`, `/login`, etc. — not `/participant/...`.)
 
 The `@vite-pwa/sveltekit` plugin is still used for workbox config and manifest generation, but `injectRegister` is set to `false`.
+
+PocketBase data reads (`/api/collections/*`) use a `NetworkOnly` runtime handler (see `vite.config.ts`), **not** `NetworkFirst`. A `NetworkFirst` cache here would let a cached `200` masquerade as a live read, so a successful read now genuinely means the server was reached — which is what the freshness model relies on.
 
 ## superforms: different adapters for server vs client
 
@@ -68,6 +70,8 @@ superForm(data.form, { validators: zodClient(schema) });
 ## Auth refresh handles two collections
 
 `hooks.server.ts` checks `collectionName` to decide whether to call `participants.authRefresh()` or `users.authRefresh()`. If you add a third auth collection, you must add a branch here or refresh will silently skip it.
+
+The participant token lasts **90 days** (cookie `maxAge` in `hooks.server.ts` matches the `participants` token duration). On top of the server-side refresh, the participant PWA also calls `authRefresh()` client-side on boot (`(participant)/+layout.svelte`), so an offline-capable client renews its token whenever it next reaches the backend.
 
 ## Vite proxy is route-specific
 

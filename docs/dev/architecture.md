@@ -270,7 +270,49 @@ The sync engine (`sync.svelte.ts`) handles three scenarios:
 | **Catch-up** | SSE reconnect or tab focus | Push pending, then incremental pull (delta sync by `updated` timestamp), then deletion detection |
 | **Full resync** | Manual "Sync Now" button | Clear sync timestamps, push, full pull, deletion detection |
 
+Triggers gate on **backend reachability**, not raw `navigator.onLine`. Before running, the engine calls `checkBackendReachable()` / `pingServer('/api/health')` (in `network.svelte.ts`) — `navigator.onLine` reports `true` on captive portals and when the server is down, so trusting it would queue doomed requests.
+
+A successful sync stamps `lastSuccessfulSyncAt` (a wall-clock ISO string) on the IndexedDB `sync_metadata` reserved `__global_sync__` key, which drives the data-freshness UI. A `401` surfaced during the pull is escalated to **session expiry** (redirect to `/login`); a `403` is not (it is a permission result, not a dead token).
+
 Conflict resolution strategy: **server wins**. When a conflict is detected (server's `updated` timestamp differs from `_serverUpdated` stored locally), the server version is accepted and the conflict is stored in the IndexedDB `conflicts` store for participant review.
+
+### Chat delivery
+
+Chat does **not** use a custom SSE stream. Messages ride PocketBase realtime through the same participant-state gateway live-query that backs every other collection: `chat_messages` and `chat_read_state` are subscribed via `gateway.collection(...).live(...)`, mirrored into IndexedDB by the sync engine, and read back reactively. Unread state is derived locally — `unread-store.svelte.ts` filters the locally-cached messages against the synced `chat_read_state` high-water marks (`last_read_at` / `last_mention_seen_at`) to produce a soft "unread" count and a hard "mention" count, with no server round-trip. The only chat-specific server endpoint is a single custom route, `GET /api/custom/chat/mentionable-participants` (registered in `pb/pb_hooks/chat.pb.js`), which backs the @-mention picker.
+
+### Public Read API (GeoJSON / GIS)
+
+A small set of **read-only** SvelteKit routes lets external GIS clients (QGIS, GDAL) pull a project's data as GeoJSON:
+
+| Route | Returns |
+|-------|---------|
+| `/api/geo/projects/{projectId}/markers.geojson` | Project markers as a `Point` FeatureCollection |
+| `/api/geo/projects/{projectId}/workflows/{workflowId}.geojson` | One workflow's instances as a FeatureCollection |
+
+These endpoints use a **third auth path**, distinct from the two cookie sessions (admin / participant):
+
+```mermaid
+sequenceDiagram
+    participant QGIS as GIS Client
+    participant SK as SvelteKit (api-token.ts)
+    participant SU as Superuser PB
+    participant Owner as Impersonated owner admin
+
+    QGIS->>SK: GET ...geojson + raw ubk_ token
+    SK->>SK: sha256(raw)
+    SK->>SU: lookup api_tokens by token_hash
+    SU-->>SK: token row (hash + owner ref only)
+    SK->>SU: impersonate owning users admin
+    SU-->>Owner: client authed AS owner
+    SK->>Owner: read project data (normal owner_id rules)
+    Owner-->>SK: records
+    SK-->>QGIS: GeoJSON FeatureCollection
+```
+
+- The raw token (`ubk_<base64url>`) is presented as a **Bearer** header, as a **Basic-auth username** (QGIS reliably ships only Basic auth), or as a discouraged `?token=` query param.
+- The raw token is never stored — only its `sha256` hash lives in `api_tokens`. The lookup runs with a superuser client (bypasses access rules), but the row holds only a hash + owner reference, no project data.
+- The token's owning `users` admin is then **impersonated**; every data read runs under that admin's normal `owner_id` access rules. The superuser never reads project data directly.
+- Output is WGS84 `[lon, lat]` (RFC 7946). Selector / multi-select field ids are resolved to human-readable labels (see `workflow-feature-model.ts`).
 
 ### Automation (PocketBase hooks)
 
@@ -290,14 +332,14 @@ Three trigger types:
 | Trigger | Hook | Fires when |
 |---------|------|------------|
 | `on_transition` | `onRecordAfterUpdateSuccess` on `workflow_instances` | `current_stage_id` changes |
-| `on_field_change` | `onRecordAfterCreateSuccess` / `onRecordAfterUpdateSuccess` on `workflow_instance_field_values` | A field value is created or updated |
+| `on_field_change` | `onRecordAfterCreateSuccess` / `onRecordAfterUpdateSuccess` on `workflow_field_values` | A new field value is recorded (values are append-only, so this is normally a create) |
 | `scheduled` | `cronAdd` (every minute) | Cron expression matches, filtered by stage and inactivity |
 
 ---
 
 ## IndexedDB Schema
 
-The participant state lives in an IndexedDB database (`participant-state`, version 8) with these stores:
+The participant state lives in an IndexedDB database (`participant-state`, version 11) with these stores:
 
 | Store | Key | Purpose |
 |-------|-----|---------|
@@ -308,6 +350,8 @@ The participant state lives in an IndexedDB database (`participant-state`, versi
 | `files` | `{collection}/{recordId}/{fieldName}/{fileName}` | Cached file blobs (photos, documents) |
 | `sync_metadata` | `collection` | Last sync timestamp per collection (for delta sync) |
 | `conflicts` | `id` | Server-wins conflicts pending participant review |
+
+`sync_metadata` also holds a reserved `__global_sync__` key (the `GLOBAL_SYNC_KEY` constant in `db.ts`) carrying `lastSuccessfulSyncAt` — a global wall-clock freshness marker for the whole dataset, distinct from the per-collection delta-sync timestamps.
 
 Records in the `records` store carry metadata fields:
 
@@ -337,13 +381,16 @@ sequenceDiagram
     PB-->>SvelteKit: Refreshed token
     SvelteKit->>SvelteKit: event.locals.user = authStore.record
     SvelteKit->>SvelteKit: resolve(event)
-    SvelteKit-->>Browser: Response + Set-Cookie (1-week expiry)
+    SvelteKit-->>Browser: Response + Set-Cookie (90-day expiry for participants)
 ```
 
 - `hooks.server.ts` runs two middleware in sequence: `handleAuth` then `handleParaglide`
+- The participant cookie has a **90-day** `maxAge`, matching the participants auth-token duration (`pb_migrations/1780200000_participants_token_duration.js`)
+- Beyond the server-side refresh shown above, the participant PWA also runs a client-side `authRefresh()` on boot (in `(participant)/+layout.svelte`) so a returning offline-capable client renews its token as soon as it reaches the backend
 - Auth refresh determines collection from the stored record's `collectionName` field
 - On 401/403, auth is cleared; on network errors, existing auth is preserved (prevents logout on transient failures)
 - Admin and participant login are separate pages with separate auth flows
+- Beyond the two cookie sessions, there is a **third, token-based auth path**: the read-only GIS API (`src/lib/server/api-token.ts`) authenticates a raw `ubk_` token and impersonates the token's owning admin — see [Public Read API](#public-read-api-geojson-gis)
 
 ---
 

@@ -13,13 +13,19 @@ This doc explains every settable field in the Überblick Sector admin UI, for bo
 
 These rules apply everywhere in Überblick. Internalize them before relying on per-field descriptions.
 
-**Empty-array-means-all.** Any `visible_to_roles` or `allowed_roles` field that is an empty array grants access to every participant in the project. A non-empty array restricts access to the listed roles only. This is enforced at the PocketBase rule level via the pattern `(<field>:length = 0 || @request.auth.role_id ?= <field>)`. It applies to: `workflows.visible_to_roles`, `workflows.entry_allowed_roles`, `workflow_stages.visible_to_roles`, `workflow_connections.allowed_roles`, `tools_forms.allowed_roles`, `tools_protocol.allowed_roles`, `marker_categories.visible_to_roles`, `custom_tables.visible_to_roles`, `map_layers.visible_to_roles`, `offline_packages.visible_to_roles`. Note: `info_pages` has no `visible_to_roles` field -- info pages are visible to every participant in the project.
+**Empty-array-means-all.** Any `visible_to_roles` or `allowed_roles` field that is an empty array grants access to every participant in the project. A non-empty array restricts access to the listed roles only. This is enforced at the PocketBase rule level via the pattern `(<field>:length = 0 || @request.auth.role_id.id ?= <field>.id)`. The `.id ?= <field>.id` form is mandatory: a participant's `role_id` is a multi-relation array (maxSelect 99), so the bare `@request.auth.role_id ?= <field>` never matches and silently denies access (see docs/dev/db/migrations.md "Multi-relation array comparison"). It applies to: `workflows.visible_to_roles`, `workflows.entry_allowed_roles`, `workflow_connections.allowed_roles`, `tools_forms.allowed_roles`, `tools_protocol.allowed_roles`, `workflow_field_defs.view_roles`, `marker_categories.visible_to_roles`, `custom_tables.visible_to_roles`, `map_layers.visible_to_roles`, `offline_packages.visible_to_roles`. Note: `info_pages` has no `visible_to_roles` field -- info pages are visible to every participant in the project.
 
-**Edit-tool roles are an exception.** `tools_edit` does not use a single `allowed_roles` field. It uses two paired arrays — `any_edit_roles` (roles that can edit any instance) and `self_edit_roles` (roles that can edit only instances they created themselves). A role in both arrays is treated as `any` (the button renders exactly once). **Empty arrays mean nobody** (not "everyone") — this is the deliberate inverse of the empty-array rule above. The migration `1778100000_edit_tools_self_any_roles.js` backfilled tools whose old `allowed_roles` was empty by populating `any_edit_roles` with every project role, preserving the old "everyone" behaviour.
+**No stage-level visibility.** `workflow_stages` no longer has a `visible_to_roles` field — the field-def redesign removed it (migration `1779700000_data_tab_layout.js`). Stages are not a permission boundary. Read access is now gated **per field def** via `workflow_field_defs.view_roles`; action access is gated per connection / form / tool as before.
+
+**Field-def model.** Form fields are split across two collections. `workflow_field_defs` is the workflow-scoped registry — one row per logical field, holding the definitional bits (`label`, `field_type`, `write_mode`, `output_type`, `field_options`, `validation_rules`), the per-field read gate (`view_roles`), and the participant Data-tab layout (`display_config`). `tools_form_field_refs` links a form to a def, with all per-form presentation (layout, placeholder, help text, required, conditional logic) in a `config` JSON column — the same def can appear in several forms with different presentation. The old flat `tools_form_fields` collection no longer exists. Field VALUES live in the append-only `workflow_field_values` event log: every write inserts a new row, and the "current value" of a field is the latest row by `recorded_at`.
+
+**One shared value pool per instance.** An instance has a single pool of field values (`workflow_field_values`, append-only; current = latest by `recorded_at` per `(instance, field_def)`). Forms, edit tools, and protocol tools are just different ways to **display** or **write** these shared values — they are not separate stores. How a given write behaves (overwrite the current value vs append a new history row vs server-computed and read-only) is governed by the field def's `write_mode`, **not** by which tool did the writing. The lone exception is a protocol tool's `local_fields`, which never reach this pool (see Protocol below).
+
+**Edit-tool roles are an exception.** `tools_edit` does not use a single `allowed_roles` field. It uses two paired arrays — `any_edit_roles` (roles that can edit any instance) and `self_edit_roles` (roles that can edit only instances they created themselves). A role in both arrays is treated as `any` (the button renders exactly once). **Empty arrays mean nobody** (not "everyone") — the deliberate inverse of the empty-array rule above. Migration `1778100000_edit_tools_self_any_roles.js` backfilled tools whose old `allowed_roles` was empty by populating `any_edit_roles` with every project role, preserving the old "everyone" behaviour.
 
 **Participant scope.** Every participant-side query is scoped by `project_id = @request.auth.project_id`. A participant can never see anything outside their assigned project, regardless of roles.
 
-**Auth.** Admins log in to the `users` collection with email/password. Participants log in to the separate `participants` collection with their `token` — the token is used as both identity and password (`authWithPassword(token, token)`). Login fails if `is_active = false` or if `expires_at < now`.
+**Auth.** Admins log in to the `users` collection with email/password. Participants log in to the separate `participants` collection with their `token` — the token is used as both identity and password (`authWithPassword(token, token)`). Login fails if `is_active = false` or if `expires_at < now`. The participant session uses a 90-day auth token (`authToken.duration = 7776000`, set by migration `1780200000_participants_token_duration.js`; PocketBase's default is 604800 = 7 days), renewed on every online open. The participant cookie's `maxAge` is matched to the same 90 days in `src/hooks.server.ts`.
 
 **Status / visibility / archived.** Many collections carry a status-like field that hides rows from participants:
 - `workflow_instances.status` — the server-side participant list rule filters out `archived` and `deleted` instances. Admins still see all statuses in the data viewer.
@@ -45,15 +51,15 @@ These rules apply everywhere in Überblick. Internalize them before relying on p
 
 ## Page: Projects List  `/projects`  [DONE]
 
-File: `src/routes/(admin)/projects/+page.svelte`
+File: `src/routes/admin/projects/+page.svelte`
 Collection: `projects`
-Notes: List page only. Cards are read-only; no inline field editing. The only actions here are Create, Import Schema, Export Schema, and navigating into a project. No documentable fields.
+Notes: List page only. Cards are read-only; no inline field editing. Actions here are Create, Import Schema, Export Schema, two data-export actions, and navigating into a project. The data exports are: "Export full project (ZIP)" — a full, re-importable archive that keeps raw-ID columns (import matches columns by name); and "Export data (CSV)" — human-readable, adding companion `*_name` columns (current_stage_name; protocol & tool-usage stage_name; marker category_name + visible_to_roles_names; participant role_names) and resolving custom_table_selector values to `; `-joined labels. The CSV is for reading; the ZIP intentionally keeps raw IDs for re-import. No documentable fields.
 
 ---
 
 ## Page: New Project  `/projects/new`  [DONE]
 
-File: `src/routes/(admin)/projects/new/+page.svelte`
+File: `src/routes/admin/projects/new/+page.svelte`
 Collection: `projects`
 
 <!-- --8<-- [start:projects-name] -->
@@ -65,22 +71,36 @@ Collection: `projects`
 
 ---
 
-## Page: Project Settings · General Tab  `/projects/[projectId]/settings`  [DONE]
+## Page: Project Settings  `/projects/[projectId]/settings`  [DONE]
 
-File: `src/routes/(admin)/projects/[projectId]/settings/GeneralSettingsTab.svelte`
-Collection: `projects`, `info_pages`
+File: `src/routes/admin/projects/[projectId]/settings/+page.svelte` (shell) + `sections/*.svelte`
 
-- [x] **display_name** (text, stored in `projects.settings.display_name`) — Overrides `projects.name` as the project title shown in the participant app header. Read in `src/routes/participant/+layout.server.ts` and passed to the layout as `projectName`; falls back to `projects.name` when empty.
+**Not tabs — a sidebar with grouped sections.** The settings page renders a left `SettingsSidebar` (`SettingsSidebar.svelte`) plus one section component at a time; the active section is chosen via the `?section=<id>` URL param (default `branding`). Sections are organised into five groups (German captions in the UI):
+
+- **Allgemein** (General): `branding`, `startup`.
+- **Karte** (Map): `layers`, `map-defaults`.
+- **Funktionen** (Features): `chat`, `info-pages`, `offline-packs`, `field-filters`, `cluster`.
+- **Integrationen** (Integrations): `api-tokens` (labelled "GIS-Zugang").
+- **Gefahrenzone** (Danger zone): `danger-zone`.
+
+The field-level docs below mirror this structure. "General fields" and "Map fields" collect the per-field content; the **Chat** (Funktionen) and **GIS Access** (Integrationen) subsections document the chat and API-token features.
+
+### General fields (Allgemein group: `branding`, `startup`)
+
+Sections: `BrandingSection.svelte`, `StartupSection.svelte`
+Collections: `projects`, `info_pages`
+
+- [x] **display_name** (text, stored in `projects.settings.display_name`) — Overrides `projects.name` as the project title shown in the participant app header. Read in `src/routes/(participant)/+layout.server.ts` and passed to the layout as `projectName`; falls back to `projects.name` when empty.
 - [x] **icon** (file upload, PNG/JPEG/SVG/WebP, max 2MB, stored in `projects.icon`) — Project icon displayed in the participant app header. Served via `/api/files/projects/{id}/{filename}` and fetched by the participant layout server.
 - [x] **info_page.title** (text, required) — Title of an info page listed in the participant app's info pages view. Rendered as the button label in the participant settings sheet.
-- [x] **info_page.content** (rich text/HTML, required) — HTML body shown when a participant opens an info page from the settings sheet. Loaded via the admin client in `src/routes/participant/+layout.server.ts` with `fields: 'id,title,content'`.
+- [x] **info_page.content** (rich text/HTML, required) — HTML body shown when a participant opens an info page from the settings sheet. Loaded via the admin client in `src/routes/(participant)/+layout.server.ts` with `fields: 'id,title,content'`. Supports per-participant template markers rendered by `src/lib/info-page-render.ts`: `$token` / `$loginlink` (inline text) and the QR markers `$qrtoken` (QR of the access token) and `$qrloginlink` (QR of a one-click login link). QR markers become standalone QR images; markers are dropped silently when no participant token is in scope.
 - [x] **info_page.sort_order** (integer, ≥0) — Controls the display order of info pages in the participant settings sheet. Used as the primary sort key (`sort: 'sort_order,created'`) when fetching pages.
 
 ---
 
-## Page: Project Settings · Map Tab  `/projects/[projectId]/settings`  [DONE]
+### Map fields (Karte group: `layers`, `map-defaults`)
 
-File: `src/routes/(admin)/projects/[projectId]/settings/MapSettingsTab.svelte`
+Sections: `LayersSection.svelte`, `MapDefaultsSection.svelte`
 Collections: `projects` (map defaults live in `projects.settings.map_defaults` JSON), `map_layers`, `offline_packages`
 
 ### Map defaults (`projects.settings.map_defaults`)
@@ -147,11 +167,69 @@ Stored as a JSON blob inside the `projects.settings` field (there is no separate
 - [x] **offline_package.file_size_bytes** (integer) — Archive size in bytes. Displayed to participants in the offline download list so they can estimate bandwidth and local storage.
 - [x] **offline_package.archive_file** (file, auth-protected) — The generated ZIP / MBTiles archive. Served as the participant download target; not directly uploaded by admins — the server writes it after region + layer selection.
 
+### Chat (Funktionen group: `chat`)
+
+Section: `ChatSection.svelte` (saves via the `?/saveChatSettings` action in `+page.server.ts`)
+Collections: `projects` (toggle + allowlist), `chat_messages`, `chat_read_state`; hooks in `pb/pb_hooks/chat.pb.js`
+
+**Behavior.** One project-wide chat room shared among **participants** — there are no DMs and no admin chat UI; admins only configure it here. `@`-mentions are populated from `GET /api/custom/chat/mentionable-participants?project_id=<id>` (participant auth only; returns `{ id, name }` for the participants the caller is allowed to mention). Unread state is "soft" (a gray dot) until you are `@`-mentioned, which raises a red badge. Messages stream in realtime over the participant gateway and are mirrored into IndexedDB so the room is readable offline.
+
+- [x] **projects.chat_enabled** (bool toggle) — Project-wide kill switch. When false the room is unavailable to everyone regardless of `chat_visible_to_roles`. Enforced in every `chat_messages` rule (`project_id.chat_enabled = true`).
+- [x] **projects.chat_visible_to_roles** (relation multi → `roles`, maxSelect 99) — Role allowlist for chat membership. **Empty = all participants** in the project; non-empty restricts the room to participants whose `role_id` intersects the list (`chat_visible_to_roles:length = 0 || @request.auth.role_id.id ?= chat_visible_to_roles.id`). Both fields are written together by `?/saveChatSettings`.
+
+#### Collection: `chat_messages`
+
+- [x] **project_id** (relation → `projects`, required, cascade delete) — Owning project; scopes the room and drives the chat-enabled / role-allowlist rule checks.
+- [x] **author_id** (relation → `participants`, required) — The participant who sent the message. Create/update/delete require `author_id = @request.auth.id`, so participants can only write as themselves.
+- [x] **body** (text, required, max 4000) — Message text. Mentions are written as `@<15-char participant id>` tokens inside the body.
+- [x] **mentions** (json) — Server-authoritative array of mentioned participant ids. **Never trusted from the client**: `chat.pb.js` re-extracts it from `body` on every create/update (regex `@([a-z0-9]{15})`), dropping ids that don't resolve to a participant in the same project.
+- [x] **created / updated** (autodate) — Standard timestamps. `created` also anchors the 5-minute edit/delete window.
+- **Rules.** list/view = project owner **OR** a participant member (project match + `chat_enabled` + role allowlist). create/update/delete = the same membership **AND** `author_id = @request.auth.id` (author-only). Edits and deletes are additionally blocked once the message is older than 5 minutes — enforced in `pb/pb_hooks/chat.pb.js` (`onRecordUpdateExecute` / `onRecordDeleteExecute` throw `BadRequestError` past the window).
+
+#### Collection: `chat_read_state`
+
+- [x] **participant_id** (relation → `participants`, required, cascade delete) — Owner of the read-state row. **All five rules** = `participant_id = @request.auth.id` (each participant manages only their own).
+- [x] **project_id** (relation → `projects`, required, cascade delete) — The room this read-state tracks. A unique index on `(participant_id, project_id)` guarantees one row per participant per project.
+- [x] **last_read_at** (date, required) — High-water mark for "everything up to here is read"; drives the soft (gray-dot) unread indicator.
+- [x] **last_mention_seen_at** (date, optional) — High-water mark for mentions; drives the red mention badge.
+- **Timestamps cannot regress.** `chat.pb.js` (`onRecordUpdateExecute` on `chat_read_state`) clamps `last_read_at` / `last_mention_seen_at` back to their previous values if an update tries to move them backwards.
+
+### GIS Access (Integrationen group: `api-tokens`, labelled "GIS-Zugang")
+
+Section: `ApiTokensSection.svelte` (actions `?/createApiToken`, `?/revokeApiToken` in `+page.server.ts`)
+Collection: `api_tokens`; endpoints under `src/routes/api/geo/**`; helper `src/lib/server/api-token.ts`
+
+Read-only personal access tokens that let external GIS clients (e.g. QGIS) pull a project's data as GeoJSON.
+
+#### Collection: `api_tokens`
+
+- [x] **user_id** (relation → `users`, required, cascade delete) — The owning admin. **All five rules** = `user_id = @request.auth.id && @request.auth.collectionName = "users"` (owner-only; participants can never touch this collection).
+- [x] **project_id** (relation → `projects`, optional, cascade delete) — Project scope. **Empty = all of the owner's projects**; when set, the token is rejected (403) for any other project.
+- [x] **label** (text, optional, max 255) — Human-readable note shown in the token list.
+- [x] **token_hash** (text, required, max 64) — sha256 **hex** of the raw token (unique index `idx_api_tokens_token_hash`). The raw token is never stored.
+- [x] **last_four** (text, max 8) — Last 4 chars of the raw token, for identifying a row in the UI.
+- [x] **expires_at** (date, optional) — Expiry. A token past `expires_at` resolves as invalid (401) at request time.
+- [x] **last_used_at** (date, optional) — Best-effort, throttled (≥60 s) timestamp bumped by the resolver on use.
+- [x] **revoked** (bool) — Soft-revoke flag checked by the resolver. Note the UI `?/revokeApiToken` action **hard-deletes** the row rather than setting this.
+- [x] **created / updated** (autodate) — Standard timestamps.
+
+**Token lifecycle.** `?/createApiToken` mints a raw token `ubk_` + `base64url(32 random bytes)`, stores only its sha256 hash + `last_four`, and returns the raw value **once** (shown to the admin a single time). `?/revokeApiToken` hard-deletes the token row (ownership enforced by the collection deleteRule).
+
+#### Read-only GeoJSON endpoints (SvelteKit routes under `/api/geo/...`)
+
+Bearer-token auth via `requireApiTokenAdmin` (`src/lib/server/api-token.ts`). A token may be supplied as `Authorization: Bearer <token>`, as HTTP Basic with the token in the **username** field (QGIS-friendly), or as a `?token=` query param (discouraged — leaks into logs/URLs).
+
+- [x] **GET `/api/geo/projects/{projectId}`** — Layer index JSON: one entry per workflow plus a markers entry, with feature counts and ready-to-paste `.geojson` URLs.
+- [x] **GET `/api/geo/projects/{projectId}/markers.geojson`** — `FeatureCollection` of marker **Point** features (geometry from `markers.location`).
+- [x] **GET `/api/geo/projects/{projectId}/workflows/{workflowId}.geojson`** — `FeatureCollection` of that workflow's instances (instance geometry, or centroid fallback for point workflows).
+
+**Auth model.** The presented token's sha256 hash is looked up with a **superuser** client (the row holds only a hash + owner ref, no project data); the request then **impersonates the owning admin**, so every read runs under that admin's `owner_id` rules. Errors: **401** missing/invalid/expired token, **403** token scoped to a different project, **404** project/workflow not found (or not readable by the owner). Coordinates are WGS84 `[lon, lat]` (RFC 7946); `custom_table_selector` / multi-select ids are resolved to human labels in feature properties.
+
 ---
 
 ## Page: Participants  `/projects/[projectId]/participants`  [DONE]
 
-File: `src/routes/(admin)/projects/[projectId]/participants/+page.svelte`
+File: `src/routes/admin/projects/[projectId]/participants/+page.svelte`
 Collections: `participants`, `participant_custom_fields`
 
 <!-- --8<-- [start:participants-name] -->
@@ -161,13 +239,13 @@ Collections: `participants`, `participant_custom_fields`
 - [x] **phone** (text, optional) — Optional contact phone number. Admin-only metadata with no participant-side effect.
 <!-- --8<-- [end:participants-phone] -->
 <!-- --8<-- [start:participants-token] -->
-- [x] **token** (text, unique, readonly in UI, auto-generated on create) — The participant's login credential. PocketBase auth uses `token` as both identity and password (`authWithPassword(token, token)` in `src/routes/participant/login/+page.server.ts`), and it is embedded in generated QR codes.
+- [x] **token** (text, unique, readonly in UI, auto-generated on create) — The participant's login credential. PocketBase auth uses `token` as both identity and password (`authWithPassword(token, token)` in `src/routes/(participant)/login/+page.server.ts`), and it is embedded in generated QR codes.
 <!-- --8<-- [end:participants-token] -->
 <!-- --8<-- [start:participants-role_id] -->
 - [x] **role_id** (relation multi, `roles`) — The participant's assigned roles. Every `visible_to_roles` / `allowed_roles` check across workflows, stages, forms, edit tools, marker categories, custom tables, map layers, and offline packages compares against this array.
 <!-- --8<-- [end:participants-role_id] -->
 <!-- --8<-- [start:participants-is_active] -->
-- [x] **is_active** (boolean, toggled via status button) — If false, login fails with "This account is inactive" in `src/routes/participant/login/+page.server.ts` even when the token is correct. Used to temporarily disable a participant without deleting them.
+- [x] **is_active** (boolean, toggled via status button) — If false, login fails with "This account is inactive" in `src/routes/(participant)/login/+page.server.ts` even when the token is correct. Used to temporarily disable a participant without deleting them.
 <!-- --8<-- [end:participants-is_active] -->
 - [x] **metadata.{custom_field}** (per-field value stored in JSON) — Per-participant values for any `participant_custom_fields` defined on the project. Stored as a JSON object keyed by `field_name`; values are preserved even if the field definition is later removed.
 
@@ -182,11 +260,16 @@ Collections: `participants`, `participant_custom_fields`
 
 - [x] **QR Export** (generates QR codes containing participant tokens) — Generates a multi-page PDF of QR codes for selected participants, each encoding the participant's token for scan-to-login. Used to bulk-distribute login credentials in the field.
 
+### Guest participants (self-join)
+
+- [x] **participants.self_joined** (boolean) — Set to `true` only by the public `/join/[slug]` endpoint when a guest mints their own account; `false`/null for admin-created participants. Surfaced by `participants.listRule`/`viewRule` (a participant can read its own row but not other guests') and used by the janitor cron. Guest rows are auto-deactivated (`is_active = false`, not deleted) by the `self_join_janitor` cron once the account is older than 90 days (runs daily at 03:17, `pb/pb_hooks/self_join_janitor.pb.js`).
+- [x] **Show guests** (toggle, URL param `?showGuests=true`) — By default the participants list hides `self_joined` rows (server filter `self_joined = false || self_joined = null` in `+page.server.ts`). Turning it on flips `showGuests` and lists guest participants alongside admin-created ones.
+
 ---
 
 ## Page: Roles · Roles Tab  `/projects/[projectId]/roles`  [DONE]
 
-File: `src/routes/(admin)/projects/[projectId]/roles/+page.svelte`
+File: `src/routes/admin/projects/[projectId]/roles/+page.svelte`
 Collection: `roles`
 
 <!-- --8<-- [start:roles-name] -->
@@ -196,18 +279,36 @@ Collection: `roles`
 - [x] **roles.description** (text, optional) — Admin-only note describing what the role is for. Not surfaced to participants.
 <!-- --8<-- [end:roles-description] -->
 - [x] **roles.assigned_participants** (reverse relation; edits `participants.role_id`) — Convenience editor that writes back to `participants.role_id` for every selected participant. Changing it immediately affects what each participant can see once they reload.
+- [x] **roles.self_joinable** (boolean toggle, action `?/toggleSelfJoinable`) — When enabled, anyone with the role's public link can mint their own guest account (no admin invite). On the *first* enable the action auto-generates a unique `join_slug`; toggling off keeps the existing slug. A "Show join URL & defaults" row action opens a dialog with the `/join/<slug>` link (copy button) and the defaults applied to each guest: name **Guest**, placeholder email (`p-…@placeholder.local`), `is_active = true`, lands on `/map`, auto-deactivated after 90 days. Requires `self_joinable` to be on before a join URL exists.
+- [x] **roles.join_slug** (text, globally unique, unguessable) — Random `base64url` slug generated on first self-join enable. Backs the public link `/join/<slug>`; rotated only by clearing/regenerating server-side. Not edited directly in the UI.
+- [x] **roles.max_instances** (numeric, action `?/updateRoleInstanceQuota`) — Per-participant cap on how many `workflow_instances` a holder of this role may have. `0` (or empty) = unlimited. For a multi-role participant the **most-permissive non-zero** cap across their roles wins (if no role caps, unlimited). The count is live (`created_by = <participant>`), so admin deletions free it up. Enforced server-side by `pb/pb_hooks/participant_instance_quota.pb.js`, which rejects over-quota creates with HTTP 400 `quota_exceeded:instances`. Admin (`users`) auth bypasses entirely.
+- **Participant-side quota gating:** when a participant has reached `max_instances`, the participant map's "create" buttons render disabled with a hint (`WorkflowSelector` props `quotaReached` / `quotaHint`); a direct create attempt still returns the 400 `quota_exceeded:instances` from the hook.
+
+---
+
+## Page: Self-join  `/join/[slug]`  [DONE]
+
+File: `src/routes/(participant)/join/[slug]/+server.ts`
+Auth: **public, participant-facing — no login required.** This is the endpoint behind a role's `self_joinable` join URL.
+
+- [x] **GET `/join/<slug>`** — Mints a guest participant for the role whose `join_slug` matches `<slug>` and logs them straight in:
+  - Rate-limited per client IP (shares the login rate-limiter; HTTP 429 with a retry hint when exceeded).
+  - Consent-gated: if the instance has `require_consent_before_login`, an un-consented visitor is bounced to `/login?returnTo=/join/<slug>` (the consent modal) and returns here after accepting.
+  - **404** if the slug is unknown **or** the matched role has `self_joinable = false`.
+  - On success creates a `participants` row with `self_joined = true`, name `Guest`, placeholder email, `is_active = true`, `role_id = [role]`; authenticates it (sets the `pb_auth_participant` cookie) and redirects to `/map` (or `?next=` when it is a local `/…` path).
+  - If already authenticated as a participant in the same project, it skips minting and just redirects to `/map`.
 
 ---
 
 ## Page: Roles · Permissions Tab  `/projects/[projectId]/roles`  [DONE]
 
-File: `src/routes/(admin)/projects/[projectId]/roles/+page.svelte` (permissions section)
+File: `src/routes/admin/projects/[projectId]/roles/+page.svelte` (permissions section)
 Action: `?/toggleRole` — toggles a role in/out of a `visible_to_roles` or `allowed_roles` array on a target collection.
 
 - [x] **workflows.visible_to_roles** (relation multi, read toggle) — Controls whether a role can see the workflow at all in the participant app. Empty array = visible to everyone in the project; non-empty = only listed roles.
 - [x] **workflows.entry_allowed_roles** (relation multi, create toggle) — Controls whether a role can create new instances of the workflow. Independent from `visible_to_roles`: a role can be allowed to see existing instances without being allowed to create new ones.
-- [x] **workflow_stages.visible_to_roles** (relation multi, read toggle) — Controls whether a role sees a given stage in the participant workflow view. Instances currently sitting in a hidden stage vanish from the role's view.
 - [x] **workflow_connections.allowed_roles** (relation multi, update/trigger toggle) — Controls whether a role can trigger the transition (tap the action button) that moves an instance across this connection. Hiding the connection also hides any buttons attached to it.
+- [x] **workflow_field_defs.view_roles** (relation multi, read toggle) — Per-field read gate. Controls whether a role can see a field's values in the participant instance-detail Data view. Empty array = every role can read it. This replaces stage-level visibility as the field-level read boundary. **UI gap:** there is no admin control for `view_roles` on the Roles permissions tab yet (and stage visibility was removed from it) — set it per field def in the Field Library, or via the MCP `set_entity_visibility` tool.
 - [x] **tools_forms.allowed_roles** (relation multi, submit toggle) — Controls whether a role can open and submit the form. Forms gated off this way disappear from the participant stage toolbar for that role.
 - [x] **tools_edit.any_edit_roles** (relation multi, update toggle) — Roles in this list can use the edit tool on *any* instance. Toggling on the project Roles page edits this array (not `self_edit_roles`). Applies equally to stage-attached and global tools.
 - [x] **tools_edit.self_edit_roles** (relation multi, update toggle) — Roles in this list can use the edit tool only on instances they themselves created (`workflow_instances.created_by = @request.auth.id`). Set per tool in the workflow builder (StagePropertyPanel / GlobalToolsPanel / ButtonConfigPanel). A role in both arrays resolves to `any` and renders one button.
@@ -220,7 +321,7 @@ Action: `?/toggleRole` — toggles a role in/out of a `visible_to_roles` or `all
 
 ## Page: Custom Tables List  `/projects/[projectId]/custom-tables`  [DONE]
 
-File: `src/routes/(admin)/projects/[projectId]/custom-tables/+page.svelte`
+File: `src/routes/admin/projects/[projectId]/custom-tables/+page.svelte`
 Collection: `custom_tables`
 
 - [x] **table_name** (text, snake_case) — Unique internal identifier enforcing lowercase letters, numbers, and underscores. The admin UI locks the input after creation, but the underlying PocketBase schema has no readonly constraint, so direct API edits can still rename it — treat as "change with care". Participants never see this field.
@@ -234,7 +335,7 @@ Collection: `custom_tables`
 
 ## Page: Custom Table Detail  `/projects/[projectId]/custom-tables/[tableId]`  [DONE]
 
-File: `src/routes/(admin)/projects/[projectId]/custom-tables/[tableId]/+page.svelte`
+File: `src/routes/admin/projects/[projectId]/custom-tables/[tableId]/+page.svelte`
 Collections: `custom_tables` (meta), `custom_table_columns`, `custom_table_data`
 
 ### Table meta (via `DataViewerHeader`)
@@ -260,7 +361,7 @@ Collections: `custom_tables` (meta), `custom_table_columns`, `custom_table_data`
 
 ## Page: Marker Categories List  `/projects/[projectId]/marker-categories`  [DONE]
 
-File: `src/routes/(admin)/projects/[projectId]/marker-categories/+page.svelte`
+File: `src/routes/admin/projects/[projectId]/marker-categories/+page.svelte`
 Collection: `marker_categories`
 
 - [x] **name** (text, required, max 255) — Display name of the marker category, shown next to the icon in the participant map's filter sheet (`FilterSheet.svelte` groups markers by category and labels each row with `category.name`). Also used as the column header in the admin list and as the heading on the category detail page.
@@ -272,7 +373,7 @@ Collection: `marker_categories`
 
 ## Page: Marker Category Detail  `/projects/[projectId]/marker-categories/[categoryId]`  [DONE]
 
-File: `src/routes/(admin)/projects/[projectId]/marker-categories/[categoryId]/+page.svelte`
+File: `src/routes/admin/projects/[projectId]/marker-categories/[categoryId]/+page.svelte`
 Collections: `marker_categories` (meta + fields schema), `markers`
 
 ### Category meta (via `DataViewerHeader`)
@@ -293,7 +394,7 @@ Collections: `marker_categories` (meta + fields schema), `markers`
 
 - [x] **markers.title** (text, required, max 500) — Primary label of the marker, shown as the heading in the participant marker detail module and used in marker lists. Required on every row.
 - [x] **markers.description** (text, optional, max 5000) — Long-form text shown in the participant marker detail module below the title. Optional and rendered only when set.
-- [x] **markers.location** (geoPoint `{lat, lon}`, required) — Geographic position used to place the pin on the participant Leaflet map. The map filter and renderer in `participant/map/+page.svelte` keep markers with `m.location?.lat` and `m.location?.lon` and feed them to the supercluster manager.
+- [x] **markers.location** (geoPoint `{lat, lon}`, required) — Geographic position used to place the pin on the participant Leaflet map. The map filter and renderer in `src/routes/(participant)/map/+page.svelte` keep markers with `m.location?.lat` and `m.location?.lon` and feed them to the supercluster manager.
 - [x] **markers.properties.{field}** (JSON object keyed by `field_name`) — Per-marker values for the custom fields defined on the parent category. Read in `MarkerDetailModule.svelte` as `marker.properties?.[field.field_name]` and formatted by `field_type` for display.
 - [x] **CSV import** (bulk marker insert, replace-or-append) — Admin action on the category detail page that parses CSV, maps columns to title/description/location/custom fields, and batch-creates marker rows via the `?/importCSV` form action. Supports clearing existing markers in the category before import.
 
@@ -301,7 +402,7 @@ Collections: `marker_categories` (meta + fields schema), `markers`
 
 ## Page: Workflows List  `/projects/[projectId]/workflows`  [DONE]
 
-File: `src/routes/(admin)/projects/[projectId]/workflows/+page.svelte`
+File: `src/routes/admin/projects/[projectId]/workflows/+page.svelte`
 Collection: `workflows`
 
 <!-- --8<-- [start:workflows-name] -->
@@ -327,14 +428,14 @@ Collection: `workflows`
 
 ## Page: Workflow Detail / Data Viewer  `/projects/[projectId]/workflows/[workflowId]`  [DONE]
 
-File: `src/routes/(admin)/projects/[projectId]/workflows/[workflowId]/+page.svelte`
-Collections: `workflows` (meta), `workflow_instances`, `workflow_instance_field_values`
+File: `src/routes/admin/projects/[projectId]/workflows/[workflowId]/+page.svelte`
+Collections: `workflows` (meta), `workflow_instances`, `workflow_field_values`
 
 ### Workflow meta (via `DataViewerHeader`)
 
 - [x] **workflows.name** (text, inline editable) — Same field as on the list page; editing it here renames the workflow everywhere it is shown to participants (`WorkflowSelector`, bottom control bar). Persisted via the `updateWorkflowMeta` action with `field = 'name'`.
 - [x] **workflows.description** (text, inline editable) — Same field as on the list page; the inline edit posts to `updateWorkflowMeta` and updates the subtitle shown under the workflow name in the participant picker.
-- [x] **workflows.visible_to_roles** (relation multi) — Restricts which participant roles can see the workflow and its instances. Enforced in the `workflow_instances`/`workflow_instance_field_values` listRules (`1776200000_filter_instance_status_for_participants.js`): empty array means visible to all, otherwise the participant's `role_id` must be in the list.
+- [x] **workflows.visible_to_roles** (relation multi) — Restricts which participant roles can see the workflow and its instances. Enforced in the `workflow_instances` / `workflow_field_values` listRules: empty array means visible to all, otherwise the participant's `role_id` must be in the list. Field-value reads are additionally gated per field def by `workflow_field_defs.view_roles`.
 - [x] **workflows.is_active** (boolean toggle) — Header-level toggle (lines 559-635 of `+page.svelte`) wired to `updateWorkflowMeta`. Same effect as on the list page: when false, the workflow disappears entirely from the participant app via the `workflows` listRule.
 <!-- --8<-- [start:workflows-private_instances] -->
 - [x] **workflows.private_instances** (boolean toggle) — When true, participants can only see instances they themselves created. The `workflow_instances` listRule adds `(workflow_id.private_instances != true || created_by = @request.auth.id)`, so other participants' instances of the same workflow stay hidden.
@@ -344,32 +445,34 @@ Collections: `workflows` (meta), `workflow_instances`, `workflow_instance_field_
 
 - [x] **workflow_instances.is_active** (boolean) — Conceptual flag backed by the `workflow_instances.status` select field (values `active`/`completed`/`archived`/`deleted`). Participant listRules in `1776200000_filter_instance_status_for_participants.js` filter out rows where `status = "deleted" || status = "archived"`, so marking an instance inactive removes it from the participant map and detail views while admins keep seeing it.
 - [x] **workflow_instances.is_archived** (boolean) — Conceptual flag backed by `workflow_instances.status = "archived"`. Archived instances are explicitly excluded from participants by the listRule status filter (`status != "archived"`), so they remain visible to admins in the data viewer but disappear from the participant app.
-- [x] **workflow_instance_field_values.value** (per-instance, per-field value; typed by the form field definition) — One row per (instance, field_key, stage_id) holding the answer a participant submitted via a form, edit tool, or protocol tool. The data viewer renders one column per form field and inline edits go through the `updateFieldValue` action, which also writes a `workflow_instance_tool_usage` audit row.
-- [x] **workflow_instance_field_values.file_value** (file, max 99 × 10MB) — Per-field file attachments for `file` form fields. Participant uploads land here instead of in `value`; the data viewer surfaces download links for each attached file.
+- [x] **workflow_field_values.value** (per-instance, per-field value; typed by the field def) — A row in the append-only value log: `(instance_id, field_def_id, write_mode, value, recorded_at, recorded_at_stage, recorded_by_action)`. Every submission via a form, edit tool, protocol tool, or automation **inserts a new row** — values are never updated in place. The "current value" of a field is the latest row by `recorded_at` per `(instance, field_def)`; `observation` write-mode fields keep the whole series as history. The data viewer renders one column per field def.
+- [x] **workflow_field_values.file_value** (file, max 1 × 10MB, images only) — File attachment for `file`-type field defs. Participant uploads land here instead of in `value`.
+- [x] **workflow_field_values.write_mode** (select: singleton/observation/computed) — Denormalized from the field def at write time, for audit. `singleton` = latest row wins; `observation` = every row is meaningful history; `computed` = produced by an automation, not entered by hand.
 - [x] **workflow_instances.geometry** (GeoJSON, optional) — The full drawn geometry when the parent workflow's `geometry_type` is `line` or `polygon`. The participant map renders this as a polyline/polygon overlay; for `point` workflows it stays empty and only `location` is used.
 - [x] **workflow_instances.centroid** (geoPoint, derived) — Center point derived from `geometry` when present. Used as the fallback pin coordinate and as the anchor for map clustering when the shape is not a point.
 - [x] **workflow_instances.bbox** (JSON `{minLon, minLat, maxLon, maxLat}`, derived) — Bounding box derived from `geometry`. Used by the participant map to fit the viewport when zooming to a line/polygon instance and as a spatial pre-filter server-side.
 - [x] **workflow_instances.files** (file multi, max 99 × 10MB) — Instance-level file attachments independent of any form field (e.g. photos attached from the detail view's generic upload slot).
-- [x] **CSV import** (bulk create instances into a selectable start stage, fields filtered by stage reachability) — The `importCSV` action parses uploaded rows, optionally wipes existing instances, then creates one `workflow_instances` row per CSV row at the chosen target stage (defaulting to the workflow's `start` stage). `lat`/`lon` columns become the instance `location`, and remaining columns are written as `workflow_instance_field_values` keyed by the form field id, each tagged with the field's owning stage from `fieldStageMap`.
+- [x] **CSV import** (bulk create instances into a selectable start stage) — The `importCSV` action parses uploaded rows, optionally wipes existing instances, then creates one `workflow_instances` row per CSV row at the chosen target stage (defaulting to the workflow's `start` stage). `lat`/`lon` columns become the instance `location`, and remaining columns are appended as `workflow_field_values` rows keyed by `field_def_id`, with `recorded_at_stage` set to the target stage.
 
 ---
 
 ## Page: Workflow Builder · Properties · Stage  `/projects/[projectId]/workflows/[workflowId]/builder`  [DONE]
 
-File: `src/routes/(admin)/projects/[projectId]/workflows/[workflowId]/builder/right-sidebar/views/properties/panels/StagePropertyPanel.svelte`
+File: `src/routes/admin/projects/[projectId]/workflows/[workflowId]/builder/right-sidebar/views/properties/panels/StagePropertyPanel.svelte`
 Collection: `workflow_stages`
 
-- [x] **workflow_stages.stage_name** (text) — Display label for the stage shown in the participant workflow instance detail header and breadcrumb (`{stage.stage_name}` in `WorkflowInstanceDetailModule.svelte` line 1434). Edited inline via the panel header input and persisted through the `onRename` callback.
-- [x] **workflow_stages.visible_to_roles** (relation multi) — Restricts which participant roles see this stage in the workflow view; instances sitting in a hidden stage vanish from those roles detail panels. Empty selection means visible to all participants in the project.
-- [x] **workflow_stages.stage_type** (select: start/intermediate/end) — Semantic role of the stage. `start` is the entry point a new instance lands in after creation; `end` marks terminal stages the automation engine treats as "completed" signals; `intermediate` covers everything in between. Drives the stage icon and a few validation rules in the builder.
-- [x] **workflow_stages.stage_order** (integer) — Vertical sort order of stages in list views (e.g. the stage picker in the data viewer). Admin-only affordance; set when the admin reorders stages.
-- [x] **tools_edit.any_edit_roles / tools_edit.self_edit_roles** (relation multi each — attached-to-stage edit tool permission) — Paired arrays configured on the Permissions tab. `any_edit_roles` allows editing any instance; `self_edit_roles` restricts to instances the participant created. Both empty = nobody can use the tool (unlike the global `allowed_roles` convention). The participant detail module hides the button when neither array matches the participant's role, or when only `self_edit_roles` matches and the participant did not create the instance.
+Stages are no longer a permission boundary — `workflow_stages.visible_to_roles` was removed in the field-def redesign. The panel has two tabs: **Permissions** (edit-tool role splits) and **Tools** (connected-tool visual config).
+
+- [x] **workflow_stages.stage_name** (text) — Display label for the stage shown in the participant workflow instance detail header and breadcrumb. Edited inline via the panel header input and persisted through the `onRename` callback.
+- [x] **workflow_stages.stage_type** (select: start/intermediate/end) — Semantic role of the stage. `start` is the entry point a new instance lands in after creation; `end` marks terminal stages the automation engine treats as "completed" signals; `intermediate` covers everything in between. Drives the stage icon and a few validation rules in the builder. Displayed as a badge in the panel; not editable here.
+- [x] **workflow_stages.stage_order** (integer) — Sort order of stages in the participant stage timeline and in list views. Set when the admin reorders stages on the canvas.
+- [x] **tools_edit.any_edit_roles / tools_edit.self_edit_roles** (relation multi each — stage-attached edit tool permission, Permissions tab) — Paired arrays. `any_edit_roles` allows editing any instance; `self_edit_roles` restricts to instances the participant created. Both empty = nobody can use the tool (the inverse of the empty-array convention). The participant detail module hides the button when neither array matches the participant's role, or when only `self_edit_roles` matches and the participant did not create the instance.
 
 ---
 
 ## Page: Workflow Builder · Properties · Connection (Edge)  `/projects/[projectId]/workflows/[workflowId]/builder`  [DONE]
 
-File: `src/routes/(admin)/projects/[projectId]/workflows/[workflowId]/builder/right-sidebar/views/properties/panels/EdgePropertyPanel.svelte`
+File: `src/routes/admin/projects/[projectId]/workflows/[workflowId]/builder/right-sidebar/views/properties/panels/EdgePropertyPanel.svelte`
 Collection: `workflow_connections`
 
 - [x] **workflow_connections.action_name** (text) — Internal name of the transition, used as the fallback button label when `visual_config.button_label` is empty (`conn.visual_config?.button_label || conn.action_name` in `WorkflowInstanceDetailModule.svelte` line 198). Also shown in the edge header in the builder.
@@ -379,34 +482,63 @@ Collection: `workflow_connections`
 - [x] **workflow_connections.visual_config.button_label** (text) — Overrides `action_name` as the visible label on the stage action button in the participant workflow detail. Stored under the connections JSON `visual_config` and applied on Settings tab edit via `syncSettings`.
 - [x] **workflow_connections.visual_config.button_color** (color) — Hex background color applied to the stage action button rendered in the participant detail toolbar. Configured via a color picker plus paired text input that both write into `visual_config.button_color`.
 - [x] **workflow_connections.visual_config.requires_confirmation** (boolean) — When true, tapping the action button in the participant app opens a confirmation dialog before the transition runs (`if (connection.visual_config?.requires_confirmation)` in `WorkflowInstanceDetailModule.svelte` line 375). When false the transition fires immediately.
-- [x] **workflow_connections.visual_config.confirmation_message** (text) — Body text shown inside that confirmation dialog (line 1472 in the detail module). Only displayed when `requires_confirmation` is enabled; defaults to Are you sure you want to proceed.
+- [x] **workflow_connections.visual_config.confirmation_message** (text) — Body text shown inside that confirmation dialog. Only displayed when `requires_confirmation` is enabled; defaults to "Are you sure you want to proceed".
+- [x] **workflow_connections.sentry** (JSON array — conditional availability, edited via `SentryEditor.svelte`) — A list of clauses, all AND-ed together, that gate whether participants see this connection at all. Each clause is `{ field_def_id, op, value? }` where `op` is one of `equals`, `not_equals`, `contains`, `is_empty`, `is_not_empty`, `gt`, `gte`, `lt`, `lte` (`value` is omitted for the unary `is_empty`/`is_not_empty`). Empty / missing = always available. Evaluation is client-side: the participant module reads the instance's current field values and hides any connection whose sentry doesn't match. The `allowed_roles` gate still applies on top. Edited in the EdgePropertyPanel **Settings → Availability** sub-section.
 
 ---
 
 ## Page: Workflow Builder · Form Editor  `/projects/[projectId]/workflows/[workflowId]/builder`  [DONE]
 
-File: `src/routes/(admin)/projects/[projectId]/workflows/[workflowId]/builder/right-sidebar/views/form-editor/FormEditorView.svelte`
+File: `src/routes/admin/projects/[projectId]/workflows/[workflowId]/builder/right-sidebar/views/form-editor/FormEditorView.svelte`
 Collection: `tools_forms`
 
-- [x] **tools_forms.name** (text) — Internal label for the form, edited inline at the top of the Form Editor and shown to admins in the workflow builder. For stage-attached forms it doubles as the fallback identifier when no `visual_config.button_label` is set.
+A form is a container; its fields are `tools_form_field_refs` rows pointing at `workflow_field_defs` (see Form Field Config below). A form can be attached three ways: **stage-attached** (`stage_id` set), **connection-attached** (`connection_id` set), or **global** (neither `connection_id` nor `stage_id` set). The Settings panel appears for **stage-attached and global** forms — both carry their own `allowed_roles` and `visual_config`. Connection-attached forms have no Settings panel; they inherit roles and `visual_config` from the connection.
+
+**Global forms.** A global form is available on *every* stage of the workflow, gated only by its own `allowed_roles` (same empty-array-means-all rule, enforced by the `connection_id = "" && stage_id = ""` branch of the `tools_forms` listRule). It gets the same Settings panel as a stage-attached form (its own roles + `visual_config`). Admin-side, global forms are added via the **Global Tools** panel (not per-stage). Participant-side, a global form renders as a normal uniform form button on each stage's toolbar — no special section, badge, or sorting that distinguishes it from a stage-attached form.
+
+- [x] **tools_forms.name** (text) — Internal label for the form, edited inline at the top of the Form Editor. For stage-attached forms it doubles as the fallback identifier when no `visual_config.button_label` is set.
 - [x] **tools_forms.description** (text) — Admin-only metadata describing what the form is for. Not surfaced anywhere in the participant app.
-- [x] **tools_forms.allowed_roles** (relation multi) — Restricts which participant roles can open and submit this form. Only editable here for stage-attached forms (connection-attached forms inherit from the connection); empty array means all roles in the project can use it.
-- [x] **tools_forms.visual_config.button_label** (text) — Text shown on the button that opens the form in the participant stage toolbar. Defaults to "Submit" when blank; only edited from the Form Editor settings panel for stage-attached forms.
-- [x] **tools_forms.visual_config.button_color** (color) — Background color of the form's launch button in the participant stage toolbar, picked via a native color input or hex text. Defaults to `#3b82f6`.
+- [x] **tools_forms.allowed_roles** (relation multi, stage-attached & global forms) — Restricts which participant roles can open and submit this form. Applies to both stage-attached and global forms (each gated by its own array); connection-attached forms instead inherit from the connection. Empty array means all roles in the project can use it.
+- [x] **tools_forms.visual_config.button_label** (text, stage-attached & global forms) — Text shown on the button that opens the form in the participant stage toolbar. Falls back to the form name when blank. A global form's button appears on every stage with this same label.
+- [x] **tools_forms.visual_config.button_color** (color, stage-attached & global forms) — Background color of the form's launch button in the participant stage toolbar. Defaults to `#3b82f6`.
+- [x] **tools_forms.visual_config.requires_confirmation / confirmation_message** (boolean + text, stage-attached & global forms) — When true, a confirmation dialog with `confirmation_message` is shown before the form submits.
+- [x] **tools_forms.pages** (JSON array — multi-page forms) — Array of `{ page, title, description }`. A field is placed on a page via the `page` number in its form-field-ref `config`; this array carries the per-page heading + sub-text the participant sees at the top of each page. Edited via the page tabs in the form preview (add / rename / delete page). A form with no `pages` entry renders as a single untitled page.
+- [x] **tools_forms.local_fields** (JSON array — protocol-owned forms only) — Inline, protocol-only field definitions (`{ key, label, field_type, field_options, required, placeholder, help_text, page, row_index, column_position }`). They exist only on this form, are NOT in the `workflow_field_defs` registry, and their values land only in the protocol entry snapshot — never in `workflow_field_values`. Only present on the form owned by a protocol tool; see the Protocol Tool Editor section.
+
+---
+
+## Page: Workflow Builder · Field Library  `/projects/[projectId]/workflows/[workflowId]/builder`  [DONE]
+
+File: `src/routes/admin/projects/[projectId]/workflows/[workflowId]/builder/right-sidebar/views/field-library/FieldLibraryView.svelte`
+Collection: `workflow_field_defs`
+
+The Field Library is the workflow-scoped field registry — the single source of truth for every logical field. Forms reference these defs (via `tools_form_field_refs`); the same def can appear on several forms. Definitional changes here apply everywhere the def is used.
+
+- [x] **workflow_field_defs.label** (text, unique per workflow) — The field's name and identity. Shown to participants on forms and in the Data view, and used for cross-project import matching. Must be unique within the workflow.
+- [x] **workflow_field_defs.field_type** (select) — Input widget type. One of `short_text`, `long_text`, `number`, `email`, `date`, `file`, `dropdown`, `multiple_choice`, `smart_dropdown`, `custom_table_selector` (the DB enum also includes `instance_reference`, a deferred feature). Determines which `field_options` / `validation_rules` shape applies (see Form Field Config below). Chosen at create time and effectively locked afterwards.
+- [x] **workflow_field_defs.write_mode** (select: singleton/observation/computed) — Storage/UI semantics. `singleton`: one current value, each submission overwrites (the default). `observation`: append-only time series — every submission is kept as history. `computed`: value is produced by an automation, read-only to the participant. Storage is append-only regardless; `write_mode` only changes how the "current value" is interpreted. **In a form:** `singleton` shows the current value as context and submitting writes a new latest row (effective overwrite); `observation` starts blank for that field and each submit appends a new history row; `computed` renders read-only and server-derived — client writes to it are rejected.
+- [x] **workflow_field_defs.output_type** (select: text/number/date/json, optional) — Optional hint for the type of value the field produces; used mainly by `computed` fields.
+- [x] **workflow_field_defs.view_roles** (relation multi) — Per-field read gate. When non-empty, only the listed roles can see this field's values in the participant Data view; empty = every role can read it. This is the **only** field-level read boundary (there is no stage-level visibility).
+- [x] **workflow_field_defs.field_options** (JSON) — Type-specific options (dropdown choices, smart-dropdown mappings, entity-selector source, date mode, file limits). Edited through the Form Field Config panel; shapes documented there.
+- [x] **workflow_field_defs.validation_rules** (JSON) — Intrinsic data constraints (min/max length, regex, number bounds, selection counts). Edited through the Form Field Config panel.
+- [x] **workflow_field_defs.display_config** (JSON: `{ tab, tabOrder, row, column }`) — Placement of the field's value on the participant instance-detail "Data" view. Tabs are *emergent*: the set of tabs is the distinct `tab` values across the workflow's field defs; empty `tab` = the default "Data" tab. Configured in the builder's **Preview → Details** tab via the Data-Tabs editor, which creates tabs and assigns each field's `tab`/`tabOrder`/`row`/`column` (the MCP `set_field_display` tool remains an alternative). Until set, a def renders in the default Data tab ordered by creation.
 
 ---
 
 ## Page: Workflow Builder · Form Field Config  `/projects/[projectId]/workflows/[workflowId]/builder`  [DONE]
 
-File: `src/routes/(admin)/projects/[projectId]/workflows/[workflowId]/builder/right-sidebar/views/form-editor/FieldConfigPanel.svelte`
-Collection: `tools_form_fields`
+File: `src/routes/admin/projects/[projectId]/workflows/[workflowId]/builder/right-sidebar/views/form-editor/FieldConfigPanel.svelte`
+Collections: `tools_form_field_refs` (per-form presentation, the `config` JSON) + `workflow_field_defs` (the field def it points at)
+
+Each field on a form is a `tools_form_field_refs` row: `{ form_id, field_def_id, config }`. The panel edits two layers at once — **per-form presentation** (written into the ref's `config` JSON) and **definitional bits** (written through to the underlying `workflow_field_defs` row, affecting every form that uses the def). Field-type-specific options below live on the field def. To add a field to a form: drag an existing def from the **Library Fields Palette** (creates a ref only) or a type tile from the **Field Types Palette** (creates a new def + ref).
 
 ### Common field properties
 
-- [x] **field_label** (text) — The label displayed above the input in the participant form renderer (`FieldRenderer.svelte`), uppercased and styled as a small caption. Also used as the title of the field in admin previews and as the column header in CSV exports.
-- [x] **placeholder** (text) — Greyed-out hint text shown inside empty inputs in the participant `FieldRenderer.svelte`. Applies to text, number, email, date, dropdown, smart dropdown, and custom table selector inputs; ignored in view mode.
-- [x] **help_text** (text) — Small explanatory text rendered beneath the input when a participant fills or edits the field. Hidden in view mode so submitted records stay compact.
-- [x] **is_required** (boolean) — If true, the participant must provide a value before the form can be submitted, and the label gains a red asterisk in `FieldRenderer.svelte`. Enforced by superforms validation on the workflow instance submit action.
+- [x] **config.placeholder** (text — per-form) — Greyed-out hint text shown inside the empty input in the participant `FieldRenderer.svelte`. Per-form: the same def can have a different placeholder on each form.
+- [x] **config.help_text** (text — per-form) — Small explanatory text rendered beneath the input. Per-form.
+- [x] **config.is_required** (boolean — per-form) — If true, the participant must provide a value before this form can be submitted, and the label gains a red asterisk. Per-form: a def can be required on one form and optional on another.
+- [x] **config.conditional_logic** (JSON — per-form) — Optional per-field show/hide rules, evaluated **live** against the in-progress form values (also settable on `tools_forms.local_fields`). Shape `{ show_if: { op, field, value } }`, where `field` is a `workflow_field_defs` id (local fields use `local:<key>`). Leaf ops: `equals` / `not_equals` / `includes` / `not_includes` / `is_empty` / `is_not_empty` (the empty ops take no `value`), plus `{ op: 'and'|'or', conds: [...] }` combinators. A hidden field is **not rendered and not submitted** (its value is pruned), and a hidden required field skips validation. Currently configured via the Form Editor's JSON view (paste per-field), not the FieldConfigPanel UI. Contrast with `workflow_connections.sentry`: `conditional_logic` answers "is this **field** shown right now?" (live, in-form); `sentry` answers "is this **transition** available?" (against the instance's persisted latest values) — different op set, never conflate them.
+- [x] **workflow_field_defs.label** (text — definitional) — The field label; editing it here renames the def everywhere it is used.
 
 ### Text / long_text validation
 
@@ -438,8 +570,9 @@ Collection: `tools_form_fields`
 
 ### Smart dropdown
 
-- [x] **field_options.source_field** (form field ID whose value drives this dropdown) — ID of an earlier `dropdown` or `multiple_choice` field (from a prior stage, prior connection, or earlier in the current form) whose chosen value gates this field. While that source field is empty, `FieldRenderer.svelte` shows a "Select a value in the dependent field first" placeholder instead of the picker.
-- [x] **field_options.mappings** (source value → option list map) — Array of `{ when, options }` entries: when the source field's value matches `when`, the participant sees that entry's `options` list inside `MobileMultiSelect`. Edited via the "Configure Options" modal that creates one tab per source option.
+- [x] **field_options.source_field** (`workflow_field_defs` id whose value drives this dropdown) — Id of an earlier `dropdown`, `multiple_choice`, or `smart_dropdown` field def whose chosen value gates this field. Smart dropdowns may chain (Category → Subtype → Model). While that source field is empty, `FieldRenderer.svelte` shows a "Select a value in the dependent field first" placeholder instead of the picker.
+- [x] **field_options.mappings** (source value → option list map) — Array of `{ when, options }` entries: when the source field's value matches `when`, the participant sees that entry's `options` list inside `MobileMultiSelect`. Edited via the "Configure Options" modal that creates one tab per source option. When the source is multi-valued (multiple_choice or another smart_dropdown with `allow_multiple`), the participant sees the union of every matching mapping's options, deduped by label and ordered by the source array.
+- [x] **field_options.allow_multiple** (boolean) — If true, the smart dropdown renders as a multi-select (`MobileMultiSelect` with `singleSelect: false`) and stores the value as a string array. Lets `validation_rules.minSelections`/`maxSelections` apply, the same way they do for `multiple_choice`. Defaults to false.
 
 ### Entity selector / custom_table_selector
 
@@ -452,66 +585,90 @@ Collection: `tools_form_fields`
 - [x] **field_options.self_select_roles** (relation multi, optional) — For `participants` and `roles` sources: the listed roles may only pick themselves (their own participant row or their own role). Useful for "sign off" patterns where a user confirms their own identity.
 - [x] **field_options.any_select_roles** (relation multi, optional) — For `participants` and `roles` sources: the listed roles may pick any entity in the project. Pair with `self_select_roles` to implement "everyone picks themselves, supervisors pick anyone".
 
-### Grid layout
+> Note: `field_options` and `validation_rules` documented above are **definitional** — they live on `workflow_field_defs` and are shared by every form that references the def. Only the Common field properties (`placeholder`, `help_text`, `is_required`, `conditional_logic`) and the layout below are per-form (`tools_form_field_refs.config`).
 
-- [x] **tools_form_fields.row_index** (integer, ≥0) — Zero-based row the field occupies in the form's two-column grid. Fields with the same `row_index` sit side-by-side; set automatically when the admin drops fields into rows in the builder.
-- [x] **tools_form_fields.column_position** (select: left/right/full) — Horizontal placement within a row. `left` and `right` each take half the row width, `full` spans the entire row. Together with `row_index` this drives the responsive grid in `FieldRenderer.svelte`.
+### Grid layout (per-form — `tools_form_field_refs.config`)
+
+- [x] **config.row_index** (integer, ≥0) — Zero-based row the field occupies in the form's two-column grid. Two refs on the same form with the same `row_index` sit side-by-side. Set automatically when the admin drops fields into rows in the builder.
+- [x] **config.column_position** (select: left/right/full) — Horizontal placement within a row. `left` and `right` each take half the row width, `full` spans the entire row. Together with `row_index` this drives the responsive grid in `FieldRenderer.svelte`.
+- [x] **config.field_order** (integer) — Order of the field within the form. Denormalized from the visual row/column position.
+- [x] **config.page** (integer, 1-based) — Which page of a multi-page form the field appears on. Page titles/descriptions live on `tools_forms.pages` (see Form Editor).
 
 ### Field type palette
 
-- [x] **field_type** (select from palette: short_text/long_text/number/date/file/dropdown/multiple_choice/smart_dropdown/custom_table_selector/…) — Determines which input widget `FieldRenderer.svelte` renders for the participant and which `field_options`/`validation_rules` shape applies. Picked by dragging a tile from the Field Types Palette onto the form preview; chosen at create time and effectively locked afterwards because changing it would invalidate any stored values.
+- [x] **field_type** (on `workflow_field_defs`) — Determines which input widget `FieldRenderer.svelte` renders and which `field_options`/`validation_rules` shape applies. Dragging a tile from the **Field Types Palette** creates a brand-new `workflow_field_defs` row of that type plus a `tools_form_field_refs` row binding it to the form. Dragging from the **Library Fields Palette** instead reuses an existing def (ref only). Chosen at create time and effectively locked afterwards because changing it would invalidate stored values.
+
+### Instance reference field (deferred feature)
+
+`instance_reference` exists in the `workflow_field_defs.field_type` DB enum but is a **deferred feature**: there is no participant picker and no cascade/integrity enforcement yet (`InstanceReferenceField.svelte` is a stub, on-delete behaviour is foundation-only). The value column stores a JSON array of `workflow_instances` ids regardless of multiplicity (single = one-element array — one storage path). When the feature ships, `field_options` carries:
+
+- [x] **field_options.target_workflow_id** (relation id | null) — Restricts the picker to instances of this workflow. `null` = any workflow in the project.
+- [x] **field_options.multiplicity** (select: single/many) — `single` stores one instance id, `many` an array of ids (both stored as a JSON array under the hood).
+- [x] **field_options.on_delete** (select: cascade/nullify/block) — Intended behaviour when a referenced target instance is deleted. Foundation only — enforcement is deferred to a follow-up.
+- [x] **field_options.relation_kind** (select: peer/parent/child) — UI hint: `parent`/`child` drive nested rendering, `peer` renders as a plain link.
 
 ---
 
 ## Page: Workflow Builder · Edit Tool Editor  `/projects/[projectId]/workflows/[workflowId]/builder`  [DONE]
 
-File: `src/routes/(admin)/projects/[projectId]/workflows/[workflowId]/builder/right-sidebar/views/edit-tool-editor/EditToolEditorView.svelte`
+File: `src/routes/admin/projects/[projectId]/workflows/[workflowId]/builder/right-sidebar/views/edit-tool-editor/EditToolEditorView.svelte`
 Collection: `tools_edit`
 
+`tools_edit` was dropped and recreated during the field-def redesign (migration `1779800000_recreate_tools_edit.js`). The edit tool is an in-place "edit mode" on the participant instance detail view.
+
+**Form vs edit tool — behavioral difference.** A FORM opens its own sheet (paginated, required-field validation, conditional-logic-aware); at a connection it is part of advancing the workflow, while a stage-attached or global form saves without advancing. An EDIT tool (`edit_mode = form_fields`) does **not** open a separate sheet — it flips the instance detail's **Data tab** into editable mode in place. Only the explicitly chosen `editable_fields` are editable, prefilled with their **current** values; only the fields the participant actually changed are written; there is **no** required-field gating and **no** workflow advance. Both paths write the **same** `workflow_field_values` (so overwrite-vs-append is still the field's `write_mode`, not the tool). `edit_mode = location` writes only the instance geometry — no field values.
+
 - [x] **tools_edit.name** (text) — Internal label for the edit tool, used as the fallback button label in the participant instance detail view when no `visual_config.button_label` is set.
-- [x] **tools_edit.editable_fields** (relation multi, `tools_form_fields`) — In `form_fields` mode, the exact subset of ancestor form fields that participants can change when they open this tool; only these fields appear in the edit sheet, all other field values stay locked.
-- [x] **tools_edit.edit_mode** (select: form_fields/location) — Switches the tool between editing form field values (opens an inline edit form on the instance) and editing the instance's geolocation (opens a map picker so participants can drag the pin to a new spot).
-- [x] **tools_edit.is_global** (boolean) — When true, the edit tool is a "global" tool that appears on every instance across the listed `stage_id` set; when false it is pinned to a single stage (or connection). Admins toggle this when promoting a per-stage tool to a multi-stage one.
-- [x] **tools_edit.stage_id** (relation multi, up to 99 stages) — Stages at which the edit tool is offered to participants. A non-global tool usually lists one stage; a global tool (`is_global = true`) lists every stage where it should be available.
-- [x] **tools_edit.connection_id** (relation, optional) — When set, the edit tool is attached to a workflow connection (transition step) instead of a stage — the participant sees it as part of that transition's flow rather than on the stage's detail view.
-- [x] **tools_edit.visual_config.button_label** (text) — Custom label shown on the edit tool's button inside the participant instance detail view; falls back to `tools_edit.name` when empty.
-- [x] **tools_edit.visual_config.button_color** (color) — Custom background color for the edit tool's button in the participant instance detail view, letting admins make critical edits visually distinct.
+- [x] **tools_edit.workflow_id** (relation) — The workflow the tool belongs to. Set on creation.
+- [x] **tools_edit.editable_fields** (relation multi, `workflow_field_defs`) — In `form_fields` mode, the subset of workflow field defs participants can change when they open this tool; only these fields appear in the edit sheet, all other values stay locked. References field defs (the registry), **not** the old `tools_form_fields`. `computed` write-mode defs are filtered out of the picker.
+- [x] **tools_edit.edit_mode** (select: form_fields/location) — Switches the tool between editing field values (opens an inline edit form) and editing the instance's geolocation (opens a map picker so participants can move the geometry).
+- [x] **tools_edit.is_global** (boolean) — When true, the tool appears across every stage in the listed `stage_id` set, and `add_stage` auto-appends new stages to it; when false it is pinned to a single stage (or connection).
+- [x] **tools_edit.stage_id** (relation multi, up to 99 stages) — Stages at which the edit tool is offered. A non-global tool usually lists one stage; a global tool lists every stage.
+- [x] **tools_edit.connection_id** (relation, optional) — When set, the edit tool is attached to a workflow connection (transition step) instead of a stage.
+- [x] **tools_edit.self_edit_roles / tools_edit.any_edit_roles** (relation multi each) — `any_edit_roles` may edit any instance; `self_edit_roles` may edit only instances they created. A role in both resolves to `any`. **Empty arrays mean nobody** can use the tool. Edited from StagePropertyPanel / GlobalToolsPanel / ButtonConfigPanel, not this editor.
+- [x] **tools_edit.visual_config.button_label / button_color** (text / color) — Label and background color of the edit tool's button in the participant instance detail view; label falls back to `tools_edit.name` when empty.
 
 ---
 
 ## Page: Workflow Builder · Protocol Tool Editor  `/projects/[projectId]/workflows/[workflowId]/builder`  [DONE]
 
-File: `src/routes/(admin)/projects/[projectId]/workflows/[workflowId]/builder/right-sidebar/views/protocol-tool-editor/ProtocolToolEditorView.svelte`
+File: `src/routes/admin/projects/[projectId]/workflows/[workflowId]/builder/right-sidebar/views/protocol-tool-editor/ProtocolToolEditorView.svelte`
 Collection: `tools_protocol`
 
-- [x] **tools_protocol.name** (text) — Internal label for the protocol tool (or for the protocol region when `is_global` is true), used as the fallback button label in the participant instance detail view when no `visual_config.button_label` is set.
-- [x] **tools_protocol.editable_fields** (relation multi) — Ancestor form fields that participants can revise inside the protocol sheet alongside the protocol form; values are pre-filled from the current instance state (subject to `prefill_config`) and saved back to the underlying form fields when the protocol is submitted.
-- [x] **tools_protocol.prefill_config** (JSON prefill rules) — Per-field on/off map (`{ fieldId: boolean }`) that decides whether each editable field starts pre-filled with the instance's current value when the participant opens the protocol; turn it off for fields that should always be entered fresh (e.g. measurement readings).
-- [x] **tools_protocol.stage_id** (relation multi, region boundary stages when is_global) — When `is_global` is true, defines the set of stages that make up the protocol region; the system automatically snapshots the audit trail whenever a participant moves an instance out of that stage set. For non-global tools it instead pins the tool to the listed stages.
-- [x] **tools_protocol.visual_config.button_label** (text) — Custom label shown on the protocol tool's button inside the participant instance detail view; falls back to `tools_protocol.name` when empty.
-- [x] **tools_protocol.visual_config.button_color** (color) — Custom background color for the protocol tool's button in the participant instance detail view, useful for highlighting recurring inspection or check-in actions.
-- [x] **tools_protocol.allowed_roles** (relation multi) — Restricts which participant roles may launch this protocol tool; an empty list means every participant on the project can use it. The PocketBase access rules enforce the same check on the API layer.
-- [x] **tools_protocol.is_global** (boolean) — Toggles the tool between "per-stage" mode (false; tool is a button on a single stage) and "region" mode (true; tool spans the stages listed in `stage_id` and the system auto-snapshots whenever an instance leaves that region).
-- [x] **tools_protocol.connection_id** (relation, optional) — When set, the protocol tool is attached to a workflow connection (transition step) rather than a stage — useful when the protocol should only run as part of a specific transition.
-- [x] **tools_protocol.protocol_form_id** (relation: `tools_forms`, optional) — Links an extra protocol-only form whose fields are merged into the protocol sheet alongside `editable_fields`. Used when the protocol needs its own one-off questions (e.g. "reason for status change") that don't live on any regular stage form.
+The redesign removed `tools_protocol.editable_fields`. A protocol tool now owns a form (`protocol_form_id`); the lifecycle-vs-snapshot distinction is expressed by what kind of field sits on that form — a registry field def (a `tools_form_field_refs` row → values append to `workflow_field_values`, part of the instance record) or a `local_field` (protocol-only, snapshot only). Each submission writes an immutable row to `workflow_protocol_entries` whose `snapshot` JSON has shape `{ kind, case_fields[], local_fields[], autolog }`.
+
+**What is frozen.** Running/submitting a protocol creates **one** immutable `workflow_protocol_entries` row (the snapshot JSON plus a `snapshot_hash` = sha256 of that JSON; participants can create but not update/delete the entry — update/delete are admin-only). The **instance itself is not frozen** — it continues normally, keeps its fields, and can still be edited and transitioned afterwards. Only the protocol **entry** is immutable. Case fields (registry field defs referenced by the protocol form) are written to **both** the snapshot **and** `workflow_field_values` (normal shared values); protocol-local fields (`tools_forms.local_fields`) live **only** in the snapshot/log — never in `workflow_field_values` and never in the field library.
+
+- [x] **tools_protocol.name** (text) — Internal label for the protocol tool (or for the protocol region when `is_global` is true), used as the fallback button label when no `visual_config.button_label` is set.
+- [x] **tools_protocol.protocol_form_id** (relation: `tools_forms`) — The form OWNED by the protocol tool — created with empty `connection_id`/`stage_id` so it never shows as a standalone stage button. Its registry field refs write to `workflow_field_values`; its `tools_forms.local_fields` are protocol-only (snapshot only). Edit its fields through the form editor.
+- [x] **tools_protocol.prefill_config** (JSON `{ field_def_id: boolean }`) — Per-field-def on/off map deciding whether each registry field starts pre-filled with the instance's current value when the participant opens the protocol; turn off for fields that should always be entered fresh (e.g. measurement readings).
+- [x] **tools_protocol.stage_id** (relation multi) — When `is_global` is true, the set of stages making up the protocol region; the system auto-snapshots whenever an instance leaves that stage set. For non-global tools, the stage the button is pinned to.
+- [x] **tools_protocol.is_global** (boolean) — Toggles "per-stage" mode (false; a button on a stage) vs "region" mode (true; spans the stages in `stage_id` with automatic snapshots on exit).
+- [x] **tools_protocol.connection_id** (relation, optional) — When set, the protocol tool is attached to a workflow connection (transition step) rather than a stage.
+- [x] **tools_protocol.allowed_roles** (relation multi) — Roles that may launch this protocol tool; empty = every role. Enforced by the PocketBase access rules too.
+- [x] **tools_protocol.visual_config.button_label / button_color** (text / color) — Label and background color of the protocol tool's button; label falls back to `tools_protocol.name`.
+
+> **UI gap:** the ProtocolToolEditorView panel currently exposes only the name, the region stages (global mode), and a link out to the form editor. `prefill_config`, `allowed_roles`, and `visual_config` exist on the collection and are honoured at runtime, but are not all editable from this panel yet — the MCP `add_protocol_tool` / `update_protocol_tool` tools set them directly.
 
 ---
 
 ## Page: Workflow Builder · Field Tag Editor  `/projects/[projectId]/workflows/[workflowId]/builder`  [DONE]
 
-File: `src/routes/(admin)/projects/[projectId]/workflows/[workflowId]/builder/right-sidebar/views/field-tag-editor/FieldTagEditorView.svelte`
+File: `src/routes/admin/projects/[projectId]/workflows/[workflowId]/builder/right-sidebar/views/field-tag-editor/FieldTagEditorView.svelte`
 Collection: `tools_field_tags`
 
-- [x] **tag_mappings[].tagType** (select: title/subtitle/filterable/map_label/…) — Semantic role assigned to a form field so its value can be reused outside the form (e.g. as the instance title, subtitle, map label, or — currently the only registered type — `filterable`, which exposes the field as a map filter).
-- [x] **tag_mappings[].fieldId** (relation: `tools_form_fields`) — The specific form field whose value drives the tag; the picker only shows fields whose `field_type` is compatible with the chosen tag type (for `filterable` that means dropdown and multiple-choice fields).
+- [x] **tag_mappings[].tagType** (string) — Semantic role assigned to a field so its value can be reused outside the form. `filterable` is currently the only registered type — it exposes the field as a filter in the participant map filter sheet.
+- [x] **tag_mappings[].fieldId** (relation: `workflow_field_defs`) — The field def whose value drives the tag (null for stage-based tags). The picker only shows defs whose `field_type` is compatible with the tag type (for `filterable`: `dropdown` and `multiple_choice`). **UI gap:** the FieldTagEditorView / TagSlot still carry legacy comments and behaviour referencing the old `tools_form_fields` id model — the runtime and the MCP treat `fieldId` as a `workflow_field_defs` id, which is the correct end-state.
 - [x] **tag_mappings[].config** (per-tag JSON, e.g. `filterable.filterBy = stage|field`) — Free-form JSON validated by the tag type's Zod schema; for `filterable` it stores `filterBy: 'stage' | 'field'`, switching the participant map filter between filtering by workflow stage or by the chosen dropdown field's values.
 
 ---
 
 ## Page: Workflow Builder · Automation Editor  `/projects/[projectId]/workflows/[workflowId]/builder`  [DONE]
 
-File: `src/routes/(admin)/projects/[projectId]/workflows/[workflowId]/builder/right-sidebar/views/automation-editor/AutomationEditorView.svelte`
+File: `src/routes/admin/projects/[projectId]/workflows/[workflowId]/builder/right-sidebar/views/automation-editor/AutomationEditorView.svelte`
 Collection: `tools_automation`
+
+Every `field_key` below (in triggers, conditions and `set_field_value` actions, and `{...}` expression references) is a **`workflow_field_defs` id**. The `automation.js` runtime resolves field values from the append-only `workflow_field_values` log by `field_def_id`. **UI gap:** the builder's TriggerCard / ConditionBuilder still carry `// TODO: field_key → field_def_id` comments — the panels have not been renamed, but the value stored and the runtime behaviour are the field-def-id end-state described here.
 
 - [x] **tools_automation.name** (text) — Admin label for the automation, shown in the automation list in the workflow builder and recorded in `workflow_instance_tool_usage.metadata.automation_name` whenever the automation fires (`logAutomationExecution` in `pb/pb_hooks/automation.js`). Participants never see this name; it is purely for admin identification and audit logs.
 - [x] **tools_automation.is_enabled** (boolean) — Master on/off switch. The hooks in `pb/pb_hooks/main.pb.js` filter automations with `is_enabled = true` for every trigger type (`on_transition`, `on_field_change`, scheduled cron); when false the automation is fully skipped at runtime even if it remains saved.
@@ -520,11 +677,11 @@ Collection: `tools_automation`
 
 ### Trigger
 
-- [x] **trigger_type** (select: on_transition/on_field_change/scheduled) — Selects which runtime hook fires the automation. `on_transition` runs after `workflow_instances.current_stage_id` changes, `on_field_change` runs after a `workflow_instance_field_values` create or update, and `scheduled` is evaluated every minute by the `automation_scheduled_check` cron in `main.pb.js`.
+- [x] **trigger_type** (select: on_transition/on_field_change/scheduled) — Selects which runtime hook fires the automation. `on_transition` runs after `workflow_instances.current_stage_id` changes, `on_field_change` runs after a new `workflow_field_values` row is inserted (the value log is append-only — every write is an insert), and `scheduled` is evaluated every minute by the `automation_scheduled_check` cron in `main.pb.js`.
 - [x] **trigger_config.from_stage_id** (on_transition) — Optional filter limiting the trigger to transitions leaving this specific stage. Matched in `main.pb.js` via `!config.from_stage_id || config.from_stage_id === oldStageId`, so leaving it empty means "any source stage".
 - [x] **trigger_config.to_stage_id** (on_transition) — Optional filter limiting the trigger to transitions arriving at this specific stage. Same loose-match rule as `from_stage_id`: empty means any destination.
-- [x] **trigger_config.stage_id** (on_field_change) — Optional filter restricting the trigger to field changes on field values whose `stage_id` matches. Empty means the automation fires regardless of which stage the changed field belongs to.
-- [x] **trigger_config.field_key** (on_field_change) — Optional filter restricting the trigger to changes on a specific form field (matched against `workflow_instance_field_values.field_key`). Empty means any field change on the workflow fires it.
+- [x] **trigger_config.stage_id** (on_field_change) — Optional filter restricting the trigger to field-value rows whose `recorded_at_stage` matches. Empty means the automation fires regardless of which stage the value was recorded at.
+- [x] **trigger_config.field_key** (on_field_change) — Optional filter restricting the trigger to changes on a specific field def (matched against `workflow_field_values.field_def_id`). Empty means any field change on the workflow fires it.
 - [x] **trigger_config.cron** (scheduled) — Standard 5-field cron expression (`minute hour dom month dow`) parsed by `cronMatchesNow()`; supports `*`, ranges, lists, and `*/step`. The scheduler tick runs every minute and executes the automation against every active workflow instance whenever the expression matches the current time.
 - [x] **trigger_config.target_stage_id** (scheduled) — Optional filter narrowing the scheduled run to instances currently sitting in this stage (`current_stage_id = {:targetStage}` in `main.pb.js`). Empty means the cron sweeps all active, non-archived instances of the workflow.
 - [x] **trigger_config.inactive_days** (number, scheduled, optional) — When set, the scheduled run only picks up instances whose `last_activity_at` is older than this many days. Useful for "nag if nothing has happened for N days" patterns. Zero or unset disables the filter so every matching instance fires on every tick.
@@ -536,11 +693,11 @@ Collection: `tools_automation`
 
 ### Condition
 
-- [x] **condition.type** (select: field_value/instance_status/current_stage) — Picks which property of the instance is inspected. `field_value` looks up `workflow_instance_field_values` via `lookupFieldValue()`, `instance_status` reads `workflow_instances.status`, and `current_stage` reads `workflow_instances.current_stage_id`.
-- [x] **condition.params.field_key** (field_value) — The form field whose latest value is fetched for comparison. Resolved by querying `workflow_instance_field_values` ordered by `-updated` so the most recent value wins.
+- [x] **condition.type** (select: field_value/instance_status/current_stage) — Picks which property of the instance is inspected. `field_value` looks up `workflow_field_values` via `lookupFieldValue()`, `instance_status` reads `workflow_instances.status`, and `current_stage` reads `workflow_instances.current_stage_id`.
+- [x] **condition.params.field_key** (field_value) — The field def (`workflow_field_defs` id) whose latest value is fetched for comparison. Resolved by querying `workflow_field_values` by `field_def_id` ordered by `-recorded_at` so the most recent value wins.
 - [x] **condition.params.operator** (select: equals/not_equals/gt/lt/contains/…) — Comparison operator applied to the resolved field value. Supports `equals`, `not_equals`, `is_empty`, `is_not_empty`, `contains`, and `gt/gte/lt/lte` which auto-detect ISO date strings (`YYYY-MM-DD…`) versus numbers in `evaluateConditions()`.
 - [x] **condition.params.value** (static compared value) — Literal value the field is compared against. Supports the special placeholders `$today`, `$today+N`, and `$today-N` which `resolveCompareValue()` expands into ISO dates at evaluation time, enabling date-relative checks like "due_date lt $today".
-- [x] **condition.params.compare_field_key** (alternative: compare against another field) — When set, the comparison value is pulled from another field on the same instance instead of the literal `value`. Lets a step compare two form fields directly (e.g. `actual_count equals planned_count`).
+- [x] **condition.params.compare_field_key** (alternative: compare against another field) — When set, the comparison value is pulled from another field def on the same instance instead of the literal `value`. Lets a step compare two fields directly (e.g. `actual_count equals planned_count`).
 - [x] **condition.params.status** (instance_status) — The status string the instance must equal for the condition to pass. Compared with strict `===` against `workflow_instances.status` in `evaluateConditions()`.
 - [x] **condition.params.stage_id** (current_stage) — The stage the instance must (or must not, with operator `not_equals`) currently sit in. Compared with strict equality against `workflow_instances.current_stage_id`.
 
@@ -548,7 +705,7 @@ Collection: `tools_automation`
 
 - [x] **action.type** (select: set_instance_status/set_field_value/set_stage) — Picks the mutation to perform when the step's conditions pass. All three are implemented in `executeActions()` and saved through `unsafeWithoutHooks()` so they cannot recursively re-trigger the same automation.
 - [x] **action.params.status** (set_instance_status) — New value written to `workflow_instances.status`. Visible to participants on the workflow instance detail view and used by status-based filters and conditions in other automations.
-- [x] **action.params.field_key** (set_field_value) — The form field to write into. If a `workflow_instance_field_values` row already exists it is updated in place; otherwise a new row is created with `stage_id` resolved from the field's parent form (or the instance's current stage as fallback).
+- [x] **action.params.field_key** (set_field_value) — The field def (`workflow_field_defs` id) to write into. The write **always inserts a new `workflow_field_values` row** (the log is append-only — values are never updated in place); the row carries the def's `write_mode` and `recorded_at_stage` = the instance's current stage. The new row becomes the field's current value.
 - [x] **action.params.value** (set_field_value expression) — The value to write. Plain strings are stored as-is; strings containing `{field_key}` references or function calls are detected by `isExpression()` and evaluated by `evaluateExpression()`, which supports arithmetic and the `FUNCTIONS` registry (`count`, `min`, `max`, `sum`, `avg`, `round`, `today`, `date_add`, `days_until`, etc.).
 - [x] **action.params.stage_id** (set_stage) — Target stage the instance is moved to. The action also bumps `last_activity_at` and records the previous stage as `from_stage_id` in the action result for the audit log.
 
@@ -556,7 +713,7 @@ Collection: `tools_automation`
 
 ## Page: Workflow Builder · Stage Preview Button Config  `/projects/[projectId]/workflows/[workflowId]/builder`  [DONE]
 
-File: `src/routes/(admin)/projects/[projectId]/workflows/[workflowId]/builder/right-sidebar/views/stage-preview/ButtonConfigPanel.svelte`
+File: `src/routes/admin/projects/[projectId]/workflows/[workflowId]/builder/right-sidebar/views/stage-preview/ButtonConfigPanel.svelte`
 Collection: `workflow_connections` (visual config for stage buttons)
 
 - [x] **workflow_connections.visual_config.button_label** (text — duplicate editor, same field as edge panel) — Same JSON field as the edge panels button label, edited here from the stage previews per-button drawer with a live preview of the colored pill. Drives the action button label rendered in the participant workflow detail.
@@ -567,14 +724,14 @@ Collection: `workflow_connections` (visual config for stage buttons)
 
 ## Page: Instance Settings  `/instance`  [DONE]
 
-File: `src/routes/(admin)/instance/+page.svelte`
-Server: `src/routes/(admin)/instance/+page.server.ts`
+File: `src/routes/admin/instance/+page.svelte`
+Server: `src/routes/admin/instance/+page.server.ts`
 Collections: `instance_settings` (single-row), `instance_legal_pages` (one row per page)
 Access: Instance-owner only. The page load redirects non-owner admins to `/`. Owner is the user whose email matches `POCKETBASE_ADMIN_EMAIL` (see `src/lib/server/is-owner.ts`). This is the only admin page that is instance-wide rather than project-scoped.
 
 ### Cookie Consent Banner  (writes to `instance_settings`)
 
-- [x] **require_consent_before_login** (bool) — When true, the participant login page renders a blocking consent modal before the token field becomes usable; the login form action also refuses submissions without a consent cookie. When false, participants log in directly. Gating is enforced in `src/routes/participant/login/+page.server.ts`. The single settings row is seeded with `false` on migration.
+- [x] **require_consent_before_login** (bool) — When true, the participant login page renders a blocking consent modal before the token field becomes usable; the login form action also refuses submissions without a consent cookie. When false, participants log in directly. Gating is enforced in `src/routes/(participant)/login/+page.server.ts`. The single settings row is seeded with `false` on migration.
 - [x] **consent_banner_title** (text, max 255) — Heading shown at the top of the consent modal rendered by `src/lib/components/consent-modal.svelte`. Plain text.
 - [x] **consent_banner_body** (editor / HTML) — Body copy inside the consent modal. Stored as HTML and rendered as-is, so admins can include paragraphs, links to legal pages, and lists. A legal-page footer is appended automatically from `instance_legal_pages` rows with `show_in_consent_footer = true`.
 - [x] **consent_accept_label** (text, max 100) — Label on the button that accepts consent, closes the modal, and reveals the login form. Defaults to `Accept` on the seeded row; on an empty string the modal shows the raw key as a fallback, so keep it populated.

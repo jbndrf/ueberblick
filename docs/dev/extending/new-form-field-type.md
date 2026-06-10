@@ -21,11 +21,34 @@ The form system has two layers:
 
 The `FieldType` union is duplicated in both layers. Both must be updated.
 
+### Where a field's type and options live (data model)
+
+The field model is unified around a canonical field registry. A field type is a
+property of a **field definition**, not of a form placement:
+
+- **`workflow_field_defs`** -- the canonical field registry (one row per field per
+  workflow). Holds `field_type`, `field_options`, `validation_rules`, `write_mode`
+  (`singleton` / `observation` / `computed`), `view_roles`, `display_config`, and
+  `label`. **This is where your new field type's `field_type` value and its
+  `field_options` shape are stored.**
+- **`tools_form_field_refs`** -- places a field def into a specific form. Holds
+  `form_id`, `field_def_id`, and a `config` JSON for placement/layout only (page,
+  row index, column position, per-form overrides such as required/placeholder).
+  It does **not** carry the field type.
+
+So when you add a field type, the registry (`workflow_field_defs.field_type` /
+`workflow_field_defs.field_options`) is what the renderer reads; the form ref only
+says "this field appears here, laid out like this."
+
 ---
 
 ## Step 1: Add to the FieldType Union
 
 Update the union in **both** files:
+
+This union is the source-of-truth list of values that can land in
+`workflow_field_defs.field_type` (a `select` column whose allowed values mirror
+this union -- adding a new type means extending that column too, see Step 1b).
 
 **`src/lib/workflow-builder/types.ts`:**
 ```typescript
@@ -40,6 +63,7 @@ export type FieldType =
   | 'multiple_choice'
   | 'smart_dropdown'
   | 'custom_table_selector'
+  | 'instance_reference' // value holds workflow_instance id(s); deferred feature
   | 'rating';  // <-- add here
 ```
 
@@ -56,8 +80,13 @@ export type FieldType =
   | 'multiple_choice'
   | 'smart_dropdown'
   | 'custom_table_selector'
+  | 'instance_reference'
   | 'rating';  // <-- add here
 ```
+
+> `instance_reference` is already a member of the union but is a deferred
+> feature -- it is a useful example of a type that exists in the registry's
+> `field_type` enum before it is fully wired into every renderer mode.
 
 ---
 
@@ -87,7 +116,8 @@ This automatically makes the field type available in:
 The existing types for reference:
 ```
 short_text, long_text, number, email, date, file,
-dropdown, multiple_choice, smart_dropdown, custom_table_selector
+dropdown, multiple_choice, smart_dropdown, custom_table_selector,
+instance_reference
 ```
 
 ---
@@ -177,7 +207,7 @@ If your field type has configurable options (like `max_stars`), add a config sec
 
 The panel is located at:
 ```
-src/routes/(admin)/projects/[projectId]/workflows/[workflowId]/
+src/routes/admin/projects/[projectId]/workflows/[workflowId]/
   builder/right-sidebar/views/form-editor/FieldConfigPanel.svelte
 ```
 
@@ -236,7 +266,29 @@ All three modes (`fill`, `edit`, `view`) must have an explicit case in `FieldRen
 
 ## Data Storage
 
-Field values are stored in `workflow_instance_field_values` as JSON. Your field type's value should be a simple JSON-serializable type:
+### Where the type and options live
+
+A field's definition lives in **`workflow_field_defs`**:
+
+- `field_type` -- a PocketBase `select` column whose allowed values mirror the
+  `FieldType` union. **Because it is a constrained `select`, adding a new type
+  requires a migration** that appends the new value to this column's `values`
+  list (see `pb/pb_migrations/`). This is the one schema change a new field type
+  needs; nothing else about the registry changes.
+- `field_options` -- a JSON column that accepts any structure, so your
+  type-specific options interface needs no schema change.
+
+Placement of a def into a form lives in **`tools_form_field_refs`** (`form_id`,
+`field_def_id`, `config` JSON for layout/overrides). No changes there for a new
+type.
+
+### Where submitted values live
+
+Field values are stored append-only in **`workflow_field_values`** -- one row per
+recorded value, keyed by `instance_id` + `field_def_id`, with the value in
+`value` (or `file_value` for uploads) and a `recorded_at` timestamp. Values are
+never updated in place; the current value of a field is the row with the latest
+`recorded_at`. Your field type's value should be a simple JSON-serializable type:
 
 | Value Type | Used By |
 |------------|---------|
@@ -244,9 +296,11 @@ Field values are stored in `workflow_instance_field_values` as JSON. Your field 
 | `number` | `number`, `rating` |
 | `string` (ISO) | `date` |
 | `string[]` | `multiple_choice`, `custom_table_selector` (with `allow_multiple`) |
-| file uploads | `file` (handled via FormData, not JSON) |
+| file uploads | `file` (stored in `file_value`, handled via FormData, not JSON) |
 
-No database migration is needed for the field type itself. The `field_type` column in `tools_form_fields` is a plain string, and `field_options` is a JSON column that accepts any structure.
+The only database migration a new field type needs is appending its value to the
+`field_type` `select` column on `workflow_field_defs`; the `workflow_field_values`
+schema is type-agnostic and needs no change.
 
 ---
 
@@ -254,6 +308,7 @@ No database migration is needed for the field type itself. The `field_type` colu
 
 - [ ] `FieldType` union updated in `src/lib/workflow-builder/types.ts`
 - [ ] `FieldType` union updated in `src/lib/components/form-renderer/types.ts`
+- [ ] New value appended to the `field_type` `select` column on `workflow_field_defs` via a migration in `pb/pb_migrations/`
 - [ ] Entry added to `FIELD_TYPES` array in `src/lib/workflow-builder/field-types.ts` with icon, label, description
 - [ ] Options interface defined (if the field has configurable settings)
 - [ ] Options interface added to `FormField.field_options` union

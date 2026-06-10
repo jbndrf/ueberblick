@@ -20,13 +20,11 @@ Erstelle drei Stufen:
 2. **Review** -- Typ: **Intermediate**
 3. **Resolved** -- Typ: **End**
 
-## 3. Sichtbarkeit konfigurieren
+## 3. Datensichtbarkeit verstehen
 
-1. Oeffne die Einstellungen der Stufe **"Review"**
-2. Im Bereich **"Sichtbarkeit"**: Waehle **Supervisor** und **Analyst**
-3. Speichere
+Die Sichtbarkeit von erfassten Werten wird **nicht je Stufe**, sondern **je Feld** gesteuert. Jedes Feld traegt eine eigene Rolleneinschraenkung: Lassen Sie sie leer, ist der Wert fuer alle sichtbar; waehlen Sie Rollen aus, sehen nur diese den Wert (alle anderen sehen weiterhin Stufenname und Fortschritt).
 
-Stufen ohne Rollenzuweisung sind fuer alle sichtbar.
+Konfiguriert wird das in der **Feld-Bibliothek** des Workflow-Builders -- also dann, wenn Sie die Formularfelder anlegen (siehe [Tutorial 3](03-formulare-und-tools.md)). Fuer dieses Tutorial koennen Sie den Schritt zunaechst ueberspringen.
 
 ## 4. Verbindungen erstellen
 

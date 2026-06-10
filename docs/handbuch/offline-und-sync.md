@@ -59,9 +59,19 @@ Das bedeutet konkret: Ein Baustellenpruefer kann in einer Tiefgarage ohne Empfan
 
 ## Verbindungsstatus und manuelles Synchronisieren
 
-In **Einstellungen > Profil** sehen Teilnehmer jederzeit ihren aktuellen Verbindungsstatus -- gruen fuer "Online", orange fuer "Offline". Darunter zeigt ein Zaehler, wie viele Aenderungen noch auf die Uebertragung warten (z.B. "3 ungespeicherte Aenderungen warten auf Upload").
+In **Einstellungen > Profil** sehen Teilnehmer jederzeit ihren aktuellen Verbindungsstatus -- gruen fuer "Online", orange fuer "Offline". Dieser Status spiegelt nicht nur wider, ob das Geraet grundsaetzlich mit einem Netzwerk verbunden ist, sondern ob der Ueberblick-Server tatsaechlich erreichbar ist. Die App prueft das ueber einen kurzen Verbindungstest gegen den Server. Das ist wichtig, weil ein Geraet sich faelschlich als "online" melden kann -- etwa in einem WLAN ohne Internetzugang oder hinter einer Anmeldeseite (Captive Portal). In solchen Faellen zeigt Ueberblick korrekt "Offline" an. Darunter zeigt ein Zaehler, wie viele Aenderungen noch auf die Uebertragung warten (z.B. "3 ungespeicherte Aenderungen warten auf Upload").
 
-Ueber den Button **Jetzt synchronisieren** kann die Synchronisation manuell angestossen werden. Das ist nuetzlich, wenn ein Teilnehmer sicherstellen moechte, dass wirklich alle Daten uebertragen wurden, bevor er das Geraet abgibt oder den Einsatzort verlaesst. Dieser Button ist nur bei bestehender Verbindung verfuegbar.
+Ueber den Button **Jetzt synchronisieren** kann die Synchronisation manuell angestossen werden. Das ist nuetzlich, wenn ein Teilnehmer sicherstellen moechte, dass wirklich alle Daten uebertragen wurden, bevor er das Geraet abgibt oder den Einsatzort verlaesst. Dieser Button ist nur verfuegbar, wenn der Server erreichbar ist. Ist er es nicht, bleibt der Button deaktiviert und es erscheint der Hinweis "Server nicht erreichbar." -- so weiss der Teilnehmer, dass seine Aenderungen weiterhin lokal warten und nicht stillschweigend verschwunden sind.
+
+### Datenaktualitaet -- "Zuletzt synchronisiert"
+
+Damit ein Teilnehmer nie unbemerkt mit veralteten Daten arbeitet, zeigt der Profil-Abschnitt an, wann zuletzt erfolgreich mit dem Server synchronisiert wurde. Massgeblich ist dabei der letzte Sync, der den Server wirklich erreicht hat -- ein blosser Verbindungsversuch ohne Serverkontakt zaehlt nicht.
+
+- **Zuletzt synchronisiert vor X:** Im Normalfall steht hier, wie lange der letzte erfolgreiche Sync zurueckliegt (z.B. "Zuletzt synchronisiert vor 2 Stunden").
+- **Noch nie synchronisiert:** Wurde auf diesem Geraet noch nie erfolgreich synchronisiert, erscheint stattdessen "Auf diesem Geraet noch nie synchronisiert".
+- **Warnung bei alten Daten:** Liegt der letzte erfolgreiche Sync **sieben Tage oder laenger** zurueck, blendet die App eine orangefarbene Warnung ein: "Deine Daten sind N Tage alt. Verbinde dich, um zu aktualisieren."
+
+Diese Warnung **blockiert nicht** -- der Teilnehmer kann weiterhin offline arbeiten und Daten erfassen. Sie ist bewusst nur ein Hinweis, damit jemand, der laengere Zeit ohne Verbindung im Feld war, rechtzeitig daran erinnert wird, seine Daten zu aktualisieren und hochzuladen. Die Sieben-Tage-Schwelle gilt derzeit einheitlich fuer alle Projekte und ist nicht pro Projekt einstellbar.
 
 ## Konfliktbehandlung
 

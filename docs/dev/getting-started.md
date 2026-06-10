@@ -73,6 +73,16 @@ npm run dev
 
 SvelteKit starts on `https://localhost:5173` with a self-signed SSL certificate (via `@vitejs/plugin-basic-ssl`). The `--host` flag is enabled by default, so the server is accessible from other devices on the network.
 
+#### Plain-HTTP dev for GIS clients
+
+External GIS clients (QGIS, GDAL) reject the dev server's self-signed `basic-ssl` certificate, so they can't reach the GeoJSON API over the normal HTTPS dev flow. To serve the dev server over plain HTTP instead, run:
+
+```bash
+npm run dev:http        # equivalent to DEV_HTTP=true vite dev --host
+```
+
+`DEV_HTTP=true` drops the `basic-ssl` plugin (`vite.config.ts`), so the server listens on `http://localhost:5173`. Use this only when testing the GIS API — the PWA / service worker need a secure context, so keep the default HTTPS flow (`npm run dev`) for participant-app work.
+
 ### 5. Verify
 
 1. Open `http://localhost:8090/_/` -- PocketBase admin UI. Log in with your `.env` credentials.
@@ -124,6 +134,7 @@ SvelteKit's own server routes (e.g. anything under `src/routes/**/+server.ts`) a
 | Command | Description |
 |---------|-------------|
 | `npm run dev` | Start Vite dev server (HTTPS, `--host` enabled) |
+| `npm run dev:http` | Start Vite dev server over plain HTTP (`DEV_HTTP=true`) so GIS clients (QGIS/GDAL) can connect |
 | `npm run backend` | Build and start PocketBase via `dev-entrypoint.sh` |
 | `npm run dev:backend` | PocketBase with modd hot-reload |
 | `npm run build` | Production build (SvelteKit + Vite) |
