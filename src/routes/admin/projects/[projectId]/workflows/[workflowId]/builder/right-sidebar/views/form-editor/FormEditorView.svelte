@@ -12,6 +12,7 @@
 	import FormJsonView from './FormJsonView.svelte';
 
 	import type { ToolsForm, ToolsFormField, TrackedFormField, WorkflowStage, ColumnPosition, VisualConfig, WorkflowFieldDef, ProtocolLocalFieldDef, FieldType } from '$lib/workflow-builder';
+	import type { FormPart, FormImportResult } from '$lib/workflow-builder/transfer';
 	import {
 		formEditorViewAllowedRoles,
 		formEditorViewButtonAppearance,
@@ -91,6 +92,8 @@
 		localFields?: ProtocolLocalFieldDef[];
 		/** Persist changes to local fields. */
 		onLocalFieldsChange?: (next: ProtocolLocalFieldDef[]) => void;
+		/** Create a new form from a pasted/edited YAML definition (code view). */
+		onImportForm?: (part: FormPart) => FormImportResult | undefined;
 	};
 
 	let {
@@ -115,7 +118,8 @@
 		onAddFieldRef,
 		showLocalFields = false,
 		localFields = [],
-		onLocalFieldsChange
+		onLocalFieldsChange,
+		onImportForm
 	}: Props = $props();
 
 	function uniqueLocalKey(base: string): string {
@@ -426,7 +430,7 @@
 	<!-- Main content area -->
 	<div class="form-editor-content">
 		{#if viewMode === 'json'}
-			<FormJsonView {form} fields={mergedFields} onFieldUpdate={handleFieldUpdateRouted} />
+			<FormJsonView {form} fields={mergedFields} {onImportForm} />
 		{:else if showSettings && hasOwnButtonConfig}
 			<!-- Settings Panel (replaces form editor when open) -->
 			<div class="settings-panel">

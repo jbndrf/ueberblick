@@ -1,42 +1,52 @@
-# Prozessmodellierung (CMMN)
+# Prozessmodellierung
 
-Diese Seite ist die **Landkarte** aller Verzweigungs- und Entscheidungsmechanismen in Ueberblick. Sie richtet sich an alle, die einen realen Ablauf modellieren und sich fragen: *Welches Werkzeug nehme ich wofuer?* Als gemeinsame Sprache dient die **CMMN** (Case Management Model and Notation) -- die Notation der oeffentlichen Verwaltung fuer schwach strukturierte, ereignisgetriebene Ablaeufe. Die Detail-Bedienung steht jeweils auf den verlinkten Seiten; hier geht es um die Einordnung.
+Diese Seite ist die **Landkarte** aller Verzweigungs- und Entscheidungsmechanismen in Ueberblick und ordnet sie in die gaengigen Notationen der Prozessmodellierung ein -- **BPMN** und **CMMN**. Ziel ist nicht die Detail-Bedienung (die steht auf den verlinkten Seiten), sondern die Frage: *Wie ist mein Ablauf gebaut, und welches Werkzeug nehme ich wofuer?*
 
-## Ueberblick aus Sicht der Prozessmodellierung
+## Ueberblick als Zustandsautomat
 
-CMMN beschreibt einen *Fall* deklarativ: Ein Fall kann viele Aufgaben enthalten, die **gleichzeitig** aktiv sein duerfen und von Bedingungen (Waechtern) ein- und ausgeschaltet werden -- es gibt keinen einzelnen "aktuellen Zustand".
+Im Kern ist ein Ueberblick-Workflow ein **endlicher Zustandsautomat mit bewachten Uebergaengen**:
 
-Ueberblick funktioniert in einem Punkt grundlegend anders: **Jeder Eintrag befindet sich zu jedem Zeitpunkt in genau einer Stufe** (`current_stage_id`). Ueberblick ist damit eher ein **Zustandsautomat mit CMMN-artigen Eintritts-Waechtern** als ein reines Fallmodell. Praktisch heisst das:
+- Jeder **Eintrag befindet sich zu jedem Zeitpunkt in genau einer Stufe** (`current_stage_id`).
+- Stufenwechsel passieren ueber **Verbindungen** -- als Schaltflaeche vom Teilnehmer ausgeloest oder von einer [Automatisierung](automatisierungen.md) (Zeit, Feldaenderung, Stufenwechsel).
+- Verbindungen koennen **bewacht** sein: Ein [Waechter](workflows.md#bedingte-verfuegbarkeit-von-verbindungen-waechter) gibt den Uebergang erst frei, wenn die Feldwerte passen.
 
-- Den **Ablauf** modellieren Sie als Graph aus [Stufen](workflows.md#die-bausteine-eines-workflows) und Uebergaengen -- strukturierter als CMMN, naeher an einem Zustandsdiagramm.
-- Die **datenabhaengige Verzweigung** liefern die [Waechter](workflows.md#bedingte-verfuegbarkeit-von-verbindungen-waechter) auf den Verbindungen -- das ist die CMMN-Idee an genau der richtigen Stelle.
+Diese Beschreibung -- Zustaende, Ereignisse, bewachte Uebergaenge -- trifft die App am genauesten. Weder BPMN noch CMMN passt vollstaendig; beide beleuchten aber jeweils eine Seite gut.
 
-CMMN-Denken hilft Ihnen also vor allem dort, wo der Ablauf **nicht** streng linear ist: wo abhaengig von erfassten Daten unterschiedliche Wege moeglich sind oder wo Dinge **ereignisgetrieben** geschehen (Zeitablauf, Feldaenderung). Wo der Ablauf streng der Reihe nach laeuft, brauchen Sie nur Stufen und Verbindungen.
+## Zwei Brillen: BPMN und CMMN
 
-## CMMN-Element → Ueberblick
+Je nachdem, aus welcher Richtung Sie schauen, passt die eine oder die andere Notation besser.
 
-Die folgende Tabelle ordnet jedem CMMN-Element seine Ueberblick-Entsprechung und -Grenze zu.
+**Design-Sicht (was der Admin zeichnet) ≈ BPMN.** Der Workflow-Builder ist ein Knoten-Kanten-Diagramm aus Stufen und Verbindungen. Das ist strukturiert und sequenziell -- BPMN-Gebiet. Verzweigung ("verschiedene Aktionen fuehren in verschiedene Stufen") entspricht einem **Gateway**, Automatisierungen entsprechen **Ereignissen** (Timer, Bedingung). BPMN deckt damit das **Geruest** gut ab: Struktur, Verzweigung und Automatisierung. Faustregel aus der oeffentlichen Verwaltung: *strukturierte Ablaeufe → BPMN*. Die typischen Ueberblick-Workflows (Reinigung, Begehung, Mangelbearbeitung) sind genau das.
 
-| CMMN (Begriff) | Ueberblick-Entsprechung | Grenze / Hinweis |
-| --- | --- | --- |
-| **Fallaktenmodell** | Ein [Workflow](workflows.md) (Definition); ein **Eintrag** = ein Fall. Die Feldwerte des Eintrags sind die Fallakte. | -- |
-| **Phase** (Stage) | **Stufe** (`workflow_stages`) | Es ist immer nur **eine** Stufe aktiv -- anders als in CMMN. |
-| **Aufgabe** (human task) | **Tool** vom Typ [Formular, Bearbeitung oder Protokoll](tools.md#die-tool-typen) | Kein blockierend/nicht-blockierend; Tools laufen beim Druck auf den Button. |
-| **Aufgabe** (case task / Subprozess) | Feldtyp `instance_reference` | **Noch nicht nutzbar** (Phase 4) -- siehe [Kein Subprozess](#kein-subprozess-was-stattdessen-geht). |
-| **Aufgabe** (decision task / DMN) | **Berechnetes Feld** + [Smart Dropdown](formulare.md#welche-feldtypen-gibt-es) | DMN-leicht: eine Formel bzw. abhaengige Auswahl statt einer eigenen Entscheidungstabelle. |
-| **Waechter / Sentry** (Eintritts­kriterium, weiss) | [Bedingung an einer Verbindung](workflows.md#bedingte-verfuegbarkeit-von-verbindungen-waechter) | Nur **UND**, nur auf **Verbindungen**, geraeteseitig ausgewertet (auch offline). |
-| **Waechter** (Austritts­kriterium, schwarz) | Keine deklarative Entsprechung | Wird ueber eine [Automatisierung](automatisierungen.md) nachgebildet (z.B. `Status setzen`). |
-| **Ereignisueberwachung** (Event Listener) | [Automatisierungs-Ausloeser](automatisierungen.md#was-loest-eine-automatisierung-aus) | `bei Feldaenderung` = Benutzer-/Allgemein-Event, `zeitgesteuert` = Timer, `bei Stufenwechsel` = Zustands-Event. |
-| **Meilenstein** | ~ eine **Endstufe** oder ein Statusfeld | Kein eigenstaendiges Meilenstein-Element. |
-| **Auto Complete** | Automatisierung mit Aktion `Status setzen` → `abgeschlossen` | "Der Fall ist fertig, sobald ..." -- nur regelbasiert, nicht deklarativ. |
-| **Erforderlich** (Required) | Pflichtfelder im Formular; zusaetzlich als Tor per **Waechter** | "Muss ausgefuellt sein, bevor es weitergeht." |
-| **Zu wiederholende** (Repetition) | **Self-Loop**-Verbindung + Felder im Schreibmodus **Beobachtung** | Siehe [Wiederkehrende Aufgaben](#wiederkehrende-aufgaben). |
-| **Manuell zu aktivierende** | Jede **Verbindungs-Schaltflaeche** (Teilnehmer-Druck) | Ueberblick-Aktionen sind grundsaetzlich manuell ausgeloest. |
-| **Optionale** (Discretionary) + Planning Table | Rollen-gesteuerte Verbindungen / **globale Tools** | Keine Ad-hoc-Aufgaben zur **Laufzeit** -- alles wird vorab definiert. |
+**Teilnehmer-Sicht (was vor Ort passiert) ≈ CMMN.** Ein Eintrag *liegt* in einer Stufe, und der Teilnehmer sieht dort eine **Menge erlaubter Aktionen** -- Uebergaenge, Stufen-Tools, globale Tools -- aus denen er auswaehlt. Manche davon sind **datenabhaengig** ein- oder ausgeblendet. Dieses "hier ist, was du jetzt tun darfst" ist ein CMMN-Arbeitsvorrat, kein erzwungener Token-Fluss. Vor allem die **Waechter** sind ein reines CMMN-Konzept (Eintrittskriterium/Sentry), fuer das BPMN kein sauberes Gegenstueck hat.
+
+> **Merksatz:** **BPMN beschreibt den Aufbau, CMMN beschreibt die Verfuegbarkeit.** Das Allergenaueste bleibt: ein bewachter Zustandsautomat.
+
+Wichtiger Unterschied zu beiden Standards: In CMMN koennen **mehrere** Aufgaben gleichzeitig aktiv sein, in BPMN fliesst ein Token durch **Aktivitaeten**. In Ueberblick ist dagegen immer **genau eine Stufe** aktiv, und die Knoten sind **Zustaende**, nicht Aktivitaeten. Deshalb passt keine der beiden Notationen 1:1.
+
+## Konzept-Landkarte: Ueberblick · BPMN · CMMN
+
+Jede Zeile beginnt mit dem Ueberblick-Konzept und zeigt, wie es die beiden Notationen benennen.
+
+| Ueberblick | BPMN-Sicht | CMMN-Sicht | Hinweis |
+| --- | --- | --- | --- |
+| [Workflow](workflows.md) / **Eintrag** | Prozessdefinition / -instanz | Fallaktenmodell / Fall | Die Feldwerte des Eintrags sind die Akte. |
+| **Stufe** (`workflow_stages`) | Zustand zwischen Aktivitaeten (kein eigener Knoten) | Phase | Es ist immer nur **eine** Stufe aktiv. |
+| **Verbindung** (Uebergang) | Sequenzfluss + (exklusives) Gateway | -- (kein Sequenzfluss) | Mehrere Verbindungen aus einer Stufe = Verzweigung. |
+| **Aktions-Button** | nutzergesteuertes (event-based) Gateway | manuell aktivierte Aufgabe im Arbeitsvorrat | Teilnehmer waehlt aus den verfuegbaren Aktionen. |
+| [**Waechter**](workflows.md#bedingte-verfuegbarkeit-von-verbindungen-waechter) (Bedingung) | ~ Bedingung am Gateway/Fluss | Sentry / Eintrittskriterium | BPMN schaltet keinen Button sichtbar -- hier ist CMMN praeziser. |
+| **Tool** ([Formular/Bearbeitung/Protokoll](tools.md#die-tool-typen)) | User Task | Aufgabe (human task) | haengt an Verbindung, Stufe oder global. |
+| **Stufen-/globales Tool** | -- (schwer abbildbar) | Optionale (Discretionary) | jederzeit verfuegbar, ohne Stufenwechsel. |
+| [**Automatisierung**](automatisierungen.md) | Timer-/Bedingungs-/Zwischenereignis, Service Task | Ereignisueberwachung | Ausloeser: Stufenwechsel, Feldaenderung, Zeit. |
+| **Berechnetes Feld** / [Smart Dropdown](formulare.md#welche-feldtypen-gibt-es) | Business-Rule-Task (DMN) | Decision Task (DMN) | abgeleiteter Wert / abhaengige Auswahl. |
+| **Self-Loop** | Schleife (loop) | Repetition (Zu wiederholende) | Aktion ohne Stufenwechsel. |
+| **Endstufe** | Endereignis | Meilenstein / Auto Complete | Vorgang abgeschlossen. |
+| `instance_reference` | Aufrufaktivitaet (Subprozess) | Case Task | **Noch nicht nutzbar** (Phase 4) -- siehe [Kein Subprozess](#kein-subprozess-was-stattdessen-geht). |
+| **Pflichtfeld** | -- | Erforderlich (Required) | muss ausgefuellt sein, bevor es weitergeht. |
 
 ## Werkzeug-Platzierung im Detail
 
-Eine CMMN-Aufgabe ist in Ueberblick ein **Tool**. Wo Sie es anhaengen, entscheidet ueber sein Verhalten. Tools werden an [drei Stellen](tools.md#wo-tools-angehaengt-werden) platziert -- eine Verbindung kann jedoch auch ein **Self-Loop** sein (von einer Stufe zu sich selbst), woraus sich praktisch **vier** Platzierungen ergeben:
+Eine Aufgabe ist in Ueberblick ein **Tool**. Wo Sie es anhaengen, entscheidet ueber sein Verhalten. Tools werden an [drei Stellen](tools.md#wo-tools-angehaengt-werden) platziert -- eine Verbindung kann jedoch auch ein **Self-Loop** sein (von einer Stufe zu sich selbst), woraus sich praktisch **vier** Platzierungen ergeben:
 
 | Platzierung | Modelliert als | Aendert die Stufe? | Per **Waechter** steuerbar? | Bestaetigung / Button-Stil? |
 | --- | --- | --- | --- | --- |
@@ -58,7 +68,7 @@ Daraus folgt der oft uebersehene Unterschied zwischen den beiden Platzierungen, 
 
 ### Wiederkehrende Aufgaben
 
-"Etwas, das von Zeit zu Zeit erledigt werden muss" (taegliche Reinigung, monatliche Wiederholungspruefung, woechentliches Altern von Sichtungen) modellieren Sie als **Zustandsschleife mit zeitgesteuertem Ruecksetzen** -- die Ueberblick-Entsprechung der CMMN-**Repetition**:
+"Etwas, das von Zeit zu Zeit erledigt werden muss" (taegliche Reinigung, monatliche Wiederholungspruefung, woechentliches Altern von Sichtungen) modellieren Sie als **Zustandsschleife mit zeitgesteuertem Ruecksetzen** -- in BPMN eine Schleife, in CMMN die **Repetition**:
 
 ```mermaid
 flowchart LR
@@ -81,7 +91,7 @@ Je nach Aufgabe gibt es drei Auspraegungen:
 
 ### Kein Subprozess -- was stattdessen geht
 
-Eine CMMN-Aufgabe kann ein eigener Unter-Fall sein (*case task*). In Ueberblick entspraeche das dem Feldtyp `instance_reference` -- der ist jedoch **noch nicht nutzbar** (Schema vorhanden, aber keine Teilnehmer-Oberflaeche; Phase 4). Sie koennen heute also **keinen echten, verknuepften Subprozess** abbilden. Alternativen:
+Ein Teilablauf als eigener Unter-Vorgang (BPMN: **Aufrufaktivitaet**, CMMN: **Case Task**) entspraeche in Ueberblick dem Feldtyp `instance_reference` -- der ist jedoch **noch nicht nutzbar** (Schema vorhanden, aber keine Teilnehmer-Oberflaeche; Phase 4). Sie koennen heute also **keinen echten, verknuepften Subprozess** abbilden. Alternativen:
 
 - **Getrennte Workflows** fuer den Teilablauf -- lose gekoppelt, ohne automatische Verknuepfung der Eintraege.
 - **Mehr Stufen im selben Workflow**, wenn der Teilablauf klein genug ist.

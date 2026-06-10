@@ -110,6 +110,7 @@
 		onFormRolesChange?: (formId: string, roleIds: string[]) => void;
 		onFormVisualConfigChange?: (formId: string, config: VisualConfig) => void;
 		onFormLocalFieldsChange?: (formId: string, next: import('$lib/workflow-builder').ProtocolLocalFieldDef[]) => void;
+		onImportForm?: (part: import('$lib/workflow-builder/transfer').FormPart) => import('$lib/workflow-builder/transfer').FormImportResult | undefined;
 		// Edit tool editor handlers
 		onEditToolNameChange?: (editToolId: string, name: string) => void;
 		onEditToolFieldsChange?: (editToolId: string, fieldIds: string[]) => void;
@@ -222,6 +223,7 @@
 		onFormRolesChange,
 		onFormVisualConfigChange,
 		onFormLocalFieldsChange,
+		onImportForm,
 		onEditToolNameChange,
 		onEditToolFieldsChange,
 		onEditToolEditModeChange,
@@ -331,6 +333,7 @@
 			showLocalFields={formBacksProtocolTool}
 			localFields={selectedForm.local_fields ?? []}
 			onLocalFieldsChange={(next) => onFormLocalFieldsChange?.(selectedForm.id, next)}
+			{onImportForm}
 		/>
 	{:else if isProtocolToolEditor && selectedProtocolTool}
 		<ProtocolToolEditorView

@@ -16,7 +16,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 
-	import { Save, CircleHelp, Loader2, ShieldCheck, Workflow } from '@lucide/svelte';
+	import { Save, CircleHelp, Loader2, ShieldCheck, Workflow, Code2 } from '@lucide/svelte';
 
 	import type { PageData } from './$types';
 	import StageNode from './StageNode.svelte';
@@ -30,6 +30,7 @@
 	} from './context-sidebar';
 	import { RightSidebar } from './right-sidebar';
 	import { PermissionsMatrixView } from './permissions-matrix';
+	import WorkflowCodeView from './WorkflowCodeView.svelte';
 	import type {
 		StageAction,
 		TimelineStage,
@@ -64,6 +65,12 @@
 	} from '$lib/workflow-builder/tools';
 	import { ToolBar } from '$lib/workflow-builder/components';
 	import type { ColumnPosition } from '$lib/workflow-builder';
+	import {
+		importFormPart,
+		type FormPart,
+		type FormTarget,
+		type FormImportResult
+	} from '$lib/workflow-builder/transfer';
 	import { deserialize } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import {
@@ -82,7 +89,8 @@
 		workflowBuilderSaving,
 		workflowBuilderWorkflowNamePlaceholder,
 		permMatrixCanvasLabel,
-		permMatrixViewLabel
+		permMatrixViewLabel,
+		workflowCodeToggle
 	} from '$lib/paraglide/messages';
 
 	let { data }: { data: PageData } = $props();
@@ -119,7 +127,7 @@
 	let saveError = $state<string | null>(null);
 
 	// Top-level builder view: the canvas, or the full-width permissions matrix.
-	let builderView = $state<'canvas' | 'permissions'>('canvas');
+	let builderView = $state<'canvas' | 'permissions' | 'code'>('canvas');
 
 	async function handleSave() {
 		isSaving = true;
@@ -1306,6 +1314,31 @@
 		builderState.updateForm(formId, { local_fields: next });
 	}
 
+	/**
+	 * Create a NEW form from a pasted/edited YAML definition (form code view).
+	 * The new form is attached to the same target as the currently-open form
+	 * (connection / stage / global), then selected so the user sees the result.
+	 */
+	function handleImportForm(part: FormPart): FormImportResult | undefined {
+		let target: FormTarget = { isGlobal: true };
+		let attachedTo: import('./context-sidebar/context').FormContextData['attachedTo'] = {
+			type: 'global'
+		};
+		if (selectionContext.type === 'form') {
+			const at = selectionContext.attachedTo;
+			if (at.type === 'connection') {
+				target = { connectionId: at.connectionId };
+				attachedTo = { type: 'connection', connectionId: at.connectionId };
+			} else if (at.type === 'stage') {
+				target = { stageId: at.stageId };
+				attachedTo = { type: 'stage', stageId: at.stageId };
+			}
+		}
+		const result = importFormPart(builderState, part, target);
+		selectionContext = createContext.form(result.formId, attachedTo);
+		return result;
+	}
+
 	// Edit tool editor handlers
 	function handleEditToolNameChange(editToolId: string, name: string) {
 		builderState.updateEditTool(editToolId, { name });
@@ -1791,6 +1824,14 @@
 					<ShieldCheck class="mr-2 h-4 w-4" />
 					{permMatrixViewLabel?.() ?? 'Permissions'}
 				</Button>
+				<Button
+					variant={builderView === 'code' ? 'default' : 'outline'}
+					size="sm"
+					onclick={() => (builderView = 'code')}
+				>
+					<Code2 class="mr-2 h-4 w-4" />
+					{workflowCodeToggle?.() ?? 'Code'}
+				</Button>
 			</div>
 		</div>
 
@@ -1816,6 +1857,14 @@
 					name: String(r.name ?? '')
 				}))}
 				projectId={String(data.workflow.project_id)}
+			/>
+		{:else if builderView === 'code'}
+			<WorkflowCodeView
+				{builderState}
+				roles={(data.roles ?? []).map((r: { id: unknown; name?: unknown }) => ({
+					id: String(r.id),
+					name: String(r.name ?? '')
+				}))}
 			/>
 		{:else}
 			<!-- Context Sidebar (left) -->
@@ -1940,6 +1989,7 @@
 				onFormRolesChange={handleFormRolesChange}
 				onFormVisualConfigChange={handleFormVisualConfigChange}
 				onFormLocalFieldsChange={handleFormLocalFieldsChange}
+				onImportForm={handleImportForm}
 				allProtocolTools={builderState.visibleProtocolTools.map((p) => p.data)}
 				onEditToolNameChange={handleEditToolNameChange}
 				onEditToolFieldsChange={handleEditToolFieldsChange}

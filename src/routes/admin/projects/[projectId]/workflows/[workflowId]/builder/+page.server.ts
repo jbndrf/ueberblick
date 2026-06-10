@@ -412,6 +412,13 @@ export const actions: Actions = {
 				}
 			};
 
+			// Real def ids created in THIS save via changes.fieldDefs.new. A
+			// form-field ref can FK to one of these (e.g. the whole-workflow YAML
+			// apply, or adding a library def + using it in a form in one save).
+			// Such ids aren't in the DB yet, so the ref path must NOT treat them as
+			// "vanished" and mint a duplicate def (unique (workflow_id,label) clash).
+			const createdDefIds = new Set<string>();
+
 			// 3b. Field Defs (workflow_field_defs) — created BEFORE form-field refs
 			// so refs can FK to real def ids. Sync writes outside the batch.
 			// Compute formulas piggyback on the def payload (compute_expression /
@@ -435,6 +442,7 @@ export const actions: Actions = {
 						? (rest as any).id
 						: generateId();
 					batch.collection('workflow_field_defs').create({ ...rest, id: newId });
+					createdDefIds.add(newId);
 					if (rest.write_mode === 'computed' && expr) {
 						await upsertComputeAutomation(
 							{ id: newId, label: rest.label },
@@ -684,6 +692,11 @@ export const actions: Actions = {
 
 				if (isPlaceholder) {
 					await resolvePlaceholderDef(field, workflowId, incomingDefId);
+				} else if (createdDefIds.has(incomingDefId!)) {
+					// Def is being created in THIS batch via changes.fieldDefs.new — FK
+					// to it directly. The def create already carries the right payload,
+					// so don't update and don't mint a duplicate.
+					field.field_def_id = incomingDefId;
 				} else {
 					// Existing def id supplied on a "new" ref: update def inside the
 					// batch so it rolls back with the rest of the transaction on
@@ -719,6 +732,9 @@ export const actions: Actions = {
 
 				if (placeholder) {
 					defId = await resolvePlaceholderDef(field, workflowId, defId);
+				} else if (createdDefIds.has(defId!)) {
+					// Def created in THIS batch (changes.fieldDefs.new) — FK to it.
+					field.field_def_id = defId;
 				} else {
 					const cache = await ensureDefCache(workflowId);
 					const existsInCache = Array.from(cache.values()).some((d) => d.id === defId);

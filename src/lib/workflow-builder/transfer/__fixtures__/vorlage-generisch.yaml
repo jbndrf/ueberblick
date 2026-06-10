@@ -1,0 +1,393 @@
+ueberblick_part: workflow
+version: 1
+name: Vorlage (generisch)
+private_instances: false
+field_defs:
+  - label: Bezeichnung
+    field_type: short_text
+    field_options: {}
+    validation_rules: {}
+    display_config:
+      column: left
+      row: 0
+      tab: Stammdaten
+      tabOrder: 1
+  - label: Eigene Bemerkungen
+    field_type: long_text
+    field_options: {}
+    validation_rules: {}
+    display_config:
+      column: full
+      row: 1
+      tab: Checkliste
+      tabOrder: 3
+  - label: Eigene Checkliste
+    field_type: multiple_choice
+    field_options:
+      options:
+        - label: Checklist-Punkt 1
+        - label: Checklist-Punkt 2
+        - label: Checklist-Punkt 3
+        - label: Checklist-Punkt 4
+        - label: Checklist-Punkt 5
+    validation_rules: {}
+    display_config:
+      column: full
+      row: 0
+      tab: Checkliste
+      tabOrder: 3
+  - label: Foto
+    field_type: file
+    field_options:
+      allowed_file_types:
+        - image/*
+      max_files: 3
+    validation_rules: {}
+    display_config:
+      column: right
+      row: 0
+      tab: Stammdaten
+      tabOrder: 1
+  - label: Nachweis Sonderfall 1
+    field_type: file
+    field_options:
+      allowed_file_types:
+        - image/*
+      max_files: 3
+    validation_rules: {}
+    display_config:
+      column: right
+      row: 0
+      tab: Sonderfälle
+      tabOrder: 2
+  - label: Nachweis Sonderfall 2
+    field_type: long_text
+    field_options: {}
+    validation_rules: {}
+    display_config:
+      column: right
+      row: 1
+      tab: Sonderfälle
+      tabOrder: 2
+  - label: Nachweis Sonderfall 3
+    field_type: dropdown
+    field_options:
+      options:
+        - label: Ja
+        - label: Nein
+        - label: N/A
+    validation_rules: {}
+    display_config:
+      column: right
+      row: 2
+      tab: Sonderfälle
+      tabOrder: 2
+  - label: Nachweis Sonderfall 4
+    field_type: file
+    field_options:
+      allowed_file_types:
+        - .pdf
+      max_files: 3
+    validation_rules: {}
+    display_config:
+      column: right
+      row: 3
+      tab: Sonderfälle
+      tabOrder: 2
+  - label: Nachweis Sonderfall 5
+    field_type: short_text
+    field_options: {}
+    validation_rules: {}
+    display_config:
+      column: right
+      row: 4
+      tab: Sonderfälle
+      tabOrder: 2
+  - label: Prüf-Bemerkungen
+    field_type: long_text
+    field_options: {}
+    validation_rules: {}
+    display_config:
+      column: full
+      row: 1
+      tab: Prüfung
+      tabOrder: 4
+  - label: Prüf-Checkliste
+    field_type: multiple_choice
+    field_options:
+      options:
+        - label: Prüfpunkt 1
+        - label: Prüfpunkt 2
+        - label: Prüfpunkt 3
+        - label: Prüfpunkt 4
+        - label: Prüfpunkt 5
+    validation_rules: {}
+    display_config:
+      column: full
+      row: 0
+      tab: Prüfung
+      tabOrder: 4
+  - label: Sonderfälle
+    field_type: multiple_choice
+    field_options:
+      options:
+        - label: Sonderfall 1
+        - label: Sonderfall 2
+        - label: Sonderfall 3
+        - label: Sonderfall 4
+        - label: Sonderfall 5
+    validation_rules: {}
+    display_config:
+      column: full
+      row: 2
+      tab: Stammdaten
+      tabOrder: 1
+  - label: Status Sonderfall 1
+    field_type: dropdown
+    field_options:
+      options:
+        - label: Vorlage vollständig
+        - label: beauftragt, ausstehend
+        - label: fehlt
+    validation_rules: {}
+    display_config:
+      column: left
+      row: 0
+      tab: Sonderfälle
+      tabOrder: 2
+  - label: Status Sonderfall 2
+    field_type: dropdown
+    field_options:
+      options:
+        - label: Vorlage vollständig
+        - label: beauftragt, ausstehend
+        - label: fehlt
+    validation_rules: {}
+    display_config:
+      column: left
+      row: 1
+      tab: Sonderfälle
+      tabOrder: 2
+  - label: Status Sonderfall 3
+    field_type: dropdown
+    field_options:
+      options:
+        - label: Vorlage vollständig
+        - label: beauftragt, ausstehend
+        - label: fehlt
+    validation_rules: {}
+    display_config:
+      column: left
+      row: 2
+      tab: Sonderfälle
+      tabOrder: 2
+  - label: Status Sonderfall 4
+    field_type: dropdown
+    field_options:
+      options:
+        - label: Vorlage vollständig
+        - label: beauftragt, ausstehend
+        - label: fehlt
+    validation_rules: {}
+    display_config:
+      column: left
+      row: 3
+      tab: Sonderfälle
+      tabOrder: 2
+  - label: Status Sonderfall 5
+    field_type: dropdown
+    field_options:
+      options:
+        - label: Vorlage vollständig
+        - label: beauftragt, ausstehend
+        - label: fehlt
+    validation_rules: {}
+    display_config:
+      column: left
+      row: 4
+      tab: Sonderfälle
+      tabOrder: 2
+stages:
+  - key: vorbereitung
+    name: Vorbereitung
+    type: start
+    x: 141
+    y: 53
+  - key: selbstpr-fung-l-uft
+    name: Selbstprüfung läuft
+    type: intermediate
+    x: 426
+    y: 47
+  - key: nachbesserung-auftrag-inter
+    name: Nachbesserung — Auftrag inter
+    type: intermediate
+    x: 375
+    y: -306
+  - key: bereit-zur-pr-fung
+    name: Bereit zur Prüfung
+    type: intermediate
+    x: 700
+    y: 55
+  - key: in-pr-fung
+    name: In Prüfung
+    type: intermediate
+    x: 1008
+    y: 56
+  - key: nachbesserung-auftrag-pr-fer
+    name: Nachbesserung — Auftrag Prüfer
+    type: intermediate
+    x: 975
+    y: -193
+  - key: freigegeben
+    name: Freigegeben
+    type: end
+    x: 1316
+    y: 57
+connections:
+  - from: null
+    to: vorbereitung
+    action: anlegen
+    button_label: Anlegen
+    button_color: "#3b82f6"
+  - from: selbstpr-fung-l-uft
+    to: nachbesserung-auftrag-inter
+    action: nachbesserung_intern_anweisen
+    button_label: Nachbesserung intern anweisen
+    button_color: "#f59e0b"
+  - from: in-pr-fung
+    to: freigegeben
+    action: freigabe_erteilen
+    button_label: Freigabe erteilen
+    button_color: "#16a34a"
+    requires_confirmation: true
+    confirmation_message: Mit der Freigabe wird das Prüfobjekt abgeschlossen. Sind alle Nachbesserungen geprüft?
+  - from: selbstpr-fung-l-uft
+    to: bereit-zur-pr-fung
+    action: zur_pruefung_anmelden
+    button_label: Zur Prüfung anmelden
+    button_color: "#16a34a"
+    requires_confirmation: true
+    confirmation_message: Mit dem Anmelden bestätigst du, dass deine Selbstprüfung abgeschlossen ist und der externe Prüfer übernehmen kann.
+  - from: bereit-zur-pr-fung
+    to: in-pr-fung
+    action: pruefung_starten
+    button_label: Prüfung starten
+    button_color: "#0ea5e9"
+    requires_confirmation: true
+    confirmation_message: Möchtest du die Prüfung jetzt starten? Damit wechselt das Prüfobjekt in den Zustand "In Prüfung" und die Prüf-Checkliste wird verfügbar.
+  - from: nachbesserung-auftrag-inter
+    to: selbstpr-fung-l-uft
+    action: nachbesserung_intern_abgeschlossen
+    button_label: Nachbesserung intern abgeschlossen
+    button_color: "#3b82f6"
+  - from: nachbesserung-auftrag-pr-fer
+    to: in-pr-fung
+    action: nachbesserung_behoben_melden
+    button_label: Nachbesserung als behoben melden
+    button_color: "#f59e0b"
+  - from: in-pr-fung
+    to: nachbesserung-auftrag-pr-fer
+    action: nachbesserung_anordnen
+    button_label: Nachbesserung anordnen
+    button_color: "#dc2626"
+  - from: vorbereitung
+    to: selbstpr-fung-l-uft
+    action: selbstpruefung_starten
+    button_label: Selbstprüfung starten
+    button_color: "#3b82f6"
+    requires_confirmation: true
+    confirmation_message: Möchtest du jetzt mit der Selbstprüfung beginnen? Die Eigene Checkliste wird im nächsten Schritt verfügbar.
+forms:
+  - attach:
+      type: connection
+      from: null
+      to: vorbereitung
+      action: anlegen
+    name: Anlegen
+    pages:
+      - description: ""
+        page: 2
+        title: Sonderfälle
+      - description: ""
+        page: 1
+        title: Stammdaten
+    fields:
+      - field: Bezeichnung
+        page: 1
+        row: 0
+        column: full
+        required: true
+        conditional_logic: null
+      - field: Foto
+        page: 1
+        row: 1
+        column: full
+        conditional_logic: null
+      - field: Sonderfälle
+        page: 2
+        row: 1
+        column: full
+        conditional_logic: null
+  - attach:
+      type: stage
+      stage: vorbereitung
+    name: Sonderfall-Nachweise
+    pages:
+      - description: Pro gewähltem Sonderfall ein Status- und ein Nachweisfeld.
+        page: 1
+        title: Sonderfall-Nachweise
+      - description: ""
+        page: 2
+        title: Sonderfälle
+    fields:
+      - field: Status Sonderfall 5
+        page: 1
+        row: 4
+        column: left
+        conditional_logic:
+          show_if:
+            op: includes
+            field: Sonderfälle
+            value: Sonderfall 5
+      - field: Status Sonderfall 1
+        page: 1
+        row: 0
+        column: left
+        conditional_logic:
+          show_if:
+            op: includes
+            field: Sonderfälle
+            value: Sonderfall 1
+      - field: Nachweis Sonderfall 2
+        page: 1
+        row: 1
+        column: right
+        placeholder: Beschreibung des Nachweises für Sonderfall 2
+        conditional_logic:
+          show_if:
+            op: includes
+            field: Sonderfälle
+            value: Sonderfall 2
+      - field: Sonderfälle
+        page: 2
+        row: 1
+        column: full
+        conditional_logic: null
+  - attach:
+      type: stage
+      stage: selbstpr-fung-l-uft
+    name: Eigene Checkliste
+    pages: []
+    fields:
+      - field: Prüf-Checkliste
+        page: 1
+        row: 0
+        column: full
+        help_text: Punkte abhaken, die geprüft wurden.
+        conditional_logic: null
+      - field: Eigene Bemerkungen
+        page: 1
+        row: 1
+        column: full
+        placeholder: Auffälligkeiten, Kontext, Notizen für die spätere Prüfung
+        conditional_logic: null
