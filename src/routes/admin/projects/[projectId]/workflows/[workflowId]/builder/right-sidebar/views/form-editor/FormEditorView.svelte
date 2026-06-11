@@ -94,6 +94,8 @@
 		onLocalFieldsChange?: (next: ProtocolLocalFieldDef[]) => void;
 		/** Create a new form from a pasted/edited YAML definition (code view). */
 		onImportForm?: (part: FormPart) => FormImportResult | undefined;
+		/** Usage count of a field def across all forms (for the def-section hint). */
+		getDefUsageCount?: (defId: string) => number;
 	};
 
 	let {
@@ -119,7 +121,8 @@
 		showLocalFields = false,
 		localFields = [],
 		onLocalFieldsChange,
-		onImportForm
+		onImportForm,
+		getDefUsageCount
 	}: Props = $props();
 
 	function uniqueLocalKey(base: string): string {
@@ -555,6 +558,9 @@
 						field={selectedField}
 						ancestorFields={availableSourceFields}
 						{roles}
+						usageCount={!isLocalId(selectedField.id) && selectedField.field_def_id
+							? (getDefUsageCount?.(selectedField.field_def_id) ?? null)
+							: null}
 						onUpdate={handleFieldConfigUpdate}
 						onDelete={handleFieldConfigDelete}
 						onClose={handleFieldConfigClose}
@@ -573,6 +579,7 @@
 							expanded={paletteExpanded}
 							{fieldDefs}
 							{usedDefIds}
+							getUsageCount={getDefUsageCount}
 							onPick={(defId) => {
 								const pages = fields.map((f) => f.data.page ?? 1);
 								const targetPage = pages.length ? Math.max(...pages) : 1;

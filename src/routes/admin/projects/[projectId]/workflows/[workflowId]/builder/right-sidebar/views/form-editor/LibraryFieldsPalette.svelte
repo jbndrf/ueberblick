@@ -1,16 +1,19 @@
 <script lang="ts">
-	import { Library } from '@lucide/svelte';
-	import type { WorkflowFieldDef } from '$lib/workflow-builder';
+	import { Library, Type } from '@lucide/svelte';
+	import { fieldTypeIcons, fieldTypeLabels, type WorkflowFieldDef } from '$lib/workflow-builder';
 
 	type Props = {
 		expanded?: boolean;
 		fieldDefs: WorkflowFieldDef[];
 		/** Def ids already referenced by the current form (rendered greyed-out). */
 		usedDefIds?: Set<string>;
+		/** Usage count per def across all forms — the "which one am I dragging" hint. */
+		getUsageCount?: (fieldDefId: string) => number;
 		onPick?: (fieldDefId: string) => void;
 	};
 
-	let { expanded = false, fieldDefs, usedDefIds = new Set(), onPick }: Props = $props();
+	let { expanded = false, fieldDefs, usedDefIds = new Set(), getUsageCount, onPick }: Props =
+		$props();
 
 	let draggingId = $state<string | null>(null);
 
@@ -38,6 +41,8 @@
 		{:else}
 			{#each fieldDefs as def (def.id)}
 				{@const isUsed = usedDefIds.has(def.id)}
+				{@const TypeIcon = fieldTypeIcons[def.field_type] || Type}
+				{@const usage = getUsageCount?.(def.id)}
 				<button
 					class="item"
 					class:dragging={draggingId === def.id}
@@ -50,12 +55,18 @@
 					type="button"
 					title={expanded ? undefined : `${def.label} (${def.field_type}, ${def.write_mode})${isUsed ? ' — already on this form' : ''}`}
 				>
-					<div class="dot" data-mode={def.write_mode}></div>
+					<span class="type-icon"><TypeIcon class="h-3.5 w-3.5" /></span>
 					{#if expanded}
 						<div class="info">
 							<span class="label">{def.label || '(unnamed)'}</span>
-							<span class="meta">{def.field_type} · {def.write_mode}</span>
+							<span class="meta">
+								{fieldTypeLabels[def.field_type] ?? def.field_type}
+								{#if usage !== undefined}
+									· {usage}×
+								{/if}
+							</span>
 						</div>
+						<span class="dot" data-mode={def.write_mode} title={def.write_mode}></span>
 					{/if}
 				</button>
 			{/each}
@@ -136,6 +147,14 @@
 	.item.dragging {
 		opacity: 0.5;
 		border-color: hsl(var(--primary));
+	}
+
+	.type-icon {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		color: hsl(var(--muted-foreground));
 	}
 
 	.dot {

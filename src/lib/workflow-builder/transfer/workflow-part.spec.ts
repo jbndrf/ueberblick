@@ -6,7 +6,7 @@ import type {
 	WorkflowStage,
 	WorkflowConnection,
 	ToolsForm,
-	ToolsFormField,
+	FormFieldRef,
 	WorkflowFieldDef
 } from '../types';
 
@@ -58,27 +58,21 @@ function def(
 	};
 }
 
-function ref(
-	id: string,
-	defId: string,
-	label: string,
-	type: ToolsFormField['field_type'],
-	row: number
-): ToolsFormField {
+function ref(id: string, defId: string, row: number): FormFieldRef {
 	return {
 		id,
 		form_id: FORM,
 		field_def_id: defId,
-		field_label: label,
-		field_type: type,
-		field_order: row,
-		page: 1,
-		row_index: row,
-		column_position: 'full',
-		is_required: false,
-		placeholder: '',
-		help_text: '',
-		conditional_logic: null
+		config: {
+			field_order: row,
+			page: 1,
+			row_index: row,
+			column_position: 'full',
+			is_required: false,
+			placeholder: '',
+			help_text: '',
+			conditional_logic: null
+		}
 	};
 }
 
@@ -111,10 +105,7 @@ function buildState(): WorkflowBuilderState {
 		stages: [stage(S1, 'Intake', 'start', 100), stage(S2, 'Review', 'intermediate', 400)],
 		connections,
 		forms,
-		formFields: [
-			ref('ref00000000001', D_TITLE, 'Title', 'short_text', 0),
-			ref('ref00000000002', D_STATUS, 'Status', 'dropdown', 1)
-		],
+		fieldRefs: [ref('ref00000000001', D_TITLE, 0), ref('ref00000000002', D_STATUS, 1)],
 		fieldDefs: [
 			def(D_TITLE, 'Title', 'short_text'),
 			def(D_STATUS, 'Status', 'dropdown', { options: [{ label: 'Open' }] })
@@ -163,7 +154,7 @@ describe('applyWorkflowPart — idempotency', () => {
 		expect(warnings).toEqual([]);
 		expect(s.isDirty).toBe(false);
 		const changes = s.getChanges();
-		for (const k of ['stages', 'connections', 'forms', 'formFields', 'fieldDefs'] as const) {
+		for (const k of ['stages', 'connections', 'forms', 'fieldRefs', 'fieldDefs'] as const) {
 			expect(changes[k].new).toHaveLength(0);
 			expect(changes[k].deleted).toHaveLength(0);
 			expect(changes[k].modified).toHaveLength(0);

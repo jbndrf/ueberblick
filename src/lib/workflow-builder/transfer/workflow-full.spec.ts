@@ -6,7 +6,7 @@ import type {
 	WorkflowStage,
 	WorkflowConnection,
 	ToolsForm,
-	ToolsFormField,
+	FormFieldRef,
 	WorkflowFieldDef,
 	ToolsEdit,
 	ToolsProtocol,
@@ -71,28 +71,21 @@ function def(
 		...extra
 	};
 }
-function ref(
-	id: string,
-	formId: string,
-	defId: string,
-	label: string,
-	type: ToolsFormField['field_type'],
-	row: number
-): ToolsFormField {
+function ref(id: string, formId: string, defId: string, row: number): FormFieldRef {
 	return {
 		id,
 		form_id: formId,
 		field_def_id: defId,
-		field_label: label,
-		field_type: type,
-		field_order: row,
-		page: 1,
-		row_index: row,
-		column_position: 'full',
-		is_required: false,
-		placeholder: '',
-		help_text: '',
-		conditional_logic: null
+		config: {
+			field_order: row,
+			page: 1,
+			row_index: row,
+			column_position: 'full',
+			is_required: false,
+			placeholder: '',
+			help_text: '',
+			conditional_logic: null
+		}
 	};
 }
 
@@ -211,10 +204,7 @@ function buildState(): WorkflowBuilderState {
 		stages: [stage(S1, 'Intake', 'start', 100), stage(S2, 'Review', 'intermediate', 400)],
 		connections,
 		forms,
-		formFields: [
-			ref('ref00000000001', FORM, D_TITLE, 'Title', 'short_text', 0),
-			ref('refp000000001', PFORM, D_TITLE, 'Title', 'short_text', 0)
-		],
+		fieldRefs: [ref('ref00000000001', FORM, D_TITLE, 0), ref('refp000000001', PFORM, D_TITLE, 0)],
 		fieldDefs: [
 			def(D_TITLE, 'Title', 'short_text', { view_roles: ['role0000000001'] }),
 			def(D_STATUS, 'Status', 'dropdown', { field_options: { options: [{ label: 'High' }] } })
@@ -279,7 +269,7 @@ describe('full workflow part — idempotency (no data loss)', () => {
 			'stages',
 			'connections',
 			'forms',
-			'formFields',
+			'fieldRefs',
 			'fieldDefs',
 			'editTools',
 			'protocolTools',

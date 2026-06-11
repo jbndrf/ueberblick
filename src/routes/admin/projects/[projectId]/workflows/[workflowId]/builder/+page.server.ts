@@ -43,9 +43,6 @@ export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) 
 		}
 
 		// Load workflow builder data - these collections may not exist yet
-		// TODO(field-def-redesign): fetch workflow_field_defs and pass through as
-		// `fieldDefs`. The page currently denormalizes ref+def into the legacy
-		// `formFields` shape; convert to a proper (refs, defs) pair in a follow-up.
 		const [
 			stages,
 			connections,
@@ -149,34 +146,14 @@ export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) 
 			def.compute_automation_id = auto.id;
 		}
 
-		// Denormalize def -> ref into the flat shape the builder UI works with:
-		// presentation from the ref's `config` JSON, definitional bits from the
-		// matching field def. The save layer re-packs presentation into `config`.
-		const defById = new Map<string, any>();
-		for (const d of fieldDefs) defById.set(d.id, d);
-		const workflowFormFields = workflowFormFieldRefs.map((ref: any) => {
-			const def = defById.get(ref.field_def_id) ?? {};
-			const config = ref.config ?? {};
-			return {
-				id: ref.id,
-				form_id: ref.form_id,
-				field_def_id: ref.field_def_id,
-				field_order: config.field_order ?? 0,
-				page: config.page ?? 1,
-				row_index: config.row_index ?? 0,
-				column_position: config.column_position ?? 'full',
-				is_required: config.is_required ?? false,
-				placeholder: config.placeholder ?? '',
-				help_text: config.help_text ?? '',
-				conditional_logic: config.conditional_logic ?? null,
-				field_label: def.label ?? '',
-				field_type: def.field_type ?? 'short_text',
-				field_options: def.field_options ?? null,
-				validation_rules: def.validation_rules ?? null,
-				write_mode: def.write_mode ?? 'singleton',
-				compute_expression: def.compute_expression ?? ''
-			};
-		});
+		// Refs stay raw ({ id, form_id, field_def_id, config }) — the builder
+		// resolves ref ⊕ def into its read-model client-side.
+		const fieldRefs = workflowFormFieldRefs.map((ref: any) => ({
+			id: ref.id,
+			form_id: ref.form_id,
+			field_def_id: ref.field_def_id,
+			config: ref.config ?? {}
+		}));
 
 		// Filter edit tools to only those belonging to this workflow's connections or stages
 		const connectionIds = connections.map((c: any) => c.id);
@@ -192,9 +169,7 @@ export const load: PageServerLoad = async ({ params, locals: { pbAdmin: pb } }) 
 			stages,
 			connections,
 			forms,
-			formFields: workflowFormFields,
-			// TODO(field-def-redesign): expose raw refs + defs once UI is migrated.
-			formFieldRefs: workflowFormFieldRefs,
+			fieldRefs,
 			fieldDefs,
 			editTools: workflowEditTools,
 			protocolTools,
@@ -254,7 +229,8 @@ export const actions: Actions = {
 			stages: { new: any[]; modified: any[]; deleted: string[] };
 			connections: { new: any[]; modified: any[]; deleted: string[] };
 			forms: { new: any[]; modified: any[]; deleted: string[] };
-			formFields: { new: any[]; modified: any[]; deleted: string[] };
+			/** Raw tools_form_field_refs rows: { id, form_id, field_def_id, config }. */
+			fieldRefs: { new: any[]; modified: any[]; deleted: string[] };
 			editTools: { new: any[]; modified: any[]; deleted: string[] };
 			protocolTools?: { new: any[]; modified: any[]; deleted: string[] };
 			automations: { new: any[]; modified: any[]; deleted: string[] };
@@ -331,10 +307,9 @@ export const actions: Actions = {
 				batch.collection('tools_forms').delete(formId);
 			}
 
-			// Compute helpers — used by section 3b (direct def edits) and
-			// section 4 (denormalized form-field saves). Hoisted here so both
-			// paths can call them. The {field_def_id} regex matches the
-			// expression parser in pb_hooks/automation.js.
+			// Compute helpers for section 3b (field-def writes). The
+			// {field_def_id} regex matches the expression parser in
+			// pb_hooks/automation.js.
 			const PB_ID_RE_COMPUTE = /^[a-zA-Z0-9]{15}$/;
 			const extractDeps = (expr: string): string[] => {
 				if (!expr || typeof expr !== 'string') return [];
@@ -412,18 +387,13 @@ export const actions: Actions = {
 				}
 			};
 
-			// Real def ids created in THIS save via changes.fieldDefs.new. A
-			// form-field ref can FK to one of these (e.g. the whole-workflow YAML
-			// apply, or adding a library def + using it in a form in one save).
-			// Such ids aren't in the DB yet, so the ref path must NOT treat them as
-			// "vanished" and mint a duplicate def (unique (workflow_id,label) clash).
-			const createdDefIds = new Set<string>();
-
-			// 3b. Field Defs (workflow_field_defs) — created BEFORE form-field refs
-			// so refs can FK to real def ids. Sync writes outside the batch.
-			// Compute formulas piggyback on the def payload (compute_expression /
-			// compute_depends_on are UI conveniences, not columns); strip before
-			// sending to PB and re-route into a companion tools_automation row.
+			// 3b. Field Defs (workflow_field_defs).
+			// ORDERING INVARIANT: def creates are queued in the batch BEFORE the
+			// ref creates in section 4, so a ref can FK a def minted client-side
+			// in this same atomic batch. Compute formulas piggyback on the def
+			// payload (compute_expression / compute_depends_on are UI
+			// conveniences, not columns); strip before sending to PB and
+			// re-route into a companion tools_automation row.
 			const stripComputeAuxFields = (def: any) => {
 				const {
 					compute_expression: expr,
@@ -436,13 +406,12 @@ export const actions: Actions = {
 			if (changes.fieldDefs) {
 				for (const def of changes.fieldDefs.new) {
 					const { rest, expr } = stripComputeAuxFields(def);
-					// Pre-mint id so any later formField ref in this same save can
-					// FK to it; queue inside batch so it rolls back atomically.
+					// Honor the client-minted id (refs in this save FK to it); fall
+					// back to a server id for callers that omit one.
 					const newId = (rest as any).id && /^[a-zA-Z0-9]{15}$/.test((rest as any).id)
 						? (rest as any).id
 						: generateId();
 					batch.collection('workflow_field_defs').create({ ...rest, id: newId });
-					createdDefIds.add(newId);
 					if (rest.write_mode === 'computed' && expr) {
 						await upsertComputeAutomation(
 							{ id: newId, label: rest.label },
@@ -487,8 +456,8 @@ export const actions: Actions = {
 			const refIdToFormId = new Map<string, string>();
 			{
 				const candidateIds = [
-					...changes.formFields.modified.map((f: any) => f.id),
-					...changes.formFields.deleted
+					...changes.fieldRefs.modified.map((f: any) => f.id),
+					...changes.fieldRefs.deleted
 				].filter((id): id is string => typeof id === 'string' && /^[a-zA-Z0-9]{15}$/.test(id));
 				if (candidateIds.length > 0) {
 					const filter = Array.from(new Set(candidateIds))
@@ -507,262 +476,46 @@ export const actions: Actions = {
 			}
 			const deletedFormIds = new Set<string>(changes.forms.deleted);
 
-			// 4. Form Fields
-			// Each incoming "field" is the denormalized shape (ref + def). Split it
-			// into: a `workflow_field_defs` upsert (label/type/options/validation/
-			// write_mode/etc.) and a `tools_form_field_refs` upsert (layout +
-			// per-form overrides). Definitional rows are written first (synchronously,
-			// outside the batch) so the ref rows can FK to a real def id.
-			const formFieldsAll = [...changes.formFields.new, ...changes.formFields.modified];
-
-			// Resolve workflow_id for each field via its form.
-			const formIdsForFields = Array.from(
-				new Set(formFieldsAll.map((f) => f.form_id).filter(Boolean))
-			);
-			const formIdToWorkflowId = new Map<string, string>();
-			// New forms (just queued) carry workflow_id on the payload itself.
-			for (const f of [...changes.forms.new, ...changes.forms.modified]) {
-				if (f?.id && f?.workflow_id) formIdToWorkflowId.set(f.id, f.workflow_id);
-			}
-			// Anything else: look up.
-			const missingFormIds = formIdsForFields.filter((id) => !formIdToWorkflowId.has(id));
-			if (missingFormIds.length > 0) {
-				const filter = missingFormIds.map((id) => `id = "${id}"`).join(' || ');
-				const formsLookup = await pb.collection('tools_forms').getFullList({
-					filter,
-					fields: 'id,workflow_id',
-					requestKey: null
-				});
-				for (const f of formsLookup) formIdToWorkflowId.set(f.id, (f as any).workflow_id);
-			}
-
-			// Helpers ----------------------------------------------------------
+			// 4. Form Field Refs — pure ref CRUD. Defs travel exclusively through
+			// changes.fieldDefs (section 3b, queued in the batch BEFORE these ref
+			// creates, so a ref can FK a def minted in this same save).
 			const PB_ID_RE = /^[a-zA-Z0-9]{15}$/;
 
-			// Per-workflow cache of existing defs keyed by label. We use this both
-			// for collision-driven label suffixing AND for reuse-by-identity when a
-			// client `_temp_*` placeholder matches an already-persisted def. Reuse
-			// closes a partial-failure loop: a previous save that committed a def
-			// outside the batch but failed the batch left an orphan; the next
-			// retry now picks that orphan back up instead of bumping to "(n)".
-			type CachedDef = {
-				id: string;
-				label: string;
-				field_type: string;
-				write_mode: string;
-				field_options: unknown;
-				validation_rules: unknown;
-			};
-			const existingDefsByWorkflow = new Map<string, Map<string, CachedDef>>();
-			const ensureDefCache = async (workflowId: string): Promise<Map<string, CachedDef>> => {
-				let cache = existingDefsByWorkflow.get(workflowId);
-				if (cache) return cache;
-				const defs = await pb.collection('workflow_field_defs').getFullList({
-					filter: `workflow_id = "${workflowId}"`,
-					fields: 'id,label,field_type,write_mode,field_options,validation_rules',
-					requestKey: null
-				});
-				cache = new Map<string, CachedDef>();
-				for (const d of defs as any[]) cache.set(d.label, d as CachedDef);
-				existingDefsByWorkflow.set(workflowId, cache);
-				return cache;
-			};
-			const uniqueLabel = async (workflowId: string, base: string): Promise<string> => {
-				const cache = await ensureDefCache(workflowId);
-				const root = (base || 'New Field').slice(0, 250);
-				let candidate = root;
-				let n = 2;
-				while (cache.has(candidate)) {
-					candidate = `${root} (${n++})`;
-				}
-				return candidate;
-			};
-
-			// Treat an incoming `_temp_*` def as a candidate for reuse only when it
-			// is uncustomized — same field_type / write_mode AND no non-default
-			// options or validation. Smart dropdowns, computed fields, choice lists
-			// with options, etc. always fall through to the create path so they
-			// never silently merge with an unrelated def.
-			const isEmptyObj = (v: unknown): boolean =>
-				v == null || (typeof v === 'object' && Object.keys(v as object).length === 0);
-			const tryReuseExistingDef = async (
-				field: any,
-				workflowId: string
-			): Promise<string | null> => {
-				const label = (field.field_label ?? '').slice(0, 250);
-				if (!label) return null;
-				if (!isEmptyObj(field.field_options) || !isEmptyObj(field.validation_rules)) return null;
-				if ((field.write_mode ?? 'singleton') === 'computed') return null;
-				const cache = await ensureDefCache(workflowId);
-				const hit = cache.get(label);
-				if (!hit) return null;
-				if (hit.field_type !== (field.field_type ?? 'short_text')) return null;
-				if (hit.write_mode !== (field.write_mode ?? 'singleton')) return null;
-				if (!isEmptyObj(hit.field_options) || !isEmptyObj(hit.validation_rules)) return null;
-				return hit.id;
-			};
-
-			const buildDefPayload = (field: any, workflowId: string, label: string) => ({
-				workflow_id: workflowId,
-				label,
-				field_type: field.field_type ?? 'short_text',
-				write_mode: field.write_mode ?? 'singleton',
-				field_options: field.field_options ?? null,
-				validation_rules: field.validation_rules ?? null
+			const buildRefPayload = (ref: any) => ({
+				form_id: ref.form_id,
+				field_def_id: ref.field_def_id,
+				config: ref.config ?? {}
 			});
 
-			const buildRefPayload = (field: any, fieldDefId: string) => ({
-				form_id: field.form_id,
-				field_def_id: fieldDefId,
-				config: {
-					field_order: field.field_order ?? 0,
-					page: field.page ?? 1,
-					row_index: field.row_index ?? 0,
-					column_position: field.column_position ?? 'full',
-					is_required: field.is_required ?? false,
-					placeholder: field.placeholder ?? '',
-					help_text: field.help_text ?? '',
-					conditional_logic: field.conditional_logic ?? null
+			for (const ref of changes.fieldRefs.new) {
+				if (typeof ref.field_def_id !== 'string' || !PB_ID_RE.test(ref.field_def_id)) {
+					throw new Error(`Form field ref ${ref.id} carries an invalid field_def_id.`);
 				}
-			});
-
-			// Upsert field defs first (outside batch) so we have real ids for refs.
-			// Map of incoming temp/placeholder field_def_id -> real id.
-			const defIdResolution = new Map<string, string>();
-
-			// Sync the computed-field companion automation after its def upsert.
-			const syncCompanionAutomation = async (field: any, workflowId: string, defId: string) => {
-				const writeMode = field.write_mode ?? 'singleton';
-				const expression = (field.compute_expression ?? '').trim();
-				if (writeMode === 'computed' && expression) {
-					await upsertComputeAutomation(
-						{ id: defId, label: field.field_label },
-						workflowId,
-						expression
-					);
-				} else {
-					await deleteComputeAutomation(defId, workflowId);
-				}
-			};
-
-			// Resolve a `_temp_*` placeholder to a real def id. Tries reuse first;
-			// otherwise pre-generates an id and queues the def create inside the
-			// batch so def + ref are committed atomically.
-			const resolvePlaceholderDef = async (
-				field: any,
-				workflowId: string,
-				incomingDefId: string | undefined
-			): Promise<string> => {
-				const reused = await tryReuseExistingDef(field, workflowId);
-				if (reused) {
-					if (incomingDefId) defIdResolution.set(incomingDefId, reused);
-					field.field_def_id = reused;
-					return reused;
-				}
-				const label = await uniqueLabel(workflowId, field.field_label);
-				const newId = generateId();
-				batch
-					.collection('workflow_field_defs')
-					.create({ id: newId, ...buildDefPayload(field, workflowId, label) });
-				// Make the just-minted def visible to subsequent reuse attempts in
-				// this same save (e.g. user added two "Test" fields at once).
-				const cache = await ensureDefCache(workflowId);
-				cache.set(label, {
-					id: newId,
-					label,
-					field_type: field.field_type ?? 'short_text',
-					write_mode: field.write_mode ?? 'singleton',
-					field_options: field.field_options ?? null,
-					validation_rules: field.validation_rules ?? null
-				});
-				if (incomingDefId) defIdResolution.set(incomingDefId, newId);
-				field.field_def_id = newId;
-				return newId;
-			};
-
-			// NEW fields: create a def, capture id.
-			for (const field of changes.formFields.new) {
-				const workflowId = formIdToWorkflowId.get(field.form_id);
-				if (!workflowId) {
-					throw new Error(`Cannot resolve workflow_id for form ${field.form_id}`);
-				}
-				const incomingDefId: string | undefined = field.field_def_id;
-				const isPlaceholder =
-					!incomingDefId || incomingDefId.startsWith('_temp_') || !PB_ID_RE.test(incomingDefId);
-
-				if (isPlaceholder) {
-					await resolvePlaceholderDef(field, workflowId, incomingDefId);
-				} else if (createdDefIds.has(incomingDefId!)) {
-					// Def is being created in THIS batch via changes.fieldDefs.new — FK
-					// to it directly. The def create already carries the right payload,
-					// so don't update and don't mint a duplicate.
-					field.field_def_id = incomingDefId;
-				} else {
-					// Existing def id supplied on a "new" ref: update def inside the
-					// batch so it rolls back with the rest of the transaction on
-					// failure.
-					const cache = await ensureDefCache(workflowId);
-					const existsInCache = Array.from(cache.values()).some((d) => d.id === incomingDefId);
-					if (existsInCache) {
-						batch
-							.collection('workflow_field_defs')
-							.update(
-								incomingDefId!,
-								buildDefPayload(field, workflowId, field.field_label)
-							);
-					} else {
-						// Def vanished server-side -> mint a fresh one (reuse-aware).
-						await resolvePlaceholderDef(field, workflowId, incomingDefId);
-					}
-				}
-				await syncCompanionAutomation(field, workflowId, field.field_def_id);
-				batch
-					.collection('tools_form_field_refs')
-					.create(buildRefPayload(field, field.field_def_id));
+				const payload: Record<string, unknown> = buildRefPayload(ref);
+				// Honor the client-minted ref id so client state stays addressable
+				// after the save (no refresh needed to re-identify rows).
+				if (typeof ref.id === 'string' && PB_ID_RE.test(ref.id)) payload.id = ref.id;
+				batch.collection('tools_form_field_refs').create(payload);
 			}
 
-			// MODIFIED fields: update both def + ref.
-			for (const field of changes.formFields.modified) {
-				const workflowId = formIdToWorkflowId.get(field.form_id);
-				if (!workflowId) {
-					throw new Error(`Cannot resolve workflow_id for form ${field.form_id}`);
-				}
-				let defId: string | undefined = field.field_def_id;
-				const placeholder = !defId || defId.startsWith('_temp_') || !PB_ID_RE.test(defId);
-
-				if (placeholder) {
-					defId = await resolvePlaceholderDef(field, workflowId, defId);
-				} else if (createdDefIds.has(defId!)) {
-					// Def created in THIS batch (changes.fieldDefs.new) — FK to it.
-					field.field_def_id = defId;
-				} else {
-					const cache = await ensureDefCache(workflowId);
-					const existsInCache = Array.from(cache.values()).some((d) => d.id === defId);
-					if (existsInCache) {
-						batch
-							.collection('workflow_field_defs')
-							.update(defId!, buildDefPayload(field, workflowId, field.field_label));
-					} else {
-						// Def vanished server-side -> mint a fresh one (reuse-aware).
-						defId = await resolvePlaceholderDef(field, workflowId, defId);
-					}
-				}
-				await syncCompanionAutomation(field, workflowId, defId!);
-				if (existingRefIds.has(field.id)) {
-					batch.collection('tools_form_field_refs').update(field.id, buildRefPayload(field, defId!));
+			for (const ref of changes.fieldRefs.modified) {
+				if (existingRefIds.has(ref.id)) {
+					batch.collection('tools_form_field_refs').update(ref.id, buildRefPayload(ref));
 				} else {
 					// Client thinks this ref exists, but it doesn't (deleted out-of-band
 					// or left stale by a prior failed save). Recreate so the field is
 					// still persisted instead of failing the entire batch.
-					batch.collection('tools_form_field_refs').create(buildRefPayload(field, defId!));
+					const payload: Record<string, unknown> = buildRefPayload(ref);
+					if (typeof ref.id === 'string' && PB_ID_RE.test(ref.id)) payload.id = ref.id;
+					batch.collection('tools_form_field_refs').create(payload);
 				}
 			}
 
-			for (const fieldId of changes.formFields.deleted) {
-				if (!existingRefIds.has(fieldId)) continue; // already gone
-				const formId = refIdToFormId.get(fieldId);
+			for (const refId of changes.fieldRefs.deleted) {
+				if (!existingRefIds.has(refId)) continue; // already gone
+				const formId = refIdToFormId.get(refId);
 				if (formId && deletedFormIds.has(formId)) continue; // server cascade will remove it
-				batch.collection('tools_form_field_refs').delete(fieldId);
+				batch.collection('tools_form_field_refs').delete(refId);
 			}
 
 			// 5. Edit Tools removed in Phase 1 redesign.
@@ -806,23 +559,15 @@ export const actions: Actions = {
 				}
 			}
 
-			// 8. Edit Tools
-			// `editable_fields` may reference `_temp_*` placeholder field defs
-			// created in the same save (a field dragged into a form). Those defs
-			// are materialised above; remap to their real ids — otherwise the
-			// relation dangles and the whole batch transaction fails.
+			// 8. Edit Tools — `editable_fields` reference real def ids (minted
+			// client-side); defs created in this save are queued earlier in the
+			// same batch, so the relations resolve atomically.
 			if (changes.editTools) {
-				const remapEditableFields = (tool: any) => ({
-					...tool,
-					editable_fields: Array.isArray(tool.editable_fields)
-						? tool.editable_fields.map((id: string) => defIdResolution.get(id) ?? id)
-						: tool.editable_fields
-				});
 				for (const tool of changes.editTools.new) {
-					batch.collection('tools_edit').create(remapEditableFields(tool));
+					batch.collection('tools_edit').create(tool);
 				}
 				for (const tool of changes.editTools.modified) {
-					batch.collection('tools_edit').update(tool.id, remapEditableFields(tool));
+					batch.collection('tools_edit').update(tool.id, tool);
 				}
 				for (const toolId of changes.editTools.deleted) {
 					batch.collection('tools_edit').delete(toolId);

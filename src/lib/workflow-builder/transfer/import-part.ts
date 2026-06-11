@@ -3,9 +3,9 @@
  *
  * Imports go exclusively through the public `add*`/`update*` methods on
  * `WorkflowBuilderState`, producing the same `status:'new'` items a human
- * clicking the builder would. No ids are minted for the DB here — the existing
- * save path resolves `_temp_*` placeholders and reuses/creates field defs by
- * label. This module's only real work is **label/key → id resolution within the
+ * clicking the builder would. New fields create REAL defs (client-minted ids)
+ * plus refs; the save path persists defs before refs in one atomic batch.
+ * This module's only real work is **label/key → id resolution within the
  * imported bundle**, plus flagging cross-references that can't survive an
  * isolated copy.
  */
@@ -105,24 +105,23 @@ export function importFormPart(
 
 		if (existingDefId) {
 			// Reuse an existing def — its type/options win; we only apply per-form
-			// presentation below. addFormFieldRef copies the def's current options
-			// onto the ref, so the server's def update stays a no-op.
+			// presentation below.
 			ref = state.addFormFieldRef(form.id, existingDefId, row, column, page);
 			reused = true;
 		} else {
-			// New field — synthesize a def via the placeholder flow, then write the
-			// part's definitional bits onto it.
-			ref = state.addFormField(form.id, pf.type, row, column, page);
-			reused = false;
-			state.updateFormField(ref.id, {
-				field_label: pf.label,
+			// New field — create a real def carrying the part's definitional bits,
+			// then a ref pointing at it.
+			const def = state.addFieldDef({
+				label: pf.label,
 				field_type: pf.type,
-				field_options: pf.field_options ?? undefined,
-				validation_rules: pf.validation_rules ?? undefined,
-				...(pf.write_mode ? { write_mode: pf.write_mode } : {}),
-				...(pf.compute_expression ? { compute_expression: pf.compute_expression } : {})
-			} as Partial<ToolsFormField>);
-			if (ref.field_def_id) labelToDefId.set(pf.label, ref.field_def_id);
+				field_options: pf.field_options ?? null,
+				validation_rules: pf.validation_rules ?? null,
+				write_mode: pf.write_mode ?? 'singleton',
+				compute_expression: pf.compute_expression ?? ''
+			});
+			ref = state.addFormFieldRef(form.id, def.id, row, column, page);
+			reused = false;
+			labelToDefId.set(pf.label, def.id);
 		}
 
 		if (!ref) {
@@ -131,7 +130,7 @@ export function importFormPart(
 		}
 
 		// Per-form presentation applies to reused and new fields alike.
-		state.updateFormField(ref.id, {
+		state.updateFieldRefConfig(ref.id, {
 			is_required: pf.required ?? false,
 			placeholder: pf.placeholder ?? '',
 			help_text: pf.help_text ?? ''
@@ -145,7 +144,8 @@ export function importFormPart(
 	const resolveLabel = (label: string) => labelToDefId.get(label);
 
 	for (const { ref, src, reused } of created) {
-		// Conditional logic is per-form (lives on the ref) → applies to all fields.
+		// Conditional logic is per-form (lives on the ref's config) → applies to
+		// all fields.
 		if (src.conditional_logic) {
 			const remapped = remapLogicLabels(src.conditional_logic, resolveLabel, (missing) => {
 				warnings.push({
@@ -153,12 +153,12 @@ export function importFormPart(
 					message: `Conditional logic on "${src.label}" references unknown field "${missing}" — rule dropped.`
 				});
 			});
-			state.updateFormField(ref.id, { conditional_logic: remapped });
+			state.updateFieldRefConfig(ref.id, { conditional_logic: remapped });
 		}
 
 		// smart_dropdown source is def-level → only for newly created defs. Reused
 		// defs keep their own source binding.
-		if (!reused && src.type === 'smart_dropdown' && src.field_options) {
+		if (!reused && src.type === 'smart_dropdown' && src.field_options && ref.field_def_id) {
 			const opts = { ...src.field_options } as Record<string, unknown>;
 			const sourceLabel = opts.source_field_label;
 			delete opts.source_field_label;
@@ -173,7 +173,7 @@ export function importFormPart(
 					});
 				}
 			}
-			state.updateFormField(ref.id, { field_options: opts });
+			state.updateFieldDef(ref.field_def_id, { field_options: opts });
 		}
 	}
 

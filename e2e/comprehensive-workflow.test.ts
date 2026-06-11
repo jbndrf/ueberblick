@@ -169,6 +169,7 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 			name: 'Damage Report Workflow',
 			description: 'Comprehensive test workflow with edit tools and smart dropdowns',
 			workflow_type: 'incident',
+			geometry_type: 'point',
 			is_active: true,
 			entry_allowed_roles: [roles.get('Field Worker')!]
 		});
@@ -260,6 +261,51 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 		workflow.forms.set('entry', entryForm.id);
 		console.log(`\nCreated entry form: ${entryForm.id}`);
 
+		// Field seeding follows the current data model: a `workflow_field_defs`
+		// row (definition) plus a `tools_form_field_refs` row (per-form layout in
+		// `config`). `workflow.fields` stores DEF ids — everything downstream
+		// (edit tools, field values, smart dropdown sources) references defs.
+		type SeedField = {
+			label: string;
+			type: string;
+			required: boolean;
+			order: number;
+			page: number;
+			row_index: number;
+			column_position: string;
+			placeholder?: string;
+			help_text?: string;
+			options?: string[];
+			field_options?: Record<string, unknown>;
+		};
+		const createField = async (formId: string, f: SeedField): Promise<string> => {
+			const def = await adminPb.collection('workflow_field_defs').create({
+				workflow_id: workflow.id,
+				label: f.label,
+				field_type: f.type,
+				write_mode: 'singleton',
+				field_options:
+					f.field_options ??
+					(f.options ? { options: f.options.map((o) => ({ label: o })) } : null)
+			});
+			await adminPb.collection('tools_form_field_refs').create({
+				form_id: formId,
+				field_def_id: def.id,
+				config: {
+					field_order: f.order,
+					page: f.page,
+					row_index: f.row_index,
+					column_position: f.column_position,
+					is_required: f.required,
+					placeholder: f.placeholder ?? '',
+					help_text: f.help_text ?? ''
+				}
+			});
+			workflow.fields.set(f.label, def.id);
+			console.log(`  Field: ${f.label} (${f.type}) [row ${f.row_index}, ${f.column_position}]`);
+			return def.id;
+		};
+
 		// Entry form fields with proper layout (row_index and column_position)
 		// IMPORTANT: page must be 1 (not 0) - the form builder defaults to showing page 1
 		const entryFields = [
@@ -321,40 +367,22 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 			}
 		];
 
-		// Create Damage Type field first to get its ID for smart dropdown
+		// Create Damage Type field first to get its def ID for smart dropdown
 		let damageTypeFieldId: string | null = null;
 
 		for (const f of entryFields) {
-			const fieldData: Record<string, unknown> = {
-				form_id: entryForm.id,
-				field_label: f.label,
-				field_type: f.type,
-				is_required: f.required,
-				field_order: f.order,
-				page: f.page,
-				row_index: f.row_index,
-				column_position: f.column_position,
-				placeholder: f.placeholder || null,
-				help_text: f.help_text || null,
-				field_options: f.options ? { options: f.options.map((o) => ({ label: o })) } : null
-			};
-
-			const field = await adminPb.collection('tools_form_fields').create(fieldData);
-			workflow.fields.set(f.label, field.id);
-			console.log(`  Field: ${f.label} (${f.type}) [row ${f.row_index}, ${f.column_position}]`);
-
+			const defId = await createField(entryForm.id, f as SeedField);
 			if (f.label === 'Damage Type') {
-				damageTypeFieldId = field.id;
+				damageTypeFieldId = defId;
 			}
 		}
 
 		// Create smart dropdown for Sub-Category (depends on Damage Type)
-		const smartDropdownData = {
-			form_id: entryForm.id,
-			field_label: 'Sub-Category',
-			field_type: 'smart_dropdown',
-			is_required: false,
-			field_order: 5,
+		await createField(entryForm.id, {
+			label: 'Sub-Category',
+			type: 'smart_dropdown',
+			required: false,
+			order: 5,
 			page: 1,
 			row_index: 3,
 			column_position: 'full',
@@ -385,12 +413,7 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 					}
 				]
 			}
-		};
-
-		const smartDropdownField = await adminPb
-			.collection('tools_form_fields')
-			.create(smartDropdownData);
-		workflow.fields.set('Sub-Category', smartDropdownField.id);
+		});
 		console.log(`  Field: Sub-Category (smart_dropdown) [row 3, full] - depends on Damage Type`);
 
 		// Review form
@@ -438,23 +461,7 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 		];
 
 		for (const f of reviewFields) {
-			const fieldData: Record<string, unknown> = {
-				form_id: reviewForm.id,
-				field_label: f.label,
-				field_type: f.type,
-				is_required: f.required,
-				field_order: f.order,
-				page: f.page,
-				row_index: f.row_index,
-				column_position: f.column_position,
-				placeholder: f.placeholder || null,
-				help_text: f.help_text || null,
-				field_options: f.options ? { options: f.options.map((o) => ({ label: o })) } : null
-			};
-
-			const field = await adminPb.collection('tools_form_fields').create(fieldData);
-			workflow.fields.set(f.label, field.id);
-			console.log(`  Field: ${f.label} (${f.type}) [row ${f.row_index}, ${f.column_position}]`);
+			await createField(reviewForm.id, f as SeedField);
 		}
 
 		// Resolution form
@@ -502,23 +509,7 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 		];
 
 		for (const f of resolveFields) {
-			const fieldData: Record<string, unknown> = {
-				form_id: resolveForm.id,
-				field_label: f.label,
-				field_type: f.type,
-				is_required: f.required,
-				field_order: f.order,
-				page: f.page,
-				row_index: f.row_index,
-				column_position: f.column_position,
-				placeholder: f.placeholder || null,
-				help_text: f.help_text || null,
-				field_options: f.options ? { options: f.options.map((o) => ({ label: o })) } : null
-			};
-
-			const field = await adminPb.collection('tools_form_fields').create(fieldData);
-			workflow.fields.set(f.label, field.id);
-			console.log(`  Field: ${f.label} (${f.type}) [row ${f.row_index}, ${f.column_position}]`);
+			await createField(resolveForm.id, f as SeedField);
 		}
 	});
 
@@ -527,6 +518,7 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 
 		// Edit tool at Report stage - allows editing Title and Description
 		const editReportTool = await adminPb.collection('tools_edit').create({
+			workflow_id: workflow.id,
 			stage_id: [workflow.stages.get('Report')],
 			edit_mode: 'form_fields',
 			is_global: false,
@@ -546,6 +538,7 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 
 		// Edit tool at Review stage - allows editing Priority
 		const editReviewTool = await adminPb.collection('tools_edit').create({
+			workflow_id: workflow.id,
 			stage_id: [workflow.stages.get('Review')],
 			edit_mode: 'form_fields',
 			is_global: false,
@@ -571,6 +564,7 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 		];
 
 		const globalLocationTool = await adminPb.collection('tools_edit').create({
+			workflow_id: workflow.id,
 			stage_id: allStages,
 			edit_mode: 'location',
 			is_global: true,
@@ -590,6 +584,7 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 
 		// Global form fields edit tool - category can be edited at any stage
 		const globalFormTool = await adminPb.collection('tools_edit').create({
+			workflow_id: workflow.id,
 			stage_id: allStages,
 			edit_mode: 'form_fields',
 			is_global: true,
@@ -691,11 +686,13 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 		for (const fv of fieldValues) {
 			const fieldId = workflow.fields.get(fv.field);
 			if (fieldId) {
-				await pb.collection('workflow_instance_field_values').create({
+				await pb.collection('workflow_field_values').create({
 					instance_id: instance.id,
-					field_key: fieldId,
+					field_def_id: fieldId,
+					write_mode: 'singleton',
 					value: fv.value,
-					stage_id: workflow.stages.get('Report')
+					recorded_at: new Date().toISOString(),
+					recorded_at_stage: workflow.stages.get('Report')
 				});
 			}
 		}
@@ -737,11 +734,13 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 		for (const fv of entryValues) {
 			const fieldId = workflow.fields.get(fv.field);
 			if (fieldId) {
-				await alicePb.collection('workflow_instance_field_values').create({
+				await alicePb.collection('workflow_field_values').create({
 					instance_id: instance.id,
-					field_key: fieldId,
+					field_def_id: fieldId,
+					write_mode: 'singleton',
 					value: fv.value,
-					stage_id: workflow.stages.get('Report')
+					recorded_at: new Date().toISOString(),
+					recorded_at_stage: workflow.stages.get('Report')
 				});
 			}
 		}
@@ -764,11 +763,13 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 		for (const fv of reviewValues) {
 			const fieldId = workflow.fields.get(fv.field);
 			if (fieldId) {
-				await bobPb.collection('workflow_instance_field_values').create({
+				await bobPb.collection('workflow_field_values').create({
 					instance_id: instance.id,
-					field_key: fieldId,
+					field_def_id: fieldId,
+					write_mode: 'singleton',
 					value: fv.value,
-					stage_id: workflow.stages.get('Review')
+					recorded_at: new Date().toISOString(),
+					recorded_at_stage: workflow.stages.get('Review')
 				});
 			}
 		}
@@ -815,11 +816,13 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 		for (const fv of entryValues) {
 			const fieldId = workflow.fields.get(fv.field);
 			if (fieldId) {
-				await alicePb.collection('workflow_instance_field_values').create({
+				await alicePb.collection('workflow_field_values').create({
 					instance_id: instance.id,
-					field_key: fieldId,
+					field_def_id: fieldId,
+					write_mode: 'singleton',
 					value: fv.value,
-					stage_id: workflow.stages.get('Report')
+					recorded_at: new Date().toISOString(),
+					recorded_at_stage: workflow.stages.get('Report')
 				});
 			}
 		}
@@ -837,11 +840,13 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 		for (const fv of reviewValues) {
 			const fieldId = workflow.fields.get(fv.field);
 			if (fieldId) {
-				await alicePb.collection('workflow_instance_field_values').create({
+				await alicePb.collection('workflow_field_values').create({
 					instance_id: instance.id,
-					field_key: fieldId,
+					field_def_id: fieldId,
+					write_mode: 'singleton',
 					value: fv.value,
-					stage_id: workflow.stages.get('Review')
+					recorded_at: new Date().toISOString(),
+					recorded_at_stage: workflow.stages.get('Review')
 				});
 			}
 		}
@@ -868,11 +873,13 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 		for (const fv of resolveValues) {
 			const fieldId = workflow.fields.get(fv.field);
 			if (fieldId) {
-				await carolPb.collection('workflow_instance_field_values').create({
+				await carolPb.collection('workflow_field_values').create({
 					instance_id: instance.id,
-					field_key: fieldId,
+					field_def_id: fieldId,
+					write_mode: 'singleton',
 					value: fv.value,
-					stage_id: workflow.stages.get('Resolved')
+					recorded_at: new Date().toISOString(),
+					recorded_at_stage: workflow.stages.get('Resolved')
 				});
 			}
 		}
@@ -1011,7 +1018,9 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 		const subCategoryFieldId = workflow.fields.get('Sub-Category');
 		const damageTypeFieldId = workflow.fields.get('Damage Type');
 
-		const subCategoryField = await adminPb.collection('tools_form_fields').getOne(subCategoryFieldId!);
+		const subCategoryField = await adminPb
+			.collection('workflow_field_defs')
+			.getOne(subCategoryFieldId!);
 
 		expect(subCategoryField.field_type).toBe('smart_dropdown');
 		expect(subCategoryField.field_options).toBeDefined();

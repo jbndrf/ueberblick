@@ -41,9 +41,10 @@ describe('whole-workflow YAML — real modelled process', () => {
 
 		// conditional logic resolved label -> a real def id
 		const sonderDefId = s.visibleFieldDefs.find((d) => d.data.label === 'Sonderfälle')?.data.id;
-		const statusField = s.formFields.find(
-			(f) => f.data.field_label === 'Status Sonderfall 1'
-		)?.data;
+		const statusDefId = s.visibleFieldDefs.find((d) => d.data.label === 'Status Sonderfall 1')
+			?.data.id;
+		const statusRef = s.visibleFieldRefs.find((f) => f.data.field_def_id === statusDefId);
+		const statusField = statusRef ? s.getFormFieldById(statusRef.data.id)?.data : undefined;
 		expect(statusField?.conditional_logic).toEqual({
 			show_if: { op: 'includes', field: sonderDefId, value: 'Sonderfall 1' }
 		});
@@ -58,7 +59,7 @@ describe('whole-workflow YAML — real modelled process', () => {
 		const { warnings } = applyWorkflowPart(s, part2);
 		expect(warnings).toEqual([]);
 		const c = s.getChanges();
-		for (const k of ['stages', 'connections', 'forms', 'formFields', 'fieldDefs'] as const) {
+		for (const k of ['stages', 'connections', 'forms', 'fieldRefs', 'fieldDefs'] as const) {
 			expect(c[k].new).toHaveLength(0);
 			expect(c[k].deleted).toHaveLength(0);
 			expect(c[k].modified).toHaveLength(0);

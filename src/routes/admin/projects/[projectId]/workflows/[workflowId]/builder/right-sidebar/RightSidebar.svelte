@@ -111,6 +111,8 @@
 		onFormVisualConfigChange?: (formId: string, config: VisualConfig) => void;
 		onFormLocalFieldsChange?: (formId: string, next: import('$lib/workflow-builder').ProtocolLocalFieldDef[]) => void;
 		onImportForm?: (part: import('$lib/workflow-builder/transfer').FormPart) => import('$lib/workflow-builder/transfer').FormImportResult | undefined;
+		/** Usage count of a field def across all forms (def-section hint). */
+		getDefUsageCount?: (defId: string) => number;
 		// Edit tool editor handlers
 		onEditToolNameChange?: (editToolId: string, name: string) => void;
 		onEditToolFieldsChange?: (editToolId: string, fieldIds: string[]) => void;
@@ -224,6 +226,7 @@
 		onFormVisualConfigChange,
 		onFormLocalFieldsChange,
 		onImportForm,
+		getDefUsageCount,
 		onEditToolNameChange,
 		onEditToolFieldsChange,
 		onEditToolEditModeChange,
@@ -334,6 +337,7 @@
 			localFields={selectedForm.local_fields ?? []}
 			onLocalFieldsChange={(next) => onFormLocalFieldsChange?.(selectedForm.id, next)}
 			{onImportForm}
+			{getDefUsageCount}
 		/>
 	{:else if isProtocolToolEditor && selectedProtocolTool}
 		<ProtocolToolEditorView

@@ -47,7 +47,10 @@ function samplePart(): FormPart {
 }
 
 function refByLabel(s: WorkflowBuilderState, label: string) {
-	return s.formFields.find((f) => f.data.field_label === label);
+	const def = s.visibleFieldDefs.find((d) => d.data.label === label);
+	if (!def) return undefined;
+	const ref = s.visibleFieldRefs.find((f) => f.data.field_def_id === def.data.id);
+	return ref ? s.getFormFieldById(ref.data.id) : undefined;
 }
 
 describe('importFormPart', () => {
@@ -62,7 +65,7 @@ describe('importFormPart', () => {
 		expect(form?.data.name).toBe('Inspection');
 		expect(form?.status).toBe('new');
 
-		const formFields = s.formFields.filter((f) => f.data.form_id === res.formId);
+		const formFields = s.fieldRefs.filter((f) => f.data.form_id === res.formId);
 		expect(formFields).toHaveLength(3);
 		expect(formFields.every((f) => f.status === 'new')).toBe(true);
 		expect(refByLabel(s, 'Severity')?.data.is_required).toBe(true);
@@ -123,7 +126,7 @@ describe('importFormPart', () => {
 		const s1 = freshState();
 		const r1 = importFormPart(s1, samplePart(), { isGlobal: true });
 		const form1 = s1.visibleForms.find((f) => f.data.id === r1.formId)!.data;
-		const fields1 = s1.formFields.filter((f) => f.data.form_id === r1.formId).map((f) => f.data);
+		const fields1 = s1.getFieldsForForm(r1.formId).map((f) => f.data);
 
 		const reExported = buildFormPart(form1, fields1);
 

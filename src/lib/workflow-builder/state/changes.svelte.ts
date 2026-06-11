@@ -34,12 +34,14 @@ export function buildChanges(state: WorkflowBuilderState) {
 				.map((f) => $state.snapshot(f.data)),
 			deleted: state.forms.filter((f) => f.status === 'deleted').map((f) => f.data.id)
 		},
-		formFields: {
-			new: state.formFields.filter((f) => f.status === 'new').map((f) => $state.snapshot(f.data)),
-			modified: state.formFields
+		// Raw refs: { id, form_id, field_def_id, config }. Definitional data
+		// travels exclusively through `fieldDefs`.
+		fieldRefs: {
+			new: state.fieldRefs.filter((f) => f.status === 'new').map((f) => $state.snapshot(f.data)),
+			modified: state.fieldRefs
 				.filter((f) => f.status === 'modified')
 				.map((f) => $state.snapshot(f.data)),
-			deleted: state.formFields.filter((f) => f.status === 'deleted').map((f) => f.data.id)
+			deleted: state.fieldRefs.filter((f) => f.status === 'deleted').map((f) => f.data.id)
 		},
 		editTools: {
 			new: state.editTools.filter((e) => e.status === 'new').map((e) => $state.snapshot(e.data)),
@@ -71,19 +73,14 @@ export function buildChanges(state: WorkflowBuilderState) {
 				.map((ft) => $state.snapshot(ft.data)),
 			deleted: state.fieldTags.filter((ft) => ft.status === 'deleted').map((ft) => ft.data.id)
 		},
+		// All defs are real (ids minted client-side); the server creates defs
+		// BEFORE refs inside the same atomic batch so refs can FK them.
 		fieldDefs: {
-			// Shadow defs (id starts with `_temp_`) are mirrors of new form
-			// fields; the server creates them via the formFields.new save
-			// path, so don't double-send them here.
-			new: state.fieldDefs
-				.filter((d) => d.status === 'new' && !d.data.id.startsWith('_temp_'))
-				.map((d) => $state.snapshot(d.data)),
+			new: state.fieldDefs.filter((d) => d.status === 'new').map((d) => $state.snapshot(d.data)),
 			modified: state.fieldDefs
-				.filter((d) => d.status === 'modified' && !d.data.id.startsWith('_temp_'))
+				.filter((d) => d.status === 'modified')
 				.map((d) => $state.snapshot(d.data)),
-			deleted: state.fieldDefs
-				.filter((d) => d.status === 'deleted' && !d.data.id.startsWith('_temp_'))
-				.map((d) => d.data.id)
+			deleted: state.fieldDefs.filter((d) => d.status === 'deleted').map((d) => d.data.id)
 		},
 		// Workflow-level permission fields. `dirty` lets the save action skip
 		// the `workflows` update when nothing here changed. `entry_allowed_roles`
@@ -103,7 +100,7 @@ export function markAsSaved(state: WorkflowBuilderState): void {
 	state.stages = state.stages.filter((s) => s.status !== 'deleted');
 	state.connections = state.connections.filter((c) => c.status !== 'deleted');
 	state.forms = state.forms.filter((f) => f.status !== 'deleted');
-	state.formFields = state.formFields.filter((f) => f.status !== 'deleted');
+	state.fieldRefs = state.fieldRefs.filter((f) => f.status !== 'deleted');
 	state.editTools = state.editTools.filter((e) => e.status !== 'deleted');
 	state.protocolTools = state.protocolTools.filter((p) => p.status !== 'deleted');
 	state.automations = state.automations.filter((a) => a.status !== 'deleted');
@@ -123,9 +120,9 @@ export function markAsSaved(state: WorkflowBuilderState): void {
 		form.status = 'unchanged';
 		form.original = $state.snapshot(form.data);
 	}
-	for (const field of state.formFields) {
-		field.status = 'unchanged';
-		field.original = $state.snapshot(field.data);
+	for (const ref of state.fieldRefs) {
+		ref.status = 'unchanged';
+		ref.original = $state.snapshot(ref.data);
 	}
 	for (const tool of state.editTools) {
 		tool.status = 'unchanged';

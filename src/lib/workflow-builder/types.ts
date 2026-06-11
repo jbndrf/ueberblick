@@ -354,14 +354,27 @@ export interface FormFieldConfig {
 }
 
 /**
- * Form field reference — a form pointing at a `WorkflowFieldDef`, plus the
- * per-form presentation `config`. Mirrors the `tools_form_field_refs`
- * collection.
+ * Raw form-field reference row — mirrors the `tools_form_field_refs`
+ * collection 1:1. This is what the builder STORES and SAVES: a form pointing
+ * at a `WorkflowFieldDef` plus the per-form presentation `config`.
  *
- * The builder works with a flattened shape: `config` fields are spread onto
- * the object and definitional bits (`field_label`, `field_type`, ...) are
- * denormalized from the matching def by the +page.server.ts load layer. The
- * save layer re-packs the presentation fields into the `config` JSON column.
+ * Definitional properties (label, type, options, validation) live ONLY on the
+ * referenced def; edit them via `updateFieldDef`. Presentation lives ONLY in
+ * `config`; edit it via `updateFieldRefConfig`.
+ */
+export interface FormFieldRef {
+	id: string;
+	form_id: string;
+	field_def_id: string;
+	config: FormFieldConfig;
+}
+
+/**
+ * Resolved form-field READ-model — the flattened ref ⊕ def shape the builder
+ * UI renders (`field_label`, `field_type`, ... from the def; layout/required/
+ * placeholder from the ref's `config`). Computed on the fly from the tracked
+ * `fieldRefs` + `fieldDefs` collections; never stored, never saved. Treat as
+ * read-only — writes go through `updateFieldRefConfig` / `updateFieldDef`.
  */
 export interface ToolsFormField {
 	id: string;
@@ -632,6 +645,13 @@ export interface ConnectionEdgeData {
 export type TrackedStage = TrackedItem<WorkflowStage>;
 export type TrackedConnection = TrackedItem<WorkflowConnection>;
 export type TrackedForm = TrackedItem<ToolsForm>;
+/** Tracked raw ref row — the persisted collection (`state.fieldRefs`). */
+export type TrackedFieldRef = TrackedItem<FormFieldRef>;
+/**
+ * Tracked-shaped wrapper around the resolved read-model returned by
+ * `getFieldsForForm` & co. `data` is computed (ref ⊕ def) and read-only;
+ * `status` mirrors the underlying ref's status.
+ */
 export type TrackedFormField = TrackedItem<ToolsFormField>;
 export type TrackedEditTool = TrackedItem<ToolsEdit>;
 export type TrackedProtocolTool = TrackedItem<ToolsProtocol>;

@@ -483,7 +483,6 @@ export function applyWorkflowPart(
 		}
 	}
 	for (const d of state.visibleFieldDefs) {
-		if (d.data.id.startsWith('_temp_')) continue;
 		if (!yamlDefLabels.has(d.data.label)) state.deleteFieldDef(d.data.id);
 	}
 	const fieldLabelToId = (label: string) => labelToDefId.get(label);
@@ -1022,10 +1021,10 @@ function reconcileFormFields(
 		};
 		const existingRef = existingByLabel.get(field.field);
 		if (existingRef) {
-			state.updateFormField(existingRef.id, presentation);
+			state.updateFieldRefConfig(existingRef.id, presentation);
 		} else {
 			const ref = state.addFormFieldRef(formId, defId, row, column, page);
-			if (ref) state.updateFormField(ref.id, presentation);
+			if (ref) state.updateFieldRefConfig(ref.id, presentation);
 		}
 	});
 

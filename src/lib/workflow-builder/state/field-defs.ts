@@ -1,12 +1,15 @@
 /**
  * Field-def registry operations (workflow_field_defs) + emergent data tabs.
+ *
+ * Defs are the single source of truth for definitional field properties
+ * (label, type, options, validation, write_mode, compute). Form refs only
+ * carry presentation config — the resolved read-model derives from both.
  */
 
 import { generateId, deepEqual } from '../utils';
 import type {
 	WorkflowFieldDef,
 	TrackedFieldDef,
-	ToolsFormField,
 	FieldType,
 	FieldDisplayConfig,
 	ColumnPosition
@@ -14,55 +17,28 @@ import type {
 import { DEFAULT_DATA_TAB } from '../types';
 import type { WorkflowBuilderState } from '../state.svelte';
 
-/**
- * Field defs as seen by cross-form consumers (library palette, protocol-tool
- * field picker, smart-dropdown source picker). Includes both:
- *  - real entries from `workflow_field_defs` (`state.fieldDefs`)
- *  - synthesized transient entries derived from new form fields whose
- *    `field_def_id` placeholder (e.g. `_temp_*`) is not yet in the registry.
- *
- * Synthesized entries let users reference freshly-added fields in other forms
- * before saving. They are NOT included in `getChanges()`; the save path
- * already materialises them via the `_temp_*` placeholder flow.
- */
-export function computeEffectiveFieldDefs(state: WorkflowBuilderState): TrackedFieldDef[] {
-	const real = state.fieldDefs.filter((d) => d.status !== 'deleted');
-	const realIds = new Set(real.map((d) => d.data.id));
-	const seenSynth = new Set<string>();
-	const synthesized: TrackedFieldDef[] = [];
-	for (const f of state.formFields) {
-		if (f.status === 'deleted') continue;
-		const defId = f.data.field_def_id;
-		if (!defId || realIds.has(defId) || seenSynth.has(defId)) continue;
-		seenSynth.add(defId);
-		synthesized.push({
-			data: {
-				id: defId,
-				workflow_id: state.workflowId,
-				label: f.data.field_label ?? '',
-				field_type: f.data.field_type,
-				write_mode: f.data.write_mode ?? 'singleton',
-				output_type: '',
-				view_roles: [],
-				validation_rules: f.data.validation_rules ?? null,
-				field_options: f.data.field_options ?? null,
-				compute_expression: f.data.compute_expression ?? '',
-				compute_depends_on: []
-			},
-			status: 'new'
-		});
-	}
-	return [...real, ...synthesized];
-}
-
 export function getFieldDefById(
 	state: WorkflowBuilderState,
 	id: string | undefined
 ): WorkflowFieldDef | undefined {
 	if (!id) return undefined;
-	const real = state.fieldDefs.find((d) => d.data.id === id && d.status !== 'deleted')?.data;
-	if (real) return real;
-	return state.effectiveFieldDefs.find((d) => d.data.id === id)?.data;
+	return state.fieldDefs.find((d) => d.data.id === id && d.status !== 'deleted')?.data;
+}
+
+/**
+ * De-duplicate a label against the visible defs — `workflow_field_defs` has a
+ * UNIQUE (workflow_id, label) index, and ids are now minted client-side, so
+ * collisions must be resolved before save.
+ */
+export function uniqueDefLabel(state: WorkflowBuilderState, base: string): string {
+	const root = (base || 'New Field').slice(0, 250);
+	const taken = new Set(state.visibleFieldDefs.map((d) => d.data.label));
+	let candidate = root;
+	let n = 2;
+	while (taken.has(candidate)) {
+		candidate = `${root} (${n++})`;
+	}
+	return candidate;
 }
 
 export function addFieldDef(
@@ -96,36 +72,58 @@ export function updateFieldDef(
 	if (!def) return;
 	def.data = { ...def.data, ...updates };
 	if (def.status === 'unchanged') def.status = 'modified';
-
-	// Form-fields denormalize the def-level properties (label, type,
-	// write_mode, options, validation, compute_expression) onto their ref
-	// row. Mirror def edits onto every form-field pointing at this def so
-	// the form builder and runtime see consistent values without a
-	// save+refresh. Presentation (placeholder, help_text, required) is NOT
-	// mirrored — it lives per-form on the ref's config.
-	for (const f of state.formFields) {
-		if (f.status === 'deleted') continue;
-		if (f.data.field_def_id !== id) continue;
-		const patch: Partial<ToolsFormField> = {};
-		if (updates.label !== undefined) patch.field_label = updates.label ?? '';
-		if (updates.field_type !== undefined) patch.field_type = updates.field_type;
-		if (updates.write_mode !== undefined) (patch as any).write_mode = updates.write_mode;
-		if (updates.field_options !== undefined) patch.field_options = updates.field_options ?? undefined;
-		if (updates.validation_rules !== undefined)
-			patch.validation_rules = updates.validation_rules ?? undefined;
-		if (updates.compute_expression !== undefined)
-			(patch as any).compute_expression = updates.compute_expression ?? '';
-		if (Object.keys(patch).length === 0) continue;
-		Object.assign(f.data, patch);
-		if (f.status === 'unchanged' && !deepEqual(f.data, f.original)) {
-			f.status = 'modified';
-		}
-	}
+	// No mirroring needed: the form read-model resolves ref ⊕ def on read, so
+	// every surface sees def edits immediately.
 }
 
+/**
+ * Delete a def from the registry. Cascades to everything referencing it:
+ * form refs (the field disappears from those forms), edit-/protocol-tool
+ * `editable_fields`, and field-tag mappings.
+ */
 export function deleteFieldDef(state: WorkflowBuilderState, id: string): void {
 	const def = state.fieldDefs.find((d) => d.data.id === id);
 	if (!def) return;
+
+	// Refs pointing at this def
+	for (const ref of [...state.fieldRefs]) {
+		if (ref.data.field_def_id !== id || ref.status === 'deleted') continue;
+		if (ref.status === 'new') {
+			state.fieldRefs = state.fieldRefs.filter((f) => f.data.id !== ref.data.id);
+		} else {
+			ref.status = 'deleted';
+		}
+	}
+
+	// Edit tools / protocol tools referencing the def in editable_fields
+	for (const tool of state.editTools) {
+		if (tool.status === 'deleted') continue;
+		if (!tool.data.editable_fields?.includes(id)) continue;
+		tool.data.editable_fields = tool.data.editable_fields.filter((f) => f !== id);
+		if (tool.status === 'unchanged' && !deepEqual(tool.data, tool.original)) {
+			tool.status = 'modified';
+		}
+	}
+	for (const pt of state.protocolTools) {
+		if (pt.status === 'deleted') continue;
+		if (!pt.data.editable_fields?.includes(id)) continue;
+		pt.data.editable_fields = pt.data.editable_fields.filter((f) => f !== id);
+		if (pt.status === 'unchanged' && !deepEqual(pt.data, pt.original)) {
+			pt.status = 'modified';
+		}
+	}
+
+	// Field-tag mappings referencing the def
+	for (const ft of state.fieldTags) {
+		if (ft.status === 'deleted') continue;
+		const before = ft.data.tag_mappings.length;
+		ft.data.tag_mappings = ft.data.tag_mappings.filter((m) => m.fieldId !== id);
+		if (ft.data.tag_mappings.length !== before && ft.status === 'unchanged') {
+			if (!deepEqual(ft.data, ft.original)) {
+				ft.status = 'modified';
+			}
+		}
+	}
 
 	if (def.status === 'new') {
 		state.fieldDefs = state.fieldDefs.filter((d) => d.data.id !== id);

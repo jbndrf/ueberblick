@@ -26,6 +26,11 @@
 	} from '$lib/workflow-builder';
 	import {
 		formEditorFieldAdvanced,
+		formEditorFieldRefSectionTitle,
+		formEditorFieldRefSectionHint,
+		formEditorFieldDefSectionTitle,
+		formEditorFieldDefSectionScopeGlobal,
+		formEditorFieldDefSectionScopeLocal,
 		formEditorFieldComputeExpression,
 		formEditorFieldComputeExpressionHelp,
 		formEditorFieldComputeDepsLabel,
@@ -89,12 +94,26 @@
 		ancestorFields?: AncestorFieldGroup[];
 		/** Available roles for entity selector */
 		roles?: Role[];
+		/**
+		 * Number of forms referencing this field's def. null/undefined = the field
+		 * has no library def (protocol-local field) — the definition section then
+		 * reads "applies only to this protocol form".
+		 */
+		usageCount?: number | null;
 		onUpdate?: (updates: Partial<ToolsFormField>) => void;
 		onDelete?: () => void;
 		onClose?: () => void;
 	};
 
-	let { field, ancestorFields = [], roles = [], onUpdate, onDelete, onClose }: Props = $props();
+	let {
+		field,
+		ancestorFields = [],
+		roles = [],
+		usageCount = null,
+		onUpdate,
+		onDelete,
+		onClose
+	}: Props = $props();
 
 	const Icon = $derived(fieldTypeIcons[field.field_type] || Type);
 
@@ -432,52 +451,73 @@
 
 	<!-- Config sections -->
 	<div class="config-content">
-		<!-- Basic settings -->
-		<div class="config-section">
-			<Label for="field-label">{formEditorFieldConfigLabel?.() ?? 'Label'}</Label>
-			<Input
-				id="field-label"
-				bind:value={label}
-				onblur={handleLabelBlur}
-				placeholder={formEditorFieldConfigLabelPlaceholder?.() ?? 'Field label...'}
-			/>
-		</div>
+		<!-- ============================================================== -->
+		<!-- Per-form presentation (the ref's config — this form only)       -->
+		<!-- ============================================================== -->
+		<section class="level-section">
+			<h4 class="level-title">{formEditorFieldRefSectionTitle?.() ?? 'Display in this form'}</h4>
+			<p class="level-hint">{formEditorFieldRefSectionHint?.() ?? 'Applies to this form only.'}</p>
 
-		{#if !isComputed}
+			{#if !isComputed}
+				<div class="config-section">
+					<Label for="field-placeholder">{formEditorFieldConfigPlaceholder?.() ?? 'Placeholder'}</Label>
+					<Input
+						id="field-placeholder"
+						bind:value={placeholder}
+						onblur={handlePlaceholderBlur}
+						placeholder={formEditorFieldConfigPlaceholderText?.() ?? 'Placeholder text...'}
+					/>
+				</div>
+			{/if}
+
 			<div class="config-section">
-				<Label for="field-placeholder">{formEditorFieldConfigPlaceholder?.() ?? 'Placeholder'}</Label>
-				<Input
-					id="field-placeholder"
-					bind:value={placeholder}
-					onblur={handlePlaceholderBlur}
-					placeholder={formEditorFieldConfigPlaceholderText?.() ?? 'Placeholder text...'}
+				<Label for="field-help">{formEditorFieldConfigHelpText?.() ?? 'Help Text'}</Label>
+				<Textarea
+					id="field-help"
+					bind:value={helpText}
+					onblur={handleHelpTextBlur}
+					placeholder={formEditorFieldConfigHelpTextPlaceholder?.() ?? 'Help text for users...'}
+					rows={2}
 				/>
 			</div>
-		{/if}
 
-		<div class="config-section">
-			<Label for="field-help">{formEditorFieldConfigHelpText?.() ?? 'Help Text'}</Label>
-			<Textarea
-				id="field-help"
-				bind:value={helpText}
-				onblur={handleHelpTextBlur}
-				placeholder={formEditorFieldConfigHelpTextPlaceholder?.() ?? 'Help text for users...'}
-				rows={2}
-			/>
-		</div>
-
-		{#if !isComputed}
-			<div class="config-row">
-				<div class="switch-field">
-					<Switch
-						id="field-required"
-						checked={isRequired}
-						onCheckedChange={handleRequiredChange}
-					/>
-					<Label for="field-required">{formEditorFieldConfigRequired?.() ?? 'Required'}</Label>
+			{#if !isComputed}
+				<div class="config-row">
+					<div class="switch-field">
+						<Switch
+							id="field-required"
+							checked={isRequired}
+							onCheckedChange={handleRequiredChange}
+						/>
+						<Label for="field-required">{formEditorFieldConfigRequired?.() ?? 'Required'}</Label>
+					</div>
 				</div>
+			{/if}
+		</section>
+
+		<!-- ============================================================== -->
+		<!-- Field definition (the def — shared across every usage)          -->
+		<!-- ============================================================== -->
+		<section class="level-section def-section">
+			<h4 class="level-title">{formEditorFieldDefSectionTitle?.() ?? 'Field definition'}</h4>
+			<p class="level-hint">
+				{#if usageCount != null}
+					{formEditorFieldDefSectionScopeGlobal?.({ count: usageCount }) ??
+						`Applies everywhere this field is used (${usageCount} usages).`}
+				{:else}
+					{formEditorFieldDefSectionScopeLocal?.() ?? 'Applies only to this protocol form.'}
+				{/if}
+			</p>
+
+			<div class="config-section">
+				<Label for="field-label">{formEditorFieldConfigLabel?.() ?? 'Label'}</Label>
+				<Input
+					id="field-label"
+					bind:value={label}
+					onblur={handleLabelBlur}
+					placeholder={formEditorFieldConfigLabelPlaceholder?.() ?? 'Field label...'}
+				/>
 			</div>
-		{/if}
 
 		<!-- Text Field Validation -->
 		{#if isTextField}
@@ -690,9 +730,9 @@
 			/>
 		{/if}
 
-		<!-- Advanced -->
+		<!-- Advanced (still def-level) -->
 		<hr class="advanced-separator" />
-		<h4 class="advanced-heading">{formEditorFieldAdvanced?.() ?? 'Advanced'}</h4>
+		<h5 class="advanced-heading">{formEditorFieldAdvanced?.() ?? 'Advanced'}</h5>
 
 		<div class="config-section">
 			<Label for="field-write-mode">{formEditorFieldWriteMode?.() ?? 'Write mode'}</Label>
@@ -738,6 +778,7 @@
 				</div>
 			</div>
 		{/if}
+		</section>
 	</div>
 
 	<!-- Footer with delete -->
@@ -823,6 +864,32 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.875rem;
+	}
+
+	.level-section {
+		display: flex;
+		flex-direction: column;
+		gap: 0.875rem;
+	}
+
+	.def-section {
+		border: 1px solid hsl(var(--primary) / 0.25);
+		background: hsl(var(--primary) / 0.04);
+		border-radius: 0.5rem;
+		padding: 0.75rem;
+	}
+
+	.level-title {
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: hsl(var(--foreground));
+		margin: 0;
+	}
+
+	.level-hint {
+		font-size: 0.6875rem;
+		color: hsl(var(--muted-foreground));
+		margin: -0.625rem 0 0;
 	}
 
 	.config-section {

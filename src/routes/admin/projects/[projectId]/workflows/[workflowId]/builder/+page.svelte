@@ -46,6 +46,8 @@
 		type ToolsForm,
 		type FormPage,
 		type ToolsFormField,
+		type FormFieldConfig,
+		type WorkflowFieldDef,
 		type ToolsEdit,
 		type ToolsProtocol,
 		type ToolsAutomation,
@@ -113,7 +115,7 @@
 			stages: data.stages,
 			connections: data.connections,
 			forms: data.forms,
-			formFields: data.formFields,
+			fieldRefs: data.fieldRefs,
 			editTools: data.editTools,
 			protocolTools: data.protocolTools,
 			automations: data.automations,
@@ -1215,8 +1217,40 @@
 		builderState.addFormFieldRef(formId, fieldDefId, rowIndex, columnPosition, page);
 	}
 
+	/**
+	 * Split a flattened field patch into its two real targets: per-form
+	 * presentation (ref config) vs. global definition (field def). Views that
+	 * still emit mixed patches go through here; the field panel itself writes
+	 * the two levels explicitly.
+	 */
 	function handleFormFieldUpdate(fieldId: string, updates: Partial<ToolsFormField>) {
-		builderState.updateFormField(fieldId, updates);
+		const refPatch: Partial<FormFieldConfig> = {};
+		if (updates.field_order !== undefined) refPatch.field_order = updates.field_order;
+		if (updates.page !== undefined) refPatch.page = updates.page;
+		if (updates.row_index !== undefined) refPatch.row_index = updates.row_index;
+		if (updates.column_position !== undefined) refPatch.column_position = updates.column_position;
+		if (updates.is_required !== undefined) refPatch.is_required = updates.is_required;
+		if (updates.placeholder !== undefined) refPatch.placeholder = updates.placeholder;
+		if (updates.help_text !== undefined) refPatch.help_text = updates.help_text;
+		if (updates.conditional_logic !== undefined)
+			refPatch.conditional_logic = updates.conditional_logic;
+		if (Object.keys(refPatch).length > 0) {
+			builderState.updateFieldRefConfig(fieldId, refPatch);
+		}
+
+		const defPatch: Partial<WorkflowFieldDef> = {};
+		if (updates.field_label !== undefined) defPatch.label = updates.field_label;
+		if (updates.field_type !== undefined) defPatch.field_type = updates.field_type;
+		if (updates.field_options !== undefined) defPatch.field_options = updates.field_options ?? null;
+		if (updates.validation_rules !== undefined)
+			defPatch.validation_rules = updates.validation_rules ?? null;
+		if (updates.write_mode !== undefined) defPatch.write_mode = updates.write_mode;
+		if (updates.compute_expression !== undefined)
+			defPatch.compute_expression = updates.compute_expression;
+		if (Object.keys(defPatch).length > 0) {
+			const defId = builderState.getFormFieldById(fieldId)?.data.field_def_id;
+			if (defId) builderState.updateFieldDef(defId, defPatch);
+		}
 	}
 
 	function handleFormFieldDelete(fieldId: string) {
@@ -1226,7 +1260,7 @@
 	function handleFormFieldsReorder(formId: string, fieldIds: string[]) {
 		// Update field_order for each field based on new order
 		fieldIds.forEach((fieldId, index) => {
-			builderState.updateFormField(fieldId, { field_order: index });
+			builderState.updateFieldRefConfig(fieldId, { field_order: index });
 		});
 	}
 
@@ -1247,12 +1281,14 @@
 		builderState.updateForm(formId, { pages });
 
 		// Add a placeholder field on the new page so it shows up
-		const newField = builderState.addFormField(formId, 'short_text', 0, 'full', nextPage);
-		if (newField) {
-			builderState.updateFormField(newField.id, {
-				field_label: workflowBuilderNewFieldLabel?.() ?? 'New Field'
-			});
-		}
+		builderState.addFormField(
+			formId,
+			'short_text',
+			0,
+			'full',
+			nextPage,
+			workflowBuilderNewFieldLabel?.() ?? 'New Field'
+		);
 	}
 
 	function handleFormDeletePage(formId: string, page: number) {
@@ -1262,9 +1298,9 @@
 		for (const field of formFields) {
 			const p = field.data.page ?? 1;
 			if (p === page) {
-				builderState.updateFormField(field.data.id, { page: Math.max(1, page - 1) });
+				builderState.updateFieldRefConfig(field.data.id, { page: Math.max(1, page - 1) });
 			} else if (p > page) {
-				builderState.updateFormField(field.data.id, { page: p - 1 });
+				builderState.updateFieldRefConfig(field.data.id, { page: p - 1 });
 			}
 		}
 		// Drop the deleted page's metadata and renumber higher pages.
@@ -1990,6 +2026,7 @@
 				onFormVisualConfigChange={handleFormVisualConfigChange}
 				onFormLocalFieldsChange={handleFormLocalFieldsChange}
 				onImportForm={handleImportForm}
+				getDefUsageCount={(defId) => builderState.getRefsForDef(defId).length}
 				allProtocolTools={builderState.visibleProtocolTools.map((p) => p.data)}
 				onEditToolNameChange={handleEditToolNameChange}
 				onEditToolFieldsChange={handleEditToolFieldsChange}

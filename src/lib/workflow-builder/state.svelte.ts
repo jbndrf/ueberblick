@@ -13,6 +13,8 @@ import type {
 	WorkflowConnection,
 	ToolsForm,
 	ToolsFormField,
+	FormFieldRef,
+	FormFieldConfig,
 	ToolsEdit,
 	ToolsProtocol,
 	ToolsAutomation,
@@ -21,6 +23,7 @@ import type {
 	TrackedStage,
 	TrackedConnection,
 	TrackedForm,
+	TrackedFieldRef,
 	TrackedFormField,
 	TrackedEditTool,
 	TrackedProtocolTool,
@@ -72,7 +75,8 @@ export class WorkflowBuilderState {
 	stages = $state<TrackedStage[]>([]);
 	connections = $state<TrackedConnection[]>([]);
 	forms = $state<TrackedForm[]>([]);
-	formFields = $state<TrackedFormField[]>([]);
+	/** Raw form-field refs (tools_form_field_refs). Read via getFieldsForForm. */
+	fieldRefs = $state<TrackedFieldRef[]>([]);
 	editTools = $state<TrackedEditTool[]>([]);
 	protocolTools = $state<TrackedProtocolTool[]>([]);
 	automations = $state<TrackedAutomation[]>([]);
@@ -82,14 +86,19 @@ export class WorkflowBuilderState {
 	fieldDefs = $state<TrackedFieldDef[]>([]);
 
 	visibleFieldDefs = $derived(this.fieldDefs.filter((d) => d.status !== 'deleted'));
-	effectiveFieldDefs = $derived.by(() => fieldDefsOps.computeEffectiveFieldDefs(this));
+	/**
+	 * All defs visible to cross-form consumers. Since defs are always real
+	 * (ids minted client-side), this is simply the visible registry — kept as
+	 * its own property because palette/picker consumers key off it.
+	 */
+	effectiveFieldDefs = $derived(this.visibleFieldDefs);
 
 	// Derived: dirty state
 	isDirty = $derived(
 		this.stages.some((s) => s.status !== 'unchanged') ||
 			this.connections.some((c) => c.status !== 'unchanged') ||
 			this.forms.some((f) => f.status !== 'unchanged') ||
-			this.formFields.some((f) => f.status !== 'unchanged') ||
+			this.fieldRefs.some((f) => f.status !== 'unchanged') ||
 			this.editTools.some((e) => e.status !== 'unchanged') ||
 			this.protocolTools.some((p) => p.status !== 'unchanged') ||
 			this.automations.some((a) => a.status !== 'unchanged') ||
@@ -102,7 +111,7 @@ export class WorkflowBuilderState {
 	visibleStages = $derived(this.stages.filter((s) => s.status !== 'deleted'));
 	visibleConnections = $derived(this.connections.filter((c) => c.status !== 'deleted'));
 	visibleForms = $derived(this.forms.filter((f) => f.status !== 'deleted'));
-	visibleFormFields = $derived(this.formFields.filter((f) => f.status !== 'deleted'));
+	visibleFieldRefs = $derived(this.fieldRefs.filter((f) => f.status !== 'deleted'));
 	visibleEditTools = $derived(this.editTools.filter((e) => e.status !== 'deleted'));
 	visibleProtocolTools = $derived(this.protocolTools.filter((p) => p.status !== 'deleted'));
 	visibleAutomations = $derived(this.automations.filter((a) => a.status !== 'deleted'));
@@ -124,7 +133,7 @@ export class WorkflowBuilderState {
 		stages?: WorkflowStage[];
 		connections?: WorkflowConnection[];
 		forms?: ToolsForm[];
-		formFields?: ToolsFormField[];
+		fieldRefs?: FormFieldRef[];
 		editTools?: ToolsEdit[];
 		protocolTools?: ToolsProtocol[];
 		automations?: ToolsAutomation[];
@@ -177,7 +186,9 @@ export class WorkflowBuilderState {
 		this.connections = loadedConnections;
 
 		this.forms = loadTracked(data.forms || []);
-		this.formFields = loadTracked(data.formFields || []);
+		this.fieldRefs = loadTracked(
+			(data.fieldRefs || []).map((r) => ({ ...r, config: r.config ?? {} }))
+		);
 		this.editTools = loadTracked(data.editTools || []);
 		this.protocolTools = loadTracked(data.protocolTools || []);
 		this.automations = loadTracked(data.automations || []);
@@ -323,9 +334,15 @@ export class WorkflowBuilderState {
 		fieldType: ToolsFormField['field_type'],
 		rowIndex: number,
 		columnPosition: ToolsFormField['column_position'],
-		page: number = 1
+		page: number = 1,
+		label?: string
 	): ToolsFormField {
-		return formsOps.addFormField(this, formId, fieldType, rowIndex, columnPosition, page);
+		return formsOps.addFormField(this, formId, fieldType, rowIndex, columnPosition, page, label);
+	}
+
+	/** Label de-duplicated against the unique (workflow_id,label) index. */
+	uniqueDefLabel(base: string): string {
+		return fieldDefsOps.uniqueDefLabel(this, base);
 	}
 
 	addFormFieldRef(
@@ -338,20 +355,28 @@ export class WorkflowBuilderState {
 		return formsOps.addFormFieldRef(this, formId, fieldDefId, rowIndex, columnPosition, page);
 	}
 
-	updateFormField(id: string, updates: Partial<ToolsFormField>) {
-		formsOps.updateFormField(this, id, updates);
+	/** Patch the per-form presentation config of a field ref. */
+	updateFieldRefConfig(refId: string, patch: Partial<FormFieldConfig>) {
+		formsOps.updateFieldRefConfig(this, refId, patch);
 	}
 
-	deleteFormField(id: string) {
-		formsOps.deleteFormField(this, id);
+	deleteFormField(refId: string) {
+		formsOps.deleteFormField(this, refId);
 	}
 
-	getFormFieldById(id: string): TrackedFormField | undefined {
-		return this.formFields.find((f) => f.data.id === id);
+	/** Resolved (ref ⊕ def) read-model for a single ref id. */
+	getFormFieldById(refId: string): TrackedFormField | undefined {
+		return formsOps.getFormFieldById(this, refId);
 	}
 
+	/** Resolved (ref ⊕ def) read-models for a form, ordered. */
 	getFieldsForForm(formId: string): TrackedFormField[] {
 		return formsOps.getFieldsForForm(this, formId);
+	}
+
+	/** Visible refs pointing at a def — usage list for the library/def panel. */
+	getRefsForDef(defId: string): TrackedFieldRef[] {
+		return formsOps.getRefsForDef(this, defId);
 	}
 
 	// =========================================================================
