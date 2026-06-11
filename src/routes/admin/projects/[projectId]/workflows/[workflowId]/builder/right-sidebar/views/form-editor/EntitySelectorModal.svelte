@@ -248,7 +248,10 @@
 		} else if (localOptions.source_type === 'marker_category') {
 			finalOptions.marker_category_id = selectedCategoryIds[0];
 			finalOptions.allowed_roles = allowedRoleIds;
-		} else if (localOptions.source_type === 'participants' || localOptions.source_type === 'roles') {
+		} else if (
+			localOptions.source_type === 'participants' ||
+			localOptions.source_type === 'roles'
+		) {
 			finalOptions.self_select_roles = selfSelectRoleIds;
 			finalOptions.any_select_roles = anySelectRoleIds;
 		}
@@ -268,30 +271,47 @@
 	// ==========================================================================
 	const sourceTypeLabel = $derived(
 		{
-			custom_table: (formEditorEntitySelectorModalSourceCustomTable?.() ?? 'Custom Table'),
-			marker_category: (formEditorEntitySelectorModalSourceMarkers?.() ?? 'Markers'),
-			participants: (formEditorEntitySelectorModalSourceParticipants?.() ?? 'Participants'),
-			roles: (formEditorEntitySelectorModalSourceRoles?.() ?? 'Roles')
+			custom_table: formEditorEntitySelectorModalSourceCustomTable?.() ?? 'Custom Table',
+			marker_category: formEditorEntitySelectorModalSourceMarkers?.() ?? 'Markers',
+			participants: formEditorEntitySelectorModalSourceParticipants?.() ?? 'Participants',
+			roles: formEditorEntitySelectorModalSourceRoles?.() ?? 'Roles'
 		}[localOptions.source_type]
 	);
 
-	const entityName = $derived(localOptions.source_type === 'participants' ? (formEditorEntitySelectorModalEntityParticipants?.() ?? 'participants') : (formEditorEntitySelectorModalEntityRoles?.() ?? 'roles'));
+	const entityName = $derived(
+		localOptions.source_type === 'participants'
+			? (formEditorEntitySelectorModalEntityParticipants?.() ?? 'participants')
+			: (formEditorEntitySelectorModalEntityRoles?.() ?? 'roles')
+	);
 	const selfText = $derived(
-		localOptions.source_type === 'participants' ? (formEditorEntitySelectorModalSelfTextParticipants?.() ?? 'themselves') : (formEditorEntitySelectorModalSelfTextRoles?.() ?? 'their own role')
+		localOptions.source_type === 'participants'
+			? (formEditorEntitySelectorModalSelfTextParticipants?.() ?? 'themselves')
+			: (formEditorEntitySelectorModalSelfTextRoles?.() ?? 'their own role')
 	);
 </script>
 
 <Dialog.Root bind:open onOpenChange={handleOpenChange}>
-	<Dialog.Content class="entity-selector-modal" interactOutsideBehavior="ignore" onFocusOutside={(e) => e.preventDefault()}>
+	<Dialog.Content
+		class="entity-selector-modal"
+		interactOutsideBehavior="ignore"
+		onFocusOutside={(e) => e.preventDefault()}
+	>
 		<Dialog.Header>
-			<Dialog.Title>{formEditorEntitySelectorModalTitle?.() ?? 'Configure'} {sourceTypeLabel} {formEditorEntitySelectorModalTitleSuffix?.() ?? 'Selector'}</Dialog.Title>
+			<Dialog.Title
+				>{formEditorEntitySelectorModalTitle?.() ?? 'Configure'}
+				{sourceTypeLabel}
+				{formEditorEntitySelectorModalTitleSuffix?.() ?? 'Selector'}</Dialog.Title
+			>
 			<Dialog.Description>
 				{#if localOptions.source_type === 'custom_table'}
-					{formEditorEntitySelectorModalDescCustomTable?.() ?? 'Select which table and field to display.'}
+					{formEditorEntitySelectorModalDescCustomTable?.() ??
+						'Select which table and field to display.'}
 				{:else if localOptions.source_type === 'marker_category'}
-					{formEditorEntitySelectorModalDescMarkerCategory?.() ?? 'Select which marker category to use.'}
+					{formEditorEntitySelectorModalDescMarkerCategory?.() ??
+						'Select which marker category to use.'}
 				{:else}
-					{formEditorEntitySelectorModalDescRolesParticipants?.({ selfText, entityName }) ?? `Configure which roles can select ${selfText} vs any ${entityName}.`}
+					{formEditorEntitySelectorModalDescRolesParticipants?.({ selfText, entityName }) ??
+						`Configure which roles can select ${selfText} vs any ${entityName}.`}
 				{/if}
 			</Dialog.Description>
 		</Dialog.Header>
@@ -300,8 +320,14 @@
 			<!-- Allow Multiple Toggle (always shown) -->
 			<div class="config-row">
 				<div class="config-row-text">
-					<Label>{formEditorEntitySelectorModalAllowMultipleLabel?.() ?? 'Allow Multiple Selections'}</Label>
-					<p class="config-hint">{formEditorEntitySelectorModalAllowMultipleHint?.() ?? 'Users can select more than one item.'}</p>
+					<Label
+						>{formEditorEntitySelectorModalAllowMultipleLabel?.() ??
+							'Allow Multiple Selections'}</Label
+					>
+					<p class="config-hint">
+						{formEditorEntitySelectorModalAllowMultipleHint?.() ??
+							'Users can select more than one item.'}
+					</p>
 				</div>
 				<Switch
 					checked={localOptions.allow_multiple ?? false}
@@ -320,7 +346,8 @@
 						getOptionDescription={(t) => t.description}
 						singleSelect={true}
 						bind:selectedIds={selectedTableIds}
-						placeholder={formEditorEntitySelectorModalSelectTablePlaceholder?.() ?? 'Select a table...'}
+						placeholder={formEditorEntitySelectorModalSelectTablePlaceholder?.() ??
+							'Select a table...'}
 						disablePortal
 					/>
 				</div>
@@ -328,7 +355,10 @@
 				{#if selectedTableIds.length > 0}
 					<div class="config-section">
 						<Label>{formEditorEntitySelectorModalDisplayFieldLabel?.() ?? 'Display Field'}</Label>
-						<p class="config-hint">{formEditorEntitySelectorModalDisplayFieldHint?.() ?? 'Which column to show as the option label.'}</p>
+						<p class="config-hint">
+							{formEditorEntitySelectorModalDisplayFieldHint?.() ??
+								'Which column to show as the option label.'}
+						</p>
 						<MobileMultiSelect
 							options={tableColumns}
 							getOptionId={(c) => c.column_name}
@@ -336,7 +366,8 @@
 							getOptionDescription={(c) => c.column_type}
 							singleSelect={true}
 							bind:selectedIds={selectedColumnIds}
-							placeholder={formEditorEntitySelectorModalSelectColumnPlaceholder?.() ?? 'Select a column...'}
+							placeholder={formEditorEntitySelectorModalSelectColumnPlaceholder?.() ??
+								'Select a column...'}
 							disablePortal
 						/>
 					</div>
@@ -354,7 +385,8 @@
 						getOptionDescription={(c) => c.description}
 						singleSelect={true}
 						bind:selectedIds={selectedCategoryIds}
-						placeholder={formEditorEntitySelectorModalSelectCategoryPlaceholder?.() ?? 'Select a category...'}
+						placeholder={formEditorEntitySelectorModalSelectCategoryPlaceholder?.() ??
+							'Select a category...'}
 						disablePortal
 					/>
 				</div>
@@ -363,15 +395,22 @@
 			<!-- Allowed roles for Custom Table / Marker Category -->
 			{#if localOptions.source_type === 'custom_table' || localOptions.source_type === 'marker_category'}
 				<div class="config-section">
-					<Label>{formEditorEntitySelectorModalAllowedRolesLabel?.() ?? 'Roles Allowed to See Entries'}</Label>
-					<p class="config-hint">{formEditorEntitySelectorModalAllowedRolesHint?.() ?? 'Only participants with one of these roles can see any entries. Leave empty to hide from everyone.'}</p>
+					<Label
+						>{formEditorEntitySelectorModalAllowedRolesLabel?.() ??
+							'Roles Allowed to See Entries'}</Label
+					>
+					<p class="config-hint">
+						{formEditorEntitySelectorModalAllowedRolesHint?.() ??
+							'Only participants with one of these roles can see any entries. Leave empty to hide from everyone.'}
+					</p>
 					<MobileMultiSelect
 						options={roles}
 						getOptionId={(r) => r.id}
 						getOptionLabel={(r) => r.name}
 						getOptionDescription={(r) => r.description}
 						bind:selectedIds={allowedRoleIds}
-						placeholder={formEditorEntitySelectorModalSelectRolesPlaceholder?.() ?? 'Select roles...'}
+						placeholder={formEditorEntitySelectorModalSelectRolesPlaceholder?.() ??
+							'Select roles...'}
 						disablePortal
 					/>
 				</div>
@@ -381,28 +420,36 @@
 			{#if localOptions.source_type === 'participants' || localOptions.source_type === 'roles'}
 				<div class="config-section">
 					<Label>{formEditorEntitySelectorModalSelfSelectLabel?.() ?? 'Self-Select Only'}</Label>
-					<p class="config-hint">{formEditorEntitySelectorModalSelfSelectHint?.({ selfText }) ?? `These roles can only select ${selfText}.`}</p>
+					<p class="config-hint">
+						{formEditorEntitySelectorModalSelfSelectHint?.({ selfText }) ??
+							`These roles can only select ${selfText}.`}
+					</p>
 					<MobileMultiSelect
 						options={roles}
 						getOptionId={(r) => r.id}
 						getOptionLabel={(r) => r.name}
 						getOptionDescription={(r) => r.description}
 						bind:selectedIds={selfSelectRoleIds}
-						placeholder={formEditorEntitySelectorModalSelectRolesPlaceholder?.() ?? 'Select roles...'}
+						placeholder={formEditorEntitySelectorModalSelectRolesPlaceholder?.() ??
+							'Select roles...'}
 						disablePortal
 					/>
 				</div>
 
 				<div class="config-section">
 					<Label>{formEditorEntitySelectorModalAnySelectLabel?.() ?? 'Can Select Anyone'}</Label>
-					<p class="config-hint">{formEditorEntitySelectorModalAnySelectHint?.({ entityName }) ?? `These roles can select any ${entityName} from the project.`}</p>
+					<p class="config-hint">
+						{formEditorEntitySelectorModalAnySelectHint?.({ entityName }) ??
+							`These roles can select any ${entityName} from the project.`}
+					</p>
 					<MobileMultiSelect
 						options={roles}
 						getOptionId={(r) => r.id}
 						getOptionLabel={(r) => r.name}
 						getOptionDescription={(r) => r.description}
 						bind:selectedIds={anySelectRoleIds}
-						placeholder={formEditorEntitySelectorModalSelectRolesPlaceholder?.() ?? 'Select roles...'}
+						placeholder={formEditorEntitySelectorModalSelectRolesPlaceholder?.() ??
+							'Select roles...'}
 						disablePortal
 					/>
 				</div>

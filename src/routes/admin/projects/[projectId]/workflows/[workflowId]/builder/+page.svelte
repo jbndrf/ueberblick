@@ -17,12 +17,7 @@
 	import ModelOverviewView from './model/ModelOverviewView.svelte';
 	import CatalogSidebar from './catalog/CatalogSidebar.svelte';
 	import InspectorHost from './inspector/InspectorHost.svelte';
-	import {
-		BuilderUi,
-		setBuilderContext,
-		selectTool,
-		type Role
-	} from './builder-context.svelte';
+	import { BuilderUi, setBuilderContext, selectTool, type Role } from './builder-context.svelte';
 	import { FlowSync } from './canvas/flow-sync.svelte';
 
 	import { createWorkflowBuilderState } from '$lib/workflow-builder';
@@ -92,11 +87,13 @@
 		state: builderState,
 		ui,
 		get roles() {
-			return (data.roles ?? []).map((r: { id: unknown; name?: unknown; description?: unknown }) => ({
-				id: String(r.id),
-				name: String(r.name ?? ''),
-				description: r.description ? String(r.description) : undefined
-			}));
+			return (data.roles ?? []).map(
+				(r: { id: unknown; name?: unknown; description?: unknown }) => ({
+					id: String(r.id),
+					name: String(r.name ?? ''),
+					description: r.description ? String(r.description) : undefined
+				})
+			);
 		},
 		get projectWorkflows() {
 			return (data.projectWorkflows ?? []).map((w: { id: unknown; name?: unknown }) => ({

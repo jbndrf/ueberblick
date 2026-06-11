@@ -92,8 +92,7 @@
 						<select
 							class="op-select"
 							value={clause.op}
-							onchange={(e) =>
-								updateClause(i, { op: e.currentTarget.value as SentryClause['op'] })}
+							onchange={(e) => updateClause(i, { op: e.currentTarget.value as SentryClause['op'] })}
 						>
 							{#each OPS as op (op.value)}
 								<option value={op.value}>{op.label}</option>
@@ -131,7 +130,7 @@
 		onclick={addClause}
 		disabled={fieldDefs.length === 0}
 	>
-		<Plus class="h-3.5 w-3.5 mr-1" />
+		<Plus class="mr-1 h-3.5 w-3.5" />
 		{'Add clause'}
 	</Button>
 </div>

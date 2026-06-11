@@ -6,8 +6,7 @@
 <div class="empty">
 	<MousePointerClick class="h-6 w-6 text-muted-foreground" />
 	<p>
-		{inspectorEmptyHint?.() ??
-			'Select a stage, connection or tool to configure it here.'}
+		{inspectorEmptyHint?.() ?? 'Select a stage, connection or tool to configure it here.'}
 	</p>
 </div>
 

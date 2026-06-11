@@ -92,15 +92,14 @@
 	);
 
 	// Check if trigger has been configured beyond defaults
-	const hasTriggerConfig = $derived(
-		automation.trigger_config != null
-	);
+	const hasTriggerConfig = $derived(automation.trigger_config != null);
 
 	// --- Step management ---
 
 	function addStep() {
 		const newStep: AutomationStep = {
-			name: (automationEditorViewDefaultStepName?.() ?? 'Step') + ' ' + (automation.steps.length + 1),
+			name:
+				(automationEditorViewDefaultStepName?.() ?? 'Step') + ' ' + (automation.steps.length + 1),
 			conditions: null,
 			actions: []
 		};
@@ -176,7 +175,7 @@
 			stageOptions={stages}
 			onUpdate={(s) => updateStep(selectedStepIndex!, s)}
 			onDelete={() => deleteStep(selectedStepIndex!)}
-			onBack={() => selectedStepIndex = null}
+			onBack={() => (selectedStepIndex = null)}
 		/>
 	{:else}
 		<!-- Main view: header, trigger, steps list -->
@@ -232,17 +231,26 @@
 
 			<!-- Execution Mode -->
 			<div class="field-group">
-				<Label class="text-xs">{automationEditorViewExecutionModeLabel?.() ?? 'Execution Mode'}</Label>
+				<Label class="text-xs"
+					>{automationEditorViewExecutionModeLabel?.() ?? 'Execution Mode'}</Label
+				>
 				<select
 					class="execution-mode-select"
 					value={automation.execution_mode || 'run_all'}
 					onchange={(e) => onExecutionModeChange?.(e.currentTarget.value as ExecutionMode)}
 				>
-					<option value="run_all">{automationEditorViewModeRunAll?.() ?? 'Run all matching steps'}</option>
-					<option value="first_match">{automationEditorViewModeFirstMatch?.() ?? 'Stop at first match'}</option>
+					<option value="run_all"
+						>{automationEditorViewModeRunAll?.() ?? 'Run all matching steps'}</option
+					>
+					<option value="first_match"
+						>{automationEditorViewModeFirstMatch?.() ?? 'Stop at first match'}</option
+					>
 				</select>
 				{#if (automation.execution_mode || 'run_all') === 'first_match'}
-					<span class="mode-hint">{automationEditorViewFirstMatchHint?.() ?? 'Steps act as a priority list -- only the first matching step executes.'}</span>
+					<span class="mode-hint"
+						>{automationEditorViewFirstMatchHint?.() ??
+							'Steps act as a priority list -- only the first matching step executes.'}</span
+					>
 				{/if}
 			</div>
 
@@ -261,7 +269,7 @@
 									{step}
 									{index}
 									selected={selectedStepIndex === index}
-									onSelect={() => selectedStepIndex = index}
+									onSelect={() => (selectedStepIndex = index)}
 									onDragStart={(e) => handleDragStart(index, e)}
 									onDragOver={(e) => handleDragOver(index, e)}
 									onDrop={(e) => handleDrop(index, e)}
@@ -272,7 +280,7 @@
 					{/if}
 
 					<Button variant="ghost" size="sm" class="add-step-btn" onclick={addStep}>
-						<Plus class="h-3 w-3 mr-1" />
+						<Plus class="mr-1 h-3 w-3" />
 						{automationEditorViewAddStep?.() ?? 'Add Step'}
 					</Button>
 				</div>
@@ -281,7 +289,7 @@
 			<!-- Delete -->
 			<div class="delete-section">
 				<Button variant="destructive" size="sm" onclick={onDelete}>
-					<Trash2 class="h-3.5 w-3.5 mr-1.5" />
+					<Trash2 class="mr-1.5 h-3.5 w-3.5" />
 					{automationEditorViewDeleteAutomation?.() ?? 'Delete Automation'}
 				</Button>
 			</div>

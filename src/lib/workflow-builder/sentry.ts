@@ -13,11 +13,7 @@
  * Pure function; no Svelte, no IDB, no PB. Unit-testable.
  */
 
-import type {
-	FieldValue,
-	SentryClause,
-	WorkflowConnection
-} from '$lib/participant-state/types';
+import type { FieldValue, SentryClause, WorkflowConnection } from '$lib/participant-state/types';
 
 export interface SentryContext {
 	/** field_def_id -> all values for that field on the instance */

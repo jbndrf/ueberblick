@@ -67,8 +67,19 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { toast } from 'svelte-sonner';
 	import {
-		Users, Eye, EyeOff, FilePlus, FileMinus, Pencil, PencilOff,
-		Lock, ChevronRight, Wrench, TriangleAlert, ShieldCheck, Link
+		Users,
+		Eye,
+		EyeOff,
+		FilePlus,
+		FileMinus,
+		Pencil,
+		PencilOff,
+		Lock,
+		ChevronRight,
+		Wrench,
+		TriangleAlert,
+		ShieldCheck,
+		Link
 	} from '@lucide/svelte';
 	import type { PageData } from './$types';
 	import { BaseTable, type BaseColumnConfig } from '$lib/components/admin/base-table';
@@ -148,9 +159,7 @@
 
 	function openJoinInfo(role: Role) {
 		if (!role.self_joinable || !role.join_slug) {
-			toast.error(
-				rolesSelfJoinNotEnabled?.() ?? 'Enable self-join first to get a join URL'
-			);
+			toast.error(rolesSelfJoinNotEnabled?.() ?? 'Enable self-join first to get a join URL');
 			return;
 		}
 		joinInfoRole = role;
@@ -375,7 +384,7 @@
 	}
 </script>
 
-<div class="flex flex-col gap-6 min-w-0 w-full">
+<div class="flex w-full min-w-0 flex-col gap-6">
 	<!-- Header -->
 	<div>
 		<h1 class="text-3xl font-bold tracking-tight">{rolesTitle()}</h1>
@@ -482,7 +491,7 @@
 			<Dialog.Title>
 				{rolesSelfJoinInfoTitle?.() ?? 'Self-join link'}
 				{#if joinInfoRole}
-					<span class="text-muted-foreground font-normal">— {joinInfoRole.name}</span>
+					<span class="font-normal text-muted-foreground">— {joinInfoRole.name}</span>
 				{/if}
 			</Dialog.Title>
 			<Dialog.Description>
@@ -504,7 +513,7 @@
 						value={joinInfoUrl}
 						onclick={selectJoinUrlInput}
 						onfocus={selectJoinUrlInput}
-						class="flex-1 h-9 rounded-md border border-input bg-muted/40 px-3 py-1 font-mono text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring select-all"
+						class="h-9 flex-1 rounded-md border border-input bg-muted/40 px-3 py-1 font-mono text-xs shadow-sm select-all focus:ring-1 focus:ring-ring focus:outline-none"
 					/>
 					<Button
 						type="button"
@@ -523,7 +532,8 @@
 
 			<div class="space-y-2">
 				<label for="quota-max-instances" class="text-sm font-medium">
-					{rolesQuotaMaxInstancesLabel?.() ?? 'Max workflow instances per participant (0 = unlimited)'}
+					{rolesQuotaMaxInstancesLabel?.() ??
+						'Max workflow instances per participant (0 = unlimited)'}
 				</label>
 				<div class="flex items-center gap-2">
 					<input
@@ -532,14 +542,21 @@
 						min="0"
 						step="1"
 						bind:value={quotaInput}
-						class="flex-1 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+						class="h-9 flex-1 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none"
 					/>
-					<Button type="button" variant="default" size="sm" disabled={savingQuota} onclick={saveQuota}>
+					<Button
+						type="button"
+						variant="default"
+						size="sm"
+						disabled={savingQuota}
+						onclick={saveQuota}
+					>
 						{rolesQuotaSave?.() ?? 'Save'}
 					</Button>
 				</div>
 				<p class="text-xs text-muted-foreground">
-					{rolesQuotaHelp?.() ?? 'Applies to anyone in this role. Lifetime total; admin deletions free the count.'}
+					{rolesQuotaHelp?.() ??
+						'Applies to anyone in this role. Lifetime total; admin deletions free the count.'}
 				</p>
 			</div>
 
@@ -557,19 +574,26 @@
 						<span>{joinInfoRole?.name ?? ''}</span>
 					</li>
 					<li class="flex justify-between gap-4">
-						<span class="text-muted-foreground">{rolesSelfJoinInfoDefaultEmail?.() ?? 'Email'}</span>
+						<span class="text-muted-foreground">{rolesSelfJoinInfoDefaultEmail?.() ?? 'Email'}</span
+						>
 						<span class="font-mono text-xs">p-…@placeholder.local</span>
 					</li>
 					<li class="flex justify-between gap-4">
-						<span class="text-muted-foreground">{rolesSelfJoinInfoDefaultActive?.() ?? 'Active'}</span>
+						<span class="text-muted-foreground"
+							>{rolesSelfJoinInfoDefaultActive?.() ?? 'Active'}</span
+						>
 						<span>{commonYes?.() ?? 'Yes'}</span>
 					</li>
 					<li class="flex justify-between gap-4">
-						<span class="text-muted-foreground">{rolesSelfJoinInfoDefaultLandingPage?.() ?? 'Lands on'}</span>
+						<span class="text-muted-foreground"
+							>{rolesSelfJoinInfoDefaultLandingPage?.() ?? 'Lands on'}</span
+						>
 						<span class="font-mono">/map</span>
 					</li>
 					<li class="flex justify-between gap-4">
-						<span class="text-muted-foreground">{rolesSelfJoinInfoDefaultRetention?.() ?? 'Auto-delete after'}</span>
+						<span class="text-muted-foreground"
+							>{rolesSelfJoinInfoDefaultRetention?.() ?? 'Auto-delete after'}</span
+						>
 						<span>{rolesSelfJoinInfoDefaultRetentionValue?.() ?? '90 days of inactivity'}</span>
 					</li>
 				</ul>

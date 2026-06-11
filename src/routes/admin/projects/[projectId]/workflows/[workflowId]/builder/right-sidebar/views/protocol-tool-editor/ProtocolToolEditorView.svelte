@@ -83,13 +83,17 @@
 				{/if}
 			</div>
 			<div class="header-title">
-				<Label for="protocol-tool-name" class="sr-only">{protocolToolEditorName?.() ?? 'Protocol Tool Name'}</Label>
+				<Label for="protocol-tool-name" class="sr-only"
+					>{protocolToolEditorName?.() ?? 'Protocol Tool Name'}</Label
+				>
 				<Input
 					id="protocol-tool-name"
 					bind:value={toolName}
 					onblur={handleNameBlur}
 					class="name-input"
-					placeholder={isRegion ? (protocolToolEditorRegionNamePlaceholder?.() ?? 'Region name...') : (protocolToolEditorToolNamePlaceholder?.() ?? 'Protocol tool name...')}
+					placeholder={isRegion
+						? (protocolToolEditorRegionNamePlaceholder?.() ?? 'Region name...')
+						: (protocolToolEditorToolNamePlaceholder?.() ?? 'Protocol tool name...')}
 				/>
 			</div>
 			<Button variant="ghost" size="icon" onclick={onClose}>
@@ -98,7 +102,8 @@
 		</div>
 		{#if isRegion}
 			<p class="header-description">
-				{protocolToolEditorRegionDescription?.() ?? 'Snapshots the instance’s tool-usage history when it leaves this region.'}
+				{protocolToolEditorRegionDescription?.() ??
+					'Snapshots the instance’s tool-usage history when it leaves this region.'}
 			</p>
 		{/if}
 	</div>
@@ -131,7 +136,7 @@
 
 			<div class="editor-footer">
 				<Button variant="destructive" size="sm" onclick={onDelete} class="w-full">
-					<Trash2 class="h-4 w-4 mr-2" />
+					<Trash2 class="mr-2 h-4 w-4" />
 					{protocolToolEditorDeleteRegion?.() ?? 'Delete Protocol Region'}
 				</Button>
 			</div>
@@ -141,16 +146,17 @@
 		<div class="manual-content">
 			<div class="form-section">
 				<Button variant="outline" size="sm" onclick={onEditForm} class="w-full">
-					<FileText class="h-4 w-4 mr-2" />
+					<FileText class="mr-2 h-4 w-4" />
 					{protocolTool.protocol_form_id
-						? (protocolToolEditorEditForm?.({ count: formFieldCount }) ?? `Edit Protocol Form (${formFieldCount} fields)`)
+						? (protocolToolEditorEditForm?.({ count: formFieldCount }) ??
+							`Edit Protocol Form (${formFieldCount} fields)`)
 						: (protocolToolEditorCreateForm?.() ?? 'Create Protocol Form')}
 				</Button>
 			</div>
 
 			<div class="editor-footer">
 				<Button variant="destructive" size="sm" onclick={onDelete} class="w-full">
-					<Trash2 class="h-4 w-4 mr-2" />
+					<Trash2 class="mr-2 h-4 w-4" />
 					{protocolToolEditorDeleteTool?.() ?? 'Delete Protocol Tool'}
 				</Button>
 			</div>

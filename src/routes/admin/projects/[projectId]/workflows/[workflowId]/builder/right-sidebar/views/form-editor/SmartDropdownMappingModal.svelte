@@ -30,7 +30,14 @@
 		onUpdate: (mappings: SmartDropdownMapping[]) => void;
 	};
 
-	let { open = $bindable(false), sourceFieldLabel, tabOptions, mappings, onClose, onUpdate }: Props = $props();
+	let {
+		open = $bindable(false),
+		sourceFieldLabel,
+		tabOptions,
+		mappings,
+		onClose,
+		onUpdate
+	}: Props = $props();
 
 	// Local state for active tab
 	let activeTab = $state<string>('');
@@ -137,9 +144,12 @@
 <Dialog.Root bind:open onOpenChange={handleOpenChange}>
 	<Dialog.Content class="smart-dropdown-modal">
 		<Dialog.Header>
-			<Dialog.Title>{formEditorSmartDropdownMappingTitle?.() ?? 'Configure Conditional Options'}</Dialog.Title>
+			<Dialog.Title
+				>{formEditorSmartDropdownMappingTitle?.() ?? 'Configure Conditional Options'}</Dialog.Title
+			>
 			<Dialog.Description>
-				{formEditorSmartDropdownMappingSourceField?.() ?? 'Source field:'} <strong>{sourceFieldLabel}</strong>
+				{formEditorSmartDropdownMappingSourceField?.() ?? 'Source field:'}
+				<strong>{sourceFieldLabel}</strong>
 			</Dialog.Description>
 		</Dialog.Header>
 
@@ -166,21 +176,30 @@
 				<div class="mapping-tab-contents">
 					{#each tabOptions as option (option.label)}
 						<div class="mapping-tab-content" class:active={effectiveActiveTab === option.label}>
-							<Label>{formEditorSmartDropdownMappingOptionsLabel?.({ label: option.label }) ?? `Options when "${option.label}" is selected:`}</Label>
+							<Label
+								>{formEditorSmartDropdownMappingOptionsLabel?.({ label: option.label }) ??
+									`Options when "${option.label}" is selected:`}</Label
+							>
 							<Textarea
 								value={mappingTexts[option.label] || ''}
 								oninput={(e) => (mappingTexts[option.label] = e.currentTarget.value)}
 								onblur={() => handleMappingTextBlur(option.label)}
-								placeholder={formEditorSmartDropdownMappingPlaceholder?.() ?? `Option 1\nOption 2\nOption 3, with explanation\nOption 4, to help users select`}
+								placeholder={formEditorSmartDropdownMappingPlaceholder?.() ??
+									`Option 1\nOption 2\nOption 3, with explanation\nOption 4, to help users select`}
 								rows={8}
 							/>
-							<p class="config-hint">{formEditorSmartDropdownMappingHint?.() ?? 'One option per line. Use comma to add explanation: "Answer, explanation text"'}</p>
+							<p class="config-hint">
+								{formEditorSmartDropdownMappingHint?.() ??
+									'One option per line. Use comma to add explanation: "Answer, explanation text"'}
+							</p>
 						</div>
 					{/each}
 				</div>
 			</div>
 		{:else}
-			<p class="no-options">{formEditorSmartDropdownMappingNoOptions?.() ?? 'No options available from source field.'}</p>
+			<p class="no-options">
+				{formEditorSmartDropdownMappingNoOptions?.() ?? 'No options available from source field.'}
+			</p>
 		{/if}
 
 		<Dialog.Footer>

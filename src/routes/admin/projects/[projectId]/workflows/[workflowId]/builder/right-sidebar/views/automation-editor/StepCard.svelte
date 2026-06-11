@@ -36,7 +36,9 @@
 		if (actionCount > 0) {
 			parts.push(`${actionCount} action${actionCount !== 1 ? 's' : ''}`);
 		}
-		return parts.length > 0 ? parts.join(', ') : (automationStepCardNoConditionsOrActions?.() ?? 'No conditions or actions');
+		return parts.length > 0
+			? parts.join(', ')
+			: (automationStepCardNoConditionsOrActions?.() ?? 'No conditions or actions');
 	}
 </script>
 
@@ -52,7 +54,12 @@
 	ondragend={onDragEnd}
 	role="button"
 	tabindex="0"
-	onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect?.(); } }}
+	onkeydown={(e) => {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			onSelect?.();
+		}
+	}}
 >
 	<div class="drag-handle" aria-hidden="true">
 		<GripVertical class="h-3 w-3" />

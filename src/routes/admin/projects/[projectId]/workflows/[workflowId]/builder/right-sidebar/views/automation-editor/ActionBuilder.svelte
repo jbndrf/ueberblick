@@ -91,7 +91,9 @@
 									});
 								}}
 							>
-								<option value="">{automationActionBuilderSelectField?.() ?? 'Select field...'}</option>
+								<option value=""
+									>{automationActionBuilderSelectField?.() ?? 'Select field...'}</option
+								>
 								{#each fieldOptions as opt}
 									<option value={opt.key}>{opt.label}</option>
 								{/each}
@@ -124,7 +126,9 @@
 									});
 								}}
 							>
-								<option value="">{automationActionBuilderSelectStage?.() ?? 'Select stage...'}</option>
+								<option value=""
+									>{automationActionBuilderSelectStage?.() ?? 'Select stage...'}</option
+								>
 								{#each stageOptions as stage}
 									<option value={stage.id}>{stage.name}</option>
 								{/each}
@@ -133,7 +137,12 @@
 					{/if}
 				</div>
 
-				<Button variant="ghost" size="icon" class="h-6 w-6 shrink-0" onclick={() => removeAction(index)}>
+				<Button
+					variant="ghost"
+					size="icon"
+					class="h-6 w-6 shrink-0"
+					onclick={() => removeAction(index)}
+				>
 					<Trash2 class="h-3 w-3" />
 				</Button>
 			</div>

@@ -176,20 +176,22 @@
 		const opts = field.field_options?.options as FieldOption[] | string[] | undefined;
 		if (!opts || opts.length === 0) return '';
 
-		return opts.map(opt => {
-			if (typeof opt === 'string') return opt;
-			if (opt.description) return `${opt.label}, ${opt.description}`;
-			return opt.label;
-		}).join('\n');
+		return opts
+			.map((opt) => {
+				if (typeof opt === 'string') return opt;
+				if (opt.description) return `${opt.label}, ${opt.description}`;
+				return opt.label;
+			})
+			.join('\n');
 	}
 
 	function parseOptionsText(text: string): FieldOption[] {
 		const seen = new Set<string>();
 		return text
 			.split('\n')
-			.map(line => line.trim())
-			.filter(line => line.length > 0)
-			.map(line => {
+			.map((line) => line.trim())
+			.filter((line) => line.length > 0)
+			.map((line) => {
 				const commaIndex = line.indexOf(',');
 				if (commaIndex === -1) {
 					return { label: line };
@@ -198,7 +200,7 @@
 				const description = line.substring(commaIndex + 1).trim();
 				return { label, description: description || undefined };
 			})
-			.filter(opt => {
+			.filter((opt) => {
 				if (seen.has(opt.label)) return false;
 				seen.add(opt.label);
 				return true;
@@ -299,7 +301,11 @@
 		if (textMaxLength !== undefined) validation.maxLength = textMaxLength;
 		if (textPattern) validation.pattern = textPattern;
 
-		onUpdate?.({ validation_rules: (Object.keys(validation).length > 0 ? validation : undefined) as Record<string, unknown> | undefined });
+		onUpdate?.({
+			validation_rules: (Object.keys(validation).length > 0 ? validation : undefined) as
+				| Record<string, unknown>
+				| undefined
+		});
 	}
 
 	function handleNumberValidationBlur() {
@@ -308,7 +314,11 @@
 		if (numberMax !== undefined) validation.max = numberMax;
 		if (numberStep !== undefined) validation.step = numberStep;
 
-		onUpdate?.({ validation_rules: (Object.keys(validation).length > 0 ? validation : undefined) as Record<string, unknown> | undefined });
+		onUpdate?.({
+			validation_rules: (Object.keys(validation).length > 0 ? validation : undefined) as
+				| Record<string, unknown>
+				| undefined
+		});
 	}
 
 	function handleDateModeChange(value: string | undefined) {
@@ -369,7 +379,11 @@
 		if (minSelections !== undefined) validation.minSelections = minSelections;
 		if (maxSelections !== undefined) validation.maxSelections = maxSelections;
 
-		onUpdate?.({ validation_rules: (Object.keys(validation).length > 0 ? validation : undefined) as Record<string, unknown> | undefined });
+		onUpdate?.({
+			validation_rules: (Object.keys(validation).length > 0 ? validation : undefined) as
+				| Record<string, unknown>
+				| undefined
+		});
 	}
 
 	// ==========================================================================
@@ -381,7 +395,9 @@
 
 	const isSmartDropdown = $derived(field.field_type === 'smart_dropdown');
 	const isEntitySelector = $derived(field.field_type === 'custom_table_selector');
-	const isTextField = $derived(field.field_type === 'short_text' || field.field_type === 'long_text');
+	const isTextField = $derived(
+		field.field_type === 'short_text' || field.field_type === 'long_text'
+	);
 	const isNumberField = $derived(field.field_type === 'number');
 	const isDateField = $derived(field.field_type === 'date');
 	const isFileField = $derived(field.field_type === 'file');
@@ -423,7 +439,10 @@
 	});
 
 	function handleWriteModeChange(e: Event) {
-		const value = (e.currentTarget as HTMLSelectElement).value as 'singleton' | 'observation' | 'computed';
+		const value = (e.currentTarget as HTMLSelectElement).value as
+			| 'singleton'
+			| 'observation'
+			| 'computed';
 		writeMode = value;
 		onUpdate?.({ write_mode: value });
 	}
@@ -460,7 +479,9 @@
 
 			{#if !isComputed}
 				<div class="config-section">
-					<Label for="field-placeholder">{formEditorFieldConfigPlaceholder?.() ?? 'Placeholder'}</Label>
+					<Label for="field-placeholder"
+						>{formEditorFieldConfigPlaceholder?.() ?? 'Placeholder'}</Label
+					>
 					<Input
 						id="field-placeholder"
 						bind:value={placeholder}
@@ -519,272 +540,312 @@
 				/>
 			</div>
 
-		<!-- Text Field Validation -->
-		{#if isTextField}
-			<div class="config-section">
-				<Label>{formEditorFieldConfigValidation?.() ?? 'Validation'}</Label>
-				<div class="validation-grid">
-					<div class="validation-field">
-						<Label for="min-length">{formEditorFieldConfigMinLength?.() ?? 'Min Length'}</Label>
-						<Input
-							id="min-length"
-							type="number"
-							min={0}
-							bind:value={textMinLength}
-							onblur={handleTextValidationBlur}
-							placeholder="0"
-						/>
-					</div>
-					<div class="validation-field">
-						<Label for="max-length">{formEditorFieldConfigMaxLength?.() ?? 'Max Length'}</Label>
-						<Input
-							id="max-length"
-							type="number"
-							min={0}
-							bind:value={textMaxLength}
-							onblur={handleTextValidationBlur}
-							placeholder={formEditorFieldConfigNoLimit?.() ?? 'No limit'}
-						/>
-					</div>
-				</div>
-				{#if isShortText}
-					<div class="config-section-inner">
-						<Label for="pattern">{formEditorFieldConfigRegexPattern?.() ?? 'Regex Pattern'}</Label>
-						<Input
-							id="pattern"
-							bind:value={textPattern}
-							onblur={handleTextValidationBlur}
-							placeholder="e.g. ^[a-zA-Z]+$"
-						/>
-					</div>
-				{/if}
-			</div>
-		{/if}
-
-		<!-- Number Field Validation -->
-		{#if isNumberField}
-			<div class="config-section">
-				<Label>{formEditorFieldConfigValidation?.() ?? 'Validation'}</Label>
-				<div class="validation-grid">
-					<div class="validation-field">
-						<Label for="num-min">{formEditorFieldConfigMin?.() ?? 'Min'}</Label>
-						<Input
-							id="num-min"
-							type="number"
-							bind:value={numberMin}
-							onblur={handleNumberValidationBlur}
-							placeholder={formEditorFieldConfigNoMin?.() ?? 'No min'}
-						/>
-					</div>
-					<div class="validation-field">
-						<Label for="num-max">{formEditorFieldConfigMax?.() ?? 'Max'}</Label>
-						<Input
-							id="num-max"
-							type="number"
-							bind:value={numberMax}
-							onblur={handleNumberValidationBlur}
-							placeholder={formEditorFieldConfigNoMax?.() ?? 'No max'}
-						/>
-					</div>
-					<div class="validation-field">
-						<Label for="num-step">{formEditorFieldConfigStep?.() ?? 'Step'}</Label>
-						<Input
-							id="num-step"
-							type="number"
-							min={0}
-							step="any"
-							bind:value={numberStep}
-							onblur={handleNumberValidationBlur}
-							placeholder="1"
-						/>
-					</div>
-				</div>
-			</div>
-		{/if}
-
-		<!-- Date Field Options -->
-		{#if isDateField}
-			<div class="config-section">
-				<Label>{formEditorFieldConfigDateMode?.() ?? 'Date Mode'}</Label>
-				<RadioGroup.Root bind:value={dateMode} onValueChange={handleDateModeChange} class="radio-group">
-					<div class="radio-option">
-						<RadioGroup.Item value="date" id="date-only" />
-						<Label for="date-only">{formEditorFieldConfigDateOnly?.() ?? 'Date only'}</Label>
-					</div>
-					<div class="radio-option">
-						<RadioGroup.Item value="datetime" id="datetime" />
-						<Label for="datetime">{formEditorFieldConfigDateAndTime?.() ?? 'Date and Time'}</Label>
-					</div>
-					<div class="radio-option">
-						<RadioGroup.Item value="time" id="time-only" />
-						<Label for="time-only">{formEditorFieldConfigTimeOnly?.() ?? 'Time only'}</Label>
-					</div>
-				</RadioGroup.Root>
-			</div>
-			<div class="config-row">
-				<div class="switch-field">
-					<Switch
-						id="prefill-now"
-						checked={prefillNow}
-						onCheckedChange={handlePrefillNowChange}
-					/>
-					<Label for="prefill-now">{formEditorFieldConfigPrefillNow?.() ?? 'Prefill with current date/time'}</Label>
-				</div>
-			</div>
-		{/if}
-
-		<!-- File Field Options -->
-		{#if isFileField}
-			<div class="config-section">
-				<Label for="file-types">{formEditorFieldConfigAllowedFileTypes?.() ?? 'Allowed File Types'}</Label>
-				<select
-					id="file-types"
-					class="native-select"
-					value={fileTypes}
-					onchange={(e) => handleFileTypesChange(e.currentTarget.value)}
-				>
-					<option value="all">{formEditorFieldConfigAllFiles?.() ?? 'All files'}</option>
-					<option value="images">{formEditorFieldConfigImagesOnly?.() ?? 'Images only (.jpg, .png, .gif, .webp)'}</option>
-					<option value="documents">{formEditorFieldConfigDocumentsOnly?.() ?? 'Documents only (.pdf, .doc, .txt)'}</option>
-				</select>
-			</div>
-			<div class="config-section">
-				<Label for="max-files">{formEditorFieldConfigMaxFiles?.() ?? 'Max Files'}</Label>
-				<Input
-					id="max-files"
-					type="number"
-					min={1}
-					bind:value={maxFiles}
-					onblur={handleMaxFilesBlur}
-				/>
-			</div>
-		{/if}
-
-		<!-- Dropdown/Multiple Choice Options (textarea) -->
-		{#if hasOptions}
-			<div class="config-section">
-				<Label for="options-textarea">{formEditorFieldConfigOptionsLabel?.() ?? 'Options (one per line)'}</Label>
-				<Textarea
-					id="options-textarea"
-					bind:value={optionsText}
-					onblur={handleOptionsTextBlur}
-					placeholder={formEditorFieldConfigOptionsPlaceholder?.() ?? `Option 1\nOption 2\nOption 3, with explanation\nOption 4, to help users select`}
-					rows={5}
-				/>
-				<p class="config-hint">{formEditorFieldConfigOptionsHint?.() ?? 'One option per line. Use comma to add explanation: "Answer, explanation text"'}</p>
-			</div>
-
-			{#if isMultipleChoice}
+			<!-- Text Field Validation -->
+			{#if isTextField}
 				<div class="config-section">
-					<Label>{formEditorFieldConfigSelectionLimits?.() ?? 'Selection Limits'}</Label>
+					<Label>{formEditorFieldConfigValidation?.() ?? 'Validation'}</Label>
 					<div class="validation-grid">
 						<div class="validation-field">
-							<Label for="min-sel">{formEditorFieldConfigMinSelections?.() ?? 'Min Selections'}</Label>
+							<Label for="min-length">{formEditorFieldConfigMinLength?.() ?? 'Min Length'}</Label>
 							<Input
-								id="min-sel"
+								id="min-length"
 								type="number"
 								min={0}
-								bind:value={minSelections}
-								onblur={handleMultipleChoiceValidationBlur}
+								bind:value={textMinLength}
+								onblur={handleTextValidationBlur}
 								placeholder="0"
 							/>
 						</div>
 						<div class="validation-field">
-							<Label for="max-sel">{formEditorFieldConfigMaxSelections?.() ?? 'Max Selections'}</Label>
+							<Label for="max-length">{formEditorFieldConfigMaxLength?.() ?? 'Max Length'}</Label>
 							<Input
-								id="max-sel"
+								id="max-length"
 								type="number"
-								min={1}
-								bind:value={maxSelections}
-								onblur={handleMultipleChoiceValidationBlur}
+								min={0}
+								bind:value={textMaxLength}
+								onblur={handleTextValidationBlur}
 								placeholder={formEditorFieldConfigNoLimit?.() ?? 'No limit'}
+							/>
+						</div>
+					</div>
+					{#if isShortText}
+						<div class="config-section-inner">
+							<Label for="pattern">{formEditorFieldConfigRegexPattern?.() ?? 'Regex Pattern'}</Label
+							>
+							<Input
+								id="pattern"
+								bind:value={textPattern}
+								onblur={handleTextValidationBlur}
+								placeholder="e.g. ^[a-zA-Z]+$"
+							/>
+						</div>
+					{/if}
+				</div>
+			{/if}
+
+			<!-- Number Field Validation -->
+			{#if isNumberField}
+				<div class="config-section">
+					<Label>{formEditorFieldConfigValidation?.() ?? 'Validation'}</Label>
+					<div class="validation-grid">
+						<div class="validation-field">
+							<Label for="num-min">{formEditorFieldConfigMin?.() ?? 'Min'}</Label>
+							<Input
+								id="num-min"
+								type="number"
+								bind:value={numberMin}
+								onblur={handleNumberValidationBlur}
+								placeholder={formEditorFieldConfigNoMin?.() ?? 'No min'}
+							/>
+						</div>
+						<div class="validation-field">
+							<Label for="num-max">{formEditorFieldConfigMax?.() ?? 'Max'}</Label>
+							<Input
+								id="num-max"
+								type="number"
+								bind:value={numberMax}
+								onblur={handleNumberValidationBlur}
+								placeholder={formEditorFieldConfigNoMax?.() ?? 'No max'}
+							/>
+						</div>
+						<div class="validation-field">
+							<Label for="num-step">{formEditorFieldConfigStep?.() ?? 'Step'}</Label>
+							<Input
+								id="num-step"
+								type="number"
+								min={0}
+								step="any"
+								bind:value={numberStep}
+								onblur={handleNumberValidationBlur}
+								placeholder="1"
 							/>
 						</div>
 					</div>
 				</div>
 			{/if}
-		{/if}
 
-		<!-- Smart Dropdown Config -->
-		{#if isSmartDropdown}
-			<SmartDropdownConfig
-				fieldOptions={field.field_options}
-				{ancestorFields}
-				onUpdate={(config) => {
-					onUpdate?.({
-						field_options: {
-							...field.field_options,
-							...config
-						}
-					});
-				}}
-			/>
-		{/if}
-
-		<!-- Entity Selector Config (Custom Table Selector) -->
-		{#if isEntitySelector}
-			<EntitySelectorConfig
-				fieldOptions={field.field_options}
-				{roles}
-				onUpdate={handleEntitySelectorUpdate}
-			/>
-		{/if}
-
-		<!-- Advanced (still def-level) -->
-		<hr class="advanced-separator" />
-		<h5 class="advanced-heading">{formEditorFieldAdvanced?.() ?? 'Advanced'}</h5>
-
-		<div class="config-section">
-			<Label for="field-write-mode">{formEditorFieldWriteMode?.() ?? 'Write mode'}</Label>
-			<select
-				id="field-write-mode"
-				class="native-select"
-				value={writeMode}
-				onchange={handleWriteModeChange}
-			>
-				<option value="singleton">{formEditorFieldWriteModeSingleton?.() ?? 'One current value (re-submitting overwrites)'}</option>
-				<option value="observation">{formEditorFieldWriteModeObservation?.() ?? 'Every submission kept as history'}</option>
-				<option value="computed">{formEditorFieldWriteModeComputed?.() ?? 'Server-evaluated from other fields'}</option>
-			</select>
-		</div>
-
-		{#if isComputed}
-			<div class="config-section">
-				<Label for="field-compute-expression">{formEditorFieldComputeExpression?.() ?? 'Compute expression'}</Label>
-				<Textarea
-					id="field-compute-expression"
-					bind:value={computeExpression}
-					onblur={handleComputeExpressionBlur}
-					placeholder="round(obs_avg(temp), 1)"
-					rows={3}
-				/>
-				<p class="config-hint">
-					{formEditorFieldComputeExpressionHelp?.() ?? 'Expression with {field_def_id} references and functions like obs_avg, obs_last, sum, round, today, days_between. See docs.'}
-				</p>
-
-				<div class="compute-deps">
-					<Label>{formEditorFieldComputeDepsLabel?.() ?? 'Updates when these fields change:'}</Label>
-					{#if computeDeps.length === 0}
-						<p class="compute-deps-empty">{formEditorFieldComputeDepsEmpty?.() ?? 'No referenced fields yet.'}</p>
-					{:else}
-						<div class="compute-deps-chips">
-							{#each computeDeps as dep (dep.id)}
-								<span class="compute-dep-chip" class:compute-dep-chip-unknown={!dep.label}>
-									{dep.label ?? (formEditorFieldComputeDepUnknown?.() ?? 'Unknown field')}
-								</span>
-							{/each}
+			<!-- Date Field Options -->
+			{#if isDateField}
+				<div class="config-section">
+					<Label>{formEditorFieldConfigDateMode?.() ?? 'Date Mode'}</Label>
+					<RadioGroup.Root
+						bind:value={dateMode}
+						onValueChange={handleDateModeChange}
+						class="radio-group"
+					>
+						<div class="radio-option">
+							<RadioGroup.Item value="date" id="date-only" />
+							<Label for="date-only">{formEditorFieldConfigDateOnly?.() ?? 'Date only'}</Label>
 						</div>
-					{/if}
+						<div class="radio-option">
+							<RadioGroup.Item value="datetime" id="datetime" />
+							<Label for="datetime">{formEditorFieldConfigDateAndTime?.() ?? 'Date and Time'}</Label
+							>
+						</div>
+						<div class="radio-option">
+							<RadioGroup.Item value="time" id="time-only" />
+							<Label for="time-only">{formEditorFieldConfigTimeOnly?.() ?? 'Time only'}</Label>
+						</div>
+					</RadioGroup.Root>
 				</div>
+				<div class="config-row">
+					<div class="switch-field">
+						<Switch
+							id="prefill-now"
+							checked={prefillNow}
+							onCheckedChange={handlePrefillNowChange}
+						/>
+						<Label for="prefill-now"
+							>{formEditorFieldConfigPrefillNow?.() ?? 'Prefill with current date/time'}</Label
+						>
+					</div>
+				</div>
+			{/if}
+
+			<!-- File Field Options -->
+			{#if isFileField}
+				<div class="config-section">
+					<Label for="file-types"
+						>{formEditorFieldConfigAllowedFileTypes?.() ?? 'Allowed File Types'}</Label
+					>
+					<select
+						id="file-types"
+						class="native-select"
+						value={fileTypes}
+						onchange={(e) => handleFileTypesChange(e.currentTarget.value)}
+					>
+						<option value="all">{formEditorFieldConfigAllFiles?.() ?? 'All files'}</option>
+						<option value="images"
+							>{formEditorFieldConfigImagesOnly?.() ??
+								'Images only (.jpg, .png, .gif, .webp)'}</option
+						>
+						<option value="documents"
+							>{formEditorFieldConfigDocumentsOnly?.() ??
+								'Documents only (.pdf, .doc, .txt)'}</option
+						>
+					</select>
+				</div>
+				<div class="config-section">
+					<Label for="max-files">{formEditorFieldConfigMaxFiles?.() ?? 'Max Files'}</Label>
+					<Input
+						id="max-files"
+						type="number"
+						min={1}
+						bind:value={maxFiles}
+						onblur={handleMaxFilesBlur}
+					/>
+				</div>
+			{/if}
+
+			<!-- Dropdown/Multiple Choice Options (textarea) -->
+			{#if hasOptions}
+				<div class="config-section">
+					<Label for="options-textarea"
+						>{formEditorFieldConfigOptionsLabel?.() ?? 'Options (one per line)'}</Label
+					>
+					<Textarea
+						id="options-textarea"
+						bind:value={optionsText}
+						onblur={handleOptionsTextBlur}
+						placeholder={formEditorFieldConfigOptionsPlaceholder?.() ??
+							`Option 1\nOption 2\nOption 3, with explanation\nOption 4, to help users select`}
+						rows={5}
+					/>
+					<p class="config-hint">
+						{formEditorFieldConfigOptionsHint?.() ??
+							'One option per line. Use comma to add explanation: "Answer, explanation text"'}
+					</p>
+				</div>
+
+				{#if isMultipleChoice}
+					<div class="config-section">
+						<Label>{formEditorFieldConfigSelectionLimits?.() ?? 'Selection Limits'}</Label>
+						<div class="validation-grid">
+							<div class="validation-field">
+								<Label for="min-sel"
+									>{formEditorFieldConfigMinSelections?.() ?? 'Min Selections'}</Label
+								>
+								<Input
+									id="min-sel"
+									type="number"
+									min={0}
+									bind:value={minSelections}
+									onblur={handleMultipleChoiceValidationBlur}
+									placeholder="0"
+								/>
+							</div>
+							<div class="validation-field">
+								<Label for="max-sel"
+									>{formEditorFieldConfigMaxSelections?.() ?? 'Max Selections'}</Label
+								>
+								<Input
+									id="max-sel"
+									type="number"
+									min={1}
+									bind:value={maxSelections}
+									onblur={handleMultipleChoiceValidationBlur}
+									placeholder={formEditorFieldConfigNoLimit?.() ?? 'No limit'}
+								/>
+							</div>
+						</div>
+					</div>
+				{/if}
+			{/if}
+
+			<!-- Smart Dropdown Config -->
+			{#if isSmartDropdown}
+				<SmartDropdownConfig
+					fieldOptions={field.field_options}
+					{ancestorFields}
+					onUpdate={(config) => {
+						onUpdate?.({
+							field_options: {
+								...field.field_options,
+								...config
+							}
+						});
+					}}
+				/>
+			{/if}
+
+			<!-- Entity Selector Config (Custom Table Selector) -->
+			{#if isEntitySelector}
+				<EntitySelectorConfig
+					fieldOptions={field.field_options}
+					{roles}
+					onUpdate={handleEntitySelectorUpdate}
+				/>
+			{/if}
+
+			<!-- Advanced (still def-level) -->
+			<hr class="advanced-separator" />
+			<h5 class="advanced-heading">{formEditorFieldAdvanced?.() ?? 'Advanced'}</h5>
+
+			<div class="config-section">
+				<Label for="field-write-mode">{formEditorFieldWriteMode?.() ?? 'Write mode'}</Label>
+				<select
+					id="field-write-mode"
+					class="native-select"
+					value={writeMode}
+					onchange={handleWriteModeChange}
+				>
+					<option value="singleton"
+						>{formEditorFieldWriteModeSingleton?.() ??
+							'One current value (re-submitting overwrites)'}</option
+					>
+					<option value="observation"
+						>{formEditorFieldWriteModeObservation?.() ?? 'Every submission kept as history'}</option
+					>
+					<option value="computed"
+						>{formEditorFieldWriteModeComputed?.() ?? 'Server-evaluated from other fields'}</option
+					>
+				</select>
 			</div>
-		{/if}
+
+			{#if isComputed}
+				<div class="config-section">
+					<Label for="field-compute-expression"
+						>{formEditorFieldComputeExpression?.() ?? 'Compute expression'}</Label
+					>
+					<Textarea
+						id="field-compute-expression"
+						bind:value={computeExpression}
+						onblur={handleComputeExpressionBlur}
+						placeholder="round(obs_avg(temp), 1)"
+						rows={3}
+					/>
+					<p class="config-hint">
+						{formEditorFieldComputeExpressionHelp?.() ??
+							'Expression with {field_def_id} references and functions like obs_avg, obs_last, sum, round, today, days_between. See docs.'}
+					</p>
+
+					<div class="compute-deps">
+						<Label
+							>{formEditorFieldComputeDepsLabel?.() ?? 'Updates when these fields change:'}</Label
+						>
+						{#if computeDeps.length === 0}
+							<p class="compute-deps-empty">
+								{formEditorFieldComputeDepsEmpty?.() ?? 'No referenced fields yet.'}
+							</p>
+						{:else}
+							<div class="compute-deps-chips">
+								{#each computeDeps as dep (dep.id)}
+									<span class="compute-dep-chip" class:compute-dep-chip-unknown={!dep.label}>
+										{dep.label ?? formEditorFieldComputeDepUnknown?.() ?? 'Unknown field'}
+									</span>
+								{/each}
+							</div>
+						{/if}
+					</div>
+				</div>
+			{/if}
 		</section>
 	</div>
 
 	<!-- Footer with delete -->
 	<div class="config-footer">
 		<Button variant="destructive" size="sm" onclick={onDelete}>
-			<Trash2 class="h-4 w-4 mr-1" />
+			<Trash2 class="mr-1 h-4 w-4" />
 			{formEditorFieldConfigDeleteField?.() ?? 'Delete Field'}
 		</Button>
 	</div>

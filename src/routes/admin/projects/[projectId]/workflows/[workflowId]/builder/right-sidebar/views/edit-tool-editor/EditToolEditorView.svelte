@@ -21,7 +21,13 @@
 	import AncestorFieldsPanel from '../protocol-tool-editor/AncestorFieldsPanel.svelte';
 	import FieldSelectionPreview from '../protocol-tool-editor/FieldSelectionPreview.svelte';
 
-	import type { ToolsEdit, ToolsForm, ToolsFormField, WorkflowStage, EditMode } from '$lib/workflow-builder';
+	import type {
+		ToolsEdit,
+		ToolsForm,
+		ToolsFormField,
+		WorkflowStage,
+		EditMode
+	} from '$lib/workflow-builder';
 
 	type AncestorFieldGroup = {
 		stage: WorkflowStage;
@@ -64,12 +70,14 @@
 	// its `field_def_id` so selection works in def-id space. Computed fields are
 	// not editable, so they are dropped from the picker entirely.
 	const defScopedFields = $derived.by((): AncestorFieldGroup[] =>
-		ancestorFields.map((g) => ({
-			...g,
-			fields: g.fields
-				.filter((f) => f.write_mode !== 'computed' && !!f.field_def_id)
-				.map((f) => ({ ...f, id: f.field_def_id as string }))
-		})).filter((g) => g.fields.length > 0)
+		ancestorFields
+			.map((g) => ({
+				...g,
+				fields: g.fields
+					.filter((f) => f.write_mode !== 'computed' && !!f.field_def_id)
+					.map((f) => ({ ...f, id: f.field_def_id as string }))
+			}))
+			.filter((g) => g.fields.length > 0)
 	);
 
 	// Local state
@@ -152,7 +160,9 @@
 				<Edit3 class="h-4 w-4" />
 			</div>
 			<div class="header-title">
-				<Label for="edit-tool-name" class="sr-only">{editToolEditorViewNameLabel?.() ?? 'Edit Tool Name'}</Label>
+				<Label for="edit-tool-name" class="sr-only"
+					>{editToolEditorViewNameLabel?.() ?? 'Edit Tool Name'}</Label
+				>
 				<Input
 					id="edit-tool-name"
 					bind:value={editToolName}
@@ -207,9 +217,10 @@
 				/>
 			{:else}
 				<div class="location-panel">
-					<MapPin class="h-6 w-6 location-icon" />
+					<MapPin class="location-icon h-6 w-6" />
 					<p class="location-text">
-						{editToolEditorViewLocationPanelText?.() ?? 'Participants can update the instance location on the map.'}
+						{editToolEditorViewLocationPanelText?.() ??
+							'Participants can update the instance location on the map.'}
 					</p>
 				</div>
 			{/if}
@@ -227,11 +238,14 @@
 			{:else}
 				<div class="preview-section location-preview">
 					<div class="location-notice">
-						<MapPin class="h-8 w-8 location-icon" />
+						<MapPin class="location-icon h-8 w-8" />
 						<div class="location-notice-content">
-							<span class="location-notice-title">{editToolEditorViewLocationPreviewTitle?.() ?? 'Location Edit'}</span>
+							<span class="location-notice-title"
+								>{editToolEditorViewLocationPreviewTitle?.() ?? 'Location Edit'}</span
+							>
 							<p class="location-notice-text">
-								{editToolEditorViewLocationPreviewText?.() ?? 'Participants will see a map picker to update the workflow instance location.'}
+								{editToolEditorViewLocationPreviewText?.() ??
+									'Participants will see a map picker to update the workflow instance location.'}
 							</p>
 						</div>
 					</div>
@@ -244,9 +258,12 @@
 						<Link class="h-4 w-4" />
 					</div>
 					<div class="notice-content">
-						<span class="notice-title">{editToolEditorViewInheritsTitle?.() ?? 'Inherits from Connection'}</span>
+						<span class="notice-title"
+							>{editToolEditorViewInheritsTitle?.() ?? 'Inherits from Connection'}</span
+						>
 						<p class="notice-text">
-							{editToolEditorViewInheritsText?.() ?? "Button appearance and allowed roles are configured on the connection's Tools tab."}
+							{editToolEditorViewInheritsText?.() ??
+								"Button appearance and allowed roles are configured on the connection's Tools tab."}
 						</p>
 					</div>
 				</div>
@@ -254,7 +271,7 @@
 
 			<div class="editor-footer">
 				<Button variant="destructive" size="sm" onclick={onDelete} class="w-full">
-					<Trash2 class="h-4 w-4 mr-2" />
+					<Trash2 class="mr-2 h-4 w-4" />
 					{editToolEditorViewDeleteButton?.() ?? 'Delete Edit Tool'}
 				</Button>
 			</div>

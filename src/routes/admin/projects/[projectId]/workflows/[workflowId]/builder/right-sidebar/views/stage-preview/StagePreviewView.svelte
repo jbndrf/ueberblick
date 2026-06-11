@@ -1,9 +1,18 @@
 <script lang="ts">
 	import { ChevronLeft, ChevronRight } from '@lucide/svelte';
-	import { stagePreviewViewCollapsePanel, stagePreviewViewSelectButton } from '$lib/paraglide/messages';
+	import {
+		stagePreviewViewCollapsePanel,
+		stagePreviewViewSelectButton
+	} from '$lib/paraglide/messages';
 	import type { Edge } from '@xyflow/svelte';
 	import type { WorkflowStage, ToolsForm, ToolsEdit, VisualConfig } from '$lib/workflow-builder';
-	import type { StageAction, TimelineStage, Role, ConfigPanelMode, IncomingFormGroup } from './types';
+	import type {
+		StageAction,
+		TimelineStage,
+		Role,
+		ConfigPanelMode,
+		IncomingFormGroup
+	} from './types';
 	import ParticipantPreview from './ParticipantPreview.svelte';
 	import AddButtonPicker from './AddButtonPicker.svelte';
 
@@ -89,7 +98,7 @@
 			onHighlightStageTool?.(null);
 			return;
 		}
-		const action = [...actions, ...globalTools].find(a => a.id === actionId);
+		const action = [...actions, ...globalTools].find((a) => a.id === actionId);
 		if (action?.type === 'connection') {
 			onHighlightEdge?.(action.id);
 		} else if (action?.type === 'stage_tool') {
@@ -138,11 +147,17 @@
 	<!-- Left Panel (config, expandable) -->
 	<div class="left-panel" class:wide={isPanelOpen}>
 		<!-- Toggle button -->
-		<button class="palette-toggle" onclick={handleTogglePanel} title={isPanelOpen ? (stagePreviewViewCollapsePanel?.() ?? 'Collapse panel') : (stagePreviewViewSelectButton?.() ?? 'Select a button to configure')}>
+		<button
+			class="palette-toggle"
+			onclick={handleTogglePanel}
+			title={isPanelOpen
+				? (stagePreviewViewCollapsePanel?.() ?? 'Collapse panel')
+				: (stagePreviewViewSelectButton?.() ?? 'Select a button to configure')}
+		>
 			{#if isPanelOpen}
-				<ChevronLeft class="w-3 h-3" />
+				<ChevronLeft class="h-3 w-3" />
 			{:else}
-				<ChevronRight class="w-3 h-3" />
+				<ChevronRight class="h-3 w-3" />
 			{/if}
 		</button>
 

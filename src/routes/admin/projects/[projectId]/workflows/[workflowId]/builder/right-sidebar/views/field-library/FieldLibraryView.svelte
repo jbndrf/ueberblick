@@ -4,11 +4,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
-	import type {
-		WorkflowFieldDef,
-		TrackedFieldDef,
-		FieldType
-	} from '$lib/workflow-builder';
+	import type { WorkflowFieldDef, TrackedFieldDef, FieldType } from '$lib/workflow-builder';
 
 	type Role = { id: string; name: string; description?: string };
 
@@ -25,9 +21,21 @@
 		onClose?: () => void;
 	};
 
-	let { fieldDefs, roles, projectWorkflows = [], onAdd, onUpdate, onDelete, onClose }: Props = $props();
+	let {
+		fieldDefs,
+		roles,
+		projectWorkflows = [],
+		onAdd,
+		onUpdate,
+		onDelete,
+		onClose
+	}: Props = $props();
 
-	function updateFieldOptions(defId: string, current: Record<string, unknown> | null | undefined, patch: Record<string, unknown>) {
+	function updateFieldOptions(
+		defId: string,
+		current: Record<string, unknown> | null | undefined,
+		patch: Record<string, unknown>
+	) {
 		onUpdate(defId, { field_options: { ...(current ?? {}), ...patch } });
 	}
 
@@ -47,7 +55,11 @@
 		{ value: 'instance_reference', label: 'Instance Reference' }
 	];
 
-	const WRITE_MODES: { value: 'singleton' | 'observation' | 'computed'; label: string; hint: string }[] = [
+	const WRITE_MODES: {
+		value: 'singleton' | 'observation' | 'computed';
+		label: string;
+		hint: string;
+	}[] = [
 		{ value: 'singleton', label: 'Singleton', hint: 'One current value, upserted on each write' },
 		{ value: 'observation', label: 'Observation', hint: 'Append-only history of readings' },
 		{ value: 'computed', label: 'Computed', hint: 'Evaluated server-side from an expression' }
@@ -67,23 +79,12 @@
 	}
 </script>
 
-<style>
-	.ref-opts {
-		padding: 0.5rem;
-		background: hsl(var(--muted) / 0.4);
-		border-radius: 0.375rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-	}
-</style>
-
 <div class="flex h-full flex-col">
 	<!-- Header -->
 	<div class="flex items-center gap-2 border-b px-4 py-3">
 		<Library class="h-4 w-4 text-primary" />
-		<div class="flex-1 min-w-0">
-			<h3 class="text-sm font-semibold leading-tight">Fields</h3>
+		<div class="min-w-0 flex-1">
+			<h3 class="text-sm leading-tight font-semibold">Fields</h3>
 			<p class="text-xs text-muted-foreground">Workflow-level field definitions</p>
 		</div>
 		{#if onClose}
@@ -96,15 +97,15 @@
 	<!-- Add button -->
 	<div class="border-b px-4 py-2">
 		<Button variant="outline" size="sm" class="w-full" onclick={handleAdd}>
-			<Plus class="h-3.5 w-3.5 mr-1.5" />
+			<Plus class="mr-1.5 h-3.5 w-3.5" />
 			Add field
 		</Button>
 	</div>
 
 	<!-- List -->
-	<div class="flex-1 overflow-y-auto p-2 space-y-1.5">
+	<div class="flex-1 space-y-1.5 overflow-y-auto p-2">
 		{#if visibleDefs(fieldDefs).length === 0}
-			<p class="text-xs text-muted-foreground text-center py-8 px-4">
+			<p class="px-4 py-8 text-center text-xs text-muted-foreground">
 				No fields defined yet. Add a field to start collecting data.
 			</p>
 		{:else}
@@ -112,7 +113,7 @@
 				{@const isOpen = expandedId === def.data.id}
 				<div class="rounded-md border bg-card">
 					<button
-						class="w-full flex items-center gap-2 px-2.5 py-2 text-left hover:bg-accent/50 transition-colors"
+						class="flex w-full items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-accent/50"
 						onclick={() => toggle(def.data.id)}
 					>
 						{#if isOpen}
@@ -120,28 +121,31 @@
 						{:else}
 							<ChevronRight class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
 						{/if}
-						<div class="flex-1 min-w-0">
-							<div class="text-sm font-medium truncate">
+						<div class="min-w-0 flex-1">
+							<div class="truncate text-sm font-medium">
 								{def.data.label || 'Untitled field'}
 							</div>
-							<div class="text-xs text-muted-foreground truncate">
+							<div class="truncate text-xs text-muted-foreground">
 								{def.data.field_type} · {def.data.write_mode}
 							</div>
 						</div>
 						{#if def.status !== 'unchanged'}
-							<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+							<span
+								class="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+							>
 								{def.status}
 							</span>
 						{/if}
 					</button>
 
 					{#if isOpen}
-						<div class="border-t px-3 py-3 space-y-3">
+						<div class="space-y-3 border-t px-3 py-3">
 							<div>
 								<Label class="text-xs">Label</Label>
 								<Input
 									value={def.data.label}
-									oninput={(e) => onUpdate(def.data.id, { label: (e.currentTarget as HTMLInputElement).value })}
+									oninput={(e) =>
+										onUpdate(def.data.id, { label: (e.currentTarget as HTMLInputElement).value })}
 									placeholder="Field label shown to participants"
 									class="h-8 text-sm"
 								/>
@@ -149,9 +153,12 @@
 							<div>
 								<Label class="text-xs">Field type</Label>
 								<select
-									class="w-full h-8 rounded-md border border-input bg-background px-2 text-sm"
+									class="h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
 									value={def.data.field_type}
-									onchange={(e) => onUpdate(def.data.id, { field_type: (e.currentTarget as HTMLSelectElement).value as FieldType })}
+									onchange={(e) =>
+										onUpdate(def.data.id, {
+											field_type: (e.currentTarget as HTMLSelectElement).value as FieldType
+										})}
 								>
 									{#each FIELD_TYPES as t}
 										<option value={t.value}>{t.label}</option>
@@ -164,7 +171,7 @@
 									<div>
 										<Label class="text-xs">Target workflow</Label>
 										<select
-											class="w-full h-8 rounded-md border border-input bg-background px-2 text-sm"
+											class="h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
 											value={opts.target_workflow_id ?? ''}
 											onchange={(e) => {
 												const v = (e.currentTarget as HTMLSelectElement).value;
@@ -180,9 +187,12 @@
 									<div>
 										<Label class="text-xs">Multiplicity</Label>
 										<select
-											class="w-full h-8 rounded-md border border-input bg-background px-2 text-sm"
+											class="h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
 											value={opts.multiplicity ?? 'single'}
-											onchange={(e) => updateFieldOptions(def.data.id, opts, { multiplicity: (e.currentTarget as HTMLSelectElement).value })}
+											onchange={(e) =>
+												updateFieldOptions(def.data.id, opts, {
+													multiplicity: (e.currentTarget as HTMLSelectElement).value
+												})}
 										>
 											<option value="single">Single (one reference)</option>
 											<option value="many">Many (list of references)</option>
@@ -191,9 +201,12 @@
 									<div>
 										<Label class="text-xs">Relation kind</Label>
 										<select
-											class="w-full h-8 rounded-md border border-input bg-background px-2 text-sm"
+											class="h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
 											value={opts.relation_kind ?? 'peer'}
-											onchange={(e) => updateFieldOptions(def.data.id, opts, { relation_kind: (e.currentTarget as HTMLSelectElement).value })}
+											onchange={(e) =>
+												updateFieldOptions(def.data.id, opts, {
+													relation_kind: (e.currentTarget as HTMLSelectElement).value
+												})}
 										>
 											<option value="peer">Peer (link)</option>
 											<option value="parent">Parent (this case is owned by target)</option>
@@ -203,15 +216,18 @@
 									<div>
 										<Label class="text-xs">On delete</Label>
 										<select
-											class="w-full h-8 rounded-md border border-input bg-background px-2 text-sm"
+											class="h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
 											value={opts.on_delete ?? 'nullify'}
-											onchange={(e) => updateFieldOptions(def.data.id, opts, { on_delete: (e.currentTarget as HTMLSelectElement).value })}
+											onchange={(e) =>
+												updateFieldOptions(def.data.id, opts, {
+													on_delete: (e.currentTarget as HTMLSelectElement).value
+												})}
 										>
 											<option value="nullify">Nullify (clear the reference)</option>
 											<option value="cascade">Cascade (delete this case too)</option>
 											<option value="block">Block (refuse to delete target)</option>
 										</select>
-										<p class="text-[11px] text-muted-foreground mt-1">
+										<p class="mt-1 text-[11px] text-muted-foreground">
 											Cascade/block enforcement is a Phase 4 follow-up — schema only for now.
 										</p>
 									</div>
@@ -220,15 +236,21 @@
 							<div>
 								<Label class="text-xs">Write mode</Label>
 								<select
-									class="w-full h-8 rounded-md border border-input bg-background px-2 text-sm"
+									class="h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
 									value={def.data.write_mode}
-									onchange={(e) => onUpdate(def.data.id, { write_mode: (e.currentTarget as HTMLSelectElement).value as 'singleton' | 'observation' | 'computed' })}
+									onchange={(e) =>
+										onUpdate(def.data.id, {
+											write_mode: (e.currentTarget as HTMLSelectElement).value as
+												| 'singleton'
+												| 'observation'
+												| 'computed'
+										})}
 								>
 									{#each WRITE_MODES as m}
 										<option value={m.value}>{m.label}</option>
 									{/each}
 								</select>
-								<p class="text-[11px] text-muted-foreground mt-1">
+								<p class="mt-1 text-[11px] text-muted-foreground">
 									{WRITE_MODES.find((m) => m.value === def.data.write_mode)?.hint}
 								</p>
 							</div>
@@ -249,9 +271,12 @@
 								<div>
 									<Label class="text-xs">Compute expression</Label>
 									<textarea
-										class="w-full min-h-[60px] rounded-md border border-input bg-background px-2 py-1.5 text-sm font-mono"
+										class="min-h-[60px] w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-sm"
 										value={def.data.compute_expression ?? ''}
-										oninput={(e) => onUpdate(def.data.id, { compute_expression: (e.currentTarget as HTMLTextAreaElement).value })}
+										oninput={(e) =>
+											onUpdate(def.data.id, {
+												compute_expression: (e.currentTarget as HTMLTextAreaElement).value
+											})}
 										placeholder={'e.g. {field_a} + {field_b}'}
 									></textarea>
 								</div>
@@ -263,7 +288,7 @@
 									class="text-destructive hover:text-destructive"
 									onclick={() => onDelete(def.data.id)}
 								>
-									<Trash2 class="h-3.5 w-3.5 mr-1.5" />
+									<Trash2 class="mr-1.5 h-3.5 w-3.5" />
 									Delete
 								</Button>
 							</div>
@@ -274,3 +299,14 @@
 		{/if}
 	</div>
 </div>
+
+<style>
+	.ref-opts {
+		padding: 0.5rem;
+		background: hsl(var(--muted) / 0.4);
+		border-radius: 0.375rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+</style>

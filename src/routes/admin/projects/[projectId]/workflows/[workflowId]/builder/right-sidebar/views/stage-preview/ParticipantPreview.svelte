@@ -94,22 +94,18 @@
 			const allowedRoles =
 				btn.type === 'stage_tool' || btn.type === 'global_tool'
 					? [...(btn.any_edit_roles || []), ...(btn.self_edit_roles || [])]
-					: (btn.allowed_roles || []);
+					: btn.allowed_roles || [];
 			const isVisible = allowedRoles.length === 0 || allowedRoles.includes(roleFilter);
 			return { ...btn, _dimmed: !isVisible };
 		});
 	});
 
 	// Stage info counts
-	const incomingCount = $derived(
-		timeline.filter((s) => s.status === 'completed').length
-	);
+	const incomingCount = $derived(timeline.filter((s) => s.status === 'completed').length);
 	const outgoingCount = $derived(
 		actions.filter((a) => a.type === 'connection' && !('isEntry' in a && a.isEntry)).length
 	);
-	const toolCount = $derived(
-		actions.filter((a) => a.type !== 'connection').length
-	);
+	const toolCount = $derived(actions.filter((a) => a.type !== 'connection').length);
 	function handleNameBlur() {
 		editingName = false;
 		if (nameInputValue.trim() && nameInputValue !== stage.stage_name) {
@@ -159,14 +155,14 @@
 	<!-- Header (exact ModuleShell styling) -->
 	<!-- ================================================================== -->
 	<div
-		class="flex items-center justify-between p-4 bg-primary text-primary-foreground rounded-t-xl flex-shrink-0 border-b border-border"
+		class="flex flex-shrink-0 items-center justify-between rounded-t-xl border-b border-border bg-primary p-4 text-primary-foreground"
 	>
-		<div class="flex-1 min-w-0 space-y-0.5">
+		<div class="min-w-0 flex-1 space-y-0.5">
 			<div class="flex items-center gap-2">
 				{#if editingName}
 					<!-- svelte-ignore a11y_autofocus (intentional: rename input opens contextually and should receive focus) -->
 					<input
-						class="text-lg font-semibold bg-transparent border-b border-primary-foreground/40 outline-none w-full placeholder:text-primary-foreground/50"
+						class="w-full border-b border-primary-foreground/40 bg-transparent text-lg font-semibold outline-none placeholder:text-primary-foreground/50"
 						bind:value={nameInputValue}
 						onblur={handleNameBlur}
 						onkeydown={handleNameKeydown}
@@ -174,7 +170,7 @@
 					/>
 				{:else}
 					<button
-						class="text-lg font-semibold truncate text-left hover:opacity-80 transition-opacity cursor-text"
+						class="cursor-text truncate text-left text-lg font-semibold transition-opacity hover:opacity-80"
 						onclick={() => (editingName = true)}
 						title={stagePreviewParticipantEditStageName?.() ?? 'Click to edit stage name'}
 					>
@@ -184,10 +180,10 @@
 			</div>
 		</div>
 
-		<div class="flex items-center gap-1 ml-2">
+		<div class="ml-2 flex items-center gap-1">
 			<!-- Role filter -->
 			<select
-				class="text-xs bg-primary-foreground/10 rounded px-2 py-1 border-0 outline-none cursor-pointer text-primary-foreground"
+				class="cursor-pointer rounded border-0 bg-primary-foreground/10 px-2 py-1 text-xs text-primary-foreground outline-none"
 				value={roleFilter}
 				onchange={(e) => onRoleFilterChange?.(e.currentTarget.value)}
 			>
@@ -199,11 +195,11 @@
 
 			<!-- Close -->
 			<button
-				class="flex items-center justify-center p-2 rounded hover:bg-primary-foreground/10 transition-colors"
+				class="flex items-center justify-center rounded p-2 transition-colors hover:bg-primary-foreground/10"
 				onclick={() => onClose?.()}
 				aria-label={commonClose?.() ?? 'Close'}
 			>
-				<X class="w-4 h-4" />
+				<X class="h-4 w-4" />
 			</button>
 		</div>
 	</div>
@@ -211,40 +207,40 @@
 	<!-- ================================================================== -->
 	<!-- Content -->
 	<!-- ================================================================== -->
-	<div class="flex-1 min-h-0 overflow-y-auto">
+	<div class="min-h-0 flex-1 overflow-y-auto">
 		<div class="p-4">
 			<!-- Action Roll Bar -->
 			<div class="mb-4">
 				<div class="flex items-stretch gap-2">
 					<!-- [+] pinned left -->
 					<button
-						class="flex flex-col items-center justify-center
-							min-w-[56px] min-h-[56px] px-3 py-2.5
-							rounded-xl flex-shrink-0
-							border-2 border-dashed border-muted-foreground/30
+						class="flex min-h-[56px] min-w-[56px] flex-shrink-0
+							flex-col items-center justify-center rounded-xl
+							border-2 border-dashed
+							border-muted-foreground/30 px-3 py-2.5
 							text-muted-foreground/50
-							hover:border-muted-foreground/50 hover:text-muted-foreground/80
-							transition-all duration-200 ease-out
-							hover:scale-[1.02] active:scale-[0.98]"
+							transition-all duration-200
+							ease-out hover:scale-[1.02] hover:border-muted-foreground/50
+							hover:text-muted-foreground/80 active:scale-[0.98]"
 						onclick={() => onAddButtonClick?.()}
 						title={stagePreviewParticipantAddActionButton?.() ?? 'Add action button'}
 					>
-						<Plus class="w-5 h-5" />
+						<Plus class="h-5 w-5" />
 					</button>
 
 					<!-- Scrollable action buttons -->
 					<div
-						class="flex gap-2.5 overflow-x-auto pb-2 scrollbar-thin flex-1 min-w-0"
+						class="scrollbar-thin flex min-w-0 flex-1 gap-2.5 overflow-x-auto pb-2"
 						onwheel={handleWheelScroll}
 					>
 						{#each visibleButtons as action}
 							{@const isDimmed = '_dimmed' in action && action._dimmed}
 							<button
-								class="action-btn action-btn-colored group relative flex flex-col items-center justify-center
-									min-w-[72px] max-w-[120px] min-h-[56px] px-3 py-2.5
-									rounded-xl flex-shrink-0
+								class="action-btn action-btn-colored group relative flex min-h-[56px] max-w-[120px] min-w-[72px]
+									flex-shrink-0 flex-col items-center justify-center rounded-xl
+									px-3 py-2.5
 									transition-all duration-200 ease-out
-									hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98]"
+									hover:-translate-y-0.5 hover:scale-[1.02] active:scale-[0.98]"
 								class:action-btn-selected={selectedButtonId === action.id}
 								class:opacity-40={isDimmed}
 								style="--btn-color: {getDisplayColor(action)}"
@@ -254,14 +250,9 @@
 							>
 								<!-- Type indicator (top-right corner) -->
 								<span class="absolute top-1 right-1 opacity-60">
-									<svelte:component
-										this={getActionTypeIcon(action)}
-										class="w-2.5 h-2.5"
-									/>
+									<svelte:component this={getActionTypeIcon(action)} class="h-2.5 w-2.5" />
 								</span>
-								<span
-									class="text-xs font-semibold text-center leading-snug line-clamp-2"
-								>
+								<span class="line-clamp-2 text-center text-xs leading-snug font-semibold">
 									{action.buttonLabel}
 								</span>
 							</button>
@@ -274,7 +265,7 @@
 			<Tabs.Root
 				value={activeTab}
 				onValueChange={(v) => (activeTab = v as string)}
-				class="flex-1 flex flex-col min-h-0"
+				class="flex min-h-0 flex-1 flex-col"
 			>
 				<Tabs.List
 					class="grid w-full flex-shrink-0"
@@ -298,7 +289,9 @@
 					<div class="space-y-4">
 						<!-- Progress Timeline (exact participant styling) -->
 						<div class="space-y-3">
-							<h4 class="text-sm font-semibold">{stagePreviewParticipantProgress?.() ?? 'Progress'}</h4>
+							<h4 class="text-sm font-semibold">
+								{stagePreviewParticipantProgress?.() ?? 'Progress'}
+							</h4>
 
 							<div class="space-y-2">
 								{#each timeline as timelineStage, index}
@@ -308,13 +301,9 @@
 											{#if timelineStage.status === 'completed'}
 												<div class="h-4 w-4 rounded-full bg-green-400"></div>
 											{:else if timelineStage.status === 'current'}
-												<div
-													class="h-4 w-4 rounded-full bg-muted-foreground"
-												></div>
+												<div class="h-4 w-4 rounded-full bg-muted-foreground"></div>
 											{:else}
-												<div
-													class="h-4 w-4 rounded-full border-2 border-muted-foreground"
-												></div>
+												<div class="h-4 w-4 rounded-full border-2 border-muted-foreground"></div>
 											{/if}
 										</div>
 
@@ -323,15 +312,14 @@
 											{#if timelineStage.status === 'current'}
 												<!-- Current stage name is editable -->
 												<button
-													class="text-sm font-medium text-foreground text-left hover:opacity-80 cursor-text"
+													class="cursor-text text-left text-sm font-medium text-foreground hover:opacity-80"
 													onclick={() => (editingName = true)}
 												>
 													{timelineStage.name}
 												</button>
 											{:else}
 												<div
-													class="text-sm font-medium {timelineStage.status ===
-													'completed'
+													class="text-sm font-medium {timelineStage.status === 'completed'
 														? 'text-foreground'
 														: 'text-muted-foreground'}"
 												>
@@ -355,29 +343,29 @@
 						<div class="grid grid-cols-2 gap-2">
 							<Card.Root>
 								<Card.Content class="p-3">
-									<div
-										class="flex items-center gap-1.5 text-xs text-muted-foreground mb-1"
-									>
-										<ArrowRight class="w-3 h-3" />
+									<div class="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+										<ArrowRight class="h-3 w-3" />
 										{stagePreviewParticipantOutgoing?.() ?? 'Outgoing'}
 									</div>
 									<div class="text-xs font-medium text-foreground">
 										{outgoingCount}
-										{(outgoingCount === 1 ? (stagePreviewParticipantConnection?.() ?? 'connection') : (stagePreviewParticipantConnections?.() ?? 'connections'))}
+										{outgoingCount === 1
+											? (stagePreviewParticipantConnection?.() ?? 'connection')
+											: (stagePreviewParticipantConnections?.() ?? 'connections')}
 									</div>
 								</Card.Content>
 							</Card.Root>
 							<Card.Root>
 								<Card.Content class="p-3">
-									<div
-										class="flex items-center gap-1.5 text-xs text-muted-foreground mb-1"
-									>
-										<Wrench class="w-3 h-3" />
+									<div class="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+										<Wrench class="h-3 w-3" />
 										{stagePreviewParticipantTools?.() ?? 'Tools'}
 									</div>
 									<div class="text-xs font-medium text-foreground">
 										{toolCount}
-										{(toolCount === 1 ? (stagePreviewParticipantTool?.() ?? 'tool') : (stagePreviewParticipantToolsCount?.() ?? 'tools'))}
+										{toolCount === 1
+											? (stagePreviewParticipantTool?.() ?? 'tool')
+											: (stagePreviewParticipantToolsCount?.() ?? 'tools')}
 									</div>
 								</Card.Content>
 							</Card.Root>
@@ -391,25 +379,39 @@
 				<Tabs.Content value="details" class="pt-4">
 					<div class="space-y-4">
 						{#if incomingForms.length === 0}
-							<p class="text-sm text-muted-foreground text-center py-4">
-								{stagePreviewParticipantNoForms?.() ?? 'No forms are attached to incoming connections for this stage.'}
+							<p class="py-4 text-center text-sm text-muted-foreground">
+								{stagePreviewParticipantNoForms?.() ??
+									'No forms are attached to incoming connections for this stage.'}
 							</p>
 						{:else}
-							<p class="text-xs text-muted-foreground mb-2">
-								{stagePreviewParticipantDataCollected?.() ?? 'Data collected when arriving at this stage via incoming connections.'}
+							<p class="mb-2 text-xs text-muted-foreground">
+								{stagePreviewParticipantDataCollected?.() ??
+									'Data collected when arriving at this stage via incoming connections.'}
 							</p>
 							{#each incomingForms as group}
 								<div class="form-group">
 									<div class="form-group-header">
-										<FileText class="w-3.5 h-3.5 text-muted-foreground" />
-										<span class="text-xs font-semibold">{group.form.name || (stagePreviewParticipantUnnamedForm?.() ?? 'Unnamed form')}</span>
-										<span class="text-[10px] text-muted-foreground ml-auto">{stagePreviewParticipantVia?.({ name: group.connectionName }) ?? `via ${group.connectionName}`}</span>
+										<FileText class="h-3.5 w-3.5 text-muted-foreground" />
+										<span class="text-xs font-semibold"
+											>{group.form.name ||
+												(stagePreviewParticipantUnnamedForm?.() ?? 'Unnamed form')}</span
+										>
+										<span class="ml-auto text-[10px] text-muted-foreground"
+											>{stagePreviewParticipantVia?.({ name: group.connectionName }) ??
+												`via ${group.connectionName}`}</span
+										>
 									</div>
 									{#if group.fields.length === 0}
-										<p class="text-xs text-muted-foreground px-3 py-2">{stagePreviewParticipantNoFields?.() ?? 'No fields yet'}</p>
+										<p class="px-3 py-2 text-xs text-muted-foreground">
+											{stagePreviewParticipantNoFields?.() ?? 'No fields yet'}
+										</p>
 									{:else}
 										<div class="p-3">
-											<FormRenderer mode="view" fields={toFormFields(group.fields)} pages={group.form.pages ?? []} />
+											<FormRenderer
+												mode="view"
+												fields={toFormFields(group.fields)}
+												pages={group.form.pages ?? []}
+											/>
 										</div>
 									{/if}
 								</div>
@@ -430,21 +432,21 @@
 							</label>
 							<input
 								id="stage-name-input"
-								class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+								class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
 								value={stage.stage_name}
-								oninput={(e) =>
-									onStageRename?.(e.currentTarget.value)}
+								oninput={(e) => onStageRename?.(e.currentTarget.value)}
 								placeholder={stagePreviewParticipantStageNamePlaceholder?.() ?? 'Stage name...'}
 							/>
 							<p class="text-xs text-muted-foreground">
-								{stagePreviewParticipantStageNameHint?.() ?? 'Shown in the participant progress view'}
+								{stagePreviewParticipantStageNameHint?.() ??
+									'Shown in the participant progress view'}
 							</p>
 						</div>
 
 						<!-- Delete -->
-						<div class="pt-4 border-t">
+						<div class="border-t pt-4">
 							<button
-								class="text-sm text-destructive hover:text-destructive/80 transition-colors"
+								class="text-sm text-destructive transition-colors hover:text-destructive/80"
 								onclick={() => onStageDelete?.()}
 							>
 								{stagePreviewParticipantDeleteStage?.() ?? 'Delete this stage'}
@@ -541,5 +543,4 @@
 		background: hsl(var(--muted) / 0.5);
 		border-bottom: 1px solid hsl(var(--border));
 	}
-
 </style>

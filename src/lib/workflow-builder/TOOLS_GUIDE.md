@@ -24,6 +24,7 @@ WORKFLOW
 #### Connection-Attached Tools
 
 When a tool is attached to a **connection**:
+
 - It's part of a single transition action
 - Multiple tools on one connection run together (sequentially or in parallel)
 - The **connection** defines the button appearance and allowed roles
@@ -31,6 +32,7 @@ When a tool is attached to a **connection**:
 - User sees ONE button for the entire connection (not per-tool)
 
 **Example:** A "Submit Report" connection might have:
+
 - Form Tool (collects data)
 - Notification Tool (sends email to supervisor)
 - Both triggered by clicking "Submit Report" button
@@ -38,6 +40,7 @@ When a tool is attached to a **connection**:
 #### Stage-Attached Tools
 
 When a tool is attached to a **stage**:
+
 - It's an independent action available at that stage
 - Each tool has its OWN button, roles, and visual config
 - User sees MULTIPLE buttons (one per tool)
@@ -45,6 +48,7 @@ When a tool is attached to a **stage**:
 - Tool's `allowed_roles` controls who can USE that specific tool
 
 **Example:** At a "Review" stage:
+
 - Edit Tool: "Update Location" (only managers)
 - Edit Tool: "Add Notes" (anyone)
 - Each appears as a separate button
@@ -53,27 +57,27 @@ When a tool is attached to a **stage**:
 
 One simple rule governs both button config AND role access:
 
-| Tool attached to | Button Config Source | Allowed Roles Source |
-|------------------|---------------------|---------------------|
-| **Connection** | `connection.visual_config` | `connection.allowed_roles` |
-| **Stage** | `tool.visual_config` | `tool.allowed_roles` |
+| Tool attached to | Button Config Source       | Allowed Roles Source       |
+| ---------------- | -------------------------- | -------------------------- |
+| **Connection**   | `connection.visual_config` | `connection.allowed_roles` |
+| **Stage**        | `tool.visual_config`       | `tool.allowed_roles`       |
 
 ### Runtime Helper
 
 ```typescript
 function getToolConfig(tool: AnyTool) {
-  if (tool.connection_id) {
-    const connection = getConnection(tool.connection_id);
-    return {
-      allowed_roles: connection.allowed_roles,
-      visual_config: connection.visual_config
-    };
-  } else {
-    return {
-      allowed_roles: tool.allowed_roles,
-      visual_config: tool.visual_config
-    };
-  }
+	if (tool.connection_id) {
+		const connection = getConnection(tool.connection_id);
+		return {
+			allowed_roles: connection.allowed_roles,
+			visual_config: connection.visual_config
+		};
+	} else {
+		return {
+			allowed_roles: tool.allowed_roles,
+			visual_config: tool.visual_config
+		};
+	}
 }
 ```
 
@@ -85,32 +89,37 @@ Create a migration in `pb/pb_migrations/`:
 
 ```javascript
 migrate((app) => {
-  const workflowConnections = app.findCollectionByNameOrId("workflow_connections");
-  const workflowStages = app.findCollectionByNameOrId("workflow_stages");
-  const rolesId = app.findCollectionByNameOrId("roles").id;
+	const workflowConnections = app.findCollectionByNameOrId('workflow_connections');
+	const workflowStages = app.findCollectionByNameOrId('workflow_stages');
+	const rolesId = app.findCollectionByNameOrId('roles').id;
 
-  const toolsMyNewTool = new Collection({
-    type: "base",
-    name: "tools_my_new_tool",
-    fields: [
-      // Parent attachment (mutually exclusive)
-      { name: "connection_id", type: "relation", collectionId: workflowConnections.id, maxSelect: 1 },
-      { name: "stage_id", type: "relation", collectionId: workflowStages.id, maxSelect: 1 },
+	const toolsMyNewTool = new Collection({
+		type: 'base',
+		name: 'tools_my_new_tool',
+		fields: [
+			// Parent attachment (mutually exclusive)
+			{
+				name: 'connection_id',
+				type: 'relation',
+				collectionId: workflowConnections.id,
+				maxSelect: 1
+			},
+			{ name: 'stage_id', type: 'relation', collectionId: workflowStages.id, maxSelect: 1 },
 
-      // Tool-specific config
-      { name: "name", type: "text", required: true, max: 255 },
-      { name: "my_tool_config", type: "json" },
+			// Tool-specific config
+			{ name: 'name', type: 'text', required: true, max: 255 },
+			{ name: 'my_tool_config', type: 'json' },
 
-      // Stage-attached tools need their own config (ignored for connection tools)
-      { name: "allowed_roles", type: "relation", collectionId: rolesId, maxSelect: 99 },
-      { name: "visual_config", type: "json" },
+			// Stage-attached tools need their own config (ignored for connection tools)
+			{ name: 'allowed_roles', type: 'relation', collectionId: rolesId, maxSelect: 99 },
+			{ name: 'visual_config', type: 'json' },
 
-      // Timestamps
-      { name: "created", type: "autodate", onCreate: true },
-      { name: "updated", type: "autodate", onCreate: true, onUpdate: true },
-    ],
-  });
-  app.save(toolsMyNewTool);
+			// Timestamps
+			{ name: 'created', type: 'autodate', onCreate: true },
+			{ name: 'updated', type: 'autodate', onCreate: true, onUpdate: true }
+		]
+	});
+	app.save(toolsMyNewTool);
 });
 ```
 
@@ -120,23 +129,23 @@ Add to `src/lib/workflow-builder/types.ts`:
 
 ```typescript
 export interface ToolsMyNewTool {
-  id: string;
-  connection_id?: string;
-  stage_id?: string;
-  name: string;
-  my_tool_config?: MyToolConfig;
-  /**
-   * Allowed roles for this tool.
-   * - If connection_id is set: IGNORED (inherited from connection.allowed_roles)
-   * - If stage_id is set: USED (defines who can use this tool)
-   */
-  allowed_roles?: string[];
-  /**
-   * Visual/button configuration for this tool.
-   * - If connection_id is set: IGNORED (inherited from connection.visual_config)
-   * - If stage_id is set: USED (defines the button appearance)
-   */
-  visual_config?: VisualConfig;
+	id: string;
+	connection_id?: string;
+	stage_id?: string;
+	name: string;
+	my_tool_config?: MyToolConfig;
+	/**
+	 * Allowed roles for this tool.
+	 * - If connection_id is set: IGNORED (inherited from connection.allowed_roles)
+	 * - If stage_id is set: USED (defines who can use this tool)
+	 */
+	allowed_roles?: string[];
+	/**
+	 * Visual/button configuration for this tool.
+	 * - If connection_id is set: IGNORED (inherited from connection.visual_config)
+	 * - If stage_id is set: USED (defines the button appearance)
+	 */
+	visual_config?: VisualConfig;
 }
 ```
 
@@ -182,30 +191,30 @@ Create `src/routes/.../builder/right-sidebar/views/my-new-tool-editor/MyNewToolE
 
 ```svelte
 <script lang="ts">
-  // Determine attachment type
-  const isStageAttached = $derived(!!myTool.stage_id && !myTool.connection_id);
+	// Determine attachment type
+	const isStageAttached = $derived(!!myTool.stage_id && !myTool.connection_id);
 </script>
 
 <div class="editor">
-  <!-- Tool-specific configuration always shown -->
-  <div class="config-section">
-    <!-- Your tool's unique settings -->
-  </div>
+	<!-- Tool-specific configuration always shown -->
+	<div class="config-section">
+		<!-- Your tool's unique settings -->
+	</div>
 
-  {#if isStageAttached}
-    <!-- Stage tools: Show button config + roles -->
-    <div class="button-config">
-      <!-- Button label, color, confirmation -->
-    </div>
-    <div class="roles-config">
-      <!-- Role selector -->
-    </div>
-  {:else}
-    <!-- Connection tools: Show inheritance notice -->
-    <div class="inheritance-notice">
-      <p>This tool inherits button appearance and roles from the connection.</p>
-    </div>
-  {/if}
+	{#if isStageAttached}
+		<!-- Stage tools: Show button config + roles -->
+		<div class="button-config">
+			<!-- Button label, color, confirmation -->
+		</div>
+		<div class="roles-config">
+			<!-- Role selector -->
+		</div>
+	{:else}
+		<!-- Connection tools: Show inheritance notice -->
+		<div class="inheritance-notice">
+			<p>This tool inherits button appearance and roles from the connection.</p>
+		</div>
+	{/if}
 </div>
 ```
 
@@ -215,15 +224,15 @@ Update `src/lib/workflow-builder/tools/registry.ts`:
 
 ```typescript
 export const TOOL_REGISTRY: ToolDefinition[] = [
-  // ... existing tools
-  {
-    type: 'my_new_tool',
-    label: 'My New Tool',
-    description: 'Does something useful',
-    icon: MyIcon,
-    attachableTo: ['connection', 'stage'], // or just ['connection'] or ['stage']
-    defaultConfig: {}
-  }
+	// ... existing tools
+	{
+		type: 'my_new_tool',
+		label: 'My New Tool',
+		description: 'Does something useful',
+		icon: MyIcon,
+		attachableTo: ['connection', 'stage'], // or just ['connection'] or ['stage']
+		defaultConfig: {}
+	}
 ];
 ```
 
@@ -242,6 +251,7 @@ Before submitting a new tool, verify:
 ## Visual Reference
 
 ### Connection Tool Flow
+
 ```
 User clicks connection button
          │
@@ -261,6 +271,7 @@ User clicks connection button
 ```
 
 ### Stage Tool Flow
+
 ```
 User at Stage X sees multiple buttons:
 

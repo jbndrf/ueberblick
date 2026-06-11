@@ -67,7 +67,9 @@ export function buildChanges(state: WorkflowBuilderState) {
 			deleted: state.automations.filter((a) => a.status === 'deleted').map((a) => a.data.id)
 		},
 		fieldTags: {
-			new: state.fieldTags.filter((ft) => ft.status === 'new').map((ft) => $state.snapshot(ft.data)),
+			new: state.fieldTags
+				.filter((ft) => ft.status === 'new')
+				.map((ft) => $state.snapshot(ft.data)),
 			modified: state.fieldTags
 				.filter((ft) => ft.status === 'modified')
 				.map((ft) => $state.snapshot(ft.data)),

@@ -162,7 +162,11 @@
 	}
 
 	/* Dim non-highlighted edges when any edge has .highlighted */
-	:global(.svelte-flow__edges:has(.highlighted) .svelte-flow__edge:not(.highlighted):not(.selected) .svelte-flow__edge-path) {
+	:global(
+		.svelte-flow__edges:has(.highlighted)
+			.svelte-flow__edge:not(.highlighted):not(.selected)
+			.svelte-flow__edge-path
+	) {
 		opacity: 0.25;
 	}
 </style>

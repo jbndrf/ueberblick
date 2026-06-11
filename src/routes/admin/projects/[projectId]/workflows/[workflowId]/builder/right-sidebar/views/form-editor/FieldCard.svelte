@@ -220,11 +220,7 @@
 				class="preview-input"
 			/>
 		{:else if field.field_type === 'date'}
-			<Input
-				type="date"
-				disabled
-				class="preview-input"
-			/>
+			<Input type="date" disabled class="preview-input" />
 		{:else if field.field_type === 'file'}
 			<div class="file-upload-preview">
 				<Upload class="h-4 w-4" />
@@ -232,7 +228,9 @@
 			</div>
 		{:else if field.field_type === 'dropdown' || field.field_type === 'smart_dropdown'}
 			<div class="select-preview">
-				<span class="select-placeholder">{field.placeholder || (formEditorFieldCardSelectPlaceholder?.() ?? 'Select...')}</span>
+				<span class="select-placeholder"
+					>{field.placeholder || (formEditorFieldCardSelectPlaceholder?.() ?? 'Select...')}</span
+				>
 				<ChevronDown class="h-4 w-4" />
 			</div>
 		{:else if field.field_type === 'multiple_choice'}
@@ -257,12 +255,18 @@
 	<!-- Field type and status indicators -->
 	<div class="field-badges">
 		{#if hasValidation}
-			<div class="indicator-badge validation" title={formEditorFieldCardHasValidationRules?.() ?? 'Has validation rules'}>
+			<div
+				class="indicator-badge validation"
+				title={formEditorFieldCardHasValidationRules?.() ?? 'Has validation rules'}
+			>
 				<Shield class="h-2.5 w-2.5" />
 			</div>
 		{/if}
 		{#if hasConditionalLogic}
-			<div class="indicator-badge conditional" title={formEditorFieldCardHasConditionalLogic?.() ?? 'Has conditional logic'}>
+			<div
+				class="indicator-badge conditional"
+				title={formEditorFieldCardHasConditionalLogic?.() ?? 'Has conditional logic'}
+			>
 				<GitBranch class="h-2.5 w-2.5" />
 			</div>
 		{/if}
@@ -291,7 +295,9 @@
 
 	.field-card.selected {
 		border-color: hsl(var(--primary));
-		box-shadow: 0 0 0 2px hsl(var(--primary) / 0.15), 0 2px 8px hsl(var(--foreground) / 0.08);
+		box-shadow:
+			0 0 0 2px hsl(var(--primary) / 0.15),
+			0 2px 8px hsl(var(--foreground) / 0.08);
 	}
 
 	.field-card.dragging {
@@ -349,7 +355,9 @@
 		color: hsl(var(--muted-foreground));
 		border-radius: 0.25rem;
 		opacity: 0.5;
-		transition: opacity 0.15s ease, background 0.15s ease;
+		transition:
+			opacity 0.15s ease,
+			background 0.15s ease;
 		z-index: 20;
 		pointer-events: auto;
 		user-select: none;
@@ -520,7 +528,9 @@
 		height: 18px;
 		border-radius: 0.25rem;
 		opacity: 0;
-		transition: opacity 0.15s ease, transform 0.15s ease;
+		transition:
+			opacity 0.15s ease,
+			transform 0.15s ease;
 	}
 
 	.field-card:hover .indicator-badge,

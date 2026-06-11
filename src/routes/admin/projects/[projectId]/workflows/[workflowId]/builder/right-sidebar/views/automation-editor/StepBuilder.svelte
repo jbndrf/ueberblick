@@ -2,7 +2,13 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Plus, Trash2, ChevronUp, ChevronDown, ChevronRight } from '@lucide/svelte';
-	import { automationStepBuilderActionsLabel, automationStepBuilderAddStep, automationStepBuilderConditionsLabel, automationStepBuilderDefaultStepName, automationStepBuilderStepNamePlaceholder } from '$lib/paraglide/messages';
+	import {
+		automationStepBuilderActionsLabel,
+		automationStepBuilderAddStep,
+		automationStepBuilderConditionsLabel,
+		automationStepBuilderDefaultStepName,
+		automationStepBuilderStepNamePlaceholder
+	} from '$lib/paraglide/messages';
 
 	import ConditionBuilder from './ConditionBuilder.svelte';
 	import ActionBuilder from './ActionBuilder.svelte';
@@ -35,7 +41,9 @@
 
 	function addStep() {
 		const newStep: AutomationStep = {
-			name: (automationStepBuilderDefaultStepName?.({ number: steps.length + 1 }) ?? `Step ${steps.length + 1}`),
+			name:
+				automationStepBuilderDefaultStepName?.({ number: steps.length + 1 }) ??
+				`Step ${steps.length + 1}`,
 			conditions: null,
 			actions: []
 		};
@@ -93,14 +101,16 @@
 		<div class="step-card">
 			<div class="step-header">
 				<button class="step-toggle" onclick={() => toggleExpanded(index)}>
-					<ChevronRight class="h-3 w-3 {expandedSteps.has(index) ? 'toggle-expanded' : 'toggle-collapsed'}" />
+					<ChevronRight
+						class="h-3 w-3 {expandedSteps.has(index) ? 'toggle-expanded' : 'toggle-collapsed'}"
+					/>
 					<span class="step-number">{index + 1}</span>
 				</button>
 				<Input
 					value={step.name}
 					oninput={(e) => updateStepName(index, e.currentTarget.value)}
 					placeholder={automationStepBuilderStepNamePlaceholder?.() ?? 'Step name...'}
-					class="h-6 text-xs flex-1"
+					class="h-6 flex-1 text-xs"
 				/>
 				<div class="step-controls">
 					{#if index > 0}
@@ -124,7 +134,9 @@
 			{#if expandedSteps.has(index)}
 				<div class="step-content">
 					<div class="step-section">
-						<span class="section-label">{automationStepBuilderConditionsLabel?.() ?? 'Conditions (guard)'}</span>
+						<span class="section-label"
+							>{automationStepBuilderConditionsLabel?.() ?? 'Conditions (guard)'}</span
+						>
 						<ConditionBuilder
 							conditions={step.conditions}
 							{fieldOptions}
@@ -146,7 +158,7 @@
 	{/each}
 
 	<Button variant="ghost" size="sm" class="add-step-btn" onclick={addStep}>
-		<Plus class="h-3 w-3 mr-1" />
+		<Plus class="mr-1 h-3 w-3" />
 		{automationStepBuilderAddStep?.() ?? 'Add Step'}
 	</Button>
 </div>

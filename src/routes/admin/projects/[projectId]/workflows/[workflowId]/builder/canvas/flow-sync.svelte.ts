@@ -71,9 +71,7 @@ export class FlowSync {
 
 			// Preserve current node positions (they're only synced to state on save)
 			// Use untrack to read nodes without creating circular dependency
-			const currentPositions = untrack(
-				() => new Map(this.nodes.map((n) => [n.id, n.position]))
-			);
+			const currentPositions = untrack(() => new Map(this.nodes.map((n) => [n.id, n.position])));
 
 			const stageNodes = this.stagesToNodes(_stages.map((s) => s.data)).map((node) => {
 				const currentPos = currentPositions.get(node.id);

@@ -2,7 +2,13 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Label } from '$lib/components/ui/label';
 	import { X } from '@lucide/svelte';
-	import { fieldTagEditorSlotClear, fieldTagEditorSlotFilterByField, fieldTagEditorSlotFilterByStage, fieldTagEditorSlotSelectField, fieldTagEditorSlotStageModeHint } from '$lib/paraglide/messages';
+	import {
+		fieldTagEditorSlotClear,
+		fieldTagEditorSlotFilterByField,
+		fieldTagEditorSlotFilterByStage,
+		fieldTagEditorSlotSelectField,
+		fieldTagEditorSlotStageModeHint
+	} from '$lib/paraglide/messages';
 	import type { TagTypeDefinition } from '$lib/workflow-builder/tools/tag-types';
 	import type { FilterableConfig } from '$lib/workflow-builder/tools/tag-types';
 	import type { TagMapping, ToolsFormField, ToolsForm, WorkflowStage } from '$lib/workflow-builder';
@@ -20,12 +26,17 @@
 		/** All form fields grouped by stage/form, pre-filtered to compatible types */
 		compatibleFieldGroups: FieldGroup[];
 		/** Called when a field is assigned or cleared */
-		onMappingChange: (tagType: string, fieldId: string | null, config?: Record<string, unknown>) => void;
+		onMappingChange: (
+			tagType: string,
+			fieldId: string | null,
+			config?: Record<string, unknown>
+		) => void;
 		/** Called when the config is updated */
 		onConfigChange: (tagType: string, config: Record<string, unknown>) => void;
 	}
 
-	let { tagType, mapping, compatibleFieldGroups, onMappingChange, onConfigChange }: Props = $props();
+	let { tagType, mapping, compatibleFieldGroups, onMappingChange, onConfigChange }: Props =
+		$props();
 
 	// Derive filterBy mode from mapping config
 	const filterBy = $derived.by((): 'stage' | 'field' => {
@@ -57,22 +68,28 @@
 	}
 </script>
 
-<div class="rounded-lg border p-3 space-y-3">
+<div class="space-y-3 rounded-lg border p-3">
 	<div>
 		<div class="flex items-center justify-between">
 			<Label class="text-sm font-medium">{tagType.displayName}</Label>
 			{#if mapping}
-				<Button variant="ghost" size="icon" class="h-6 w-6" onclick={handleClear} title={fieldTagEditorSlotClear?.() ?? 'Clear'}>
+				<Button
+					variant="ghost"
+					size="icon"
+					class="h-6 w-6"
+					onclick={handleClear}
+					title={fieldTagEditorSlotClear?.() ?? 'Clear'}
+				>
 					<X class="h-3.5 w-3.5" />
 				</Button>
 			{/if}
 		</div>
-		<p class="text-xs text-muted-foreground mt-0.5">{tagType.description}</p>
+		<p class="mt-0.5 text-xs text-muted-foreground">{tagType.description}</p>
 	</div>
 
 	<!-- Filter mode radio -->
 	<div class="flex gap-4">
-		<label class="flex items-center gap-1.5 text-sm cursor-pointer">
+		<label class="flex cursor-pointer items-center gap-1.5 text-sm">
 			<input
 				type="radio"
 				name="filterBy-{tagType.tagType}"
@@ -83,7 +100,7 @@
 			/>
 			{fieldTagEditorSlotFilterByStage?.() ?? 'Filter by Stage'}
 		</label>
-		<label class="flex items-center gap-1.5 text-sm cursor-pointer">
+		<label class="flex cursor-pointer items-center gap-1.5 text-sm">
 			<input
 				type="radio"
 				name="filterBy-{tagType.tagType}"
@@ -100,7 +117,7 @@
 	{#if mapping && filterBy === 'field'}
 		<div>
 			<select
-				class="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+				class="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm ring-offset-background focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
 				value={mapping?.fieldId ?? ''}
 				onchange={handleFieldSelect}
 			>
@@ -121,7 +138,8 @@
 	<!-- Stage mode hint -->
 	{#if mapping && filterBy === 'stage'}
 		<p class="text-xs text-muted-foreground">
-			{fieldTagEditorSlotStageModeHint?.() ?? 'Participants will filter by workflow stage. Configure stage icons in the icon designer.'}
+			{fieldTagEditorSlotStageModeHint?.() ??
+				'Participants will filter by workflow stage. Configure stage icons in the icon designer.'}
 		</p>
 	{/if}
 </div>

@@ -15,10 +15,9 @@ test.describe('Builder refactor smoke', () => {
 		await pb
 			.collection('users')
 			.authWithPassword(ADMIN_CREDENTIALS.email, ADMIN_CREDENTIALS.password);
-		const wf = await pb.collection('workflows').getFirstListItem(
-			'name = "Damage Report Workflow"',
-			{ sort: '-created' }
-		);
+		const wf = await pb
+			.collection('workflows')
+			.getFirstListItem('name = "Damage Report Workflow"', { sort: '-created' });
 
 		const errors: string[] = [];
 		page.on('pageerror', (err) => errors.push(String(err)));
@@ -28,7 +27,9 @@ test.describe('Builder refactor smoke', () => {
 		await page.fill('input[type="email"]', ADMIN_CREDENTIALS.email);
 		await page.fill('input[type="password"]', ADMIN_CREDENTIALS.password);
 		await page.click('button[type="submit"]');
-		await page.waitForURL((url) => url.pathname.startsWith('/admin') && !url.pathname.includes('login'));
+		await page.waitForURL(
+			(url) => url.pathname.startsWith('/admin') && !url.pathname.includes('login')
+		);
 
 		await page.goto(`/admin/projects/${wf.project_id}/workflows/${wf.id}/builder`);
 

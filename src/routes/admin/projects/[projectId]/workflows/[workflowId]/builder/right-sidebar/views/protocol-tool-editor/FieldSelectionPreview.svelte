@@ -2,7 +2,11 @@
 	import { X, Edit3, Type } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { fieldTypeIcons, type ToolsFormField, type WorkflowStage } from '$lib/workflow-builder';
-	import { editToolFieldSelectionPreviewEmptyDescription, editToolFieldSelectionPreviewEmptyTitle, editToolFieldSelectionPreviewTitle } from '$lib/paraglide/messages';
+	import {
+		editToolFieldSelectionPreviewEmptyDescription,
+		editToolFieldSelectionPreviewEmptyTitle,
+		editToolFieldSelectionPreviewTitle
+	} from '$lib/paraglide/messages';
 
 	type SelectedFieldInfo = {
 		field: ToolsFormField;
@@ -65,9 +69,12 @@
 				<div class="empty-icon">
 					<Edit3 class="h-10 w-10" />
 				</div>
-				<p class="empty-title">{editToolFieldSelectionPreviewEmptyTitle?.() ?? 'No fields selected'}</p>
+				<p class="empty-title">
+					{editToolFieldSelectionPreviewEmptyTitle?.() ?? 'No fields selected'}
+				</p>
 				<p class="empty-description">
-					{editToolFieldSelectionPreviewEmptyDescription?.() ?? 'Select fields from the left panel to make them editable with this tool.'}
+					{editToolFieldSelectionPreviewEmptyDescription?.() ??
+						'Select fields from the left panel to make them editable with this tool.'}
 				</p>
 			</div>
 		{/if}

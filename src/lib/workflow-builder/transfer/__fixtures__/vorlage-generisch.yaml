@@ -248,53 +248,53 @@ connections:
     to: vorbereitung
     action: anlegen
     button_label: Anlegen
-    button_color: "#3b82f6"
+    button_color: '#3b82f6'
   - from: selbstpr-fung-l-uft
     to: nachbesserung-auftrag-inter
     action: nachbesserung_intern_anweisen
     button_label: Nachbesserung intern anweisen
-    button_color: "#f59e0b"
+    button_color: '#f59e0b'
   - from: in-pr-fung
     to: freigegeben
     action: freigabe_erteilen
     button_label: Freigabe erteilen
-    button_color: "#16a34a"
+    button_color: '#16a34a'
     requires_confirmation: true
     confirmation_message: Mit der Freigabe wird das Prüfobjekt abgeschlossen. Sind alle Nachbesserungen geprüft?
   - from: selbstpr-fung-l-uft
     to: bereit-zur-pr-fung
     action: zur_pruefung_anmelden
     button_label: Zur Prüfung anmelden
-    button_color: "#16a34a"
+    button_color: '#16a34a'
     requires_confirmation: true
     confirmation_message: Mit dem Anmelden bestätigst du, dass deine Selbstprüfung abgeschlossen ist und der externe Prüfer übernehmen kann.
   - from: bereit-zur-pr-fung
     to: in-pr-fung
     action: pruefung_starten
     button_label: Prüfung starten
-    button_color: "#0ea5e9"
+    button_color: '#0ea5e9'
     requires_confirmation: true
     confirmation_message: Möchtest du die Prüfung jetzt starten? Damit wechselt das Prüfobjekt in den Zustand "In Prüfung" und die Prüf-Checkliste wird verfügbar.
   - from: nachbesserung-auftrag-inter
     to: selbstpr-fung-l-uft
     action: nachbesserung_intern_abgeschlossen
     button_label: Nachbesserung intern abgeschlossen
-    button_color: "#3b82f6"
+    button_color: '#3b82f6'
   - from: nachbesserung-auftrag-pr-fer
     to: in-pr-fung
     action: nachbesserung_behoben_melden
     button_label: Nachbesserung als behoben melden
-    button_color: "#f59e0b"
+    button_color: '#f59e0b'
   - from: in-pr-fung
     to: nachbesserung-auftrag-pr-fer
     action: nachbesserung_anordnen
     button_label: Nachbesserung anordnen
-    button_color: "#dc2626"
+    button_color: '#dc2626'
   - from: vorbereitung
     to: selbstpr-fung-l-uft
     action: selbstpruefung_starten
     button_label: Selbstprüfung starten
-    button_color: "#3b82f6"
+    button_color: '#3b82f6'
     requires_confirmation: true
     confirmation_message: Möchtest du jetzt mit der Selbstprüfung beginnen? Die Eigene Checkliste wird im nächsten Schritt verfügbar.
 forms:
@@ -305,10 +305,10 @@ forms:
       action: anlegen
     name: Anlegen
     pages:
-      - description: ""
+      - description: ''
         page: 2
         title: Sonderfälle
-      - description: ""
+      - description: ''
         page: 1
         title: Stammdaten
     fields:
@@ -336,7 +336,7 @@ forms:
       - description: Pro gewähltem Sonderfall ein Status- und ein Nachweisfeld.
         page: 1
         title: Sonderfall-Nachweise
-      - description: ""
+      - description: ''
         page: 2
         title: Sonderfälle
     fields:

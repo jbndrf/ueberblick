@@ -105,7 +105,7 @@ async function selectInstance(page: Page, instanceId: string) {
 	}
 
 	// If dispatching event didn't work, try scrolling marker into view and clicking
-	if (await leafletMarker.count() > 0) {
+	if ((await leafletMarker.count()) > 0) {
 		console.log(`Trying scrollIntoView + click`);
 		await leafletMarker.scrollIntoViewIfNeeded();
 		await page.waitForTimeout(300);
@@ -283,7 +283,11 @@ test.describe.serial('Permission Matrix E2E Test', () => {
 			is_active: true,
 			role_id: []
 		});
-		participants.set('IsolatedUser', { id: isolatedParticipant.id, token: isolatedToken, roleId: '' });
+		participants.set('IsolatedUser', {
+			id: isolatedParticipant.id,
+			token: isolatedToken,
+			roleId: ''
+		});
 		console.log(`IsolatedUser (second project): token = ${isolatedToken}`);
 	});
 
@@ -830,8 +834,12 @@ test.describe.serial('Permission Matrix E2E Test', () => {
 	// This is INTENTIONAL - instance visibility is open for progress tracking.
 	// Field values (LAYER 3) are protected by stage_id.visible_to_roles.
 
-	test('2. Instance Visibility: MinimalAccessUser can see all instances (progress transparency)', async ({ page }) => {
-		console.log(`\n=== TEST 2: Instance Visibility (MinimalAccessUser - Progress Transparency) ===`);
+	test('2. Instance Visibility: MinimalAccessUser can see all instances (progress transparency)', async ({
+		page
+	}) => {
+		console.log(
+			`\n=== TEST 2: Instance Visibility (MinimalAccessUser - Progress Transparency) ===`
+		);
 		const user = participants.get('MinimalAccessUser')!;
 		await loginAsParticipant(page, user.token);
 
@@ -843,8 +851,12 @@ test.describe.serial('Permission Matrix E2E Test', () => {
 		const leakageVisible = await canSeeInstance(page, instances.get('leakage-test-instance')!);
 
 		console.log(`Open instance visible: ${openVisible}`);
-		console.log(`Restricted stage instance visible (EXPECTED - progress transparency): ${restrictedVisible}`);
-		console.log(`Partial stage instance visible (EXPECTED - progress transparency): ${partialVisible}`);
+		console.log(
+			`Restricted stage instance visible (EXPECTED - progress transparency): ${restrictedVisible}`
+		);
+		console.log(
+			`Partial stage instance visible (EXPECTED - progress transparency): ${partialVisible}`
+		);
 		console.log(`Leakage test instance visible: ${leakageVisible}`);
 
 		// All instances are visible to all project participants (progress transparency)
@@ -855,7 +867,9 @@ test.describe.serial('Permission Matrix E2E Test', () => {
 		console.log(`PASS: MinimalAccessUser can see all instances (per Layer 2 design)`);
 	});
 
-	test('3. Instance Visibility: PartialAccessUser can see all instances (progress transparency)', async ({ page }) => {
+	test('3. Instance Visibility: PartialAccessUser can see all instances (progress transparency)', async ({
+		page
+	}) => {
 		console.log(`\n=== TEST 3: Instance Visibility (PartialAccessUser) ===`);
 		const user = participants.get('PartialAccessUser')!;
 		await loginAsParticipant(page, user.token);
@@ -893,7 +907,9 @@ test.describe.serial('Permission Matrix E2E Test', () => {
 		console.log(`PASS: FullAccessUser can see field values at restricted stage`);
 	});
 
-	test('5. Field Values: MinimalAccessUser cannot see restricted field values', async ({ page }) => {
+	test('5. Field Values: MinimalAccessUser cannot see restricted field values', async ({
+		page
+	}) => {
 		console.log(`\n=== TEST 5: Field Values (MinimalAccessUser) ===`);
 		const user = participants.get('MinimalAccessUser')!;
 		await loginAsParticipant(page, user.token);
@@ -993,7 +1009,9 @@ test.describe.serial('Permission Matrix E2E Test', () => {
 		console.log(`PASS: MinimalAccessUser can only see open edit tools`);
 	});
 
-	test('9. Cross-Project Isolation: IsolatedUser cannot see main project data', async ({ page }) => {
+	test('9. Cross-Project Isolation: IsolatedUser cannot see main project data', async ({
+		page
+	}) => {
 		console.log(`\n=== TEST 9: Cross-Project Isolation ===`);
 		const user = participants.get('IsolatedUser')!;
 		await loginAsParticipant(page, user.token);
@@ -1045,7 +1063,9 @@ test.describe.serial('Permission Matrix E2E Test', () => {
 		console.log(`PASS: Lockdown configuration complete`);
 	});
 
-	test('11. NOONE ROLE LOCKDOWN: Verify FullAccessUser sees no sensitive data', async ({ page }) => {
+	test('11. NOONE ROLE LOCKDOWN: Verify FullAccessUser sees no sensitive data', async ({
+		page
+	}) => {
 		console.log(`\n=== TEST 11: LOCKDOWN VERIFICATION (FullAccessUser) ===`);
 		const user = participants.get('FullAccessUser')!;
 		await loginAsParticipant(page, user.token);

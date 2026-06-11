@@ -6,7 +6,14 @@ import { superValidate } from 'sveltekit-superforms';
 import { zod4 } from 'sveltekit-superforms/adapters';
 import { createUpdateFieldAction, createDeleteAction } from '$lib/server/crud-actions';
 import type PocketBase from 'pocketbase';
-import { rolesServerCreateError, rolesServerCreateParticipantError, rolesServerLoadError, rolesServerNameMinLength, rolesServerUpdateError, rolesServerUpdateParticipantsError } from '$lib/paraglide/messages';
+import {
+	rolesServerCreateError,
+	rolesServerCreateParticipantError,
+	rolesServerLoadError,
+	rolesServerNameMinLength,
+	rolesServerUpdateError,
+	rolesServerUpdateParticipantsError
+} from '$lib/paraglide/messages';
 
 function generateJoinSlug(): string {
 	return randomBytes(12).toString('base64url');
@@ -15,11 +22,7 @@ function generateJoinSlug(): string {
 /**
  * Cleanup before deleting a role - remove role from all participants and visibility settings
  */
-async function cleanupRoleReferences(
-	pb: PocketBase,
-	roleId: string,
-	projectId: string
-) {
+async function cleanupRoleReferences(pb: PocketBase, roleId: string, projectId: string) {
 	// Remove this role from all assigned participants
 	const participantsWithRole = await pb.collection('participants').getFullList({
 		filter: `project_id = "${projectId}" && role_id ?~ "${roleId}"`
@@ -218,7 +221,9 @@ export const actions: Actions = {
 			return { success: true };
 		} catch (err) {
 			console.error('Error updating participant roles:', err);
-			return fail(500, { message: rolesServerUpdateParticipantsError?.() ?? 'Failed to update participant roles' });
+			return fail(500, {
+				message: rolesServerUpdateParticipantsError?.() ?? 'Failed to update participant roles'
+			});
 		}
 	},
 
@@ -326,7 +331,9 @@ export const actions: Actions = {
 			return { success: true, entity: newParticipant };
 		} catch (error) {
 			console.error('Error creating participant:', error);
-			return fail(500, { message: rolesServerCreateParticipantError?.() ?? 'Failed to create participant' });
+			return fail(500, {
+				message: rolesServerCreateParticipantError?.() ?? 'Failed to create participant'
+			});
 		}
 	}
 };

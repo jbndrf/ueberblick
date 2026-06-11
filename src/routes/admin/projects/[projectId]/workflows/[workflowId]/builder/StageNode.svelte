@@ -40,12 +40,7 @@
 	class:in-region={inRegion}
 >
 	<!-- Input handle - all stages have target handles (start stages receive entry connections) -->
-	<Handle
-		type="target"
-		position={Position.Left}
-		class="handle handle-target"
-		style="top: 24px;"
-	/>
+	<Handle type="target" position={Position.Left} class="handle handle-target" style="top: 24px;" />
 
 	<div class="stage-content">
 		<div class="stage-header">
@@ -61,18 +56,17 @@
 		<div class="stage-meta">
 			<span class="stage-key">{data.key}</span>
 			{#if data.maxHours}
-				<span class="stage-hours">{workflowBuilderStageNodeMaxHours?.({ maxHours: data.maxHours }) ?? `${data.maxHours}h`}</span>
+				<span class="stage-hours"
+					>{workflowBuilderStageNodeMaxHours?.({ maxHours: data.maxHours }) ??
+						`${data.maxHours}h`}</span
+				>
 			{/if}
 		</div>
 
 		{#if inRegion}
 			<div class="region-indicators">
 				{#each regions as region (region.id)}
-					<span
-						class="region-dot"
-						style="background: {region.color};"
-						title={region.name}
-					></span>
+					<span class="region-dot" style="background: {region.color};" title={region.name}></span>
 				{/each}
 			</div>
 		{/if}
@@ -291,7 +285,9 @@
 		height: 12px;
 		border: 2px solid white;
 		box-shadow: 0 1px 4px oklch(0 0 0 / 0.2);
-		transition: transform 0.15s ease, box-shadow 0.15s ease;
+		transition:
+			transform 0.15s ease,
+			box-shadow 0.15s ease;
 	}
 
 	:global(.dark .stage-node .handle) {
@@ -334,7 +330,12 @@
 	}
 
 	@keyframes pulse {
-		0%, 100% { transform: scale(1); }
-		50% { transform: scale(1.2); }
+		0%,
+		100% {
+			transform: scale(1);
+		}
+		50% {
+			transform: scale(1.2);
+		}
 	}
 </style>

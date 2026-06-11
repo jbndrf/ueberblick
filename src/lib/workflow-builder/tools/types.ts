@@ -92,7 +92,12 @@ export interface FieldTagToolConfig {
 // Tool Config Union
 // =============================================================================
 
-export type ToolConfig = FormToolConfig | EditToolConfig | AutomationToolConfig | ProtocolToolConfig | FieldTagToolConfig;
+export type ToolConfig =
+	| FormToolConfig
+	| EditToolConfig
+	| AutomationToolConfig
+	| ProtocolToolConfig
+	| FieldTagToolConfig;
 
 // =============================================================================
 // Type Guards

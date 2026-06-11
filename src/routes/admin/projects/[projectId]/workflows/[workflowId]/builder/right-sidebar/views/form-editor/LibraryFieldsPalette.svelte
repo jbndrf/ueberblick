@@ -12,8 +12,13 @@
 		onPick?: (fieldDefId: string) => void;
 	};
 
-	let { expanded = false, fieldDefs, usedDefIds = new Set(), getUsageCount, onPick }: Props =
-		$props();
+	let {
+		expanded = false,
+		fieldDefs,
+		usedDefIds = new Set(),
+		getUsageCount,
+		onPick
+	}: Props = $props();
 
 	let draggingId = $state<string | null>(null);
 
@@ -53,7 +58,9 @@
 					onclick={() => !isUsed && onPick?.(def.id)}
 					disabled={isUsed}
 					type="button"
-					title={expanded ? undefined : `${def.label} (${def.field_type}, ${def.write_mode})${isUsed ? ' — already on this form' : ''}`}
+					title={expanded
+						? undefined
+						: `${def.label} (${def.field_type}, ${def.write_mode})${isUsed ? ' — already on this form' : ''}`}
 				>
 					<span class="type-icon"><TypeIcon class="h-3.5 w-3.5" /></span>
 					{#if expanded}

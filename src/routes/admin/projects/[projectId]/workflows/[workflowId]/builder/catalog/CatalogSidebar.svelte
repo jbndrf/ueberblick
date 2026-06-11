@@ -50,7 +50,9 @@
 	const globalTools = $derived.by(() => {
 		const items: Array<{ id: string; type: string; name: string }> = [
 			...state.getGlobalForms().map((f) => ({ id: f.data.id, type: 'form', name: f.data.name })),
-			...state.getGlobalEditTools().map((t) => ({ id: t.data.id, type: 'edit', name: t.data.name })),
+			...state
+				.getGlobalEditTools()
+				.map((t) => ({ id: t.data.id, type: 'edit', name: t.data.name })),
 			...state
 				.getGlobalProtocolTools()
 				.map((t) => ({ id: t.data.id, type: 'protocol', name: t.data.name }))
@@ -87,9 +89,7 @@
 	}
 
 	// --- Field tags ------------------------------------------------------------
-	const tagMappingCount = $derived(
-		state.getFieldTagForWorkflow()?.data.tag_mappings.length ?? 0
-	);
+	const tagMappingCount = $derived(state.getFieldTagForWorkflow()?.data.tag_mappings.length ?? 0);
 
 	function openFieldTags() {
 		state.getOrCreateFieldTag();
@@ -147,8 +147,7 @@
 			>
 				<GripVertical class="drag-handle text-muted-foreground" />
 				<CircleStop class="drag-icon text-foreground" />
-				<span class="drag-label text-foreground"
-					>{workflowBuilderDefaultPanelEnd?.() ?? 'End'}</span
+				<span class="drag-label text-foreground">{workflowBuilderDefaultPanelEnd?.() ?? 'End'}</span
 				>
 			</div>
 		</div>
@@ -196,7 +195,7 @@
 						class:selected={selectedId === tool.id}
 						onclick={() => selectTool(ctx, tool.id)}
 					>
-						<ToolIcon class="h-3.5 w-3.5 item-icon" />
+						<ToolIcon class="item-icon h-3.5 w-3.5" />
 						<span class="item-label">{tool.name}</span>
 					</button>
 				{/each}
@@ -209,7 +208,11 @@
 		<div class="section-header">
 			<h3 class="section-title">{catalogAutomationsTitle?.() ?? 'Automations'}</h3>
 			<div class="add-buttons">
-				<button class="add-btn" title={catalogAutomationsTitle?.() ?? 'Automations'} onclick={addAutomation}>
+				<button
+					class="add-btn"
+					title={catalogAutomationsTitle?.() ?? 'Automations'}
+					onclick={addAutomation}
+				>
 					<Zap class="h-3 w-3" /><Plus class="h-2.5 w-2.5" />
 				</button>
 			</div>
@@ -224,7 +227,7 @@
 						class:selected={selectedId === automation.id}
 						onclick={() => ui.select({ type: 'automation', id: automation.id })}
 					>
-						<Zap class="h-3.5 w-3.5 item-icon" />
+						<Zap class="item-icon h-3.5 w-3.5" />
 						<span class="item-label">{automation.name}</span>
 						<span class="item-meta">{triggerShortLabel(automation.trigger_type)}</span>
 						<input
@@ -252,10 +255,11 @@
 				class:selected={ui.selection.type === 'fieldTags'}
 				onclick={openFieldTags}
 			>
-				<Tags class="h-3.5 w-3.5 item-icon" />
+				<Tags class="item-icon h-3.5 w-3.5" />
 				<span class="item-label">{catalogFieldTagsLabel?.() ?? 'Field tags'}</span>
 				<span class="item-meta"
-					>{catalogFieldTagsMapped?.({ count: tagMappingCount }) ?? `${tagMappingCount} mapped`}</span
+					>{catalogFieldTagsMapped?.({ count: tagMappingCount }) ??
+						`${tagMappingCount} mapped`}</span
 				>
 			</button>
 			<button
@@ -263,7 +267,7 @@
 				class:selected={ui.selection.type === 'fieldDef'}
 				onclick={() => ui.select({ type: 'fieldDef', id: '' })}
 			>
-				<Library class="h-3.5 w-3.5 item-icon" />
+				<Library class="item-icon h-3.5 w-3.5" />
 				<span class="item-label">{catalogFieldLibraryLabel?.() ?? 'Field library'}</span>
 				<span class="item-meta">{state.visibleFieldDefs.length}</span>
 			</button>

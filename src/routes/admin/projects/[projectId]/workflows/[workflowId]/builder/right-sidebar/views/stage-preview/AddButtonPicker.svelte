@@ -26,8 +26,14 @@
 		onClose?: () => void;
 	}
 
-	let { stageId, availableTargetStages, onAddConnection, onAddStageTool, onCreateStageAndConnect, onClose }: Props =
-		$props();
+	let {
+		stageId,
+		availableTargetStages,
+		onAddConnection,
+		onAddStageTool,
+		onCreateStageAndConnect,
+		onClose
+	}: Props = $props();
 
 	// Sub-view state
 	let view = $state<'pick' | 'transition' | 'stage-tool'>('pick');
@@ -60,8 +66,12 @@
 			}
 		}}
 	>
-		<ArrowLeft class="w-3.5 h-3.5" />
-		<span>{view === 'pick' ? (stagePreviewAddButtonPickerBack?.() ?? 'Back') : (stagePreviewAddButtonPickerChooseType?.() ?? 'Choose type')}</span>
+		<ArrowLeft class="h-3.5 w-3.5" />
+		<span
+			>{view === 'pick'
+				? (stagePreviewAddButtonPickerBack?.() ?? 'Back')
+				: (stagePreviewAddButtonPickerChooseType?.() ?? 'Choose type')}</span
+		>
 	</button>
 
 	<div class="picker-content">
@@ -72,36 +82,46 @@
 			<div class="picker-options">
 				<button class="picker-option" onclick={() => (view = 'transition')}>
 					<div class="picker-option-icon">
-						<ArrowRight class="w-4 h-4" />
+						<ArrowRight class="h-4 w-4" />
 					</div>
 					<div class="picker-option-text">
-						<span class="picker-option-label">{stagePreviewAddButtonPickerTransitionLabel?.() ?? 'Transition'}</span>
-						<span class="picker-option-desc">{stagePreviewAddButtonPickerTransitionDesc?.() ?? 'Move to another stage'}</span>
+						<span class="picker-option-label"
+							>{stagePreviewAddButtonPickerTransitionLabel?.() ?? 'Transition'}</span
+						>
+						<span class="picker-option-desc"
+							>{stagePreviewAddButtonPickerTransitionDesc?.() ?? 'Move to another stage'}</span
+						>
 					</div>
 				</button>
 
 				<button class="picker-option" onclick={() => (view = 'stage-tool')}>
 					<div class="picker-option-icon">
-						<Wrench class="w-4 h-4" />
+						<Wrench class="h-4 w-4" />
 					</div>
 					<div class="picker-option-text">
-						<span class="picker-option-label">{stagePreviewAddButtonPickerStageToolLabel?.() ?? 'Stage Tool'}</span>
-						<span class="picker-option-desc">{stagePreviewAddButtonPickerStageToolDesc?.() ?? 'Use a tool at this stage'}</span>
+						<span class="picker-option-label"
+							>{stagePreviewAddButtonPickerStageToolLabel?.() ?? 'Stage Tool'}</span
+						>
+						<span class="picker-option-desc"
+							>{stagePreviewAddButtonPickerStageToolDesc?.() ?? 'Use a tool at this stage'}</span
+						>
 					</div>
 				</button>
 			</div>
 		{:else if view === 'transition'}
 			<!-- Target stage selection -->
-			<h4 class="picker-title">{stagePreviewAddButtonPickerSelectTargetStage?.() ?? 'Select target stage'}</h4>
+			<h4 class="picker-title">
+				{stagePreviewAddButtonPickerSelectTargetStage?.() ?? 'Select target stage'}
+			</h4>
 
 			<div class="target-list">
 				<button class="target-item target-item-create" onclick={handleCreateNewStage}>
-					<Plus class="w-3.5 h-3.5 text-muted-foreground" />
+					<Plus class="h-3.5 w-3.5 text-muted-foreground" />
 					<span class="target-name">{stagePreviewAddButtonPickerNewStage?.() ?? 'New Stage'}</span>
 				</button>
 				{#each availableTargetStages as target}
 					<button class="target-item" onclick={() => handleSelectTarget(target.id)}>
-						<ArrowRight class="w-3.5 h-3.5 text-muted-foreground" />
+						<ArrowRight class="h-3.5 w-3.5 text-muted-foreground" />
 						<span class="target-name">{target.stage_name}</span>
 						<span class="target-type">{target.stage_type}</span>
 					</button>
@@ -109,10 +129,12 @@
 			</div>
 		{:else if view === 'stage-tool'}
 			<!-- Stage tool selection (registry-driven) -->
-			<h4 class="picker-title">{stagePreviewAddButtonPickerSelectToolType?.() ?? 'Select tool type'}</h4>
+			<h4 class="picker-title">
+				{stagePreviewAddButtonPickerSelectToolType?.() ?? 'Select tool type'}
+			</h4>
 
 			{#if stageTools.length === 0}
-				<p class="text-xs text-muted-foreground py-4 text-center">
+				<p class="py-4 text-center text-xs text-muted-foreground">
 					{stagePreviewAddButtonPickerNoTools?.() ?? 'No stage tools available.'}
 				</p>
 			{:else}
@@ -120,7 +142,7 @@
 					{#each stageTools as tool}
 						<button class="picker-option" onclick={() => handleSelectTool(tool.toolType)}>
 							<div class="picker-option-icon" style="color: {tool.defaultColor}">
-								<svelte:component this={tool.icon} class="w-4 h-4" />
+								<svelte:component this={tool.icon} class="h-4 w-4" />
 							</div>
 							<div class="picker-option-text">
 								<span class="picker-option-label">{tool.displayName}</span>

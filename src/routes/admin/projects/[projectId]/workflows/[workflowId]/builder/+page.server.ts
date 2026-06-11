@@ -408,16 +408,13 @@ export const actions: Actions = {
 					const { rest, expr } = stripComputeAuxFields(def);
 					// Honor the client-minted id (refs in this save FK to it); fall
 					// back to a server id for callers that omit one.
-					const newId = (rest as any).id && /^[a-zA-Z0-9]{15}$/.test((rest as any).id)
-						? (rest as any).id
-						: generateId();
+					const newId =
+						(rest as any).id && /^[a-zA-Z0-9]{15}$/.test((rest as any).id)
+							? (rest as any).id
+							: generateId();
 					batch.collection('workflow_field_defs').create({ ...rest, id: newId });
 					if (rest.write_mode === 'computed' && expr) {
-						await upsertComputeAutomation(
-							{ id: newId, label: rest.label },
-							rest.workflow_id,
-							expr
-						);
+						await upsertComputeAutomation({ id: newId, label: rest.label }, rest.workflow_id, expr);
 					}
 				}
 				for (const def of changes.fieldDefs.modified) {

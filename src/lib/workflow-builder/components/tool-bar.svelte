@@ -16,7 +16,13 @@
 		direction?: 'horizontal' | 'vertical';
 	};
 
-	let { tools, selectedToolId, onSelectTool, onAddTool, direction = 'horizontal' }: Props = $props();
+	let {
+		tools,
+		selectedToolId,
+		onSelectTool,
+		onAddTool,
+		direction = 'horizontal'
+	}: Props = $props();
 
 	const sortedTools = $derived([...tools].sort((a, b) => a.order - b.order));
 </script>
@@ -29,7 +35,15 @@
 			onclick={() => onSelectTool?.(tool.id)}
 		/>
 	{/each}
-	<button class="add-tool" onclick={(e) => { e.stopPropagation(); onAddTool?.(); }} title="Add tool" type="button">
+	<button
+		class="add-tool"
+		onclick={(e) => {
+			e.stopPropagation();
+			onAddTool?.();
+		}}
+		title="Add tool"
+		type="button"
+	>
 		<Plus class="add-icon" />
 	</button>
 </div>

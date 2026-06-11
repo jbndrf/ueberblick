@@ -2,12 +2,26 @@
 	import { flip } from 'svelte/animate';
 	import { tick } from 'svelte';
 	import { Plus, X, Pencil, Check, AlignLeft, AlignRight, Maximize2 } from '@lucide/svelte';
-	import { formEditorPreviewAriaLabel, formEditorPreviewDragToAdd, formEditorPreviewMoveHere, formEditorPreviewNewField, formEditorPreviewNoFieldsYet, formEditorPreviewPageFallback, formEditorPreviewPageDescriptionPlaceholder } from '$lib/paraglide/messages';
+	import {
+		formEditorPreviewAriaLabel,
+		formEditorPreviewDragToAdd,
+		formEditorPreviewMoveHere,
+		formEditorPreviewNewField,
+		formEditorPreviewNoFieldsYet,
+		formEditorPreviewPageFallback,
+		formEditorPreviewPageDescriptionPlaceholder
+	} from '$lib/paraglide/messages';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import FieldCard from './FieldCard.svelte';
-	import type { TrackedFormField, FieldType, ToolsFormField, ColumnPosition, FormPage } from '$lib/workflow-builder';
+	import type {
+		TrackedFormField,
+		FieldType,
+		ToolsFormField,
+		ColumnPosition,
+		FormPage
+	} from '$lib/workflow-builder';
 
 	// Drop zone configuration type
 	type DropZoneConfig = {
@@ -22,8 +36,18 @@
 		selectedFieldId?: string | null;
 		onFieldSelect?: (fieldId: string) => void;
 		onFieldsReorder?: (fieldIds: string[]) => void;
-		onFieldDrop?: (fieldType: FieldType, page: number, rowIndex: number, columnPosition: ColumnPosition) => void;
-		onFieldRefDrop?: (fieldDefId: string, page: number, rowIndex: number, columnPosition: ColumnPosition) => void;
+		onFieldDrop?: (
+			fieldType: FieldType,
+			page: number,
+			rowIndex: number,
+			columnPosition: ColumnPosition
+		) => void;
+		onFieldRefDrop?: (
+			fieldDefId: string,
+			page: number,
+			rowIndex: number,
+			columnPosition: ColumnPosition
+		) => void;
 		onFieldUpdate?: (fieldId: string, updates: Partial<ToolsFormField>) => void;
 		/** Per-page metadata (title + description). */
 		pages?: FormPage[];
@@ -82,7 +106,9 @@
 	const pageTitles = $derived.by(() => {
 		const titles: Record<number, string> = {};
 		for (const page of pages) {
-			titles[page] = pageMetaByNum.get(page)?.title || (formEditorPreviewPageFallback?.({ page }) ?? `Page ${page}`);
+			titles[page] =
+				pageMetaByNum.get(page)?.title ||
+				(formEditorPreviewPageFallback?.({ page }) ?? `Page ${page}`);
 		}
 		return titles;
 	});
@@ -122,8 +148,8 @@
 		return Array.from(rowMap.entries())
 			.sort(([a], [b]) => a - b)
 			.map(([rowIdx, rowFields]) => ({
-				fields: rowFields.sort((a, b) =>
-					positionOrder[a.data.column_position] - positionOrder[b.data.column_position]
+				fields: rowFields.sort(
+					(a, b) => positionOrder[a.data.column_position] - positionOrder[b.data.column_position]
 				),
 				isHalfWidth: rowFields[0]?.data.column_position !== 'full',
 				rowIndex: rowIdx
@@ -132,7 +158,7 @@
 
 	// Get the next available row index for new fields
 	const nextRowIndex = $derived(
-		fieldRows.length > 0 ? Math.max(...fieldRows.map(r => r.rowIndex)) + 1 : 0
+		fieldRows.length > 0 ? Math.max(...fieldRows.map((r) => r.rowIndex)) + 1 : 0
 	);
 
 	/**
@@ -177,9 +203,11 @@
 		| { kind: 'def'; fieldDefId: string };
 
 	function readNewFieldPayload(e: DragEvent): NewFieldPayload | null {
-		const fieldType = (e.dataTransfer?.getData('fieldType') || e.dataTransfer?.getData('fieldtype')) as FieldType;
+		const fieldType = (e.dataTransfer?.getData('fieldType') ||
+			e.dataTransfer?.getData('fieldtype')) as FieldType;
 		if (fieldType) return { kind: 'type', fieldType };
-		const fieldDefId = e.dataTransfer?.getData('fieldDefId') || e.dataTransfer?.getData('fielddefid');
+		const fieldDefId =
+			e.dataTransfer?.getData('fieldDefId') || e.dataTransfer?.getData('fielddefid');
 		if (fieldDefId) return { kind: 'def', fieldDefId };
 		return null;
 	}
@@ -202,10 +230,12 @@
 		const types = e.dataTransfer?.types;
 
 		// Check if dragging a new field from either palette (fresh type or library def)
-		const hasNewField = types && Array.from(types).some((t) => {
-			const lower = t.toLowerCase();
-			return lower === 'fieldtype' || lower === 'fielddefid';
-		});
+		const hasNewField =
+			types &&
+			Array.from(types).some((t) => {
+				const lower = t.toLowerCase();
+				return lower === 'fieldtype' || lower === 'fielddefid';
+			});
 		if (hasNewField) {
 			isDraggingFieldType = true;
 			if (e.dataTransfer) {
@@ -355,7 +385,12 @@
 		reorderTarget = null;
 	}
 
-	function handleReorderDragOver(e: DragEvent, rowIndex: number, position: ColumnPosition, squeezeFieldId?: string) {
+	function handleReorderDragOver(
+		e: DragEvent,
+		rowIndex: number,
+		position: ColumnPosition,
+		squeezeFieldId?: string
+	) {
 		e.preventDefault();
 		e.stopPropagation();
 		if (!draggedFieldId) return;
@@ -368,7 +403,11 @@
 		e.preventDefault();
 
 		// Only squeeze if the row has a single full-width field that's not the dragged one
-		if (row.fields.length === 1 && row.fields[0].data.column_position === 'full' && row.fields[0].data.id !== draggedFieldId) {
+		if (
+			row.fields.length === 1 &&
+			row.fields[0].data.column_position === 'full' &&
+			row.fields[0].data.id !== draggedFieldId
+		) {
 			const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
 			const relativeX = e.clientX - rect.left;
 			const position = relativeX < rect.width / 2 ? 'left' : 'right';
@@ -380,7 +419,12 @@
 		}
 	}
 
-	function handleReorderDrop(e: DragEvent, rowIndex: number, position: ColumnPosition, squeezeFieldId?: string) {
+	function handleReorderDrop(
+		e: DragEvent,
+		rowIndex: number,
+		position: ColumnPosition,
+		squeezeFieldId?: string
+	) {
 		if (!draggedFieldId) return;
 		e.preventDefault();
 		e.stopPropagation();
@@ -436,7 +480,8 @@
 
 	function startEditingTitle(page: number) {
 		editingPageTitle = page;
-		editingTitleValue = pageTitles[page] || (formEditorPreviewPageFallback?.({ page }) ?? `Page ${page}`);
+		editingTitleValue =
+			pageTitles[page] || (formEditorPreviewPageFallback?.({ page }) ?? `Page ${page}`);
 	}
 
 	function savePageTitle() {
@@ -482,9 +527,15 @@
 	type CellPosition = 'left' | 'middle' | 'right';
 	const CELL_ICONS = { left: AlignLeft, middle: Maximize2, right: AlignRight } as const;
 
-	function isNewFieldCellActive(rowIndex: number, type: 'new-row' | 'between-row', pos: CellPosition): boolean {
+	function isNewFieldCellActive(
+		rowIndex: number,
+		type: 'new-row' | 'between-row',
+		pos: CellPosition
+	): boolean {
 		if (!hoverTarget) return false;
-		return hoverTarget.type === type && hoverTarget.rowIndex === rowIndex && hoverTarget.position === pos;
+		return (
+			hoverTarget.type === type && hoverTarget.rowIndex === rowIndex && hoverTarget.position === pos
+		);
 	}
 
 	function isReorderCellActive(rowIndex: number, pos: ColumnPosition): boolean {
@@ -497,10 +548,22 @@
 	}
 </script>
 
-{#snippet dropZoneCell(mode: 'new-field' | 'reorder', rowIndex: number, type: 'new-row' | 'between-row', pos: CellPosition, small: boolean = false)}
-	{@const isActive = mode === 'new-field' ? isNewFieldCellActive(rowIndex, type, pos) : isReorderCellActive(rowIndex, getColPosFromCell(pos))}
+{#snippet dropZoneCell(
+	mode: 'new-field' | 'reorder',
+	rowIndex: number,
+	type: 'new-row' | 'between-row',
+	pos: CellPosition,
+	small: boolean = false
+)}
+	{@const isActive =
+		mode === 'new-field'
+			? isNewFieldCellActive(rowIndex, type, pos)
+			: isReorderCellActive(rowIndex, getColPosFromCell(pos))}
 	{@const Icon = CELL_ICONS[pos]}
-	{@const previewText = mode === 'new-field' ? (formEditorPreviewNewField?.() ?? 'New field') : (formEditorPreviewMoveHere?.() ?? 'Move here')}
+	{@const previewText =
+		mode === 'new-field'
+			? (formEditorPreviewNewField?.() ?? 'New field')
+			: (formEditorPreviewMoveHere?.() ?? 'Move here')}
 	<div
 		class="drop-zone-cell"
 		class:active={isActive}
@@ -524,7 +587,9 @@
 		tabindex="-1"
 	>
 		{#if isActive}
-			<div class="preview-placeholder" class:small class:full-width={pos === 'middle'}>{previewText}</div>
+			<div class="preview-placeholder" class:small class:full-width={pos === 'middle'}>
+				{previewText}
+			</div>
 		{:else}
 			<Icon class="zone-icon" />
 		{/if}
@@ -533,9 +598,10 @@
 
 {#snippet dropZoneRow(config: DropZoneConfig)}
 	{@const { mode, rowIndex, type, small = false } = config}
-	{@const isExpanded = mode === 'new-field'
-		? (hoverTarget?.type === type && hoverTarget?.rowIndex === rowIndex)
-		: (reorderTarget?.rowIndex === rowIndex)}
+	{@const isExpanded =
+		mode === 'new-field'
+			? hoverTarget?.type === type && hoverTarget?.rowIndex === rowIndex
+			: reorderTarget?.rowIndex === rowIndex}
 	{@const isVisible = mode === 'new-field' ? isDraggingFieldType : !!draggedFieldId}
 	<div
 		class="row-insert-indicator"
@@ -551,11 +617,17 @@
 {/snippet}
 
 {#snippet emptySideZone(mode: 'new-field' | 'reorder', rowIndex: number, side: 'left' | 'right')}
-	{@const isActive = mode === 'new-field'
-		? (hoverTarget?.type === 'empty-side' && hoverTarget?.rowIndex === rowIndex && hoverTarget?.position === side)
-		: (reorderTarget?.rowIndex === rowIndex && reorderTarget?.position === side)}
+	{@const isActive =
+		mode === 'new-field'
+			? hoverTarget?.type === 'empty-side' &&
+				hoverTarget?.rowIndex === rowIndex &&
+				hoverTarget?.position === side
+			: reorderTarget?.rowIndex === rowIndex && reorderTarget?.position === side}
 	{@const Icon = side === 'left' ? AlignLeft : AlignRight}
-	{@const previewText = mode === 'new-field' ? (formEditorPreviewNewField?.() ?? 'New field') : (formEditorPreviewMoveHere?.() ?? 'Move here')}
+	{@const previewText =
+		mode === 'new-field'
+			? (formEditorPreviewNewField?.() ?? 'New field')
+			: (formEditorPreviewMoveHere?.() ?? 'Move here')}
 	<div
 		class="empty-side-indicator"
 		class:reorder-zone={mode === 'reorder'}
@@ -610,9 +682,21 @@
 						tabindex="0"
 						aria-selected={currentPage === page}
 						onclick={() => (currentPage = page)}
-						onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); currentPage = page; } }}
-						ondragover={(e) => { if (draggedFieldId) e.preventDefault(); }}
-						ondrop={(e) => { if (draggedFieldId) { e.preventDefault(); handleFieldDropOnPage(page); } }}
+						onkeydown={(e) => {
+							if (e.key === 'Enter' || e.key === ' ') {
+								e.preventDefault();
+								currentPage = page;
+							}
+						}}
+						ondragover={(e) => {
+							if (draggedFieldId) e.preventDefault();
+						}}
+						ondrop={(e) => {
+							if (draggedFieldId) {
+								e.preventDefault();
+								handleFieldDropOnPage(page);
+							}
+						}}
 					>
 						{#if editingPageTitle === page}
 							<Input
@@ -630,7 +714,10 @@
 							{#if currentPage === page}
 								<button
 									class="edit-title"
-									onclick={(e) => { e.stopPropagation(); startEditingTitle(page); }}
+									onclick={(e) => {
+										e.stopPropagation();
+										startEditingTitle(page);
+									}}
 									type="button"
 								>
 									<Pencil class="h-3 w-3" />
@@ -638,7 +725,10 @@
 								{#if pages.length > 1}
 									<button
 										class="delete-page"
-										onclick={(e) => { e.stopPropagation(); handleDeletePage(page); }}
+										onclick={(e) => {
+											e.stopPropagation();
+											handleDeletePage(page);
+										}}
 										type="button"
 									>
 										<X class="h-3 w-3" />
@@ -661,7 +751,8 @@
 				bind:value={descDraft}
 				class="page-description-input"
 				rows={2}
-				placeholder={formEditorPreviewPageDescriptionPlaceholder?.() ?? 'Optional description shown at the top of this page'}
+				placeholder={formEditorPreviewPageDescriptionPlaceholder?.() ??
+					'Optional description shown at the top of this page'}
 				onblur={commitPageDescription}
 			/>
 		</div>
@@ -675,7 +766,9 @@
 					<Plus class="h-8 w-8" />
 				</div>
 				<p class="empty-title">{formEditorPreviewNoFieldsYet?.() ?? 'No fields yet'}</p>
-				<p class="empty-desc">{formEditorPreviewDragToAdd?.() ?? 'Drag fields from the palette to add'}</p>
+				<p class="empty-desc">
+					{formEditorPreviewDragToAdd?.() ?? 'Drag fields from the palette to add'}
+				</p>
 			</div>
 		{:else if currentPageFields.length === 0 && isDraggingFieldType}
 			<!-- Empty form - show new row indicator with preview -->
@@ -689,29 +782,60 @@
 			<div class="fields-list">
 				<!-- Top reorder indicator (before first row) - for existing fields -->
 				{#if fieldRows.length > 0}
-					{@render dropZoneRow({ mode: 'reorder', rowIndex: -0.5, type: 'between-row', small: true })}
+					{@render dropZoneRow({
+						mode: 'reorder',
+						rowIndex: -0.5,
+						type: 'between-row',
+						small: true
+					})}
 				{/if}
 
 				{#each fieldRows as row, idx (row.rowIndex)}
 					<!-- Between-row indicators (before each row except first) -->
 					{#if idx > 0}
 						{@const insertRowIndex = fieldRows[idx - 1].rowIndex + 0.5}
-						{@render dropZoneRow({ mode: 'new-field', rowIndex: insertRowIndex, type: 'between-row', small: true })}
-						{@render dropZoneRow({ mode: 'reorder', rowIndex: insertRowIndex, type: 'between-row', small: true })}
+						{@render dropZoneRow({
+							mode: 'new-field',
+							rowIndex: insertRowIndex,
+							type: 'between-row',
+							small: true
+						})}
+						{@render dropZoneRow({
+							mode: 'reorder',
+							rowIndex: insertRowIndex,
+							type: 'between-row',
+							small: true
+						})}
 					{/if}
 
 					<div
 						class="field-row"
-						class:half-width={row.isHalfWidth || (hoverTarget?.type === 'existing-row' && hoverTarget?.rowIndex === row.rowIndex) || (reorderTarget?.squeezeFieldId && reorderTarget?.rowIndex === row.rowIndex)}
+						class:half-width={row.isHalfWidth ||
+							(hoverTarget?.type === 'existing-row' && hoverTarget?.rowIndex === row.rowIndex) ||
+							(reorderTarget?.squeezeFieldId && reorderTarget?.rowIndex === row.rowIndex)}
 						ondragover={(e) => {
 							if (isDraggingFieldType) handleRowDragOver(e, row);
 							else if (draggedFieldId) handleReorderRowDragOver(e, row);
 						}}
 						ondrop={(e) => {
 							if (hoverTarget?.type === 'existing-row' && hoverTarget?.squeezeFieldId) {
-								handleCellDrop(e, 'existing-row', hoverTarget.position, row.rowIndex, hoverTarget.squeezeFieldId);
-							} else if (reorderTarget?.squeezeFieldId && reorderTarget?.rowIndex === row.rowIndex) {
-								handleReorderDrop(e, row.rowIndex, reorderTarget.position, reorderTarget.squeezeFieldId);
+								handleCellDrop(
+									e,
+									'existing-row',
+									hoverTarget.position,
+									row.rowIndex,
+									hoverTarget.squeezeFieldId
+								);
+							} else if (
+								reorderTarget?.squeezeFieldId &&
+								reorderTarget?.rowIndex === row.rowIndex
+							) {
+								handleReorderDrop(
+									e,
+									row.rowIndex,
+									reorderTarget.position,
+									reorderTarget.squeezeFieldId
+								);
 							}
 						}}
 						role="region"
@@ -719,13 +843,17 @@
 						<!-- Preview field on left when squeezing existing field right (new field) -->
 						{#if hoverTarget?.type === 'existing-row' && hoverTarget?.rowIndex === row.rowIndex && hoverTarget?.position === 'left'}
 							<div class="field-wrapper preview-field" data-position="left">
-								<div class="preview-placeholder">{formEditorPreviewNewField?.() ?? 'New field'}</div>
+								<div class="preview-placeholder">
+									{formEditorPreviewNewField?.() ?? 'New field'}
+								</div>
 							</div>
 						{/if}
 						<!-- Preview field on left when reordering (squeeze) -->
 						{#if reorderTarget?.squeezeFieldId && reorderTarget?.rowIndex === row.rowIndex && reorderTarget?.position === 'left'}
 							<div class="field-wrapper preview-field reorder-preview" data-position="left">
-								<div class="preview-placeholder">{formEditorPreviewMoveHere?.() ?? 'Move here'}</div>
+								<div class="preview-placeholder">
+									{formEditorPreviewMoveHere?.() ?? 'Move here'}
+								</div>
 							</div>
 						{/if}
 
@@ -733,7 +861,9 @@
 						{#if isDraggingFieldType && row.fields.length === 1 && row.fields[0].data.column_position === 'right' && hoverTarget?.type !== 'existing-row'}
 							<div
 								class="empty-side-indicator"
-								class:active={hoverTarget?.type === 'empty-side' && hoverTarget?.rowIndex === row.rowIndex && hoverTarget?.position === 'left'}
+								class:active={hoverTarget?.type === 'empty-side' &&
+									hoverTarget?.rowIndex === row.rowIndex &&
+									hoverTarget?.position === 'left'}
 								ondragover={(e) => handleCellDragOver(e, 'empty-side', 'left', row.rowIndex)}
 								ondragleave={handleCellDragLeave}
 								ondrop={(e) => handleCellDrop(e, 'empty-side', 'left', row.rowIndex)}
@@ -741,7 +871,9 @@
 								tabindex="-1"
 							>
 								{#if hoverTarget?.type === 'empty-side' && hoverTarget?.rowIndex === row.rowIndex && hoverTarget?.position === 'left'}
-									<div class="preview-placeholder">{formEditorPreviewNewField?.() ?? 'New field'}</div>
+									<div class="preview-placeholder">
+										{formEditorPreviewNewField?.() ?? 'New field'}
+									</div>
 								{:else}
 									<AlignLeft class="zone-icon" />
 								{/if}
@@ -752,14 +884,17 @@
 						{#if draggedFieldId && row.fields.length === 1 && row.fields[0].data.column_position === 'right' && row.fields[0].data.id !== draggedFieldId}
 							<div
 								class="empty-side-indicator reorder-zone"
-								class:active={reorderTarget?.rowIndex === row.rowIndex && reorderTarget?.position === 'left'}
+								class:active={reorderTarget?.rowIndex === row.rowIndex &&
+									reorderTarget?.position === 'left'}
 								ondragover={(e) => handleReorderDragOver(e, row.rowIndex, 'left')}
 								ondrop={(e) => handleReorderDrop(e, row.rowIndex, 'left')}
 								role="button"
 								tabindex="-1"
 							>
 								{#if reorderTarget?.rowIndex === row.rowIndex && reorderTarget?.position === 'left'}
-									<div class="preview-placeholder">{formEditorPreviewMoveHere?.() ?? 'Move here'}</div>
+									<div class="preview-placeholder">
+										{formEditorPreviewMoveHere?.() ?? 'Move here'}
+									</div>
 								{:else}
 									<AlignLeft class="zone-icon" />
 								{/if}
@@ -767,14 +902,25 @@
 						{/if}
 
 						{#each row.fields as trackedField (trackedField.data.id)}
-							{@const isSqueezing = hoverTarget?.squeezeFieldId === trackedField.data.id || reorderTarget?.squeezeFieldId === trackedField.data.id}
-							{@const squeezePosition = hoverTarget?.squeezeFieldId === trackedField.data.id ? hoverTarget?.position : (reorderTarget?.squeezeFieldId === trackedField.data.id ? reorderTarget?.position : null)}
+							{@const isSqueezing =
+								hoverTarget?.squeezeFieldId === trackedField.data.id ||
+								reorderTarget?.squeezeFieldId === trackedField.data.id}
+							{@const squeezePosition =
+								hoverTarget?.squeezeFieldId === trackedField.data.id
+									? hoverTarget?.position
+									: reorderTarget?.squeezeFieldId === trackedField.data.id
+										? reorderTarget?.position
+										: null}
 							<div
 								class="field-wrapper"
 								class:squeezing={isSqueezing}
 								class:squeeze-right={isSqueezing && squeezePosition === 'left'}
 								class:squeeze-left={isSqueezing && squeezePosition === 'right'}
-								data-position={isSqueezing ? (squeezePosition === 'left' ? 'right' : 'left') : trackedField.data.column_position}
+								data-position={isSqueezing
+									? squeezePosition === 'left'
+										? 'right'
+										: 'left'
+									: trackedField.data.column_position}
 								animate:flip={{ duration: 200 }}
 							>
 								<FieldCard
@@ -783,7 +929,9 @@
 									dragging={draggedFieldId === trackedField.data.id}
 									halfWidth={row.isHalfWidth || isSqueezing}
 									scopeTint={scopeTinted
-										? (trackedField.data.field_def_id ? 'lifecycle' : 'local')
+										? trackedField.data.field_def_id
+											? 'lifecycle'
+											: 'local'
 										: null}
 									onSelect={() => onFieldSelect?.(trackedField.data.id)}
 									onUpdate={(updates) => onFieldUpdate?.(trackedField.data.id, updates)}
@@ -796,13 +944,17 @@
 						<!-- Preview field on right when squeezing existing field left (new field) -->
 						{#if hoverTarget?.type === 'existing-row' && hoverTarget?.rowIndex === row.rowIndex && hoverTarget?.position === 'right'}
 							<div class="field-wrapper preview-field" data-position="right">
-								<div class="preview-placeholder">{formEditorPreviewNewField?.() ?? 'New field'}</div>
+								<div class="preview-placeholder">
+									{formEditorPreviewNewField?.() ?? 'New field'}
+								</div>
 							</div>
 						{/if}
 						<!-- Preview field on right when reordering (squeeze) -->
 						{#if reorderTarget?.squeezeFieldId && reorderTarget?.rowIndex === row.rowIndex && reorderTarget?.position === 'right'}
 							<div class="field-wrapper preview-field reorder-preview" data-position="right">
-								<div class="preview-placeholder">{formEditorPreviewMoveHere?.() ?? 'Move here'}</div>
+								<div class="preview-placeholder">
+									{formEditorPreviewMoveHere?.() ?? 'Move here'}
+								</div>
 							</div>
 						{/if}
 
@@ -810,7 +962,9 @@
 						{#if isDraggingFieldType && row.fields.length === 1 && row.fields[0].data.column_position === 'left' && hoverTarget?.type !== 'existing-row'}
 							<div
 								class="empty-side-indicator"
-								class:active={hoverTarget?.type === 'empty-side' && hoverTarget?.rowIndex === row.rowIndex && hoverTarget?.position === 'right'}
+								class:active={hoverTarget?.type === 'empty-side' &&
+									hoverTarget?.rowIndex === row.rowIndex &&
+									hoverTarget?.position === 'right'}
 								ondragover={(e) => handleCellDragOver(e, 'empty-side', 'right', row.rowIndex)}
 								ondragleave={handleCellDragLeave}
 								ondrop={(e) => handleCellDrop(e, 'empty-side', 'right', row.rowIndex)}
@@ -818,7 +972,9 @@
 								tabindex="-1"
 							>
 								{#if hoverTarget?.type === 'empty-side' && hoverTarget?.rowIndex === row.rowIndex && hoverTarget?.position === 'right'}
-									<div class="preview-placeholder">{formEditorPreviewNewField?.() ?? 'New field'}</div>
+									<div class="preview-placeholder">
+										{formEditorPreviewNewField?.() ?? 'New field'}
+									</div>
 								{:else}
 									<AlignRight class="zone-icon" />
 								{/if}
@@ -829,14 +985,17 @@
 						{#if draggedFieldId && row.fields.length === 1 && row.fields[0].data.column_position === 'left' && row.fields[0].data.id !== draggedFieldId}
 							<div
 								class="empty-side-indicator reorder-zone"
-								class:active={reorderTarget?.rowIndex === row.rowIndex && reorderTarget?.position === 'right'}
+								class:active={reorderTarget?.rowIndex === row.rowIndex &&
+									reorderTarget?.position === 'right'}
 								ondragover={(e) => handleReorderDragOver(e, row.rowIndex, 'right')}
 								ondrop={(e) => handleReorderDrop(e, row.rowIndex, 'right')}
 								role="button"
 								tabindex="-1"
 							>
 								{#if reorderTarget?.rowIndex === row.rowIndex && reorderTarget?.position === 'right'}
-									<div class="preview-placeholder">{formEditorPreviewMoveHere?.() ?? 'Move here'}</div>
+									<div class="preview-placeholder">
+										{formEditorPreviewMoveHere?.() ?? 'Move here'}
+									</div>
 								{:else}
 									<AlignRight class="zone-icon" />
 								{/if}
@@ -853,7 +1012,11 @@
 						{@render dropZoneCell('new-field', nextRowIndex, 'new-row', 'right')}
 					</div>
 				{/if}
-				<div class="new-row-indicator reorder-zone" class:hidden={!draggedFieldId} class:has-preview={reorderTarget?.rowIndex === nextRowIndex}>
+				<div
+					class="new-row-indicator reorder-zone"
+					class:hidden={!draggedFieldId}
+					class:has-preview={reorderTarget?.rowIndex === nextRowIndex}
+				>
 					{@render dropZoneCell('reorder', nextRowIndex, 'new-row', 'left')}
 					{@render dropZoneCell('reorder', nextRowIndex, 'new-row', 'middle')}
 					{@render dropZoneCell('reorder', nextRowIndex, 'new-row', 'right')}
@@ -1076,20 +1239,22 @@
 
 	.field-wrapper {
 		min-width: 0;
-		transition: flex 0.2s ease, margin 0.2s ease;
+		transition:
+			flex 0.2s ease,
+			margin 0.2s ease;
 	}
 
 	/* Field positioning based on data-position attribute */
-	.field-wrapper[data-position="left"] {
+	.field-wrapper[data-position='left'] {
 		flex: 0 0 calc(50% - 0.25rem);
 	}
 
-	.field-wrapper[data-position="right"] {
+	.field-wrapper[data-position='right'] {
 		flex: 0 0 calc(50% - 0.25rem);
 		margin-left: auto;
 	}
 
-	.field-wrapper[data-position="full"] {
+	.field-wrapper[data-position='full'] {
 		flex: 1;
 	}
 
@@ -1114,11 +1279,11 @@
 		flex: 0 0 calc(50% - 0.25rem);
 	}
 
-	.field-wrapper.preview-field[data-position="left"] {
+	.field-wrapper.preview-field[data-position='left'] {
 		margin-right: auto;
 	}
 
-	.field-wrapper.preview-field[data-position="right"] {
+	.field-wrapper.preview-field[data-position='right'] {
 		margin-left: auto;
 	}
 
@@ -1206,7 +1371,9 @@
 		width: 20px;
 		height: 20px;
 		color: #666;
-		transition: color 0.15s ease, transform 0.15s ease;
+		transition:
+			color 0.15s ease,
+			transform 0.15s ease;
 	}
 
 	.drop-zone-cell:hover :global(.zone-icon),
@@ -1280,7 +1447,9 @@
 		width: 22px;
 		height: 22px;
 		color: #666;
-		transition: color 0.15s ease, transform 0.15s ease;
+		transition:
+			color 0.15s ease,
+			transform 0.15s ease;
 	}
 
 	.empty-side-indicator:hover :global(.zone-icon),

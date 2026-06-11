@@ -11,7 +11,17 @@
 	import FormPreview from './FormPreview.svelte';
 	import FormJsonView from './FormJsonView.svelte';
 
-	import type { ToolsForm, ToolsFormField, TrackedFormField, WorkflowStage, ColumnPosition, VisualConfig, WorkflowFieldDef, ProtocolLocalFieldDef, FieldType } from '$lib/workflow-builder';
+	import type {
+		ToolsForm,
+		ToolsFormField,
+		TrackedFormField,
+		WorkflowStage,
+		ColumnPosition,
+		VisualConfig,
+		WorkflowFieldDef,
+		ProtocolLocalFieldDef,
+		FieldType
+	} from '$lib/workflow-builder';
 	import type { FormPart, FormImportResult } from '$lib/workflow-builder/transfer';
 	import {
 		formEditorViewAllowedRoles,
@@ -59,11 +69,21 @@
 		/** Callback when form name changes */
 		onFormNameChange?: (name: string) => void;
 		/** Callback when a field is added (legacy: creates a fresh def + ref) */
-		onAddField?: (fieldType: string, page: number, rowIndex: number, columnPosition: ColumnPosition) => void;
+		onAddField?: (
+			fieldType: string,
+			page: number,
+			rowIndex: number,
+			columnPosition: ColumnPosition
+		) => void;
 		/** Workflow-scoped field-def registry */
 		fieldDefs?: WorkflowFieldDef[];
 		/** Callback when an existing field def is dropped onto the form (creates a ref only) */
-		onAddFieldRef?: (fieldDefId: string, page: number, rowIndex: number, columnPosition: ColumnPosition) => void;
+		onAddFieldRef?: (
+			fieldDefId: string,
+			page: number,
+			rowIndex: number,
+			columnPosition: ColumnPosition
+		) => void;
 		/** Callback when a field is updated */
 		onFieldUpdate?: (fieldId: string, updates: Partial<ToolsFormField>) => void;
 		/** Callback when a field is deleted */
@@ -133,7 +153,13 @@
 		return `${base}_${i}`;
 	}
 
-	const usedDefIds = $derived(new Set(fields.filter((f) => f.status !== 'deleted' && f.data.field_def_id).map((f) => f.data.field_def_id as string)));
+	const usedDefIds = $derived(
+		new Set(
+			fields
+				.filter((f) => f.status !== 'deleted' && f.data.field_def_id)
+				.map((f) => f.data.field_def_id as string)
+		)
+	);
 
 	// Stage-attached and global forms have their own button/role config;
 	// connection-attached forms inherit it from the connection.
@@ -194,10 +220,10 @@
 					lf.field_type,
 				required: updates.is_required ?? lf.required,
 				placeholder:
-					updates.placeholder !== undefined ? updates.placeholder ?? null : lf.placeholder,
-				help_text: updates.help_text !== undefined ? updates.help_text ?? null : lf.help_text,
+					updates.placeholder !== undefined ? (updates.placeholder ?? null) : lf.placeholder,
+				help_text: updates.help_text !== undefined ? (updates.help_text ?? null) : lf.help_text,
 				field_options:
-					updates.field_options !== undefined ? updates.field_options ?? null : lf.field_options,
+					updates.field_options !== undefined ? (updates.field_options ?? null) : lf.field_options,
 				page: updates.page ?? lf.page,
 				row_index: updates.row_index ?? lf.row_index,
 				column_position:
@@ -205,8 +231,8 @@
 					lf.column_position,
 				conditional_logic:
 					updates.conditional_logic !== undefined
-						? updates.conditional_logic ?? null
-						: lf.conditional_logic ?? null
+						? (updates.conditional_logic ?? null)
+						: (lf.conditional_logic ?? null)
 			};
 		});
 		onLocalFieldsChange?.(next);
@@ -291,7 +317,14 @@
 
 		if (currentFormFieldsBefore.length > 0) {
 			result.push({
-				stage: { id: 'current', stage_name: 'Current Form', stage_type: 'intermediate', workflow_id: form.workflow_id, position_x: 0, position_y: 0 },
+				stage: {
+					id: 'current',
+					stage_name: 'Current Form',
+					stage_type: 'intermediate',
+					workflow_id: form.workflow_id,
+					position_x: 0,
+					position_y: 0
+				},
 				form: form,
 				fields: currentFormFieldsBefore
 			});
@@ -322,13 +355,23 @@
 		}
 	}
 
-	function handleFieldDrop(fieldType: string, page: number, rowIndex: number, columnPosition: ColumnPosition) {
+	function handleFieldDrop(
+		fieldType: string,
+		page: number,
+		rowIndex: number,
+		columnPosition: ColumnPosition
+	) {
 		// In protocol mode, the field-types palette doesn't create new
 		// workflow_field_defs — it creates protocol-local fields stored on
 		// tools_forms.local_fields. Anything else (library palette) stays
 		// unchanged: those drops go through onAddFieldRef on the FormPreview.
 		if (showLocalFields) {
-			addLocalFieldAt(fieldType as Exclude<FieldType, 'instance_reference'>, page, rowIndex, columnPosition);
+			addLocalFieldAt(
+				fieldType as Exclude<FieldType, 'instance_reference'>,
+				page,
+				rowIndex,
+				columnPosition
+			);
 			return;
 		}
 		onAddField?.(fieldType, page, rowIndex, columnPosition);
@@ -404,7 +447,7 @@
 				<Button
 					variant={showSettings ? 'secondary' : 'ghost'}
 					size="icon"
-					onclick={() => showSettings = !showSettings}
+					onclick={() => (showSettings = !showSettings)}
 					class="settings-btn"
 					title={formEditorViewButtonRoleSettings?.() ?? 'Button & Role Settings'}
 				>
@@ -416,7 +459,9 @@
 				size="icon"
 				onclick={() => (viewMode = viewMode === 'json' ? 'builder' : 'json')}
 				class="settings-btn"
-				title={viewMode === 'json' ? (formEditorViewToggleBuilder?.() ?? 'Builder view') : (formEditorViewToggleJson?.() ?? 'JSON view')}
+				title={viewMode === 'json'
+					? (formEditorViewToggleBuilder?.() ?? 'Builder view')
+					: (formEditorViewToggleJson?.() ?? 'JSON view')}
 			>
 				{#if viewMode === 'json'}
 					<LayoutGrid class="h-4 w-4" />
@@ -439,19 +484,24 @@
 			<div class="settings-panel">
 				<div class="settings-section">
 					<div class="settings-header">
-						<span class="settings-title">{formEditorViewButtonAppearance?.() ?? 'Button Appearance'}</span>
+						<span class="settings-title"
+							>{formEditorViewButtonAppearance?.() ?? 'Button Appearance'}</span
+						>
 					</div>
 					<div class="settings-content">
 						<div class="form-field">
 							<Label for="button-label">{formEditorViewButtonLabel?.() ?? 'Button Label'}</Label>
 							<Input
 								id="button-label"
-								value={form.visual_config?.button_label || (formEditorViewButtonLabelDefault?.() ?? 'Submit')}
-								oninput={(e) => onVisualConfigChange?.({
-									...form.visual_config,
-									button_label: e.currentTarget.value
-								})}
-								placeholder={formEditorViewButtonLabelPlaceholder?.() ?? 'e.g., Submit, Save, Continue'}
+								value={form.visual_config?.button_label ||
+									(formEditorViewButtonLabelDefault?.() ?? 'Submit')}
+								oninput={(e) =>
+									onVisualConfigChange?.({
+										...form.visual_config,
+										button_label: e.currentTarget.value
+									})}
+								placeholder={formEditorViewButtonLabelPlaceholder?.() ??
+									'e.g., Submit, Save, Continue'}
 							/>
 						</div>
 
@@ -462,18 +512,20 @@
 									type="color"
 									id="button-color"
 									value={form.visual_config?.button_color || '#3b82f6'}
-									oninput={(e) => onVisualConfigChange?.({
-										...form.visual_config,
-										button_color: e.currentTarget.value
-									})}
+									oninput={(e) =>
+										onVisualConfigChange?.({
+											...form.visual_config,
+											button_color: e.currentTarget.value
+										})}
 									class="color-input"
 								/>
 								<Input
 									value={form.visual_config?.button_color || '#3b82f6'}
-									oninput={(e) => onVisualConfigChange?.({
-										...form.visual_config,
-										button_color: e.currentTarget.value
-									})}
+									oninput={(e) =>
+										onVisualConfigChange?.({
+											...form.visual_config,
+											button_color: e.currentTarget.value
+										})}
 									placeholder="#3b82f6"
 									class="color-text"
 								/>
@@ -482,32 +534,42 @@
 
 						<div class="form-field-switch">
 							<div class="switch-info">
-								<Label for="requires-confirmation">{formEditorViewRequiresConfirmation?.() ?? 'Requires Confirmation'}</Label>
+								<Label for="requires-confirmation"
+									>{formEditorViewRequiresConfirmation?.() ?? 'Requires Confirmation'}</Label
+								>
 								<p class="switch-description">
-									{formEditorViewRequiresConfirmationDesc?.() ?? 'Show a confirmation dialog before submitting'}
+									{formEditorViewRequiresConfirmationDesc?.() ??
+										'Show a confirmation dialog before submitting'}
 								</p>
 							</div>
 							<Switch
 								id="requires-confirmation"
 								checked={form.visual_config?.requires_confirmation || false}
-								onCheckedChange={(checked) => onVisualConfigChange?.({
-									...form.visual_config,
-									requires_confirmation: checked
-								})}
+								onCheckedChange={(checked) =>
+									onVisualConfigChange?.({
+										...form.visual_config,
+										requires_confirmation: checked
+									})}
 							/>
 						</div>
 
 						{#if form.visual_config?.requires_confirmation}
 							<div class="form-field">
-								<Label for="confirmation-message">{formEditorViewConfirmationMessage?.() ?? 'Confirmation Message'}</Label>
+								<Label for="confirmation-message"
+									>{formEditorViewConfirmationMessage?.() ?? 'Confirmation Message'}</Label
+								>
 								<Input
 									id="confirmation-message"
-									value={form.visual_config?.confirmation_message || (formEditorViewConfirmationMessageDefault?.() ?? 'Are you sure you want to submit?')}
-									oninput={(e) => onVisualConfigChange?.({
-										...form.visual_config,
-										confirmation_message: e.currentTarget.value
-									})}
-									placeholder={formEditorViewConfirmationMessageDefault?.() ?? 'Are you sure you want to submit?'}
+									value={form.visual_config?.confirmation_message ||
+										(formEditorViewConfirmationMessageDefault?.() ??
+											'Are you sure you want to submit?')}
+									oninput={(e) =>
+										onVisualConfigChange?.({
+											...form.visual_config,
+											confirmation_message: e.currentTarget.value
+										})}
+									placeholder={formEditorViewConfirmationMessageDefault?.() ??
+										'Are you sure you want to submit?'}
 								/>
 							</div>
 						{/if}
@@ -530,7 +592,7 @@
 											if (e.currentTarget.checked) {
 												onRolesChange?.([...currentRoles, role.id]);
 											} else {
-												onRolesChange?.(currentRoles.filter(id => id !== role.id));
+												onRolesChange?.(currentRoles.filter((id) => id !== role.id));
 											}
 										}}
 									/>
@@ -540,11 +602,14 @@
 									{/if}
 								</label>
 							{:else}
-								<p class="no-roles">{formEditorViewNoRoles?.() ?? 'No roles defined for this project.'}</p>
+								<p class="no-roles">
+									{formEditorViewNoRoles?.() ?? 'No roles defined for this project.'}
+								</p>
 							{/each}
 						</div>
 						<p class="help-text">
-							{formEditorViewRolesHelp?.() ?? 'Only participants with selected roles can use this form. Leave empty to allow all.'}
+							{formEditorViewRolesHelp?.() ??
+								'Only participants with selected roles can use this form. Leave empty to allow all.'}
 						</p>
 					</div>
 				</div>
@@ -618,7 +683,8 @@
 					onFieldSelect={handleFieldSelect}
 					onFieldsReorder={handleFieldsReorderRouted}
 					onFieldDrop={handleFieldDrop}
-					onFieldRefDrop={(defId, page, rowIndex, columnPosition) => onAddFieldRef?.(defId, page, rowIndex, columnPosition)}
+					onFieldRefDrop={(defId, page, rowIndex, columnPosition) =>
+						onAddFieldRef?.(defId, page, rowIndex, columnPosition)}
 					onFieldUpdate={handleFieldUpdateRouted}
 					pages={form.pages ?? []}
 					{onAddPage}
@@ -630,11 +696,9 @@
 			</div>
 		{/if}
 	</div>
-
 </div>
 
 <style>
-
 	.form-editor {
 		display: flex;
 		flex-direction: column;
@@ -909,7 +973,7 @@
 		background: hsl(var(--accent));
 	}
 
-	.role-checkbox input[type="checkbox"] {
+	.role-checkbox input[type='checkbox'] {
 		width: 1rem;
 		height: 1rem;
 		accent-color: hsl(var(--primary));

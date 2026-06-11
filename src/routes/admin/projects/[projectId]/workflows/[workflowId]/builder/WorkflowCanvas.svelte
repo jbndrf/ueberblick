@@ -14,7 +14,12 @@
 	} from '@xyflow/svelte';
 
 	import { onMount } from 'svelte';
-	import { workflowBuilderCanvasConnectingIndicator, workflowBuilderCanvasEnd, workflowBuilderCanvasNewStage, workflowBuilderCanvasStart } from '$lib/paraglide/messages';
+	import {
+		workflowBuilderCanvasConnectingIndicator,
+		workflowBuilderCanvasEnd,
+		workflowBuilderCanvasNewStage,
+		workflowBuilderCanvasStart
+	} from '$lib/paraglide/messages';
 	import type { StageData } from '$lib/workflow-builder';
 
 	interface Props {
@@ -60,7 +65,10 @@
 		event.preventDefault();
 		if (!event.dataTransfer) return;
 
-		const type = event.dataTransfer.getData('application/xyflow') as 'start' | 'intermediate' | 'end';
+		const type = event.dataTransfer.getData('application/xyflow') as
+			| 'start'
+			| 'intermediate'
+			| 'end';
 		if (!type) return;
 
 		// Check if start node already exists
@@ -80,7 +88,12 @@
 			type: 'stage',
 			position,
 			data: {
-				title: type === 'start' ? (workflowBuilderCanvasStart?.() ?? 'Start') : type === 'end' ? (workflowBuilderCanvasEnd?.() ?? 'End') : (workflowBuilderCanvasNewStage?.() ?? 'New Stage'),
+				title:
+					type === 'start'
+						? (workflowBuilderCanvasStart?.() ?? 'Start')
+						: type === 'end'
+							? (workflowBuilderCanvasEnd?.() ?? 'End')
+							: (workflowBuilderCanvasNewStage?.() ?? 'New Stage'),
 				key: `${type}_${Date.now()}`,
 				stageType: type,
 				maxHours: null
@@ -101,7 +114,8 @@
 <div class="canvas-wrapper" role="application" ondrop={onDrop} ondragover={onDragOver}>
 	{#if connectingFrom}
 		<div class="connecting-indicator">
-			{workflowBuilderCanvasConnectingIndicator?.() ?? 'Connecting from node... Right-click another node to connect, or click canvas to cancel.'}
+			{workflowBuilderCanvasConnectingIndicator?.() ??
+				'Connecting from node... Right-click another node to connect, or click canvas to cancel.'}
 		</div>
 	{/if}
 

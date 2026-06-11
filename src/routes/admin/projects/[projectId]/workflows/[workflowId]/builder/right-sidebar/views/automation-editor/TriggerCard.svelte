@@ -65,10 +65,31 @@
 		onClearTrigger
 	}: Props = $props();
 
-	const TRIGGER_TYPES: { value: TriggerType; label: string; description: string; icon: typeof Route }[] = [
-		{ value: 'on_transition', label: (automationTriggerCardOnTransitionLabel?.() ?? 'On Transition'), description: (automationTriggerCardOnTransitionDesc?.() ?? 'When instance moves between stages'), icon: Route },
-		{ value: 'on_field_change', label: (automationTriggerCardOnFieldChangeLabel?.() ?? 'On Field Change'), description: (automationTriggerCardOnFieldChangeDesc?.() ?? 'When a field value changes'), icon: Pencil },
-		{ value: 'scheduled', label: (automationTriggerCardScheduledLabel?.() ?? 'Scheduled'), description: (automationTriggerCardScheduledDesc?.() ?? 'Run on a cron schedule'), icon: Clock }
+	const TRIGGER_TYPES: {
+		value: TriggerType;
+		label: string;
+		description: string;
+		icon: typeof Route;
+	}[] = [
+		{
+			value: 'on_transition',
+			label: automationTriggerCardOnTransitionLabel?.() ?? 'On Transition',
+			description:
+				automationTriggerCardOnTransitionDesc?.() ?? 'When instance moves between stages',
+			icon: Route
+		},
+		{
+			value: 'on_field_change',
+			label: automationTriggerCardOnFieldChangeLabel?.() ?? 'On Field Change',
+			description: automationTriggerCardOnFieldChangeDesc?.() ?? 'When a field value changes',
+			icon: Pencil
+		},
+		{
+			value: 'scheduled',
+			label: automationTriggerCardScheduledLabel?.() ?? 'Scheduled',
+			description: automationTriggerCardScheduledDesc?.() ?? 'Run on a cron schedule',
+			icon: Clock
+		}
 	];
 
 	let isEditing = $state(false);
@@ -87,13 +108,13 @@
 
 	// Cast helpers
 	const transitionConfig = $derived(
-		triggerType === 'on_transition' ? triggerConfig as TransitionTriggerConfig : null
+		triggerType === 'on_transition' ? (triggerConfig as TransitionTriggerConfig) : null
 	);
 	const fieldChangeConfig = $derived(
-		triggerType === 'on_field_change' ? triggerConfig as FieldChangeTriggerConfig : null
+		triggerType === 'on_field_change' ? (triggerConfig as FieldChangeTriggerConfig) : null
 	);
 	const scheduledConfig = $derived(
-		triggerType === 'scheduled' ? triggerConfig as ScheduledTriggerConfig : null
+		triggerType === 'scheduled' ? (triggerConfig as ScheduledTriggerConfig) : null
 	);
 
 	const cronValidation = $derived(
@@ -101,25 +122,37 @@
 	);
 
 	const stageOptionsWithAny: StageOption[] = $derived([
-		{ id: '', name: (automationTriggerCardAnyStage?.() ?? 'Any Stage') },
+		{ id: '', name: automationTriggerCardAnyStage?.() ?? 'Any Stage' },
 		...stages
 	]);
 
 	const fieldOptionsWithAny: FieldOption[] = $derived([
-		{ key: '', label: (automationTriggerCardAnyField?.() ?? 'Any Field') },
+		{ key: '', label: automationTriggerCardAnyField?.() ?? 'Any Field' },
 		...fieldOptions
 	]);
 
 	// Summary text for configured trigger
 	function getSummary(): string {
 		if (transitionConfig) {
-			const from = stages.find(s => s.id === transitionConfig.from_stage_id)?.name ?? (automationTriggerCardAny?.() ?? 'Any');
-			const to = stages.find(s => s.id === transitionConfig.to_stage_id)?.name ?? (automationTriggerCardAny?.() ?? 'Any');
+			const from =
+				stages.find((s) => s.id === transitionConfig.from_stage_id)?.name ??
+				automationTriggerCardAny?.() ??
+				'Any';
+			const to =
+				stages.find((s) => s.id === transitionConfig.to_stage_id)?.name ??
+				automationTriggerCardAny?.() ??
+				'Any';
 			return `${from} -> ${to}`;
 		}
 		if (fieldChangeConfig) {
-			const stage = stages.find(s => s.id === fieldChangeConfig.stage_id)?.name ?? (automationTriggerCardAnyStage?.() ?? 'Any Stage');
-			const field = fieldOptions.find(f => f.key === fieldChangeConfig.field_key)?.label ?? (automationTriggerCardAnyField?.() ?? 'Any Field');
+			const stage =
+				stages.find((s) => s.id === fieldChangeConfig.stage_id)?.name ??
+				automationTriggerCardAnyStage?.() ??
+				'Any Stage';
+			const field =
+				fieldOptions.find((f) => f.key === fieldChangeConfig.field_key)?.label ??
+				automationTriggerCardAnyField?.() ??
+				'Any Field';
 			return `${field} in ${stage}`;
 		}
 		if (scheduledConfig) {
@@ -131,13 +164,14 @@
 		return '';
 	}
 
-	const triggerInfo = $derived(TRIGGER_TYPES.find(t => t.value === triggerType));
+	const triggerInfo = $derived(TRIGGER_TYPES.find((t) => t.value === triggerType));
 </script>
 
 {#if !hasConfig && !isEditing}
 	<!-- No trigger configured: show type palette -->
 	<div class="trigger-palette">
-		<span class="palette-label">{automationTriggerCardChooseTrigger?.() ?? 'Choose a trigger'}</span>
+		<span class="palette-label">{automationTriggerCardChooseTrigger?.() ?? 'Choose a trigger'}</span
+		>
 		<div class="palette-options">
 			{#each TRIGGER_TYPES as tt}
 				{@const Icon = tt.icon}
@@ -168,7 +202,7 @@
 				<span class="trigger-summary-detail">{getSummary()}</span>
 			</div>
 			<div class="trigger-summary-actions">
-				<Button variant="ghost" size="icon" class="h-6 w-6" onclick={() => isEditing = true}>
+				<Button variant="ghost" size="icon" class="h-6 w-6" onclick={() => (isEditing = true)}>
 					<Settings class="h-3 w-3" />
 				</Button>
 			</div>
@@ -178,8 +212,10 @@
 	<!-- Editing trigger config -->
 	<div class="trigger-edit">
 		<div class="trigger-edit-header">
-			<span class="trigger-edit-title">{automationTriggerCardConfigureTitle?.() ?? 'Configure Trigger'}</span>
-			<Button variant="ghost" size="icon" class="h-6 w-6" onclick={() => isEditing = false}>
+			<span class="trigger-edit-title"
+				>{automationTriggerCardConfigureTitle?.() ?? 'Configure Trigger'}</span
+			>
+			<Button variant="ghost" size="icon" class="h-6 w-6" onclick={() => (isEditing = false)}>
 				<X class="h-3 w-3" />
 			</Button>
 		</div>
@@ -207,7 +243,11 @@
 					<select
 						class="config-select"
 						value={transitionConfig.from_stage_id ?? ''}
-						onchange={(e) => onTriggerConfigChange?.({ ...transitionConfig, from_stage_id: e.currentTarget.value || null })}
+						onchange={(e) =>
+							onTriggerConfigChange?.({
+								...transitionConfig,
+								from_stage_id: e.currentTarget.value || null
+							})}
 					>
 						{#each stageOptionsWithAny as s}
 							<option value={s.id}>{s.name}</option>
@@ -219,7 +259,11 @@
 					<select
 						class="config-select"
 						value={transitionConfig.to_stage_id ?? ''}
-						onchange={(e) => onTriggerConfigChange?.({ ...transitionConfig, to_stage_id: e.currentTarget.value || null })}
+						onchange={(e) =>
+							onTriggerConfigChange?.({
+								...transitionConfig,
+								to_stage_id: e.currentTarget.value || null
+							})}
 					>
 						{#each stageOptionsWithAny as s}
 							<option value={s.id}>{s.name}</option>
@@ -232,7 +276,11 @@
 					<select
 						class="config-select"
 						value={fieldChangeConfig.stage_id ?? ''}
-						onchange={(e) => onTriggerConfigChange?.({ ...fieldChangeConfig, stage_id: e.currentTarget.value || null })}
+						onchange={(e) =>
+							onTriggerConfigChange?.({
+								...fieldChangeConfig,
+								stage_id: e.currentTarget.value || null
+							})}
 					>
 						{#each stageOptionsWithAny as s}
 							<option value={s.id}>{s.name}</option>
@@ -244,7 +292,11 @@
 					<select
 						class="config-select"
 						value={fieldChangeConfig.field_key ?? ''}
-						onchange={(e) => onTriggerConfigChange?.({ ...fieldChangeConfig, field_key: e.currentTarget.value || null })}
+						onchange={(e) =>
+							onTriggerConfigChange?.({
+								...fieldChangeConfig,
+								field_key: e.currentTarget.value || null
+							})}
 					>
 						{#each fieldOptionsWithAny as f}
 							<option value={f.key}>{f.label}</option>
@@ -257,21 +309,31 @@
 					<select
 						class="config-select"
 						value={scheduledConfig.target_stage_id ?? ''}
-						onchange={(e) => onTriggerConfigChange?.({ ...scheduledConfig, target_stage_id: e.currentTarget.value || null })}
+						onchange={(e) =>
+							onTriggerConfigChange?.({
+								...scheduledConfig,
+								target_stage_id: e.currentTarget.value || null
+							})}
 					>
 						{#each stageOptionsWithAny as s}
 							<option value={s.id}>{s.name}</option>
 						{/each}
 					</select>
-					<span class="config-help">{automationTriggerCardTargetStageHelp?.() ?? 'Only run for instances at this stage'}</span>
+					<span class="config-help"
+						>{automationTriggerCardTargetStageHelp?.() ??
+							'Only run for instances at this stage'}</span
+					>
 				</div>
 				<div class="config-field">
-					<Label class="text-xs">{automationTriggerCardCronExpression?.() ?? 'Cron Expression'}</Label>
+					<Label class="text-xs"
+						>{automationTriggerCardCronExpression?.() ?? 'Cron Expression'}</Label
+					>
 					<Input
 						value={scheduledConfig.cron}
-						oninput={(e) => onTriggerConfigChange?.({ ...scheduledConfig, cron: e.currentTarget.value })}
+						oninput={(e) =>
+							onTriggerConfigChange?.({ ...scheduledConfig, cron: e.currentTarget.value })}
 						placeholder="0 2 * * 1-5"
-						class="h-7 text-xs font-mono"
+						class="h-7 font-mono text-xs"
 					/>
 					{#if cronValidation.valid}
 						<span class="config-help">{describeCron(scheduledConfig.cron)}</span>
@@ -280,25 +342,33 @@
 					{/if}
 				</div>
 				<div class="config-field">
-					<Label class="text-xs">{automationTriggerCardInactiveDays?.() ?? 'Inactive for (days)'}</Label>
+					<Label class="text-xs"
+						>{automationTriggerCardInactiveDays?.() ?? 'Inactive for (days)'}</Label
+					>
 					<Input
 						type="number"
 						min={0}
 						value={String(scheduledConfig.inactive_days ?? 0)}
 						oninput={(e) => {
 							const days = parseInt(e.currentTarget.value, 10);
-							onTriggerConfigChange?.({ ...scheduledConfig, inactive_days: isNaN(days) || days <= 0 ? null : days });
+							onTriggerConfigChange?.({
+								...scheduledConfig,
+								inactive_days: isNaN(days) || days <= 0 ? null : days
+							});
 						}}
 						placeholder="0"
 						class="h-7 text-xs"
 					/>
-					<span class="config-help">{automationTriggerCardInactiveDaysHelp?.() ?? 'Only target instances with no activity for this many days (0 = no filter)'}</span>
+					<span class="config-help"
+						>{automationTriggerCardInactiveDaysHelp?.() ??
+							'Only target instances with no activity for this many days (0 = no filter)'}</span
+					>
 				</div>
 			{/if}
 		</div>
 
 		<div class="trigger-edit-footer">
-			<Button variant="ghost" size="sm" class="h-6 text-xs" onclick={() => isEditing = false}>
+			<Button variant="ghost" size="sm" class="h-6 text-xs" onclick={() => (isEditing = false)}>
 				{automationTriggerCardDone?.() ?? 'Done'}
 			</Button>
 		</div>

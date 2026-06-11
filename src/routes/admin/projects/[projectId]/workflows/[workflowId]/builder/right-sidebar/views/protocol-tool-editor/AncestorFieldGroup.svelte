@@ -1,7 +1,10 @@
 <script lang="ts">
 	import { ChevronDown, ChevronRight, CheckSquare, Square } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { editToolAncestorFieldGroupDeselectAll, editToolAncestorFieldGroupSelectAll } from '$lib/paraglide/messages';
+	import {
+		editToolAncestorFieldGroupDeselectAll,
+		editToolAncestorFieldGroupSelectAll
+	} from '$lib/paraglide/messages';
 	import AncestorFieldItem from './AncestorFieldItem.svelte';
 	import type { ToolsFormField } from '$lib/workflow-builder';
 
@@ -32,9 +35,7 @@
 	let isOpen = $state(defaultOpen);
 
 	// Count how many fields are selected
-	const selectedCount = $derived(
-		fields.filter((f) => selectedFieldIds.includes(f.id)).length
-	);
+	const selectedCount = $derived(fields.filter((f) => selectedFieldIds.includes(f.id)).length);
 
 	const allSelected = $derived(selectedCount === fields.length && fields.length > 0);
 	const someSelected = $derived(selectedCount > 0 && selectedCount < fields.length);
@@ -87,7 +88,10 @@
 			<button
 				type="button"
 				class="select-all-btn"
-				onclick={(e) => { e.stopPropagation(); handleSelectAll(); }}
+				onclick={(e) => {
+					e.stopPropagation();
+					handleSelectAll();
+				}}
 			>
 				{#if allSelected}
 					<CheckSquare class="h-3.5 w-3.5" />

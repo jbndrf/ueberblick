@@ -48,15 +48,21 @@
 		{ value: 'gte', label: '>=' },
 		{ value: 'lt', label: '<' },
 		{ value: 'lte', label: '<=' },
-		{ value: 'contains', label: (automationConditionBuilderOperatorContains?.() ?? 'contains') },
-		{ value: 'is_empty', label: (automationConditionBuilderOperatorIsEmpty?.() ?? 'is empty') },
-		{ value: 'is_not_empty', label: (automationConditionBuilderOperatorIsNotEmpty?.() ?? 'is not empty') }
+		{ value: 'contains', label: automationConditionBuilderOperatorContains?.() ?? 'contains' },
+		{ value: 'is_empty', label: automationConditionBuilderOperatorIsEmpty?.() ?? 'is empty' },
+		{
+			value: 'is_not_empty',
+			label: automationConditionBuilderOperatorIsNotEmpty?.() ?? 'is not empty'
+		}
 	];
 
 	const CONDITION_TYPES = [
-		{ value: 'field_value', label: (automationConditionBuilderTypeFieldValue?.() ?? 'Field Value') },
-		{ value: 'instance_status', label: (automationConditionBuilderTypeInstanceStatus?.() ?? 'Instance Status') },
-		{ value: 'current_stage', label: (automationConditionBuilderTypeStage?.() ?? 'Stage') }
+		{ value: 'field_value', label: automationConditionBuilderTypeFieldValue?.() ?? 'Field Value' },
+		{
+			value: 'instance_status',
+			label: automationConditionBuilderTypeInstanceStatus?.() ?? 'Instance Status'
+		},
+		{ value: 'current_stage', label: automationConditionBuilderTypeStage?.() ?? 'Stage' }
 	];
 
 	const STATUS_OPTIONS = ['active', 'completed', 'archived', 'deleted'];
@@ -150,9 +156,15 @@
 						onchange={(e) => {
 							const type = e.currentTarget.value;
 							if (type === 'field_value') {
-								updateCondition(index, { type: 'field_value', params: { field_key: '', operator: 'equals', value: '' } });
+								updateCondition(index, {
+									type: 'field_value',
+									params: { field_key: '', operator: 'equals', value: '' }
+								});
 							} else if (type === 'current_stage') {
-								updateCondition(index, { type: 'current_stage', params: { stage_id: stageOptions[0]?.id ?? '', operator: 'equals' } });
+								updateCondition(index, {
+									type: 'current_stage',
+									params: { stage_id: stageOptions[0]?.id ?? '', operator: 'equals' }
+								});
 							} else {
 								updateCondition(index, { type: 'instance_status', params: { status: 'active' } });
 							}
@@ -174,7 +186,9 @@
 								});
 							}}
 						>
-							<option value="">{automationConditionBuilderSelectField?.() ?? 'Select field...'}</option>
+							<option value=""
+								>{automationConditionBuilderSelectField?.() ?? 'Select field...'}</option
+							>
 							{#each fieldOptions as opt}
 								<option value={opt.key}>{opt.label}</option>
 							{/each}
@@ -186,7 +200,10 @@
 							onchange={(e) => {
 								updateCondition(index, {
 									...condition,
-									params: { ...condition.params, operator: e.currentTarget.value as ConditionOperator }
+									params: {
+										...condition.params,
+										operator: e.currentTarget.value as ConditionOperator
+									}
 								});
 							}}
 						>
@@ -196,18 +213,23 @@
 						</select>
 
 						{#if !UNARY_OPERATORS.includes(condition.params.operator)}
-							{@const isFieldCompare = !!condition.params.compare_field_key || condition.params.compare_field_key === ''}
+							{@const isFieldCompare =
+								!!condition.params.compare_field_key || condition.params.compare_field_key === ''}
 							<div class="compare-mode-row">
 								<button
 									class="compare-toggle"
 									class:active={!isFieldCompare}
-									onclick={() => { if (isFieldCompare) toggleCompareMode(index, condition); }}
-								>{automationConditionBuilderCompareValue?.() ?? 'Value'}</button>
+									onclick={() => {
+										if (isFieldCompare) toggleCompareMode(index, condition);
+									}}>{automationConditionBuilderCompareValue?.() ?? 'Value'}</button
+								>
 								<button
 									class="compare-toggle"
 									class:active={isFieldCompare}
-									onclick={() => { if (!isFieldCompare) toggleCompareMode(index, condition); }}
-								>{automationConditionBuilderCompareField?.() ?? 'Field'}</button>
+									onclick={() => {
+										if (!isFieldCompare) toggleCompareMode(index, condition);
+									}}>{automationConditionBuilderCompareField?.() ?? 'Field'}</button
+								>
 							</div>
 
 							{#if isFieldCompare}
@@ -221,7 +243,9 @@
 										});
 									}}
 								>
-									<option value="">{automationConditionBuilderSelectField?.() ?? 'Select field...'}</option>
+									<option value=""
+										>{automationConditionBuilderSelectField?.() ?? 'Select field...'}</option
+									>
 									{#each fieldOptions as opt}
 										<option value={opt.key}>{opt.label}</option>
 									{/each}
@@ -236,10 +260,15 @@
 												params: { ...condition.params, value: e.currentTarget.value }
 											});
 										}}
-										placeholder={automationConditionBuilderValuePlaceholder?.() ?? 'Value, $today, $now-1h...'}
+										placeholder={automationConditionBuilderValuePlaceholder?.() ??
+											'Value, $today, $now-1h...'}
 										class="h-7 text-xs"
 									/>
-									<span class="value-hint" title={automationConditionBuilderValueHint?.({ 'm|h|d': 'm|h|d' }) ?? ''}>?</span>
+									<span
+										class="value-hint"
+										title={automationConditionBuilderValueHint?.({ 'm|h|d': 'm|h|d' }) ?? ''}
+										>?</span
+									>
 								</div>
 							{/if}
 						{/if}
@@ -265,7 +294,10 @@
 							onchange={(e) => {
 								updateCondition(index, {
 									...condition,
-									params: { ...condition.params, operator: e.currentTarget.value as 'equals' | 'not_equals' }
+									params: {
+										...condition.params,
+										operator: e.currentTarget.value as 'equals' | 'not_equals'
+									}
 								});
 							}}
 						>
@@ -282,7 +314,9 @@
 								});
 							}}
 						>
-							<option value="">{automationConditionBuilderSelectStage?.() ?? 'Select stage...'}</option>
+							<option value=""
+								>{automationConditionBuilderSelectStage?.() ?? 'Select stage...'}</option
+							>
 							{#each stageOptions as stage}
 								<option value={stage.id}>{stage.name}</option>
 							{/each}
@@ -290,7 +324,12 @@
 					{/if}
 				</div>
 
-				<Button variant="ghost" size="icon" class="h-6 w-6 shrink-0" onclick={() => removeCondition(index)}>
+				<Button
+					variant="ghost"
+					size="icon"
+					class="h-6 w-6 shrink-0"
+					onclick={() => removeCondition(index)}
+				>
 					<Trash2 class="h-3 w-3" />
 				</Button>
 			</div>
@@ -298,7 +337,7 @@
 	</div>
 
 	<Button variant="ghost" size="sm" class="add-condition-btn" onclick={addCondition}>
-		<Plus class="h-3 w-3 mr-1" />
+		<Plus class="mr-1 h-3 w-3" />
 		{automationConditionBuilderAddCondition?.() ?? 'Add Condition'}
 	</Button>
 </div>

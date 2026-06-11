@@ -72,11 +72,16 @@ export type ConfigPanelMode =
 /** Default button color by action type (single source of truth) */
 export function getDefaultButtonColor(actionType: StageAction['type']): string {
 	switch (actionType) {
-		case 'connection': return '#64748b';   // slate-500 -- cool blue-grey
-		case 'stage_tool': return '#57534e';   // stone-600 -- warm dark grey
-		case 'stage_form': return '#57534e';   // stone-600 -- warm dark grey
-		case 'global_tool': return '#6b7280';  // gray-500  -- neutral mid grey
-		default: return '#64748b';
+		case 'connection':
+			return '#64748b'; // slate-500 -- cool blue-grey
+		case 'stage_tool':
+			return '#57534e'; // stone-600 -- warm dark grey
+		case 'stage_form':
+			return '#57534e'; // stone-600 -- warm dark grey
+		case 'global_tool':
+			return '#6b7280'; // gray-500  -- neutral mid grey
+		default:
+			return '#64748b';
 	}
 }
 

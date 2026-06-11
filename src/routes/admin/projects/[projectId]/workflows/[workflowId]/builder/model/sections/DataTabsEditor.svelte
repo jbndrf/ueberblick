@@ -70,9 +70,7 @@
 	}
 
 	function labelFor(name: string): string {
-		return name === DEFAULT_DATA_TAB
-			? (workflowBuilderDataTabsDefaultName?.() ?? 'Data')
-			: name;
+		return name === DEFAULT_DATA_TAB ? (workflowBuilderDataTabsDefaultName?.() ?? 'Data') : name;
 	}
 
 	/** Field defs in a tab, sorted by display row. */
@@ -189,10 +187,7 @@
 		if (updates.field_label !== undefined) {
 			onFieldDefUpdate(id, { label: updates.field_label });
 		}
-		if (
-			updates.row_index !== undefined ||
-			updates.column_position !== undefined
-		) {
+		if (updates.row_index !== undefined || updates.column_position !== undefined) {
 			const def = visibleDefs.find((d) => d.data.id === id);
 			if (!def) return;
 			const next: FieldDisplayConfig = {
@@ -267,7 +262,9 @@
 
 		<!-- Tab-level role permission -->
 		<div class="tab-roles">
-			<span class="tab-roles-label">{workflowBuilderDataTabsRolesLabel?.() ?? 'Visible to roles'}</span>
+			<span class="tab-roles-label"
+				>{workflowBuilderDataTabsRolesLabel?.() ?? 'Visible to roles'}</span
+			>
 			<MobileMultiSelect
 				selectedIds={activeTabRoles}
 				options={roles}
@@ -285,11 +282,7 @@
 
 		<!-- The form-builder drag-and-drop grid, reused for data-tab layout -->
 		{#key activeTab}
-			<FormPreview
-				fields={previewFields}
-				showPages={false}
-				onFieldUpdate={handlePreviewUpdate}
-			/>
+			<FormPreview fields={previewFields} showPages={false} onFieldUpdate={handlePreviewUpdate} />
 		{/key}
 	{/if}
 </div>

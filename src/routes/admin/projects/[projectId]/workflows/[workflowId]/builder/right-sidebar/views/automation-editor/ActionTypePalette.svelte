@@ -1,7 +1,12 @@
 <script lang="ts">
 	import { Shield, Pencil, ArrowRight } from '@lucide/svelte';
 	import type { AutomationAction } from '$lib/workflow-builder';
-	import { automationActionTypePaletteLabel, automationActionTypePaletteSetField, automationActionTypePaletteSetStage, automationActionTypePaletteSetStatus } from '$lib/paraglide/messages';
+	import {
+		automationActionTypePaletteLabel,
+		automationActionTypePaletteSetField,
+		automationActionTypePaletteSetStage,
+		automationActionTypePaletteSetStatus
+	} from '$lib/paraglide/messages';
 
 	type StageOption = { id: string; name: string };
 
@@ -50,12 +55,7 @@
 	<div class="palette-buttons">
 		{#each ACTION_TYPES as at}
 			{@const Icon = at.icon}
-			<button
-				class="palette-btn"
-				{disabled}
-				onclick={() => onAdd(at.create())}
-				title={at.label}
-			>
+			<button class="palette-btn" {disabled} onclick={() => onAdd(at.create())} title={at.label}>
 				<Icon class="h-3 w-3" />
 				<span class="palette-btn-label">{at.label}</span>
 			</button>

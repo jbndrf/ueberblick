@@ -1,5 +1,10 @@
 <script lang="ts">
-	import { editToolAncestorFieldItemNoPrefill, editToolAncestorFieldItemPrefill, editToolAncestorFieldItemPrefillDisabled, editToolAncestorFieldItemPrefillEnabled } from '$lib/paraglide/messages';
+	import {
+		editToolAncestorFieldItemNoPrefill,
+		editToolAncestorFieldItemPrefill,
+		editToolAncestorFieldItemPrefillDisabled,
+		editToolAncestorFieldItemPrefillEnabled
+	} from '$lib/paraglide/messages';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Type } from '@lucide/svelte';
 	import { fieldTypeIcons, type ToolsFormField } from '$lib/workflow-builder';
@@ -30,7 +35,12 @@
 	role="button"
 	tabindex="0"
 	onclick={onToggle}
-	onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle?.(); } }}
+	onkeydown={(e) => {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			onToggle?.();
+		}
+	}}
 >
 	<Checkbox checked={isSelected} />
 	<div class="field-info">
@@ -46,10 +56,17 @@
 			type="button"
 			class="prefill-toggle"
 			class:prefill-off={!prefillEnabled}
-			onclick={(e) => { e.stopPropagation(); onTogglePrefill?.(); }}
-			title={(prefillEnabled ? (editToolAncestorFieldItemPrefillEnabled?.() ?? 'Pre-fill enabled (click to disable)') : (editToolAncestorFieldItemPrefillDisabled?.() ?? 'Pre-fill disabled (click to enable)'))}
+			onclick={(e) => {
+				e.stopPropagation();
+				onTogglePrefill?.();
+			}}
+			title={prefillEnabled
+				? (editToolAncestorFieldItemPrefillEnabled?.() ?? 'Pre-fill enabled (click to disable)')
+				: (editToolAncestorFieldItemPrefillDisabled?.() ?? 'Pre-fill disabled (click to enable)')}
 		>
-			{(prefillEnabled ? (editToolAncestorFieldItemPrefill?.() ?? 'prefill') : (editToolAncestorFieldItemNoPrefill?.() ?? 'no prefill'))}
+			{prefillEnabled
+				? (editToolAncestorFieldItemPrefill?.() ?? 'prefill')
+				: (editToolAncestorFieldItemNoPrefill?.() ?? 'no prefill')}
 		</button>
 	{/if}
 	<div class="field-type-icon">
@@ -134,5 +151,4 @@
 	.prefill-toggle.prefill-off:hover {
 		background: hsl(var(--accent));
 	}
-
 </style>

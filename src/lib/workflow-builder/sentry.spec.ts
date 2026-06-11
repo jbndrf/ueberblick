@@ -38,12 +38,8 @@ describe('connectionIsAvailable', () => {
 		const sentry: SentryClause[] = [
 			{ field_def_id: 'fd_decision', op: 'equals', value: 'approved' }
 		];
-		expect(
-			connectionIsAvailable({ sentry }, ctx([fv({ value: 'approved' })]))
-		).toBe(true);
-		expect(
-			connectionIsAvailable({ sentry }, ctx([fv({ value: 'declined' })]))
-		).toBe(false);
+		expect(connectionIsAvailable({ sentry }, ctx([fv({ value: 'approved' })]))).toBe(true);
+		expect(connectionIsAvailable({ sentry }, ctx([fv({ value: 'declined' })]))).toBe(false);
 	});
 
 	it('AND across clauses', () => {
@@ -99,8 +95,8 @@ describe('connectionIsAvailable', () => {
 		expect(
 			connectionIsAvailable({ sentry }, ctx([fv({ field_def_id: 'fd_n', value: '15' })]))
 		).toBe(true);
-		expect(
-			connectionIsAvailable({ sentry }, ctx([fv({ field_def_id: 'fd_n', value: '5' })]))
-		).toBe(false);
+		expect(connectionIsAvailable({ sentry }, ctx([fv({ field_def_id: 'fd_n', value: '5' })]))).toBe(
+			false
+		);
 	});
 });

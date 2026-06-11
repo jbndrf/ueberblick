@@ -22,7 +22,10 @@
 	class="tool-icon"
 	class:selected
 	style="--tool-color: {color}"
-	onclick={(e) => { e.stopPropagation(); onclick?.(); }}
+	onclick={(e) => {
+		e.stopPropagation();
+		onclick?.();
+	}}
 	{title}
 	type="button"
 >

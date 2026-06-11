@@ -87,12 +87,14 @@
 	// ==========================================================================
 	// Derived values for summary display
 	// ==========================================================================
-	const sourceTypeLabel = $derived({
-		custom_table: (formEditorEntitySelectorConfigCustomTable?.() ?? 'Custom Table'),
-		marker_category: (formEditorEntitySelectorConfigMarkers?.() ?? 'Markers'),
-		participants: (formEditorEntitySelectorConfigParticipants?.() ?? 'Participants'),
-		roles: (formEditorEntitySelectorConfigRoles?.() ?? 'Roles')
-	}[sourceType]);
+	const sourceTypeLabel = $derived(
+		{
+			custom_table: formEditorEntitySelectorConfigCustomTable?.() ?? 'Custom Table',
+			marker_category: formEditorEntitySelectorConfigMarkers?.() ?? 'Markers',
+			participants: formEditorEntitySelectorConfigParticipants?.() ?? 'Participants',
+			roles: formEditorEntitySelectorConfigRoles?.() ?? 'Roles'
+		}[sourceType]
+	);
 
 	const isConfigured = $derived(() => {
 		if (sourceType === 'custom_table') {
@@ -103,14 +105,13 @@
 			);
 		}
 		if (sourceType === 'marker_category') {
-			return (
-				!!currentOptions.marker_category_id &&
-				(currentOptions.allowed_roles?.length || 0) > 0
-			);
+			return !!currentOptions.marker_category_id && (currentOptions.allowed_roles?.length || 0) > 0;
 		}
 		if (sourceType === 'participants' || sourceType === 'roles') {
-			return (currentOptions.self_select_roles?.length || 0) > 0 ||
-				   (currentOptions.any_select_roles?.length || 0) > 0;
+			return (
+				(currentOptions.self_select_roles?.length || 0) > 0 ||
+				(currentOptions.any_select_roles?.length || 0) > 0
+			);
 		}
 		return false;
 	});
@@ -124,7 +125,9 @@
 			<div class="source-type-list">
 				<div class="source-type-option">
 					<RadioGroup.Item value="custom_table" id="src-custom-table" />
-					<Label for="src-custom-table">{formEditorEntitySelectorConfigCustomTable?.() ?? 'Custom Table'}</Label>
+					<Label for="src-custom-table"
+						>{formEditorEntitySelectorConfigCustomTable?.() ?? 'Custom Table'}</Label
+					>
 				</div>
 				<div class="source-type-option">
 					<RadioGroup.Item value="marker_category" id="src-marker" />
@@ -132,7 +135,9 @@
 				</div>
 				<div class="source-type-option">
 					<RadioGroup.Item value="participants" id="src-participants" />
-					<Label for="src-participants">{formEditorEntitySelectorConfigParticipants?.() ?? 'Participants'}</Label>
+					<Label for="src-participants"
+						>{formEditorEntitySelectorConfigParticipants?.() ?? 'Participants'}</Label
+					>
 				</div>
 				<div class="source-type-option">
 					<RadioGroup.Item value="roles" id="src-roles" />
@@ -144,15 +149,15 @@
 
 	<!-- Configure Button -->
 	<div class="config-section">
-		<Button
-			variant="outline"
-			class="configure-button"
-			onclick={() => (modalOpen = true)}
-		>
+		<Button variant="outline" class="configure-button" onclick={() => (modalOpen = true)}>
 			<Settings2 class="h-4 w-4" />
-			{formEditorEntitySelectorConfigConfigureButton?.({ sourceTypeLabel: sourceTypeLabel ?? '' }) ?? `Configure ${sourceTypeLabel}`}
+			{formEditorEntitySelectorConfigConfigureButton?.({
+				sourceTypeLabel: sourceTypeLabel ?? ''
+			}) ?? `Configure ${sourceTypeLabel}`}
 			{#if isConfigured()}
-				<span class="configured-badge">{formEditorEntitySelectorConfigConfigured?.() ?? 'Configured'}</span>
+				<span class="configured-badge"
+					>{formEditorEntitySelectorConfigConfigured?.() ?? 'Configured'}</span
+				>
 			{/if}
 		</Button>
 	</div>
@@ -206,7 +211,7 @@
 		background: hsl(var(--accent));
 	}
 
-	.source-type-option:has(:global([data-state="checked"])) {
+	.source-type-option:has(:global([data-state='checked'])) {
 		background: hsl(var(--primary) / 0.1);
 		border-color: hsl(var(--primary) / 0.3);
 	}

@@ -1,5 +1,13 @@
 <script lang="ts">
-	import { ArrowRight, Lock, Crosshair, Zap, Pencil, ClipboardList, FileText } from '@lucide/svelte';
+	import {
+		ArrowRight,
+		Lock,
+		Crosshair,
+		Zap,
+		Pencil,
+		ClipboardList,
+		FileText
+	} from '@lucide/svelte';
 	import ModelSection from './ModelSection.svelte';
 	import DataTabsEditor from './sections/DataTabsEditor.svelte';
 	import PermissionsMatrixView from './permissions/PermissionsMatrixView.svelte';
@@ -82,7 +90,8 @@
 	});
 
 	function triggerShortLabel(triggerType: string): string {
-		if (triggerType === 'on_field_change') return catalogTriggerFieldChange?.() ?? 'on field change';
+		if (triggerType === 'on_field_change')
+			return catalogTriggerFieldChange?.() ?? 'on field change';
 		if (triggerType === 'cron') return catalogTriggerScheduled?.() ?? 'scheduled';
 		return catalogTriggerTransition?.() ?? 'on transition';
 	}
@@ -168,7 +177,7 @@
 							{#if !conn.data.from_stage_id}
 								<span class="type-badge" data-type="start">{modelEntryBadge?.() ?? 'Entry'}</span>
 							{:else}
-								<ArrowRight class="h-3.5 w-3.5 row-icon" />
+								<ArrowRight class="row-icon h-3.5 w-3.5" />
 							{/if}
 							<span class="row-path">{connLabel(conn.data)}</span>
 							<input
@@ -212,7 +221,7 @@
 				<div class="rows">
 					{#each allForms as form (form.data.id)}
 						<div class="row">
-							<FileText class="h-3.5 w-3.5 row-icon" />
+							<FileText class="row-icon h-3.5 w-3.5" />
 							<input
 								class="inline-input"
 								value={form.data.name}
@@ -270,8 +279,12 @@
 									if (v && v !== def.data.label) state.updateFieldDef(def.data.id, { label: v });
 								}}
 							/>
-							<span class="row-meta">{fieldTypeLabels[def.data.field_type] ?? def.data.field_type}</span>
-							<span class="row-meta">{writeModeLabels[def.data.write_mode] ?? def.data.write_mode}</span>
+							<span class="row-meta"
+								>{fieldTypeLabels[def.data.field_type] ?? def.data.field_type}</span
+							>
+							<span class="row-meta"
+								>{writeModeLabels[def.data.write_mode] ?? def.data.write_mode}</span
+							>
 							<span class="row-meta"
 								>{modelUsageCount?.({ count: state.getRefsForDef(def.data.id).length }) ??
 									`${state.getRefsForDef(def.data.id).length}×`}</span
@@ -299,9 +312,9 @@
 					{#each tools as tool (tool.id)}
 						<div class="row">
 							{#if tool.kind === 'edit'}
-								<Pencil class="h-3.5 w-3.5 row-icon" />
+								<Pencil class="row-icon h-3.5 w-3.5" />
 							{:else}
-								<ClipboardList class="h-3.5 w-3.5 row-icon" />
+								<ClipboardList class="row-icon h-3.5 w-3.5" />
 							{/if}
 							<span class="row-label">{tool.name}</span>
 							<span class="row-meta">{tool.scope}</span>
@@ -342,7 +355,7 @@
 				<div class="rows">
 					{#each state.visibleAutomations as automation (automation.data.id)}
 						<div class="row">
-							<Zap class="h-3.5 w-3.5 row-icon" />
+							<Zap class="row-icon h-3.5 w-3.5" />
 							<input
 								class="inline-input"
 								value={automation.data.name}

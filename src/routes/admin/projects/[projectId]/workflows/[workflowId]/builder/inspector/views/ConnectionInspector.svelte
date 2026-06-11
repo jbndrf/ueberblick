@@ -46,7 +46,9 @@
 	const { state, ui, roles, createRole } = ctx;
 
 	const connectionId = $derived(ui.selection.type === 'connection' ? ui.selection.id : null);
-	const conn = $derived(connectionId ? (state.getConnectionById(connectionId)?.data ?? null) : null);
+	const conn = $derived(
+		connectionId ? (state.getConnectionById(connectionId)?.data ?? null) : null
+	);
 
 	const isEntry = $derived(!!conn && !conn.from_stage_id);
 	const isSelfLoop = $derived(!!conn && conn.from_stage_id === conn.to_stage_id && !isEntry);
@@ -54,7 +56,9 @@
 	const sourceName = $derived(
 		conn?.from_stage_id ? (state.getStageById(conn.from_stage_id)?.data.stage_name ?? '') : ''
 	);
-	const targetName = $derived(conn ? (state.getStageById(conn.to_stage_id)?.data.stage_name ?? '') : '');
+	const targetName = $derived(
+		conn ? (state.getStageById(conn.to_stage_id)?.data.stage_name ?? '') : ''
+	);
 
 	// Connected tools, merged and ordered
 	const sortedTools = $derived.by(() => {
@@ -62,13 +66,28 @@
 		const all = [
 			...state
 				.getFormsForConnection(connectionId)
-				.map((f) => ({ type: 'form', id: f.data.id, name: f.data.name, order: f.data.tool_order ?? 0 })),
+				.map((f) => ({
+					type: 'form',
+					id: f.data.id,
+					name: f.data.name,
+					order: f.data.tool_order ?? 0
+				})),
 			...state
 				.getEditToolsForConnection(connectionId)
-				.map((e) => ({ type: 'edit', id: e.data.id, name: e.data.name, order: e.data.tool_order ?? 0 })),
+				.map((e) => ({
+					type: 'edit',
+					id: e.data.id,
+					name: e.data.name,
+					order: e.data.tool_order ?? 0
+				})),
 			...state
 				.getProtocolToolsForConnection(connectionId)
-				.map((p) => ({ type: 'protocol', id: p.data.id, name: p.data.name, order: p.data.tool_order ?? 0 }))
+				.map((p) => ({
+					type: 'protocol',
+					id: p.data.id,
+					name: p.data.name,
+					order: p.data.tool_order ?? 0
+				}))
 		];
 		return all.sort((a, b) => a.order - b.order);
 	});
@@ -214,7 +233,9 @@
 			{#if !isEntry}
 				<PropertySection title={propertiesEdgePropertyButtonAppearance?.() ?? 'Button Appearance'}>
 					<div class="form-field">
-						<Label for="button-label">{propertiesEdgePropertyButtonLabel?.() ?? 'Button Label'}</Label>
+						<Label for="button-label"
+							>{propertiesEdgePropertyButtonLabel?.() ?? 'Button Label'}</Label
+						>
 						<Input
 							id="button-label"
 							value={conn.visual_config?.button_label ?? ''}
@@ -224,7 +245,9 @@
 						/>
 					</div>
 					<div class="form-field">
-						<Label for="button-color">{propertiesEdgePropertyButtonColor?.() ?? 'Button Color'}</Label>
+						<Label for="button-color"
+							>{propertiesEdgePropertyButtonColor?.() ?? 'Button Color'}</Label
+						>
 						<div class="color-picker">
 							<input
 								type="color"
@@ -316,17 +339,17 @@
 					<div class="add-tool-row">
 						{#if allowedToolTypes.includes('form')}
 							<Button variant="outline" size="sm" onclick={() => addTool('form')}>
-								<Plus class="h-3.5 w-3.5 mr-1" />{connectionInspectorAddForm?.() ?? 'Form'}
+								<Plus class="mr-1 h-3.5 w-3.5" />{connectionInspectorAddForm?.() ?? 'Form'}
 							</Button>
 						{/if}
 						{#if allowedToolTypes.includes('edit')}
 							<Button variant="outline" size="sm" onclick={() => addTool('edit')}>
-								<Plus class="h-3.5 w-3.5 mr-1" />{connectionInspectorAddEdit?.() ?? 'Edit'}
+								<Plus class="mr-1 h-3.5 w-3.5" />{connectionInspectorAddEdit?.() ?? 'Edit'}
 							</Button>
 						{/if}
 						{#if allowedToolTypes.includes('protocol')}
 							<Button variant="outline" size="sm" onclick={() => addTool('protocol')}>
-								<Plus class="h-3.5 w-3.5 mr-1" />{connectionInspectorAddProtocol?.() ?? 'Protocol'}
+								<Plus class="mr-1 h-3.5 w-3.5" />{connectionInspectorAddProtocol?.() ?? 'Protocol'}
 							</Button>
 						{/if}
 					</div>
@@ -337,7 +360,7 @@
 		<!-- Footer -->
 		<div class="panel-footer">
 			<Button variant="destructive" size="sm" onclick={handleDelete} class="w-full">
-				<Trash2 class="h-4 w-4 mr-2" />
+				<Trash2 class="mr-2 h-4 w-4" />
 				{propertiesEdgePropertyDeleteAction?.() ?? 'Delete Action'}
 			</Button>
 		</div>

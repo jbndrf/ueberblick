@@ -136,10 +136,7 @@ export function getGlobalForms(state: WorkflowBuilderState): TrackedForm[] {
 // =============================================================================
 
 /** Resolve a ref against its def into the flattened read-model shape. */
-export function resolveFieldRef(
-	state: WorkflowBuilderState,
-	ref: FormFieldRef
-): ToolsFormField {
+export function resolveFieldRef(state: WorkflowBuilderState, ref: FormFieldRef): ToolsFormField {
 	const def: WorkflowFieldDef | undefined = state.getFieldDefById(ref.field_def_id);
 	const config = ref.config ?? {};
 	return {

@@ -166,7 +166,10 @@ export function getDataTabs(
 }
 
 /** Field defs assigned to a tab, ordered by row then column. */
-export function getFieldDefsForTab(state: WorkflowBuilderState, tabName: string): TrackedFieldDef[] {
+export function getFieldDefsForTab(
+	state: WorkflowBuilderState,
+	tabName: string
+): TrackedFieldDef[] {
 	const colRank = { left: 0, full: 1, right: 2 };
 	return state.visibleFieldDefs
 		.filter((d) => defTab(d.data) === tabName)

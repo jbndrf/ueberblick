@@ -41,8 +41,8 @@ describe('whole-workflow YAML — real modelled process', () => {
 
 		// conditional logic resolved label -> a real def id
 		const sonderDefId = s.visibleFieldDefs.find((d) => d.data.label === 'Sonderfälle')?.data.id;
-		const statusDefId = s.visibleFieldDefs.find((d) => d.data.label === 'Status Sonderfall 1')
-			?.data.id;
+		const statusDefId = s.visibleFieldDefs.find((d) => d.data.label === 'Status Sonderfall 1')?.data
+			.id;
 		const statusRef = s.visibleFieldRefs.find((f) => f.data.field_def_id === statusDefId);
 		const statusField = statusRef ? s.getFormFieldById(statusRef.data.id)?.data : undefined;
 		expect(statusField?.conditional_logic).toEqual({

@@ -285,8 +285,7 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 				field_type: f.type,
 				write_mode: 'singleton',
 				field_options:
-					f.field_options ??
-					(f.options ? { options: f.options.map((o) => ({ label: o })) } : null)
+					f.field_options ?? (f.options ? { options: f.options.map((o) => ({ label: o })) } : null)
 			});
 			await adminPb.collection('tools_form_field_refs').create({
 				form_id: formId,
@@ -532,7 +531,9 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 			}
 		});
 		workflow.editTools.set('editReport', editReportTool.id);
-		console.log(`Created edit tool: "Edit Report Details" at Report stage (Field Worker, Supervisor)`);
+		console.log(
+			`Created edit tool: "Edit Report Details" at Report stage (Field Worker, Supervisor)`
+		);
 		console.log(`  - Editable fields: Title, Description`);
 		console.log(`  - Button: "Edit Details" (blue)`);
 
@@ -667,13 +668,18 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 			location: LOCATIONS.COLOGNE
 		});
 		instances.set('Instance1', instance.id);
-		console.log(`Alice created Instance 1: ${instance.id} (Cologne: ${LOCATIONS.COLOGNE.lat}, ${LOCATIONS.COLOGNE.lon})`);
+		console.log(
+			`Alice created Instance 1: ${instance.id} (Cologne: ${LOCATIONS.COLOGNE.lat}, ${LOCATIONS.COLOGNE.lon})`
+		);
 
 		// Save form field values with identifiable data
 		const timestamp = new Date().toISOString();
 		const fieldValues = [
 			{ field: 'Title', value: 'Water Leak in Building A' },
-			{ field: 'Description', value: 'Major water leak detected on floor 3, ceiling panels damaged' },
+			{
+				field: 'Description',
+				value: 'Major water leak detected on floor 3, ceiling panels damaged'
+			},
 			{ field: 'Severity', value: 'High' },
 			{ field: 'Damage Type', value: 'Water' },
 			{ field: 'Sub-Category', value: 'Burst Pipe' },
@@ -715,13 +721,18 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 			location: LOCATIONS.BERLIN
 		});
 		instances.set('Instance2', instance.id);
-		console.log(`Alice created Instance 2: ${instance.id} (Berlin: ${LOCATIONS.BERLIN.lat}, ${LOCATIONS.BERLIN.lon})`);
+		console.log(
+			`Alice created Instance 2: ${instance.id} (Berlin: ${LOCATIONS.BERLIN.lat}, ${LOCATIONS.BERLIN.lon})`
+		);
 
 		// Fill entry form
 		const timestamp = new Date().toISOString();
 		const entryValues = [
 			{ field: 'Title', value: 'Fire Alarm System Malfunction' },
-			{ field: 'Description', value: 'Fire alarm triggered without cause, electrical panel shows signs of overheating' },
+			{
+				field: 'Description',
+				value: 'Fire alarm triggered without cause, electrical panel shows signs of overheating'
+			},
 			{ field: 'Severity', value: 'Critical' },
 			{ field: 'Damage Type', value: 'Electrical' },
 			{ field: 'Sub-Category', value: 'Short Circuit' },
@@ -797,13 +808,18 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 			location: LOCATIONS.MUNICH
 		});
 		instances.set('Instance3', instance.id);
-		console.log(`Alice created Instance 3: ${instance.id} (Munich: ${LOCATIONS.MUNICH.lat}, ${LOCATIONS.MUNICH.lon})`);
+		console.log(
+			`Alice created Instance 3: ${instance.id} (Munich: ${LOCATIONS.MUNICH.lat}, ${LOCATIONS.MUNICH.lon})`
+		);
 
 		// Fill entry form
 		const timestamp = new Date().toISOString();
 		const entryValues = [
 			{ field: 'Title', value: 'Structural Crack in Foundation' },
-			{ field: 'Description', value: 'Large crack discovered in basement foundation, possible water seepage' },
+			{
+				field: 'Description',
+				value: 'Large crack discovered in basement foundation, possible water seepage'
+			},
 			{ field: 'Severity', value: 'Medium' },
 			{ field: 'Damage Type', value: 'Structural' },
 			{ field: 'Sub-Category', value: 'Foundation' },
@@ -901,10 +917,9 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 
 		// Alice (Field Worker) visibility
 		const alicePb = new PocketBase(PB_URL);
-		await alicePb.collection('participants').authWithPassword(
-			participants.get('Alice')!.token,
-			participants.get('Alice')!.token
-		);
+		await alicePb
+			.collection('participants')
+			.authWithPassword(participants.get('Alice')!.token, participants.get('Alice')!.token);
 		const aliceInstances = await alicePb.collection('workflow_instances').getFullList({
 			filter: `id = "${instance1}" || id = "${instance2}" || id = "${instance3}"`
 		});
@@ -919,10 +934,9 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 
 		// Bob (Supervisor) visibility
 		const bobPb = new PocketBase(PB_URL);
-		await bobPb.collection('participants').authWithPassword(
-			participants.get('Bob')!.token,
-			participants.get('Bob')!.token
-		);
+		await bobPb
+			.collection('participants')
+			.authWithPassword(participants.get('Bob')!.token, participants.get('Bob')!.token);
 		const bobInstances = await bobPb.collection('workflow_instances').getFullList({
 			filter: `id = "${instance1}" || id = "${instance2}" || id = "${instance3}"`
 		});
@@ -938,10 +952,9 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 
 		// Carol (Analyst) visibility
 		const carolPb = new PocketBase(PB_URL);
-		await carolPb.collection('participants').authWithPassword(
-			participants.get('Carol')!.token,
-			participants.get('Carol')!.token
-		);
+		await carolPb
+			.collection('participants')
+			.authWithPassword(participants.get('Carol')!.token, participants.get('Carol')!.token);
 		const carolInstances = await carolPb.collection('workflow_instances').getFullList({
 			filter: `id = "${instance1}" || id = "${instance2}" || id = "${instance3}"`
 		});
@@ -961,8 +974,12 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 		console.log(`\n=== TEST 7: Edit Tool Access Check ===`);
 
 		// Verify edit tools were created by fetching by their stored IDs
-		const reportEditTool = await adminPb.collection('tools_edit').getOne(workflow.editTools.get('editReport')!);
-		const reviewEditTool = await adminPb.collection('tools_edit').getOne(workflow.editTools.get('editReview')!);
+		const reportEditTool = await adminPb
+			.collection('tools_edit')
+			.getOne(workflow.editTools.get('editReport')!);
+		const reviewEditTool = await adminPb
+			.collection('tools_edit')
+			.getOne(workflow.editTools.get('editReview')!);
 
 		// Verify stage_id arrays contain the correct stages
 		expect(reportEditTool.stage_id).toContain(workflow.stages.get('Report'));
@@ -983,8 +1000,12 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 		expect(reviewEditTool.any_edit_roles).toContain(roles.get('Analyst'));
 
 		// Verify global tools
-		const globalLocationTool = await adminPb.collection('tools_edit').getOne(workflow.editTools.get('globalLocation')!);
-		const globalFormTool = await adminPb.collection('tools_edit').getOne(workflow.editTools.get('globalForm')!);
+		const globalLocationTool = await adminPb
+			.collection('tools_edit')
+			.getOne(workflow.editTools.get('globalLocation')!);
+		const globalFormTool = await adminPb
+			.collection('tools_edit')
+			.getOne(workflow.editTools.get('globalForm')!);
 
 		// Global tools should have is_global: true and be available at all stages
 		expect(globalLocationTool.is_global).toBe(true);
@@ -1032,7 +1053,9 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 		console.log(`  - Mappings for: Water, Fire, Structural, Electrical`);
 
 		for (const mapping of subCategoryField.field_options.mappings) {
-			console.log(`    - ${mapping.when}: ${mapping.options.map((o: { label: string }) => o.label).join(', ')}`);
+			console.log(
+				`    - ${mapping.when}: ${mapping.options.map((o: { label: string }) => o.label).join(', ')}`
+			);
 		}
 
 		console.log(`PASS: Smart dropdown properly configured`);
@@ -1087,11 +1110,7 @@ test.describe.serial('Comprehensive Workflow E2E Test', () => {
 		console.log(`Use these at /participant/login to test visibility:`);
 		for (const [name, p] of participants) {
 			const roleText =
-				name === 'Alice'
-					? 'Field Worker'
-					: name === 'Bob'
-						? 'Supervisor'
-						: 'Analyst';
+				name === 'Alice' ? 'Field Worker' : name === 'Bob' ? 'Supervisor' : 'Analyst';
 			console.log(`  ${name} (${roleText}): ${p.token}`);
 		}
 

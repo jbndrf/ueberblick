@@ -2,7 +2,14 @@
 	import { ArrowLeft, Trash2 } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
-	import { automationStepConfigPanelActionsLabel, automationStepConfigPanelConditionsLabel, automationStepConfigPanelDeleteStep, automationStepConfigPanelStep, automationStepConfigPanelStepNamePlaceholder, automationStepConfigPanelSteps } from '$lib/paraglide/messages';
+	import {
+		automationStepConfigPanelActionsLabel,
+		automationStepConfigPanelConditionsLabel,
+		automationStepConfigPanelDeleteStep,
+		automationStepConfigPanelStep,
+		automationStepConfigPanelStepNamePlaceholder,
+		automationStepConfigPanelSteps
+	} from '$lib/paraglide/messages';
 
 	import ConditionBuilder from './ConditionBuilder.svelte';
 	import ActionBuilder from './ActionBuilder.svelte';
@@ -66,7 +73,9 @@
 
 		<!-- Conditions -->
 		<div class="config-section">
-			<span class="section-label">{automationStepConfigPanelConditionsLabel?.() ?? 'Conditions (guard)'}</span>
+			<span class="section-label"
+				>{automationStepConfigPanelConditionsLabel?.() ?? 'Conditions (guard)'}</span
+			>
 			<ConditionBuilder
 				conditions={step.conditions}
 				{fieldOptions}
@@ -85,17 +94,14 @@
 				onChange={updateActions}
 			/>
 			{#if step.actions.length < 5}
-				<ActionTypePalette
-					{stageOptions}
-					onAdd={addAction}
-				/>
+				<ActionTypePalette {stageOptions} onAdd={addAction} />
 			{/if}
 		</div>
 
 		<!-- Delete -->
 		<div class="config-footer">
 			<Button variant="destructive" size="sm" class="h-7 text-xs" onclick={onDelete}>
-				<Trash2 class="h-3 w-3 mr-1" />
+				<Trash2 class="mr-1 h-3 w-3" />
 				{automationStepConfigPanelDeleteStep?.() ?? 'Delete Step'}
 			</Button>
 		</div>

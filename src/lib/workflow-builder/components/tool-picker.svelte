@@ -18,12 +18,15 @@
 	const tools = $derived.by(() => {
 		const all = toolRegistry.getToolsFor(attachmentTarget);
 		if (!allowedToolTypes) return all;
-		return all.filter(t => allowedToolTypes.includes(t.toolType));
+		return all.filter((t) => allowedToolTypes.includes(t.toolType));
 	});
 
 	const sectionTitle = $derived(
-		attachmentTarget === 'global' ? 'Global Tools' :
-		attachmentTarget === 'stage' ? 'Stage Tools' : 'Connection Tools'
+		attachmentTarget === 'global'
+			? 'Global Tools'
+			: attachmentTarget === 'stage'
+				? 'Stage Tools'
+				: 'Connection Tools'
 	);
 
 	let isOpen = $state(true);
