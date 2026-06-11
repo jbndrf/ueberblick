@@ -44,8 +44,16 @@ test.describe('Builder refactor smoke', () => {
 		await page.locator('.svelte-flow__node-stage').first().click();
 		await expect(page.locator('.inspector')).toBeVisible();
 
-		// Click an edge -> connection inspector with sentry section
-		await page.locator('.svelte-flow__edge:not(.entry-edge)').first().dispatchEvent('click');
+		// --- Connection inspector via the model tab deep-link (deterministic) ---
+		await page.getByRole('button', { name: /^(Modell|Model)$/ }).click();
+		await expect(page.getByRole('heading', { name: /Verbindungen|Connections/ })).toBeVisible();
+		// Reveal a non-entry connection: rows render an arrow icon; entry rows a badge.
+		const connRow = page
+			.locator('.model-overview .row', { hasText: '→' })
+			.filter({ has: page.locator('.reveal-btn') })
+			.filter({ hasNot: page.locator('.type-badge') })
+			.first();
+		await connRow.locator('.reveal-btn').click();
 		await expect(page.getByText(/Wächter|Sentry/).first()).toBeVisible();
 
 		// Rename the connection action in the inspector -> save button becomes enabled
