@@ -12,6 +12,7 @@
 		type NodeEventWithPointer,
 		type Connection
 	} from '@xyflow/svelte';
+	import '@xyflow/svelte/dist/style.css';
 
 	import { onMount } from 'svelte';
 	import {
