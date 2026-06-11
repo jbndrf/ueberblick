@@ -449,6 +449,40 @@
 		return map;
 	});
 
+	// Single representative fill/stroke color per instance for polygon &
+	// line geometries. Mirrors the icon fallback chain above so a shape reads
+	// the same color as its centroid marker: an active icon contributes its
+	// style.color (the same value the donut/legend visualKeyRegistry uses),
+	// otherwise we fall back to the workflow's marker_color. The geometry
+	// layer applies its own default when an instance isn't in this map.
+	const colorByInstance = $derived.by(() => {
+		const workflowById = new Map((workflows as any[]).map((w) => [w.id, w]));
+		const stageById = new Map((workflowStages as any[]).map((s) => [s.id, s]));
+		const map = new Map<string, string>();
+		for (const inst of workflowInstances as any[]) {
+			const wf = workflowById.get(inst.workflow_id);
+			if (!wf) continue;
+			let iconColor: string | undefined;
+			const filterValue = filterableValues.get(inst.id);
+			const filterIcon =
+				filterValue && wf.filter_value_icons?.[filterValue];
+			if (filterIcon?.svgContent) {
+				iconColor = filterIcon.style?.color;
+			}
+			if (iconColor === undefined && inst.current_stage_id) {
+				const stage = stageById.get(inst.current_stage_id);
+				if (stage?.visual_config?.icon_config?.svgContent) {
+					iconColor = stage.visual_config.icon_config.style?.color;
+				}
+			}
+			if (iconColor === undefined && wf.icon_config?.svgContent) {
+				iconColor = wf.icon_config.style?.color;
+			}
+			map.set(inst.id, iconColor ?? wf.marker_color ?? '#3b82f6');
+		}
+		return map;
+	});
+
 	// Most recent tool_usage per instance, so the Recent sheet can display the
 	// same activity label as the detail module's Activity tab.
 	const latestToolUsageByInstance = $derived.by(() => {
@@ -2002,6 +2036,7 @@
 			{map}
 			instances={filteredInstances}
 			{workflows}
+			{colorByInstance}
 			visibleWorkflowIds={effectiveVisibleWorkflowIds}
 			selectedInstanceId={selection.type === 'workflowInstance' ? selection.instanceId : null}
 			interactive={!isCreatingInstance}

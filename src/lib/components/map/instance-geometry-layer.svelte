@@ -26,8 +26,14 @@
 		 *  Accepts a superset so callers can pass their heterogeneous records
 		 *  without having to narrow them first. */
 		instances: readonly InstanceLike[] | readonly Record<string, unknown>[];
-		/** Workflow definitions, used to pick a stroke color per instance. */
+		/** Workflow definitions, used as the fallback stroke/fill color per
+		 *  instance (the workflow's marker_color). */
 		workflows: readonly WorkflowLike[] | readonly Record<string, unknown>[];
+		/** Per-instance resolved stroke/fill color, keyed by instance id. Lets a
+		 *  shape match its centroid marker when that marker's color comes from a
+		 *  filter-value / stage / workflow icon rather than plain marker_color.
+		 *  Instances absent from this map fall back to colorFor() (marker_color). */
+		colorByInstance?: ReadonlyMap<string, string>;
 		/** Currently-visible workflow IDs (filter state). */
 		visibleWorkflowIds?: string[];
 		/** Hard-floor zoom below which no shapes are drawn. The per-shape
@@ -56,6 +62,7 @@
 		map,
 		instances,
 		workflows,
+		colorByInstance,
 		visibleWorkflowIds,
 		minZoom = 3,
 		minShapePixels = 6,
@@ -154,7 +161,7 @@
 			}
 
 			seen.add(inst.id);
-			const color = colorFor(inst.workflow_id);
+			const color = colorByInstance?.get(inst.id) ?? colorFor(inst.workflow_id);
 			const geom = inst.geometry;
 			const isSelected = inst.id === selectedInstanceId;
 
@@ -165,7 +172,7 @@
 			const lineWeight = isSelected ? 6 : 4;
 			const lineOpacity = isSelected ? 1 : 0.9;
 			const polyWeight = isSelected ? 4 : 2;
-			const polyFillOpacity = isSelected ? 0.45 : 0.25;
+			const polyFillOpacity = isSelected ? 0.3 : 0.15;
 
 			// Leaflet's L.polyline and L.polygon accept nested arrays out of the
 			// box: a flat latlng[] renders a single stroke/ring, and a latlng[][]
