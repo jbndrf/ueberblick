@@ -21,8 +21,6 @@ export interface WorkflowStage {
 	position_x?: number;
 	position_y?: number;
 	visual_config?: Record<string, unknown>;
-	/** Roles that can see instances currently in this stage. Empty/missing = all. */
-	visible_to_roles?: string[];
 }
 
 // =============================================================================

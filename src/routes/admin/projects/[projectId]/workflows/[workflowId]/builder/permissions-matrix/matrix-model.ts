@@ -12,7 +12,6 @@ import {
 	permMatrixBandEditTools,
 	permMatrixBandForms,
 	permMatrixBandProtocolTools,
-	permMatrixBandStages,
 	permMatrixBandStartInstance,
 	permMatrixBandTransitions,
 	permMatrixBandWorkflow,
@@ -107,27 +106,8 @@ export function buildMatrixModel(state: WorkflowBuilderState): MatrixSection[] {
 		]
 	});
 
-	const stageRows: MatrixRow[] = state.visibleStages.map((stage) => {
-		const stageId = stage.data.id;
-		return {
-			id: `stage:${stageId}`,
-			label: stage.data.stage_name,
-			tone: 'view' as CellTone,
-			advanced: false,
-			readOnly: false,
-			indent: 0,
-			roles: () => state.getStageById(stageId)?.data.visible_to_roles ?? [],
-			setRoles: (next) => state.updateStage(stageId, { visible_to_roles: next })
-		};
-	});
-	if (stageRows.length > 0) {
-		visibilityBands.push({
-			id: 'stages',
-			label: permMatrixBandStages(),
-			advanced: false,
-			rows: stageRows
-		});
-	}
+	// No stage rows: `workflow_stages` carries no role fields in the data model —
+	// stage-level visibility does not exist.
 
 	for (const tab of state.getDataTabs()) {
 		const defs = state.getFieldDefsForTab(tab.name);
