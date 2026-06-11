@@ -2221,5 +2221,8 @@
 	"modelAddAutomation": "Add automation",
 	"modelWriteModeSingleton": "Single value",
 	"modelWriteModeObservation": "Observation",
-	"modelWriteModeComputed": "Computed"
+	"modelWriteModeComputed": "Computed",
+	"entityYamlHint": "YAML of this element (including its children). Apply only changes the draft — remember to save.",
+	"inspectorViewForm": "Form",
+	"inspectorViewYaml": "YAML"
 }

@@ -43,3 +43,11 @@ export {
 } from './workflow-part';
 
 export { stringifyPart, parsePart, parseFormPartText, parseWorkflowPartText } from './serde';
+
+export {
+	serializeEntityPart,
+	applyEntityPart,
+	type YamlEntityKind,
+	type EntityYaml,
+	type EntityApplyResult
+} from './entity-parts';

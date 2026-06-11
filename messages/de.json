@@ -2221,5 +2221,8 @@
 	"modelAddAutomation": "Automatisierung anlegen",
 	"modelWriteModeSingleton": "Einzelwert",
 	"modelWriteModeObservation": "Beobachtung",
-	"modelWriteModeComputed": "Berechnet"
+	"modelWriteModeComputed": "Berechnet",
+	"entityYamlHint": "YAML dieses Elements (inkl. seiner Kinder). Übernehmen ändert nur den Entwurf — Speichern nicht vergessen.",
+	"inspectorViewForm": "Formular",
+	"inspectorViewYaml": "YAML"
 }

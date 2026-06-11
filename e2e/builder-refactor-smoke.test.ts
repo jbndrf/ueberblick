@@ -36,8 +36,8 @@ test.describe('Builder refactor smoke', () => {
 		await expect(page.locator('.drag-item-start')).toBeVisible();
 		await expect(page.locator('.drag-item-stage')).toBeVisible();
 
-		// Canvas: stage nodes rendered
-		await expect(page.locator('.svelte-flow__node').first()).toBeVisible();
+		// Canvas: stage nodes rendered (generous timeout — dev server may compile)
+		await expect(page.locator('.svelte-flow__node').first()).toBeVisible({ timeout: 30000 });
 
 		// Click a stage node -> stage inspector (participant preview)
 		await page.locator('.svelte-flow__node-stage').first().click();
@@ -62,6 +62,12 @@ test.describe('Builder refactor smoke', () => {
 			filter: `workflow_id = "${wf.id}" && action_name = "${renamed}"`
 		});
 		expect(conns.length).toBe(1);
+
+		// --- Entity YAML toggle: connection serializes with sentry/action keys ---
+		await page.locator('.inspector .mode-btn', { hasText: 'YAML' }).click();
+		await expect(page.locator('.entity-yaml')).toContainText('action:');
+		await page.locator('.inspector .mode-btn').first().click();
+		await expect(page.locator('.connection-inspector')).toBeVisible();
 
 		// --- Model tab: all entity sections + bulk permissions matrix ---
 		await page.getByRole('button', { name: /^(Modell|Model)$/ }).click();
