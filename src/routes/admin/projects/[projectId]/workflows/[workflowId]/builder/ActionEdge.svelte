@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { BaseEdge, EdgeLabel, getBezierPath, type EdgeProps } from '@xyflow/svelte';
+	import { Lock } from '@lucide/svelte';
 	import { ToolBar } from '$lib/workflow-builder/components';
 	import type { ConnectionEdgeData } from '$lib/workflow-builder';
 
@@ -104,6 +105,12 @@
 <!-- Tool bar positioned at edge midpoint, direction based on line angle -->
 <EdgeLabel x={labelX} y={labelY}>
 	<div class="edge-toolbar-container nodrag nopan">
+		{#if data?.hasSentry}
+			<!-- Guarded transition: sentry conditions restrict availability -->
+			<span class="sentry-badge" title="Wächter aktiv">
+				<Lock class="h-3 w-3" />
+			</span>
+		{/if}
 		<ToolBar
 			{tools}
 			selectedToolId={data?.selectedToolId}
@@ -119,6 +126,19 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		gap: 0.25rem;
+	}
+
+	.sentry-badge {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 18px;
+		height: 18px;
+		border-radius: 9999px;
+		background: hsl(var(--card));
+		border: 1px solid hsl(var(--border));
+		color: hsl(32 95% 44%);
 	}
 
 	:global(.svelte-flow__edge-path) {

@@ -5,7 +5,6 @@
 	import type { WorkflowStage, ToolsForm, ToolsEdit, VisualConfig } from '$lib/workflow-builder';
 	import type { StageAction, TimelineStage, Role, ConfigPanelMode, IncomingFormGroup } from './types';
 	import ParticipantPreview from './ParticipantPreview.svelte';
-	import ButtonConfigPanel from './ButtonConfigPanel.svelte';
 	import AddButtonPicker from './AddButtonPicker.svelte';
 
 	interface Props {
@@ -22,22 +21,14 @@
 		onStageRename?: (stageId: string, name: string) => void;
 		onStageDelete?: (stageId: string) => void;
 		onClose?: () => void;
-		// Button config handlers
-		onButtonLabelChange?: (actionId: string, actionType: string, label: string) => void;
-		onButtonColorChange?: (actionId: string, actionType: string, color: string) => void;
-		onButtonRolesChange?: (actionId: string, actionType: string, roleIds: string[], scope?: 'self' | 'any') => void;
-		onButtonDelete?: (actionId: string, actionType: string) => void;
 		// Add button handlers
 		onAddConnection?: (fromStageId: string, toStageId: string) => void;
 		onAddStageTool?: (stageId: string, toolType: string) => void;
 		// Create stage + connect
 		onCreateStageAndConnect?: (fromStageId: string) => void;
-		// Navigation
+		// Navigation — preview buttons select their object's inspector
 		onSelectTool?: (toolType: string, toolId: string) => void;
 		onSelectConnection?: (connectionId: string) => void;
-		// Visual config
-		onConnectionVisualConfigChange?: (connectionId: string, config: VisualConfig) => void;
-		onToolVisualConfigChange?: (toolId: string, config: VisualConfig) => void;
 		// Role creation
 		onCreateRole?: (name: string) => Promise<Role>;
 		// Canvas highlight callbacks
@@ -56,54 +47,39 @@
 		onStageRename,
 		onStageDelete,
 		onClose,
-		onButtonLabelChange,
-		onButtonColorChange,
-		onButtonRolesChange,
-		onButtonDelete,
 		onAddConnection,
 		onAddStageTool,
 		onCreateStageAndConnect,
 		onSelectTool,
 		onSelectConnection,
-		onConnectionVisualConfigChange,
-		onToolVisualConfigChange,
 		onCreateRole,
 		onHighlightEdge,
 		onHighlightStageTool
 	}: Props = $props();
 
-	// Panel state
+	// Panel state (add-picker only)
 	let configPanel = $state<ConfigPanelMode>({ type: 'collapsed' });
 	let selectedButtonId = $state<string | null>(null);
 	let roleFilter = $state<string>('all');
 
 	const isPanelOpen = $derived(configPanel.type !== 'collapsed');
 
-	// Get the currently selected action
-	const selectedAction = $derived.by(() => {
-		if (!selectedButtonId) return null;
-		const allActions = [...actions, ...globalTools];
-		return allActions.find((a) => a.id === selectedButtonId) ?? null;
-	});
-
+	/**
+	 * Buttons in the preview SELECT their object — the connection, form or
+	 * tool — so each thing has exactly one configuration home (its own
+	 * inspector). The preview never edits inline.
+	 */
 	function handleButtonSelect(actionId: string) {
-		selectedButtonId = actionId;
-		configPanel = { type: 'button-config', actionId };
-
-		// Highlight the corresponding element on canvas
-		const action = [...actions, ...globalTools].find(a => a.id === actionId);
-		if (action?.type === 'connection') {
-			onHighlightEdge?.(action.id);
-			onHighlightStageTool?.(null);
-		} else if (action?.type === 'stage_tool') {
-			onHighlightStageTool?.(action.tool.id);
-			onHighlightEdge?.(null);
-		} else if (action?.type === 'stage_form') {
-			onHighlightStageTool?.(action.form.id);
-			onHighlightEdge?.(null);
-		} else {
-			onHighlightEdge?.(null);
-			onHighlightStageTool?.(null);
+		const action = [...actions, ...globalTools].find((a) => a.id === actionId);
+		if (!action) return;
+		onHighlightEdge?.(null);
+		onHighlightStageTool?.(null);
+		if (action.type === 'connection') {
+			onSelectConnection?.(action.id);
+		} else if (action.type === 'stage_tool' || action.type === 'global_tool') {
+			onSelectTool?.('edit', action.tool.id);
+		} else if (action.type === 'stage_form') {
+			onSelectTool?.('form', action.form.id);
 		}
 	}
 
@@ -170,35 +146,10 @@
 			{/if}
 		</button>
 
-		<!-- Panel content -->
+		<!-- Panel content (add-picker only — buttons select their object's inspector) -->
 		{#if isPanelOpen}
 			<div class="panel-content">
-				{#if configPanel.type === 'button-config' && selectedAction}
-					<ButtonConfigPanel
-						action={selectedAction}
-						{roles}
-						{onCreateRole}
-						onLabelChange={(label) => {
-							if (!selectedAction) return;
-							onButtonLabelChange?.(selectedAction.id, selectedAction.type, label);
-						}}
-						onColorChange={(color) => {
-							if (!selectedAction) return;
-							onButtonColorChange?.(selectedAction.id, selectedAction.type, color);
-						}}
-						onRolesChange={(roleIds, scope) => {
-							if (!selectedAction) return;
-							onButtonRolesChange?.(selectedAction.id, selectedAction.type, roleIds, scope);
-						}}
-						onDelete={() => {
-							if (!selectedAction) return;
-							onButtonDelete?.(selectedAction.id, selectedAction.type);
-							handleConfigClose();
-						}}
-						onOpenTool={(toolType, toolId) => onSelectTool?.(toolType, toolId)}
-						onClose={handleConfigClose}
-					/>
-				{:else if configPanel.type === 'add-picker'}
+				{#if configPanel.type === 'add-picker'}
 					<AddButtonPicker
 						stageId={stage.id}
 						{availableTargetStages}

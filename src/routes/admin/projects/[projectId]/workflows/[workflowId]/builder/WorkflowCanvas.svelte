@@ -15,7 +15,7 @@
 
 	import { onMount } from 'svelte';
 	import { workflowBuilderCanvasConnectingIndicator, workflowBuilderCanvasEnd, workflowBuilderCanvasNewStage, workflowBuilderCanvasStart } from '$lib/paraglide/messages';
-	import type { StageData } from './context-sidebar';
+	import type { StageData } from '$lib/workflow-builder';
 
 	interface Props {
 		nodes: Node[];

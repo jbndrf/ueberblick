@@ -303,6 +303,7 @@ test.describe.serial('Permission Matrix E2E Test', () => {
 			name: 'Permission Test Workflow',
 			description: 'Workflow with varying stage visibility for permission testing',
 			workflow_type: 'incident',
+			geometry_type: 'point',
 			is_active: true,
 			entry_allowed_roles: [] // All can create initially
 		});
@@ -460,17 +461,24 @@ test.describe.serial('Permission Matrix E2E Test', () => {
 		];
 
 		for (const f of openFields) {
-			const field = await adminPb.collection('tools_form_fields').create({
-				form_id: openEntryForm.id,
-				field_label: f.label,
+			const def = await adminPb.collection('workflow_field_defs').create({
+				workflow_id: workflow.id,
+				label: f.label,
 				field_type: f.type,
-				is_required: f.required,
-				field_order: f.order,
-				page: f.page,
-				row_index: f.row_index,
-				column_position: f.column_position
+				write_mode: 'singleton'
 			});
-			workflow.fields.set(f.label, field.id);
+			await adminPb.collection('tools_form_field_refs').create({
+				form_id: openEntryForm.id,
+				field_def_id: def.id,
+				config: {
+					field_order: f.order,
+					page: f.page,
+					row_index: f.row_index,
+					column_position: f.column_position,
+					is_required: f.required
+				}
+			});
+			workflow.fields.set(f.label, def.id);
 			console.log(`  Field: ${f.label}`);
 		}
 
@@ -507,17 +515,24 @@ test.describe.serial('Permission Matrix E2E Test', () => {
 		];
 
 		for (const f of restrictedFields) {
-			const field = await adminPb.collection('tools_form_fields').create({
-				form_id: restrictedEntryForm.id,
-				field_label: f.label,
+			const def = await adminPb.collection('workflow_field_defs').create({
+				workflow_id: workflow.id,
+				label: f.label,
 				field_type: f.type,
-				is_required: f.required,
-				field_order: f.order,
-				page: f.page,
-				row_index: f.row_index,
-				column_position: f.column_position
+				write_mode: 'singleton'
 			});
-			workflow.fields.set(f.label, field.id);
+			await adminPb.collection('tools_form_field_refs').create({
+				form_id: restrictedEntryForm.id,
+				field_def_id: def.id,
+				config: {
+					field_order: f.order,
+					page: f.page,
+					row_index: f.row_index,
+					column_position: f.column_position,
+					is_required: f.required
+				}
+			});
+			workflow.fields.set(f.label, def.id);
 			console.log(`  Field: ${f.label}`);
 		}
 
@@ -544,17 +559,24 @@ test.describe.serial('Permission Matrix E2E Test', () => {
 		];
 
 		for (const f of partialFields) {
-			const field = await adminPb.collection('tools_form_fields').create({
-				form_id: partialTransitionForm.id,
-				field_label: f.label,
+			const def = await adminPb.collection('workflow_field_defs').create({
+				workflow_id: workflow.id,
+				label: f.label,
 				field_type: f.type,
-				is_required: f.required,
-				field_order: f.order,
-				page: f.page,
-				row_index: f.row_index,
-				column_position: f.column_position
+				write_mode: 'singleton'
 			});
-			workflow.fields.set(f.label, field.id);
+			await adminPb.collection('tools_form_field_refs').create({
+				form_id: partialTransitionForm.id,
+				field_def_id: def.id,
+				config: {
+					field_order: f.order,
+					page: f.page,
+					row_index: f.row_index,
+					column_position: f.column_position,
+					is_required: f.required
+				}
+			});
+			workflow.fields.set(f.label, def.id);
 			console.log(`  Field: ${f.label}`);
 		}
 	});
@@ -564,6 +586,7 @@ test.describe.serial('Permission Matrix E2E Test', () => {
 
 		// Open Edit Tool - all can use
 		const openEditTool = await adminPb.collection('tools_edit').create({
+			workflow_id: workflow.id,
 			stage_id: [workflow.stages.get('Open Stage (all can see)')],
 			edit_mode: 'form_fields',
 			is_global: false,
@@ -582,6 +605,7 @@ test.describe.serial('Permission Matrix E2E Test', () => {
 
 		// Full Access Edit Tool - only Full Access can use
 		const fullAccessEditTool = await adminPb.collection('tools_edit').create({
+			workflow_id: workflow.id,
 			stage_id: [workflow.stages.get('Full Access Only Stage')],
 			edit_mode: 'form_fields',
 			is_global: false,
@@ -606,6 +630,7 @@ test.describe.serial('Permission Matrix E2E Test', () => {
 		];
 
 		const globalLocationTool = await adminPb.collection('tools_edit').create({
+			workflow_id: workflow.id,
 			stage_id: allStages,
 			edit_mode: 'location',
 			is_global: true,
@@ -639,17 +664,21 @@ test.describe.serial('Permission Matrix E2E Test', () => {
 		console.log(`Created open instance: ${openInstance.id} (Berlin)`);
 
 		// Add field values for open instance
-		await adminPb.collection('workflow_instance_field_values').create({
+		await adminPb.collection('workflow_field_values').create({
 			instance_id: openInstance.id,
-			field_key: workflow.fields.get('Public Field - Anyone Can Read This'),
+			field_def_id: workflow.fields.get('Public Field - Anyone Can Read This'),
+			write_mode: 'singleton',
 			value: 'This is PUBLIC data that anyone should see',
-			stage_id: workflow.stages.get('Open Stage (all can see)')
+			recorded_at: new Date().toISOString(),
+			recorded_at_stage: workflow.stages.get('Open Stage (all can see)')
 		});
-		await adminPb.collection('workflow_instance_field_values').create({
+		await adminPb.collection('workflow_field_values').create({
 			instance_id: openInstance.id,
-			field_key: workflow.fields.get('Open Stage Timestamp'),
+			field_def_id: workflow.fields.get('Open Stage Timestamp'),
+			write_mode: 'singleton',
 			value: timestamp,
-			stage_id: workflow.stages.get('Open Stage (all can see)')
+			recorded_at: new Date().toISOString(),
+			recorded_at_stage: workflow.stages.get('Open Stage (all can see)')
 		});
 
 		// Add tool usage for open instance
@@ -676,17 +705,21 @@ test.describe.serial('Permission Matrix E2E Test', () => {
 		console.log(`Created restricted instance: ${restrictedInstance.id} (Munich)`);
 
 		// Add field values for restricted instance - SENSITIVE DATA
-		await adminPb.collection('workflow_instance_field_values').create({
+		await adminPb.collection('workflow_field_values').create({
 			instance_id: restrictedInstance.id,
-			field_key: workflow.fields.get('Restricted Field - Full Access Only'),
+			field_def_id: workflow.fields.get('Restricted Field - Full Access Only'),
+			write_mode: 'singleton',
 			value: 'SECRET: This data should ONLY be visible to Full Access Role',
-			stage_id: workflow.stages.get('Full Access Only Stage')
+			recorded_at: new Date().toISOString(),
+			recorded_at_stage: workflow.stages.get('Full Access Only Stage')
 		});
-		await adminPb.collection('workflow_instance_field_values').create({
+		await adminPb.collection('workflow_field_values').create({
 			instance_id: restrictedInstance.id,
-			field_key: workflow.fields.get('Sensitive Data - Role Limited'),
+			field_def_id: workflow.fields.get('Sensitive Data - Role Limited'),
+			write_mode: 'singleton',
 			value: 'CONFIDENTIAL: Internal review notes - salary adjustment request details',
-			stage_id: workflow.stages.get('Full Access Only Stage')
+			recorded_at: new Date().toISOString(),
+			recorded_at_stage: workflow.stages.get('Full Access Only Stage')
 		});
 
 		// Add tool usage for restricted instance - SENSITIVE AUDIT
@@ -714,11 +747,13 @@ test.describe.serial('Permission Matrix E2E Test', () => {
 		console.log(`Created partial access instance: ${partialInstance.id} (Cologne)`);
 
 		// Add field values for partial instance
-		await adminPb.collection('workflow_instance_field_values').create({
+		await adminPb.collection('workflow_field_values').create({
 			instance_id: partialInstance.id,
-			field_key: workflow.fields.get('Shared Field - Full and Partial Access'),
+			field_def_id: workflow.fields.get('Shared Field - Full and Partial Access'),
+			write_mode: 'singleton',
 			value: 'SHARED: This data is visible to Full Access and Partial Access roles',
-			stage_id: workflow.stages.get('Partial Access Stage')
+			recorded_at: new Date().toISOString(),
+			recorded_at_stage: workflow.stages.get('Partial Access Stage')
 		});
 
 		// Instance 4: For historical data leakage test
@@ -734,11 +769,13 @@ test.describe.serial('Permission Matrix E2E Test', () => {
 		console.log(`Created leakage test instance: ${leakageTestInstance.id} (Hamburg)`);
 
 		// Add SENSITIVE field values at the restricted stage
-		await adminPb.collection('workflow_instance_field_values').create({
+		await adminPb.collection('workflow_field_values').create({
 			instance_id: leakageTestInstance.id,
-			field_key: workflow.fields.get('Restricted Field - Full Access Only'),
+			field_def_id: workflow.fields.get('Restricted Field - Full Access Only'),
+			write_mode: 'singleton',
 			value: 'LEAKED?: This sensitive data was created at Full Access Stage',
-			stage_id: workflow.stages.get('Full Access Only Stage')
+			recorded_at: new Date().toISOString(),
+			recorded_at_stage: workflow.stages.get('Full Access Only Stage')
 		});
 
 		// Add SENSITIVE audit trail at the restricted stage
