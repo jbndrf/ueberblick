@@ -9,20 +9,6 @@
 		commonDelete,
 		commonSave,
 		commonYes,
-		permissionsCanCreate,
-		permissionsCanUpdate,
-		permissionsCanView,
-		permissionsDescription,
-		permissionsGlobalTools,
-		permissionsHiddenButGranted,
-		permissionsMapLayers,
-		permissionsMarkerCategories,
-		permissionsNoEntities,
-		permissionsOfflinePackages,
-		permissionsSelectRole,
-		permissionsTables,
-		permissionsTitle,
-		permissionsWorkflows,
 		rolesActions,
 		rolesAssignedParticipants,
 		rolesCreateError,
@@ -204,55 +190,6 @@
 
 	function selectJoinUrlInput(e: Event) {
 		(e.currentTarget as HTMLInputElement).select();
-	}
-
-	// --- Permissions tab state ---
-	let selectedPermRoleId = $state(data.roles[0]?.id || '');
-	let toggling = $state<string | null>(null);
-	const allRoleIds = $derived(data.roles.map((r: any) => r.id));
-
-	function hasAccess(roleId: string, allowedRoles: string[]): boolean {
-		return allowedRoles.length === 0 || allowedRoles.includes(roleId);
-	}
-
-	async function togglePermission(collection: string, recordId: string, field: string) {
-		const key = `${collection}:${recordId}:${field}`;
-		if (toggling) return;
-		toggling = key;
-		try {
-			const formData = new FormData();
-			formData.append('collection', collection);
-			formData.append('recordId', recordId);
-			formData.append('field', field);
-			formData.append('roleId', selectedPermRoleId);
-			formData.append('allRoleIds', JSON.stringify(allRoleIds));
-			const res = await fetch('?/toggleRole', { method: 'POST', body: formData });
-			if (!res.ok) console.error('Toggle failed:', res.status);
-			await invalidateAll();
-		} catch (err) {
-			console.error('Toggle error:', err);
-		} finally {
-			toggling = null;
-		}
-	}
-
-	function hasGrantedSubPermissions(roleId: string, wf: typeof data.permWorkflows[0]): boolean {
-		for (const stage of wf.stages) {
-			if (hasAccess(roleId, stage.visibleToRoles)) return true;
-			for (const form of stage.forms) {
-				if (hasAccess(roleId, form.allowedRoles)) return true;
-			}
-			for (const tool of stage.editTools) {
-				if (hasAccess(roleId, tool.allowedRoles)) return true;
-			}
-			for (const conn of stage.connections) {
-				if (hasAccess(roleId, conn.allowedRoles)) return true;
-			}
-		}
-		for (const tool of wf.globalTools) {
-			if (hasAccess(roleId, tool.allowedRoles)) return true;
-		}
-		return false;
 	}
 
 	// --- Roles tab logic ---
@@ -445,15 +382,13 @@
 		<p class="text-muted-foreground">{rolesDescription()}</p>
 	</div>
 
+	<!-- Permissions live in the workflow builder (object inspectors + model tab
+	     matrix) — this page is role lifecycle only: names, join, participants. -->
 	<Tabs.Root bind:value={currentTab}>
 		<Tabs.List>
 			<Tabs.Trigger value="roles" class="flex items-center gap-2">
 				<ShieldCheck class="h-4 w-4" />
 				{rolesTitle()}
-			</Tabs.Trigger>
-			<Tabs.Trigger value="permissions" class="flex items-center gap-2">
-				<Eye class="h-4 w-4" />
-				{permissionsTitle()}
 			</Tabs.Trigger>
 		</Tabs.List>
 
@@ -524,215 +459,6 @@
 		</Tabs.Content>
 
 		<!-- PERMISSIONS TAB -->
-		<Tabs.Content value="permissions">
-			<div class="flex flex-col gap-0 min-w-0 w-full">
-				<!-- Sticky header with role selector -->
-				<div class="sticky top-0 z-10 bg-background border-b pb-3 pt-1 mb-4">
-					<div class="flex items-center justify-between gap-4">
-						<p class="text-muted-foreground text-sm">{permissionsDescription()}</p>
-						<div class="flex items-center gap-2 shrink-0">
-							<label for="role-select" class="text-sm text-muted-foreground whitespace-nowrap">
-								{permissionsSelectRole()}:
-							</label>
-							<select
-								id="role-select"
-								bind:value={selectedPermRoleId}
-								class="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-							>
-								{#each data.roles as role}
-									<option value={role.id}>{role.name}</option>
-								{/each}
-							</select>
-						</div>
-					</div>
-
-					<!-- R / C / U legend -->
-					<div class="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-						<span class="flex items-center gap-1"><Eye class="h-3 w-3" /> {permissionsCanView()}</span>
-						<span class="flex items-center gap-1"><FilePlus class="h-3 w-3" /> {permissionsCanCreate()}</span>
-						<span class="flex items-center gap-1"><Pencil class="h-3 w-3" /> {permissionsCanUpdate?.() ?? 'Update'}</span>
-					</div>
-				</div>
-
-				<!-- WORKFLOWS -->
-				{#if data.permWorkflows.length > 0}
-					<section class="mb-6">
-						<h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{permissionsWorkflows()}</h3>
-						<div class="space-y-1">
-							{#each data.permWorkflows as wf}
-								{@const wfCanRead = hasAccess(selectedPermRoleId, wf.visibleToRoles)}
-								{@const wfCanCreate = hasAccess(selectedPermRoleId, wf.entryAllowedRoles)}
-								{@const wfDenied = !wfCanRead}
-								{@const hiddenButGranted = wfDenied && hasGrantedSubPermissions(selectedPermRoleId, wf)}
-
-								<div class="border rounded-lg overflow-hidden">
-									<div class="flex items-center gap-2 px-3 py-2 bg-muted/30">
-										<a
-											href="/admin/projects/{projectId}/workflows/{wf.id}"
-											class="text-sm font-medium hover:underline flex items-center gap-1 flex-1 min-w-0 truncate"
-										>
-											{wf.name}
-											<ChevronRight class="h-3 w-3 shrink-0" />
-										</a>
-										{#if hiddenButGranted}
-											<Tooltip.Root>
-												<Tooltip.Trigger>
-													<TriangleAlert class="h-4 w-4 text-amber-500 shrink-0" />
-												</Tooltip.Trigger>
-												<Tooltip.Content class="max-w-xs text-xs">
-													{permissionsHiddenButGranted()}
-												</Tooltip.Content>
-											</Tooltip.Root>
-										{/if}
-										{#if wf.privateInstances}
-											<Lock class="h-3.5 w-3.5 text-muted-foreground" />
-										{/if}
-										{#if !wf.isActive}
-											<Badge variant="outline" class="text-xs">{rolesInactive?.() ?? 'Inactive'}</Badge>
-										{/if}
-										<div class="flex items-center gap-2 shrink-0 w-20 justify-end">
-											{@render permIcon('read', wfCanRead, () => togglePermission('workflows', wf.id, 'visible_to_roles'))}
-											{@render permIcon('create', wfCanCreate, () => togglePermission('workflows', wf.id, 'entry_allowed_roles'))}
-											<span class="w-5"></span>
-										</div>
-									</div>
-
-									{#if wf.stages.length > 0 || wf.globalTools.length > 0}
-										{@const dimmed = wfDenied ? 'opacity-30' : ''}
-										<div class="divide-y divide-border/50">
-											{#each wf.stages as stage}
-												{@const stageCanRead = hasAccess(selectedPermRoleId, stage.visibleToRoles)}
-
-												<div class="flex items-center gap-2 px-3 py-1.5 pl-6 text-sm">
-													<span class="text-muted-foreground flex-1 min-w-0 truncate {dimmed}">{stage.name}</span>
-													<div class="flex items-center gap-2 shrink-0 w-20 justify-end">
-														{@render permIcon('read', stageCanRead, () => togglePermission('workflow_stages', stage.id, 'visible_to_roles'))}
-														<span class="w-5"></span>
-														<span class="w-5"></span>
-													</div>
-												</div>
-
-												{#each stage.forms as form}
-													{@const canUse = hasAccess(selectedPermRoleId, form.allowedRoles)}
-													<div class="flex items-center gap-2 px-3 py-1 pl-10 text-xs">
-														<FilePlus class="h-3 w-3 shrink-0 text-muted-foreground {dimmed}" />
-														<span class="text-muted-foreground flex-1 min-w-0 truncate {dimmed}">{form.name}</span>
-														<div class="flex items-center gap-2 shrink-0 w-20 justify-end">
-															<span class="w-5"></span>
-															{@render permIcon('create', canUse, () => togglePermission('tools_forms', form.id, 'allowed_roles'))}
-															<span class="w-5"></span>
-														</div>
-													</div>
-												{/each}
-
-												{#each stage.editTools as tool}
-													{@const canUse = hasAccess(selectedPermRoleId, tool.allowedRoles)}
-													<div class="flex items-center gap-2 px-3 py-1 pl-10 text-xs">
-														<Pencil class="h-3 w-3 shrink-0 text-muted-foreground {dimmed}" />
-														<span class="text-muted-foreground flex-1 min-w-0 truncate {dimmed}">{tool.name}</span>
-														<div class="flex items-center gap-2 shrink-0 w-20 justify-end">
-															<span class="w-5"></span>
-															<span class="w-5"></span>
-															{@render permIcon('update', canUse, () => togglePermission('tools_edit', tool.id, 'any_edit_roles'))}
-														</div>
-													</div>
-												{/each}
-
-												{#each stage.connections as conn}
-													{@const canUse = hasAccess(selectedPermRoleId, conn.allowedRoles)}
-													<div class="flex items-center gap-2 px-3 py-1 pl-10 text-xs">
-														<ChevronRight class="h-3 w-3 shrink-0 text-muted-foreground {dimmed}" />
-														<span class="text-muted-foreground flex-1 min-w-0 truncate {dimmed}">{conn.actionName}</span>
-														<div class="flex items-center gap-2 shrink-0 w-20 justify-end">
-															<span class="w-5"></span>
-															<span class="w-5"></span>
-															{@render permIcon('update', canUse, () => togglePermission('workflow_connections', conn.id, 'allowed_roles'))}
-														</div>
-													</div>
-												{/each}
-											{/each}
-
-											{#if wf.globalTools.length > 0}
-												<div class="flex items-center gap-2 px-3 py-1.5 pl-6 text-sm">
-													<Wrench class="h-3 w-3 shrink-0 text-muted-foreground {dimmed}" />
-													<span class="text-muted-foreground flex-1 {dimmed}">{permissionsGlobalTools?.() ?? 'Global Tools'}</span>
-												</div>
-												{#each wf.globalTools as tool}
-													{@const canUse = hasAccess(selectedPermRoleId, tool.allowedRoles)}
-													<div class="flex items-center gap-2 px-3 py-1 pl-10 text-xs">
-														<Pencil class="h-3 w-3 shrink-0 text-muted-foreground {dimmed}" />
-														<span class="text-muted-foreground flex-1 min-w-0 truncate {dimmed}">{tool.name}</span>
-														<div class="flex items-center gap-2 shrink-0 w-20 justify-end">
-															<span class="w-5"></span>
-															<span class="w-5"></span>
-															{@render permIcon('update', canUse, () => togglePermission('tools_edit', tool.id, 'any_edit_roles'))}
-														</div>
-													</div>
-												{/each}
-											{/if}
-										</div>
-									{/if}
-								</div>
-							{/each}
-						</div>
-					</section>
-				{/if}
-
-				<!-- TABLES -->
-				{#if data.permTables.length > 0}
-					<section class="mb-6">
-						<h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{permissionsTables()}</h3>
-						<div class="border rounded-lg divide-y">
-							{#each data.permTables as entity}
-								{@render simpleEntityRow(entity, 'custom-tables', 'custom_tables')}
-							{/each}
-						</div>
-					</section>
-				{/if}
-
-				<!-- MARKER CATEGORIES -->
-				{#if data.permCategories.length > 0}
-					<section class="mb-6">
-						<h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{permissionsMarkerCategories()}</h3>
-						<div class="border rounded-lg divide-y">
-							{#each data.permCategories as entity}
-								{@render simpleEntityRow(entity, 'marker-categories', 'marker_categories')}
-							{/each}
-						</div>
-					</section>
-				{/if}
-
-				<!-- MAP LAYERS -->
-				{#if data.permLayers.length > 0}
-					<section class="mb-6">
-						<h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{permissionsMapLayers()}</h3>
-						<div class="border rounded-lg divide-y">
-							{#each data.permLayers as entity}
-								{@render simpleEntityRow(entity, 'map-settings', 'map_layers')}
-							{/each}
-						</div>
-					</section>
-				{/if}
-
-				<!-- OFFLINE PACKAGES -->
-				{#if data.permPackages.length > 0}
-					<section class="mb-6">
-						<h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{permissionsOfflinePackages()}</h3>
-						<div class="border rounded-lg divide-y">
-							{#each data.permPackages as entity}
-								{@render simpleEntityRow(entity, 'map-settings', 'offline_packages')}
-							{/each}
-						</div>
-					</section>
-				{/if}
-
-				{#if data.permWorkflows.length === 0 && data.permTables.length === 0 && data.permCategories.length === 0 && data.permLayers.length === 0 && data.permPackages.length === 0}
-					<div class="text-center py-8 text-muted-foreground">
-						{permissionsNoEntities()}
-					</div>
-				{/if}
-			</div>
-		</Tabs.Content>
 	</Tabs.Root>
 </div>
 
@@ -905,52 +631,3 @@
 		{/if}
 	</Dialog.Content>
 </Dialog.Root>
-
-<!-- Permission icon snippet -->
-{#snippet permIcon(type: 'read' | 'create' | 'update', allowed: boolean, onclick: () => void)}
-	<button
-		class="w-5 flex items-center justify-center cursor-pointer hover:scale-125 transition-transform disabled:opacity-50 disabled:cursor-wait"
-		title={type === 'read' ? permissionsCanView() : type === 'create' ? permissionsCanCreate() : (permissionsCanUpdate?.() ?? 'Update')}
-		disabled={toggling !== null}
-		{onclick}
-	>
-		{#if type === 'read'}
-			{#if allowed}
-				<Eye class="h-4 w-4 text-green-600 dark:text-green-400" />
-			{:else}
-				<EyeOff class="h-4 w-4 text-destructive/40" />
-			{/if}
-		{:else if type === 'create'}
-			{#if allowed}
-				<FilePlus class="h-4 w-4 text-blue-600 dark:text-blue-400" />
-			{:else}
-				<FileMinus class="h-4 w-4 text-destructive/40" />
-			{/if}
-		{:else}
-			{#if allowed}
-				<Pencil class="h-4 w-4 text-amber-600 dark:text-amber-400" />
-			{:else}
-				<PencilOff class="h-4 w-4 text-destructive/40" />
-			{/if}
-		{/if}
-	</button>
-{/snippet}
-
-<!-- Simple entity row (tables, categories, layers, packages) -->
-{#snippet simpleEntityRow(entity: { id: string; name: string; visibleToRoles: string[] }, routeSegment: string, collection: string)}
-	{@const canRead = hasAccess(selectedPermRoleId, entity.visibleToRoles)}
-	<div class="flex items-center gap-2 px-3 py-2">
-		<a
-			href="/admin/projects/{projectId}/{routeSegment}/{entity.id}"
-			class="text-sm hover:underline flex items-center gap-1 flex-1 min-w-0 truncate"
-		>
-			{entity.name}
-			<ChevronRight class="h-3 w-3 shrink-0" />
-		</a>
-		<div class="flex items-center gap-2 shrink-0 w-20 justify-end">
-			{@render permIcon('read', canRead, () => togglePermission(collection, entity.id, 'visible_to_roles'))}
-			<span class="w-5"></span>
-			<span class="w-5"></span>
-		</div>
-	</div>
-{/snippet}

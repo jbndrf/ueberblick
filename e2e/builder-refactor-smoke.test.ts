@@ -48,8 +48,9 @@ test.describe('Builder refactor smoke', () => {
 		await expect(page.getByText(/Wächter|Sentry/).first()).toBeVisible();
 
 		// Rename the connection action in the inspector -> save button becomes enabled
+		const renamed = `smoke-renamed-${Date.now()}`;
 		const nameInput = page.locator('.connection-inspector input').first();
-		await nameInput.fill('smoke-renamed');
+		await nameInput.fill(renamed);
 		await nameInput.blur();
 		const saveButton = page.getByRole('button', { name: /Speichern|Save/ }).first();
 		await expect(saveButton).toBeEnabled();
@@ -58,9 +59,29 @@ test.describe('Builder refactor smoke', () => {
 
 		// Persisted?
 		const conns = await pb.collection('workflow_connections').getFullList({
-			filter: `workflow_id = "${wf.id}" && action_name = "smoke-renamed"`
+			filter: `workflow_id = "${wf.id}" && action_name = "${renamed}"`
 		});
 		expect(conns.length).toBe(1);
+
+		// --- Model tab: all entity sections + bulk permissions matrix ---
+		await page.getByRole('button', { name: /^(Modell|Model)$/ }).click();
+		await expect(page.getByRole('heading', { name: /Stufen|Stages/ })).toBeVisible();
+		await expect(page.getByRole('heading', { name: /Verbindungen|Connections/ })).toBeVisible();
+		await expect(page.getByRole('heading', { name: /Felder|Fields/ }).first()).toBeVisible();
+		await expect(
+			page.getByRole('heading', { name: /Berechtigungen|Permissions/ }).first()
+		).toBeVisible();
+
+		// Inline rename in the model tab marks the builder dirty
+		const stageInput = page.locator('.model-overview .inline-input').first();
+		await stageInput.fill('Model Renamed Stage');
+		await stageInput.blur();
+		await expect(page.getByRole('button', { name: /Speichern|Save/ }).first()).toBeEnabled();
+
+		// Deep-link: reveal button jumps back to the canvas with the inspector open
+		await page.locator('.model-overview .reveal-btn').first().click();
+		await expect(page.locator('.svelte-flow__node').first()).toBeVisible();
+		await expect(page.locator('.inspector')).toContainText('Model Renamed Stage');
 
 		expect(errors, `page errors: ${errors.join('\n')}`).toEqual([]);
 	});

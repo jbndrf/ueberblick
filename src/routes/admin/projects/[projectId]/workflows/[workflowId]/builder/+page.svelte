@@ -14,7 +14,7 @@
 	import ActionEdge from './ActionEdge.svelte';
 	import WorkflowCanvas from './WorkflowCanvas.svelte';
 	import WorkflowCodeView from './WorkflowCodeView.svelte';
-	import PermissionsMatrixView from './permissions-matrix/PermissionsMatrixView.svelte';
+	import ModelOverviewView from './model/ModelOverviewView.svelte';
 	import CatalogSidebar from './catalog/CatalogSidebar.svelte';
 	import InspectorHost from './inspector/InspectorHost.svelte';
 	import {
@@ -35,7 +35,7 @@
 		workflowBuilderWorkflowNamePlaceholder,
 		workflowCodeToggle,
 		permMatrixCanvasLabel,
-		permMatrixViewLabel
+		modelTabLabel
 	} from '$lib/paraglide/messages';
 	import type { PageData } from './$types';
 
@@ -251,7 +251,7 @@
 					onclick={() => (ui.view = 'model')}
 				>
 					<ShieldCheck class="mr-2 h-4 w-4" />
-					{permMatrixViewLabel?.() ?? 'Permissions'}
+					{modelTabLabel?.() ?? 'Model'}
 				</Button>
 				<Button
 					variant={ui.view === 'code' ? 'default' : 'outline'}
@@ -283,11 +283,7 @@
 
 	<div class="builder-content">
 		{#if ui.view === 'model'}
-			<PermissionsMatrixView
-				{builderState}
-				roles={ctx.roles}
-				projectId={String(data.workflow.project_id)}
-			/>
+			<ModelOverviewView projectId={String(data.workflow.project_id)} />
 		{:else if ui.view === 'code'}
 			<WorkflowCodeView {builderState} roles={ctx.roles} />
 		{:else}
