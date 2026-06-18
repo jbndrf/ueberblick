@@ -9,7 +9,6 @@
 		WorkflowFieldDef,
 		FormPage,
 		ColumnPosition,
-		VisualConfig,
 		ProtocolLocalFieldDef
 	} from '$lib/workflow-builder';
 	import {
@@ -165,10 +164,13 @@
 		onPageTitleChange={(page, title) => setPageMeta(page, { title })}
 		onPageDescriptionChange={(page, description) => setPageMeta(page, { description })}
 		onClose={() => ui.deselect()}
+		onDelete={formBacksProtocolTool
+			? undefined
+			: () => {
+					state.deleteForm(formId);
+					ui.deselect();
+				}}
 		onPaletteExpandedChange={(expanded) => (ui.paletteExpanded = expanded)}
-		onRolesChange={(roleIds) => state.updateForm(formId, { allowed_roles: roleIds })}
-		onVisualConfigChange={(config: VisualConfig) =>
-			state.updateForm(formId, { visual_config: config })}
 		showLocalFields={formBacksProtocolTool}
 		localFields={form.local_fields ?? []}
 		onLocalFieldsChange={(next: ProtocolLocalFieldDef[]) =>

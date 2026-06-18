@@ -49,6 +49,10 @@
 			columnPosition: ColumnPosition
 		) => void;
 		onFieldUpdate?: (fieldId: string, updates: Partial<ToolsFormField>) => void;
+		/** Optional per-field remove affordance (× on the card). Omit to hide it. */
+		onFieldRemove?: (fieldId: string) => void;
+		/** Tooltip/label for the per-field remove button. */
+		fieldRemoveLabel?: string;
 		/** Per-page metadata (title + description). */
 		pages?: FormPage[];
 		onPageTitleChange?: (page: number, title: string) => void;
@@ -72,6 +76,8 @@
 		onFieldDrop,
 		onFieldRefDrop,
 		onFieldUpdate,
+		onFieldRemove,
+		fieldRemoveLabel,
 		pages: pageMeta = [],
 		onPageTitleChange,
 		onPageDescriptionChange,
@@ -933,8 +939,10 @@
 											? 'lifecycle'
 											: 'local'
 										: null}
+									removeLabel={fieldRemoveLabel}
 									onSelect={() => onFieldSelect?.(trackedField.data.id)}
 									onUpdate={(updates) => onFieldUpdate?.(trackedField.data.id, updates)}
+									onRemove={onFieldRemove ? () => onFieldRemove(trackedField.data.id) : undefined}
 									onDragStart={() => handleFieldDragStart(trackedField.data.id)}
 									onDragEnd={handleFieldDragEnd}
 								/>

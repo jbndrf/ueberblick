@@ -3,7 +3,8 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
-	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
+	import RoleSelect from '../../../components/RoleSelect.svelte';
+	import { builderFieldVisibilityLabel, builderFieldVisibilityHint } from '$lib/paraglide/messages';
 	import type { WorkflowFieldDef, TrackedFieldDef, FieldType } from '$lib/workflow-builder';
 
 	type Role = { id: string; name: string; description?: string };
@@ -254,19 +255,14 @@
 									{WRITE_MODES.find((m) => m.value === def.data.write_mode)?.hint}
 								</p>
 							</div>
-							<div>
-								<Label class="text-xs">View roles (optional)</Label>
-								<MobileMultiSelect
-									selectedIds={def.data.view_roles ?? []}
-									onSelectedIdsChange={(ids) => onUpdate(def.data.id, { view_roles: ids })}
-									options={roles}
-									getOptionId={(r) => r.id}
-									getOptionLabel={(r) => r.name}
-									getOptionDescription={(r) => r.description}
-									placeholder="Inherits from form's allowed_roles when empty"
-									class="w-full"
-								/>
-							</div>
+							<RoleSelect
+								selectedIds={def.data.view_roles ?? []}
+								{roles}
+								onChange={(ids) => onUpdate(def.data.id, { view_roles: ids })}
+								label={builderFieldVisibilityLabel?.() ?? 'Visible to roles'}
+								help={builderFieldVisibilityHint?.() ??
+									'Set per field. Empty = visible to everyone.'}
+							/>
 							{#if def.data.write_mode === 'computed'}
 								<div>
 									<Label class="text-xs">Compute expression</Label>

@@ -17,6 +17,7 @@ import type {
 	TrackedEditTool,
 	ToolsProtocol
 } from '$lib/workflow-builder';
+import { resolveButtonLabel } from '$lib/workflow-builder';
 import type {
 	ToolInstance,
 	FormToolConfig,
@@ -25,6 +26,7 @@ import type {
 } from '$lib/workflow-builder/tools';
 import type { BuilderContext } from '../builder-context.svelte';
 import { selectTool } from '../builder-context.svelte';
+import { ToolbarLayout } from './toolbar-layout.svelte';
 import {
 	workflowBuilderDefaultFormLabel,
 	workflowBuilderDefaultEditLabel,
@@ -40,6 +42,8 @@ export class FlowSync {
 	edges = $state.raw<Edge[]>([]);
 
 	private ctx: BuilderContext;
+	/** Shared registry that keeps edge toolbars from overlapping each other. */
+	private toolbarLayout = new ToolbarLayout();
 
 	/** Must be constructed during component init ($effect needs a root). */
 	constructor(ctx: BuilderContext) {
@@ -143,7 +147,10 @@ export class FlowSync {
 			config: {
 				toolType: 'form',
 				formId: form.data.id,
-				buttonLabel: form.data.name || (workflowBuilderDefaultFormLabel?.() ?? 'Form')
+				buttonLabel: resolveButtonLabel(
+					form.data.visual_config,
+					form.data.name || (workflowBuilderDefaultFormLabel?.() ?? 'Form')
+				)
 			} as FormToolConfig,
 			order: index
 		}));
@@ -156,7 +163,10 @@ export class FlowSync {
 			config: {
 				toolType: 'edit',
 				editableFields: tool.data.editable_fields,
-				buttonLabel: tool.data.name || (workflowBuilderDefaultEditLabel?.() ?? 'Edit')
+				buttonLabel: resolveButtonLabel(
+					tool.data.visual_config,
+					tool.data.name || (workflowBuilderDefaultEditLabel?.() ?? 'Edit')
+				)
 			} as EditToolConfig,
 			order: index + 100 // Offset to keep forms first
 		}));
@@ -168,7 +178,10 @@ export class FlowSync {
 			toolType: 'protocol',
 			config: {
 				toolType: 'protocol',
-				buttonLabel: tool.data.name || (workflowBuilderDefaultProtocolLabel?.() ?? 'Protocol')
+				buttonLabel: resolveButtonLabel(
+					tool.data.visual_config,
+					tool.data.name || (workflowBuilderDefaultProtocolLabel?.() ?? 'Protocol')
+				)
 			} as ProtocolToolConfig,
 			order: index + 200 // Offset to keep forms and edit tools first
 		}));
@@ -257,10 +270,10 @@ export class FlowSync {
 					y: targetY + 10 // Slightly below center for visual alignment
 				},
 				data: {
-					label:
-						conn.visual_config?.button_label ||
-						conn.action_name ||
-						(workflowBuilderEntryLabel?.() ?? 'Entry'),
+					label: resolveButtonLabel(
+						conn.visual_config,
+						conn.action_name || (workflowBuilderEntryLabel?.() ?? 'Entry')
+					),
 					connectionId: conn.id
 				},
 				draggable: false,
@@ -299,10 +312,22 @@ export class FlowSync {
 			return base + (i - (n - 1) / 2) * PARALLEL_GAP;
 		}
 
+		// Lane position within the directed stage-pair group. Lets ActionEdge
+		// stagger parallel toolbars along the line so they don't overlap.
+		function laneInfoFor(conn: WorkflowConnection): { index: number; count: number } {
+			if (!conn.from_stage_id || conn.from_stage_id === conn.to_stage_id) {
+				return { index: 0, count: 1 };
+			}
+			const group = directedGroups.get(`${conn.from_stage_id}->${conn.to_stage_id}`);
+			if (!group) return { index: 0, count: 1 };
+			return { index: Math.max(0, group.indexOf(conn.id)), count: group.length };
+		}
+
 		return connections.map((conn) => {
 			const isEntryConnection = !conn.from_stage_id;
 			const isSelfLoop = !isEntryConnection && conn.from_stage_id === conn.to_stage_id;
 			const curveOffset = isEntryConnection || isSelfLoop ? 0 : curveOffsetFor(conn);
+			const lane = isEntryConnection || isSelfLoop ? { index: 0, count: 1 } : laneInfoFor(conn);
 			const isHighlighted = highlighted.has(conn.id);
 
 			const classes =
@@ -315,7 +340,7 @@ export class FlowSync {
 				// For entry connections, use the virtual marker node as source
 				source: isEntryConnection ? `entry-marker-${conn.id}` : (conn.from_stage_id as string),
 				target: conn.to_stage_id,
-				label: conn.visual_config?.button_label || conn.action_name,
+				label: resolveButtonLabel(conn.visual_config, conn.action_name),
 				type: 'action',
 				animated: isSelfLoop,
 				class: classes,
@@ -327,6 +352,9 @@ export class FlowSync {
 					tools: this.getToolsForConnection(conn.id),
 					isSelfLoop,
 					curveOffset,
+					laneIndex: lane.index,
+					laneCount: lane.count,
+					toolbarLayout: this.toolbarLayout,
 					isEntry: isEntryConnection,
 					hasSentry: (conn.sentry?.length ?? 0) > 0,
 					onSelectTool: (toolId: string) => selectTool(ctx, toolId),

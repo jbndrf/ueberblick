@@ -9,11 +9,12 @@
 		FileText
 	} from '@lucide/svelte';
 	import ModelSection from './ModelSection.svelte';
-	import DataTabsEditor from './sections/DataTabsEditor.svelte';
 	import PermissionsMatrixView from './permissions/PermissionsMatrixView.svelte';
+	import InlineEdit from '../components/InlineEdit.svelte';
 	import { getBuilderContext, openProtocolTool } from '../builder-context.svelte';
 	import { fieldTypeLabels, type WorkflowConnection } from '$lib/workflow-builder';
 	import {
+		builderClickToRename,
 		modelStagesTitle,
 		modelConnectionsTitle,
 		modelFormsTitle,
@@ -21,7 +22,6 @@
 		modelToolsTitle,
 		modelAutomationsTitle,
 		modelPermissionsTitle,
-		modelDataTabsTitle,
 		modelSentryChip,
 		modelRolesAll,
 		modelRolesCount,
@@ -50,6 +50,30 @@
 
 	const ctx = getBuilderContext();
 	const { state, ui, roles } = ctx;
+
+	// Clicking a row selects the entity so its inspector opens on the right (the
+	// Model tab carries the same inspector as the canvas). Protocol tools route
+	// through openProtocolTool (manual ones open their backing form).
+	function selectEntity(sel: { type: string; id: string }) {
+		if (sel.type === 'protocolTool') {
+			openProtocolTool(ctx, sel.id);
+			return;
+		}
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		ui.select(sel as any);
+	}
+	function isSelected(type: string, id: string): boolean {
+		const s = ui.selection;
+		return s.type === type && 'id' in s && s.id === id;
+	}
+	// Only act when the row itself is focused — never when typing in a child input.
+	function rowKeydown(e: KeyboardEvent, sel: { type: string; id: string }) {
+		if (e.target !== e.currentTarget) return;
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			selectEntity(sel);
+		}
+	}
 
 	const stageName = (id: string | null | undefined) =>
 		id ? (state.getStageById(id)?.data.stage_name ?? '?') : null;
@@ -130,6 +154,13 @@
 
 <div class="model-overview">
 	<div class="model-scroll">
+		<!-- Berechtigungen (Bulk-Matrix) — top: who can do what across the workflow -->
+		<ModelSection title={modelPermissionsTitle?.() ?? 'Permissions'}>
+			<div class="matrix-wrap">
+				<PermissionsMatrixView builderState={state} {roles} {projectId} />
+			</div>
+		</ModelSection>
+
 		<!-- Stufen -->
 		<ModelSection title={modelStagesTitle?.() ?? 'Stages'} count={state.visibleStages.length}>
 			{#if state.visibleStages.length === 0}
@@ -137,23 +168,30 @@
 			{:else}
 				<div class="rows">
 					{#each state.visibleStages as stage (stage.data.id)}
-						<div class="row">
+						<div
+							class="row"
+							class:selected={isSelected('stage', stage.data.id)}
+							role="button"
+							tabindex="0"
+							onclick={() => selectEntity({ type: 'stage', id: stage.data.id })}
+							onkeydown={(e) => rowKeydown(e, { type: 'stage', id: stage.data.id })}
+						>
 							<span class="type-badge" data-type={stage.data.stage_type}
 								>{stage.data.stage_type}</span
 							>
-							<input
+							<InlineEdit
 								class="inline-input"
 								value={stage.data.stage_name}
-								onblur={(e) => {
-									const v = e.currentTarget.value.trim();
-									if (v && v !== stage.data.stage_name)
-										state.updateStage(stage.data.id, { stage_name: v });
-								}}
+								onCommit={(v) => state.updateStage(stage.data.id, { stage_name: v })}
+								editTitle={builderClickToRename?.() ?? 'Click to rename'}
 							/>
 							<button
 								class="reveal-btn"
 								title={modelShowOnCanvas?.() ?? 'Show on canvas'}
-								onclick={() => ui.reveal({ type: 'stage', id: stage.data.id })}
+								onclick={(e) => {
+									e.stopPropagation();
+									ui.reveal({ type: 'stage', id: stage.data.id });
+								}}
 							>
 								<Crosshair class="h-3.5 w-3.5" />
 							</button>
@@ -173,26 +211,33 @@
 			{:else}
 				<div class="rows">
 					{#each state.visibleConnections as conn (conn.data.id)}
-						<div class="row">
+						<div
+							class="row"
+							class:selected={isSelected('connection', conn.data.id)}
+							role="button"
+							tabindex="0"
+							onclick={() => selectEntity({ type: 'connection', id: conn.data.id })}
+							onkeydown={(e) => rowKeydown(e, { type: 'connection', id: conn.data.id })}
+						>
 							{#if !conn.data.from_stage_id}
 								<span class="type-badge" data-type="start">{modelEntryBadge?.() ?? 'Entry'}</span>
 							{:else}
 								<ArrowRight class="row-icon h-3.5 w-3.5" />
 							{/if}
 							<span class="row-path">{connLabel(conn.data)}</span>
-							<input
+							<InlineEdit
 								class="inline-input"
 								value={conn.data.action_name}
-								onblur={(e) => {
-									const v = e.currentTarget.value.trim();
-									if (v && v !== conn.data.action_name)
-										state.updateConnection(conn.data.id, { action_name: v });
-								}}
+								onCommit={(v) => state.updateConnection(conn.data.id, { action_name: v })}
+								editTitle={builderClickToRename?.() ?? 'Click to rename'}
 							/>
 							{#if (conn.data.sentry?.length ?? 0) > 0}
 								<button
 									class="sentry-chip"
-									onclick={() => ui.reveal({ type: 'connection', id: conn.data.id })}
+									onclick={(e) => {
+										e.stopPropagation();
+										ui.reveal({ type: 'connection', id: conn.data.id });
+									}}
 								>
 									<Lock class="h-3 w-3" />
 									{modelSentryChip?.({ count: conn.data.sentry?.length ?? 0 }) ??
@@ -203,7 +248,10 @@
 							<button
 								class="reveal-btn"
 								title={modelShowOnCanvas?.() ?? 'Show on canvas'}
-								onclick={() => ui.reveal({ type: 'connection', id: conn.data.id })}
+								onclick={(e) => {
+									e.stopPropagation();
+									ui.reveal({ type: 'connection', id: conn.data.id });
+								}}
 							>
 								<Crosshair class="h-3.5 w-3.5" />
 							</button>
@@ -220,15 +268,20 @@
 			{:else}
 				<div class="rows">
 					{#each allForms as form (form.data.id)}
-						<div class="row">
+						<div
+							class="row"
+							class:selected={isSelected('form', form.data.id)}
+							role="button"
+							tabindex="0"
+							onclick={() => selectEntity({ type: 'form', id: form.data.id })}
+							onkeydown={(e) => rowKeydown(e, { type: 'form', id: form.data.id })}
+						>
 							<FileText class="row-icon h-3.5 w-3.5" />
-							<input
+							<InlineEdit
 								class="inline-input"
 								value={form.data.name}
-								onblur={(e) => {
-									const v = e.currentTarget.value.trim();
-									if (v && v !== form.data.name) state.updateForm(form.data.id, { name: v });
-								}}
+								onCommit={(v) => state.updateForm(form.data.id, { name: v })}
+								editTitle={builderClickToRename?.() ?? 'Click to rename'}
 							/>
 							<span class="row-meta">{formAttachment(form.data)}</span>
 							<span class="row-meta"
@@ -245,7 +298,10 @@
 							<button
 								class="reveal-btn"
 								title={modelShowOnCanvas?.() ?? 'Show on canvas'}
-								onclick={() => ui.reveal({ type: 'form', id: form.data.id })}
+								onclick={(e) => {
+									e.stopPropagation();
+									ui.reveal({ type: 'form', id: form.data.id });
+								}}
 							>
 								<Crosshair class="h-3.5 w-3.5" />
 							</button>
@@ -270,14 +326,19 @@
 			{:else}
 				<div class="rows">
 					{#each state.visibleFieldDefs as def (def.data.id)}
-						<div class="row">
-							<input
+						<div
+							class="row"
+							class:selected={isSelected('fieldDef', def.data.id)}
+							role="button"
+							tabindex="0"
+							onclick={() => selectEntity({ type: 'fieldDef', id: def.data.id })}
+							onkeydown={(e) => rowKeydown(e, { type: 'fieldDef', id: def.data.id })}
+						>
+							<InlineEdit
 								class="inline-input"
 								value={def.data.label}
-								onblur={(e) => {
-									const v = e.currentTarget.value.trim();
-									if (v && v !== def.data.label) state.updateFieldDef(def.data.id, { label: v });
-								}}
+								onCommit={(v) => state.updateFieldDef(def.data.id, { label: v })}
+								editTitle={builderClickToRename?.() ?? 'Click to rename'}
 							/>
 							<span class="row-meta"
 								>{fieldTypeLabels[def.data.field_type] ?? def.data.field_type}</span
@@ -294,13 +355,6 @@
 					{/each}
 				</div>
 			{/if}
-
-			<h4 class="subsection-title">{modelDataTabsTitle?.() ?? 'Data tabs'}</h4>
-			<DataTabsEditor
-				fieldDefs={state.fieldDefs}
-				{roles}
-				onFieldDefUpdate={(id, updates) => state.updateFieldDef(id, updates)}
-			/>
 		</ModelSection>
 
 		<!-- Tools -->
@@ -310,7 +364,18 @@
 			{:else}
 				<div class="rows">
 					{#each tools as tool (tool.id)}
-						<div class="row">
+						{@const toolSel = {
+							type: tool.kind === 'protocol' ? 'protocolTool' : 'editTool',
+							id: tool.id
+						}}
+						<div
+							class="row"
+							class:selected={isSelected(toolSel.type, tool.id)}
+							role="button"
+							tabindex="0"
+							onclick={() => selectEntity(toolSel)}
+							onkeydown={(e) => rowKeydown(e, toolSel)}
+						>
 							{#if tool.kind === 'edit'}
 								<Pencil class="row-icon h-3.5 w-3.5" />
 							{:else}
@@ -322,7 +387,8 @@
 							<button
 								class="reveal-btn"
 								title={modelShowOnCanvas?.() ?? 'Show on canvas'}
-								onclick={() => {
+								onclick={(e) => {
+									e.stopPropagation();
 									if (tool.kind === 'protocol') {
 										ui.view = 'canvas';
 										openProtocolTool(ctx, tool.id);
@@ -354,22 +420,27 @@
 			{:else}
 				<div class="rows">
 					{#each state.visibleAutomations as automation (automation.data.id)}
-						<div class="row">
+						<div
+							class="row"
+							class:selected={isSelected('automation', automation.data.id)}
+							role="button"
+							tabindex="0"
+							onclick={() => selectEntity({ type: 'automation', id: automation.data.id })}
+							onkeydown={(e) => rowKeydown(e, { type: 'automation', id: automation.data.id })}
+						>
 							<Zap class="row-icon h-3.5 w-3.5" />
-							<input
+							<InlineEdit
 								class="inline-input"
 								value={automation.data.name}
-								onblur={(e) => {
-									const v = e.currentTarget.value.trim();
-									if (v && v !== automation.data.name)
-										state.updateAutomation(automation.data.id, { name: v });
-								}}
+								onCommit={(v) => state.updateAutomation(automation.data.id, { name: v })}
+								editTitle={builderClickToRename?.() ?? 'Click to rename'}
 							/>
 							<span class="row-meta">{triggerShortLabel(automation.data.trigger_type)}</span>
 							<input
 								type="checkbox"
 								class="enable-toggle"
 								checked={automation.data.is_enabled}
+								onclick={(e) => e.stopPropagation()}
 								onchange={(e) =>
 									state.updateAutomation(automation.data.id, {
 										is_enabled: e.currentTarget.checked
@@ -378,7 +449,10 @@
 							<button
 								class="reveal-btn"
 								title={modelShowOnCanvas?.() ?? 'Show on canvas'}
-								onclick={() => ui.reveal({ type: 'automation', id: automation.data.id })}
+								onclick={(e) => {
+									e.stopPropagation();
+									ui.reveal({ type: 'automation', id: automation.data.id });
+								}}
 							>
 								<Crosshair class="h-3.5 w-3.5" />
 							</button>
@@ -386,13 +460,6 @@
 					{/each}
 				</div>
 			{/if}
-		</ModelSection>
-
-		<!-- Berechtigungen (Bulk-Matrix) -->
-		<ModelSection title={modelPermissionsTitle?.() ?? 'Permissions'}>
-			<div class="matrix-wrap">
-				<PermissionsMatrixView builderState={state} {roles} {projectId} />
-			</div>
 		</ModelSection>
 	</div>
 </div>
@@ -425,8 +492,26 @@
 		display: flex;
 		align-items: center;
 		gap: 0.625rem;
-		padding: 0.375rem 0.25rem;
+		padding: 0.375rem 0.5rem;
+		margin: 0 -0.25rem;
+		border-radius: 0.375rem;
 		border-bottom: 1px solid hsl(var(--border) / 0.6);
+		cursor: pointer;
+		transition: background 0.12s ease;
+	}
+
+	.row:hover {
+		background: hsl(var(--muted) / 0.6);
+	}
+
+	.row.selected {
+		background: hsl(var(--primary) / 0.1);
+		box-shadow: inset 2px 0 0 hsl(var(--primary));
+	}
+
+	.row:focus-visible {
+		outline: 2px solid hsl(var(--primary));
+		outline-offset: -2px;
 	}
 
 	.row:last-child {
@@ -456,7 +541,8 @@
 		white-space: nowrap;
 	}
 
-	.inline-input {
+	/* Applied to InlineEdit's rendered button/input (a child component), so :global. */
+	:global(.model-overview .inline-input) {
 		flex: 1;
 		min-width: 8rem;
 		font-size: 0.8125rem;
@@ -466,13 +552,18 @@
 		border-radius: 0.25rem;
 		padding: 0.2rem 0.375rem;
 		transition: all 0.15s ease;
+		text-align: left;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		overflow: hidden;
+		cursor: text;
 	}
 
-	.inline-input:hover {
+	:global(.model-overview .inline-input:hover) {
 		border-color: hsl(var(--border));
 	}
 
-	.inline-input:focus {
+	:global(.model-overview .inline-input:focus) {
 		outline: none;
 		border-color: hsl(var(--primary));
 		background: hsl(var(--card));
@@ -536,13 +627,6 @@
 		font-size: 0.75rem;
 		color: hsl(var(--muted-foreground));
 		margin: 0;
-	}
-
-	.subsection-title {
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: hsl(var(--muted-foreground));
-		margin: 0.75rem 0 0.25rem;
 	}
 
 	.enable-toggle {

@@ -1,12 +1,20 @@
 <script lang="ts">
-	import { X, Edit3, Trash2, Link, MapPin, ChevronDown } from '@lucide/svelte';
-	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import { Label } from '$lib/components/ui/label';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import {
-		editToolEditorViewNameLabel,
+		X,
+		Edit3,
+		Trash2,
+		Link,
+		MapPin,
+		ChevronDown,
+		Settings2,
+		ArrowRight
+	} from '@lucide/svelte';
+	import { Button } from '$lib/components/ui/button';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import InlineEdit from '../../../components/InlineEdit.svelte';
+	import {
 		editToolEditorViewNamePlaceholder,
+		builderClickToRename,
 		editToolEditorViewEditMode,
 		editToolEditorViewModeFormFields,
 		editToolEditorViewModeLocation,
@@ -15,11 +23,14 @@
 		editToolEditorViewLocationPreviewText,
 		editToolEditorViewInheritsTitle,
 		editToolEditorViewInheritsText,
-		editToolEditorViewDeleteButton
+		editToolEditorViewDeleteButton,
+		stagePreviewButtonRoleSettings,
+		builderOpenConnection
 	} from '$lib/paraglide/messages';
 
 	import AncestorFieldsPanel from '../protocol-tool-editor/AncestorFieldsPanel.svelte';
 	import FieldSelectionPreview from '../protocol-tool-editor/FieldSelectionPreview.svelte';
+	import { getBuilderContext } from '../../../builder-context.svelte';
 
 	import type {
 		ToolsEdit,
@@ -28,6 +39,8 @@
 		WorkflowStage,
 		EditMode
 	} from '$lib/workflow-builder';
+
+	const { ui } = getBuilderContext();
 
 	type AncestorFieldGroup = {
 		stage: WorkflowStage;
@@ -81,7 +94,6 @@
 	);
 
 	// Local state
-	let editToolName = $state(editTool.name);
 	let selectedFieldIds = $state<string[]>(editTool.editable_fields || []);
 
 	// Track current edit tool ID to detect changes
@@ -91,7 +103,6 @@
 	$effect(() => {
 		if (editTool.id !== currentEditToolId) {
 			currentEditToolId = editTool.id;
-			editToolName = editTool.name;
 			selectedFieldIds = editTool.editable_fields || [];
 		}
 	});
@@ -133,12 +144,6 @@
 		return result;
 	});
 
-	function handleNameBlur() {
-		if (editToolName !== editTool.name && editToolName.trim()) {
-			onNameChange?.(editToolName.trim());
-		}
-	}
-
 	function handleToggleField(fieldId: string) {
 		if (selectedFieldIds.includes(fieldId)) {
 			selectedFieldIds = selectedFieldIds.filter((id) => id !== fieldId);
@@ -160,17 +165,26 @@
 				<Edit3 class="h-4 w-4" />
 			</div>
 			<div class="header-title">
-				<Label for="edit-tool-name" class="sr-only"
-					>{editToolEditorViewNameLabel?.() ?? 'Edit Tool Name'}</Label
-				>
-				<Input
-					id="edit-tool-name"
-					bind:value={editToolName}
-					onblur={handleNameBlur}
-					class="name-input"
+				<InlineEdit
+					value={editTool.name}
+					onCommit={(v) => onNameChange?.(v)}
+					class="w-full cursor-text truncate border-b border-transparent bg-transparent text-left text-base font-semibold text-foreground transition outline-none placeholder:text-muted-foreground hover:border-border focus:border-primary"
 					placeholder={editToolEditorViewNamePlaceholder?.() ?? 'Edit tool name...'}
+					ariaLabel={editToolEditorViewNamePlaceholder?.() ?? 'Edit tool name'}
+					editTitle={builderClickToRename?.() ?? 'Click to rename'}
 				/>
 			</div>
+			{#if !isConnectionAttached}
+				<button
+					class="config-gear"
+					class:active={ui.configTarget?.kind === 'editTool' && ui.configTarget?.id === editTool.id}
+					onclick={() => ui.toggleConfig('editTool', editTool.id)}
+					title={stagePreviewButtonRoleSettings?.() ?? 'Button & role settings'}
+					aria-label={stagePreviewButtonRoleSettings?.() ?? 'Button & role settings'}
+				>
+					<Settings2 class="h-4 w-4" />
+				</button>
+			{/if}
 			<Button variant="ghost" size="icon" onclick={onClose}>
 				<X class="h-4 w-4" />
 			</Button>
@@ -265,6 +279,16 @@
 							{editToolEditorViewInheritsText?.() ??
 								"Button appearance and allowed roles are configured on the connection's Tools tab."}
 						</p>
+						{#if editTool.connection_id}
+							<button
+								type="button"
+								class="notice-link"
+								onclick={() => ui.select({ type: 'connection', id: editTool.connection_id! })}
+							>
+								{builderOpenConnection?.() ?? 'Open connection'}
+								<ArrowRight class="h-3.5 w-3.5" />
+							</button>
+						{/if}
 					</div>
 				</div>
 			{/if}
@@ -319,9 +343,30 @@
 		flex: 1;
 	}
 
-	.header-title :global(.name-input) {
-		font-weight: 600;
-		font-size: 1rem;
+	.config-gear {
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 32px;
+		height: 32px;
+		border-radius: 0.375rem;
+		border: 1px solid hsl(var(--border));
+		background: hsl(var(--background));
+		color: hsl(var(--muted-foreground));
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.config-gear:hover {
+		background: hsl(var(--accent));
+		color: hsl(var(--foreground));
+	}
+
+	.config-gear.active {
+		background: hsl(var(--primary));
+		color: hsl(var(--primary-foreground));
+		border-color: hsl(var(--primary));
 	}
 
 	.editor-content {
@@ -474,6 +519,24 @@
 		font-size: 0.75rem;
 		color: hsl(var(--muted-foreground));
 		line-height: 1.4;
+	}
+
+	.notice-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		margin-top: 0.5rem;
+		padding: 0;
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: hsl(var(--primary));
+		background: none;
+		border: none;
+		cursor: pointer;
+	}
+
+	.notice-link:hover {
+		text-decoration: underline;
 	}
 
 	.location-notice {

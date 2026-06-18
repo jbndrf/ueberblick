@@ -28,6 +28,28 @@ export type Selection =
 
 export type BuilderView = 'canvas' | 'model' | 'code';
 
+/**
+ * Panel 2 (the shared config sidebar): which element's appearance/roles (for an
+ * action button) or in-context settings (for a field) is open. One target, one
+ * sidebar — every gear/field-click sets this, so the same config always opens in
+ * the same place.
+ */
+export type ConfigTarget = {
+	kind: 'connection' | 'form' | 'editTool' | 'protocolTool' | 'field';
+	id: string;
+};
+
+/**
+ * Panel 3 (the detail sidebar): the deeper drill-in behind a Panel-2 element —
+ * the field underneath. Two shapes: a shared workflow field def (`fieldDef`), or
+ * a protocol form's inline local field (`localField`, addressed by form + key
+ * since it has no shared def). Reached by "go deeper" from Panel 2; the
+ * breadcrumb steps back up.
+ */
+export type DetailTarget =
+	| { kind: 'fieldDef'; id: string }
+	| { kind: 'localField'; formId: string; key: string };
+
 export class BuilderUi {
 	selection = $state<Selection>({ type: 'none' });
 	view = $state<BuilderView>('canvas');
@@ -39,20 +61,71 @@ export class BuilderUi {
 	connectingFrom = $state<string | null>(null);
 	/** Form editor field palette expanded (widens the inspector). */
 	paletteExpanded = $state(false);
+	/**
+	 * Active data tab in the participant preview. Shared so the inspector's
+	 * field palette knows which tab a picked field drops into. Empty string =
+	 * the default "Data" tab (DEFAULT_DATA_TAB).
+	 */
+	activeDataTab = $state<string>('');
+	/**
+	 * The action whose appearance + roles is open in the shared expandable
+	 * config sidebar (null = closed). Set by every "Button & role settings" gear.
+	 */
+	configTarget = $state<ConfigTarget | null>(null);
+	/** Panel 3 (detail sidebar): the deeper drill-in (null = closed). */
+	detailTarget = $state<DetailTarget | null>(null);
 
 	select(s: Selection) {
 		this.selection = s;
+		this.closePanels();
 	}
 
 	deselect() {
 		this.selection = { type: 'none' };
+		this.closePanels();
 	}
 
 	/** Deep-link from the model tab: select + jump to the canvas. */
 	reveal(s: Selection) {
 		this.selection = s;
 		this.view = 'canvas';
+		this.closePanels();
 	}
+
+	/** Close both drill-down panels (Panel 2 + Panel 3). */
+	closePanels() {
+		this.configTarget = null;
+		this.detailTarget = null;
+	}
+
+	/** Open this element's config sidebar (Panel 2), or close it if already open. */
+	toggleConfig(kind: ConfigTarget['kind'], id: string) {
+		// Changing Panel 2 always collapses the deeper Panel 3.
+		this.detailTarget = null;
+		if (this.configTarget?.kind === kind && this.configTarget.id === id) {
+			this.configTarget = null;
+		} else {
+			this.configTarget = { kind, id };
+		}
+	}
+
+	/** Drill into the detail sidebar (Panel 3), or close it if already open. */
+	toggleDetail(target: DetailTarget) {
+		if (detailTargetsEqual(this.detailTarget, target)) {
+			this.detailTarget = null;
+		} else {
+			this.detailTarget = target;
+		}
+	}
+}
+
+/** Structural equality for detail targets (toggle = same target closes it). */
+function detailTargetsEqual(a: DetailTarget | null, b: DetailTarget | null): boolean {
+	if (!a || !b || a.kind !== b.kind) return false;
+	if (a.kind === 'fieldDef' && b.kind === 'fieldDef') return a.id === b.id;
+	if (a.kind === 'localField' && b.kind === 'localField')
+		return a.formId === b.formId && a.key === b.key;
+	return false;
 }
 
 export type Role = { id: string; name: string; description?: string };

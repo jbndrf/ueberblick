@@ -637,6 +637,23 @@ export interface ConnectionEdgeData {
 	 * sharing the same stage pair (parallel and/or bidirectional) don't overlap.
 	 */
 	curveOffset?: number;
+	/**
+	 * Position of this edge within its directed stage-pair group and the group
+	 * size. Used to stagger the midpoint toolbars of parallel connections along
+	 * the travel direction so they don't stack on top of each other.
+	 */
+	laneIndex?: number;
+	laneCount?: number;
+	/**
+	 * Shared registry used to push this edge's midpoint toolbar clear of other
+	 * edges' toolbars. Typed structurally to avoid a route→lib import cycle; the
+	 * concrete implementation is the canvas `ToolbarLayout`.
+	 */
+	toolbarLayout?: {
+		register(id: string, box: { x: number; y: number; w: number; h: number }): void;
+		unregister(id: string): void;
+		readonly offsets: Map<string, { dx: number; dy: number }>;
+	};
 	onSelectTool?: (toolId: string) => void;
 	onAddTool?: () => void;
 	[key: string]: unknown;

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
-	import { Trash2 } from '@lucide/svelte';
+	import { X } from '@lucide/svelte';
 	import { ExpressionInput } from '$lib/components/expression-input';
 	import {
 		automationActionBuilderFieldLabel,
@@ -143,7 +143,7 @@
 					class="h-6 w-6 shrink-0"
 					onclick={() => removeAction(index)}
 				>
-					<Trash2 class="h-3 w-3" />
+					<X class="h-3 w-3" />
 				</Button>
 			</div>
 		{/each}

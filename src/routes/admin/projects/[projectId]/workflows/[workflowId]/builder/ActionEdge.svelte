@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { BaseEdge, EdgeLabel, getBezierPath, type EdgeProps } from '@xyflow/svelte';
 	import { Lock } from '@lucide/svelte';
 	import { ToolBar } from '$lib/workflow-builder/components';
@@ -22,6 +23,8 @@
 	const tools = $derived(data?.tools ?? []);
 	const isSelfLoop = $derived(data?.isSelfLoop ?? false);
 	const curveOffset = $derived(data?.curveOffset ?? 0);
+	const laneIndex = $derived(data?.laneIndex ?? 0);
+	const laneCount = $derived(data?.laneCount ?? 1);
 
 	// For self-loops, create a circular looping path above the node
 	function getSelfLoopPath(sx: number, sy: number, tx: number, ty: number) {
@@ -84,6 +87,39 @@
 	const labelX = $derived(pathData[1]);
 	const labelY = $derived(pathData[2]);
 
+	// Anchor for the midpoint toolbar. Parallel connections sharing a stage pair
+	// are fanned out perpendicular (see curveOffset), but their toolbars would
+	// still stack near the midpoint. Stagger each lane's toolbar *along* the
+	// travel direction — where a toolbar is only ~one icon wide — so they sit in
+	// sequence instead of on top of each other, while still riding their curve.
+	const STAGGER_PX = 44;
+	const toolbarAnchor = $derived.by((): { x: number; y: number } => {
+		if (isSelfLoop) return { x: labelX, y: labelY };
+
+		const dx = targetX - sourceX;
+		const dy = targetY - sourceY;
+		const len = Math.hypot(dx, dy) || 1;
+
+		// Per-lane shift along the line, centered on the group. Clamped so the
+		// toolbar never drifts onto the stage nodes at either end.
+		let t = 0.5;
+		if (laneCount > 1) {
+			const centered = laneIndex - (laneCount - 1) / 2;
+			t = Math.min(0.78, Math.max(0.22, 0.5 + (centered * STAGGER_PX) / len));
+		}
+
+		// Unit perpendicular, to the right of travel (matches getOffsetPath). The
+		// quadratic's perpendicular displacement at parameter t is 2(1-t)·t·offset.
+		const nx = dy / len;
+		const ny = -dx / len;
+		const perp = 2 * (1 - t) * t * curveOffset;
+
+		return {
+			x: sourceX + dx * t + nx * perp,
+			y: sourceY + dy * t + ny * perp
+		};
+	});
+
 	// Calculate line direction for tool bar orientation
 	// Vertical/diagonal lines -> horizontal toolbar (tools beside +)
 	// Horizontal lines -> vertical toolbar (tools above/below +)
@@ -98,12 +134,49 @@
 		// Otherwise (mostly horizontal), use vertical toolbar
 		return angle > 45 && angle < 135 ? 'horizontal' : 'vertical';
 	});
+
+	// --- Cross-connection de-overlap -----------------------------------------
+	// Register this toolbar's live anchor + estimated footprint with the shared
+	// layout so toolbars from unrelated connections get nudged apart. The raw
+	// anchor never reads the resolved offset, so there's no feedback loop.
+	const layout = $derived(data?.toolbarLayout);
+
+	// Rough toolbar footprint in flow px: one box per tool plus the add button,
+	// laid out along the toolbar's orientation; the sentry badge widens the row.
+	const toolbarBox = $derived.by((): { w: number; h: number } => {
+		const ICON = 28;
+		const GAP = 4;
+		const PAD = 4;
+		const count = tools.length + 1; // tools + the add button
+		const long = count * ICON + (count - 1) * GAP + PAD * 2;
+		const short = ICON + PAD * 2;
+		let w = toolbarDirection === 'horizontal' ? long : short;
+		const h = toolbarDirection === 'horizontal' ? short : long;
+		if (data?.hasSentry) w += 22; // lock badge + gap sit to the left in the row
+		return { w, h };
+	});
+
+	$effect(() => {
+		layout?.register(id, {
+			x: toolbarAnchor.x,
+			y: toolbarAnchor.y,
+			w: toolbarBox.w,
+			h: toolbarBox.h
+		});
+	});
+	onDestroy(() => layout?.unregister(id));
+
+	// Apply the resolver's nudge (if any) to keep clear of other toolbars.
+	const resolvedAnchor = $derived.by((): { x: number; y: number } => {
+		const off = layout?.offsets.get(id);
+		return off ? { x: toolbarAnchor.x + off.dx, y: toolbarAnchor.y + off.dy } : toolbarAnchor;
+	});
 </script>
 
 <BaseEdge path={edgePath} {markerEnd} />
 
 <!-- Tool bar positioned at edge midpoint, direction based on line angle -->
-<EdgeLabel x={labelX} y={labelY}>
+<EdgeLabel x={resolvedAnchor.x} y={resolvedAnchor.y}>
 	<div class="edge-toolbar-container nodrag nopan">
 		{#if data?.hasSentry}
 			<!-- Guarded transition: sentry conditions restrict availability -->

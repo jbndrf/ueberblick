@@ -1,21 +1,22 @@
 <script lang="ts">
-	import { X, ClipboardList, Trash2, FileText, MapPin } from '@lucide/svelte';
+	import { X, ClipboardList, Trash2, FileText, MapPin, Settings2 } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import { Label } from '$lib/components/ui/label';
 	import { Checkbox } from '$lib/components/ui/checkbox';
+	import InlineEdit from '../../../components/InlineEdit.svelte';
 	import {
 		protocolToolEditorCreateForm,
 		protocolToolEditorDeleteRegion,
 		protocolToolEditorDeleteTool,
 		protocolToolEditorEditForm,
-		protocolToolEditorName,
 		protocolToolEditorNoStages,
 		protocolToolEditorRegionDescription,
 		protocolToolEditorRegionNamePlaceholder,
 		protocolToolEditorRegionStages,
-		protocolToolEditorToolNamePlaceholder
+		protocolToolEditorToolNamePlaceholder,
+		stagePreviewButtonRoleSettings,
+		builderClickToRename
 	} from '$lib/paraglide/messages';
+	import { getBuilderContext } from '../../../builder-context.svelte';
 
 	import type { ToolsProtocol, WorkflowStage } from '$lib/workflow-builder';
 
@@ -42,25 +43,19 @@
 		onClose
 	}: Props = $props();
 
+	const { ui } = getBuilderContext();
+
 	const isRegion = $derived(protocolTool.is_global);
 
-	let toolName = $state(protocolTool.name);
 	let selectedStageIds = $state<string[]>(protocolTool.stage_id || []);
 	let currentToolId = $state(protocolTool.id);
 
 	$effect(() => {
 		if (protocolTool.id !== currentToolId) {
 			currentToolId = protocolTool.id;
-			toolName = protocolTool.name;
 			selectedStageIds = protocolTool.stage_id || [];
 		}
 	});
-
-	function handleNameBlur() {
-		if (toolName !== protocolTool.name && toolName.trim()) {
-			onNameChange?.(toolName.trim());
-		}
-	}
 
 	function handleToggleStage(stageId: string) {
 		if (selectedStageIds.includes(stageId)) {
@@ -83,19 +78,31 @@
 				{/if}
 			</div>
 			<div class="header-title">
-				<Label for="protocol-tool-name" class="sr-only"
-					>{protocolToolEditorName?.() ?? 'Protocol Tool Name'}</Label
-				>
-				<Input
-					id="protocol-tool-name"
-					bind:value={toolName}
-					onblur={handleNameBlur}
-					class="name-input"
+				<InlineEdit
+					value={protocolTool.name}
+					onCommit={(v) => onNameChange?.(v)}
+					class="w-full cursor-text truncate border-b border-transparent bg-transparent text-left text-base font-semibold text-foreground transition outline-none placeholder:text-muted-foreground hover:border-border focus:border-primary"
 					placeholder={isRegion
 						? (protocolToolEditorRegionNamePlaceholder?.() ?? 'Region name...')
 						: (protocolToolEditorToolNamePlaceholder?.() ?? 'Protocol tool name...')}
+					ariaLabel={isRegion
+						? (protocolToolEditorRegionNamePlaceholder?.() ?? 'Region name')
+						: (protocolToolEditorToolNamePlaceholder?.() ?? 'Protocol tool name')}
+					editTitle={builderClickToRename?.() ?? 'Click to rename'}
 				/>
 			</div>
+			{#if !isRegion}
+				<button
+					class="config-gear"
+					class:active={ui.configTarget?.kind === 'protocolTool' &&
+						ui.configTarget?.id === protocolTool.id}
+					onclick={() => ui.toggleConfig('protocolTool', protocolTool.id)}
+					title={stagePreviewButtonRoleSettings?.() ?? 'Button & role settings'}
+					aria-label={stagePreviewButtonRoleSettings?.() ?? 'Button & role settings'}
+				>
+					<Settings2 class="h-4 w-4" />
+				</button>
+			{/if}
 			<Button variant="ghost" size="icon" onclick={onClose}>
 				<X class="h-4 w-4" />
 			</Button>
@@ -209,11 +216,6 @@
 		flex: 1;
 	}
 
-	.header-title :global(.name-input) {
-		font-weight: 600;
-		font-size: 1rem;
-	}
-
 	.header-description {
 		margin-top: 0.5rem;
 		font-size: 0.75rem;
@@ -232,6 +234,32 @@
 		flex-shrink: 0;
 		padding: 1rem;
 		background: hsl(var(--background));
+	}
+
+	.config-gear {
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 32px;
+		height: 32px;
+		border-radius: 0.375rem;
+		border: 1px solid hsl(var(--border));
+		background: hsl(var(--background));
+		color: hsl(var(--muted-foreground));
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.config-gear:hover {
+		background: hsl(var(--accent));
+		color: hsl(var(--foreground));
+	}
+
+	.config-gear.active {
+		background: hsl(var(--primary));
+		color: hsl(var(--primary-foreground));
+		border-color: hsl(var(--primary));
 	}
 
 	.editor-footer {

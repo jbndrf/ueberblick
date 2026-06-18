@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
-	import { Plus, Trash2 } from '@lucide/svelte';
+	import { Plus, X } from '@lucide/svelte';
 	import {
 		automationConditionBuilderAddCondition,
 		automationConditionBuilderAll,
@@ -330,7 +330,7 @@
 					class="h-6 w-6 shrink-0"
 					onclick={() => removeCondition(index)}
 				>
-					<Trash2 class="h-3 w-3" />
+					<X class="h-3 w-3" />
 				</Button>
 			</div>
 		{/each}

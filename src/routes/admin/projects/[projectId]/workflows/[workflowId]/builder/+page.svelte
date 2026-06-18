@@ -17,7 +17,9 @@
 	import ModelOverviewView from './model/ModelOverviewView.svelte';
 	import CatalogSidebar from './catalog/CatalogSidebar.svelte';
 	import InspectorHost from './inspector/InspectorHost.svelte';
-	import { BuilderUi, setBuilderContext, selectTool, type Role } from './builder-context.svelte';
+	import ExpandableConfigSidebar from './components/ExpandableConfigSidebar.svelte';
+	import ExpandableDetailSidebar from './components/ExpandableDetailSidebar.svelte';
+	import { BuilderUi, setBuilderContext, type Role } from './builder-context.svelte';
 	import { FlowSync } from './canvas/flow-sync.svelte';
 
 	import { createWorkflowBuilderState } from '$lib/workflow-builder';
@@ -280,7 +282,14 @@
 
 	<div class="builder-content">
 		{#if ui.view === 'model'}
+			<!-- Model overview (left, fills space) + the same drill-down + inspector
+			     stack as the canvas, so an entity can be configured here too. -->
 			<ModelOverviewView projectId={String(data.workflow.project_id)} />
+			<ExpandableDetailSidebar />
+			<ExpandableConfigSidebar />
+			{#if ui.selection.type !== 'none'}
+				<InspectorHost />
+			{/if}
 		{:else if ui.view === 'code'}
 			<WorkflowCodeView {builderState} roles={ctx.roles} />
 		{:else}
@@ -306,6 +315,14 @@
 					/>
 				</SvelteFlowProvider>
 			</div>
+
+			<!-- Breadcrumb drill-down: Panel 3 (detail) sits left of Panel 2 (config),
+			     which sits left of the inspector (Preview). Deeper = further left. -->
+			<ExpandableDetailSidebar />
+
+			<!-- Shared expandable config sidebar (Panel 2): appearance + roles for the
+			     action — or a field's in-context settings — targeted by a gear / click. -->
+			<ExpandableConfigSidebar />
 
 			<!-- Inspector (right): configuration of the current selection -->
 			<InspectorHost />

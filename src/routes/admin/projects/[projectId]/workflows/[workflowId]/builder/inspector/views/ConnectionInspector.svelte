@@ -1,32 +1,23 @@
 <script lang="ts">
-	import { ArrowRight, LogIn, RotateCcw, Trash2, Lock, Plus } from '@lucide/svelte';
+	import { ArrowRight, LogIn, RotateCcw, Trash2, Lock, Plus, Settings2 } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import { Label } from '$lib/components/ui/label';
-	import { Switch } from '$lib/components/ui/switch';
-	import MobileMultiSelect from '$lib/components/mobile-multi-select.svelte';
 	import PropertySection from '../../right-sidebar/views/properties/shared/PropertySection.svelte';
 	import SentryEditor from '../../right-sidebar/views/properties/panels/SentryEditor.svelte';
+	import RoleSelect from '../../components/RoleSelect.svelte';
+	import InlineEdit from '../../components/InlineEdit.svelte';
+	import { stagePreviewButtonRoleSettings, builderClickToRename } from '$lib/paraglide/messages';
 	import { toolRegistry } from '$lib/workflow-builder/tools';
-	import type { SentryClause, VisualConfig } from '$lib/workflow-builder';
+	import type { SentryClause } from '$lib/workflow-builder';
 	import { getBuilderContext, selectTool, openProtocolTool } from '../../builder-context.svelte';
 	import EmptyInspector from './EmptyInspector.svelte';
 	import {
 		propertiesEdgePropertyActionNamePlaceholder,
 		propertiesEdgePropertyAllowedRoles,
-		propertiesEdgePropertyButtonAppearance,
-		propertiesEdgePropertyButtonColor,
-		propertiesEdgePropertyButtonLabel,
-		propertiesEdgePropertyButtonLabelPlaceholder,
-		propertiesEdgePropertyConfirmationDefault,
-		propertiesEdgePropertyConfirmationMessage,
 		propertiesEdgePropertyConnectedTools,
 		propertiesEdgePropertyDeleteAction,
 		propertiesEdgePropertyDeleteTool,
 		propertiesEdgePropertyEntryInfo,
 		propertiesEdgePropertyNoTools,
-		propertiesEdgePropertyRequiresConfirmation,
-		propertiesEdgePropertyRequiresConfirmationDesc,
 		propertiesEdgePropertyRolesHelp,
 		propertiesEdgePropertyRolesPlaceholder,
 		propertiesEdgePropertySourceFallback,
@@ -43,51 +34,47 @@
 	} from '$lib/paraglide/messages';
 
 	const ctx = getBuilderContext();
-	const { state, ui, roles, createRole } = ctx;
+	const { state: builderState, ui, roles, createRole } = ctx;
 
 	const connectionId = $derived(ui.selection.type === 'connection' ? ui.selection.id : null);
 	const conn = $derived(
-		connectionId ? (state.getConnectionById(connectionId)?.data ?? null) : null
+		connectionId ? (builderState.getConnectionById(connectionId)?.data ?? null) : null
 	);
 
 	const isEntry = $derived(!!conn && !conn.from_stage_id);
 	const isSelfLoop = $derived(!!conn && conn.from_stage_id === conn.to_stage_id && !isEntry);
 
 	const sourceName = $derived(
-		conn?.from_stage_id ? (state.getStageById(conn.from_stage_id)?.data.stage_name ?? '') : ''
+		conn?.from_stage_id
+			? (builderState.getStageById(conn.from_stage_id)?.data.stage_name ?? '')
+			: ''
 	);
 	const targetName = $derived(
-		conn ? (state.getStageById(conn.to_stage_id)?.data.stage_name ?? '') : ''
+		conn ? (builderState.getStageById(conn.to_stage_id)?.data.stage_name ?? '') : ''
 	);
 
 	// Connected tools, merged and ordered
 	const sortedTools = $derived.by(() => {
 		if (!connectionId) return [];
 		const all = [
-			...state
-				.getFormsForConnection(connectionId)
-				.map((f) => ({
-					type: 'form',
-					id: f.data.id,
-					name: f.data.name,
-					order: f.data.tool_order ?? 0
-				})),
-			...state
-				.getEditToolsForConnection(connectionId)
-				.map((e) => ({
-					type: 'edit',
-					id: e.data.id,
-					name: e.data.name,
-					order: e.data.tool_order ?? 0
-				})),
-			...state
-				.getProtocolToolsForConnection(connectionId)
-				.map((p) => ({
-					type: 'protocol',
-					id: p.data.id,
-					name: p.data.name,
-					order: p.data.tool_order ?? 0
-				}))
+			...builderState.getFormsForConnection(connectionId).map((f) => ({
+				type: 'form',
+				id: f.data.id,
+				name: f.data.name,
+				order: f.data.tool_order ?? 0
+			})),
+			...builderState.getEditToolsForConnection(connectionId).map((e) => ({
+				type: 'edit',
+				id: e.data.id,
+				name: e.data.name,
+				order: e.data.tool_order ?? 0
+			})),
+			...builderState.getProtocolToolsForConnection(connectionId).map((p) => ({
+				type: 'protocol',
+				id: p.data.id,
+				name: p.data.name,
+				order: p.data.tool_order ?? 0
+			}))
 		];
 		return all.sort((a, b) => a.order - b.order);
 	});
@@ -96,46 +83,39 @@
 	const allowedToolTypes = $derived.by((): string[] => {
 		if (!connectionId || !conn) return [];
 		if (isEntry) {
-			return state.getFormsForConnection(connectionId).length > 0 ? [] : ['form'];
+			return builderState.getFormsForConnection(connectionId).length > 0 ? [] : ['form'];
 		}
 		return ['form', 'edit', 'protocol'];
 	});
 
-	function patchVisual(patch: Partial<VisualConfig>) {
-		if (!connectionId || !conn) return;
-		state.updateConnection(connectionId, {
-			visual_config: { ...conn.visual_config, ...patch }
-		});
-	}
-
 	function handleSentryChange(next: SentryClause[]) {
 		if (!connectionId) return;
-		state.updateConnection(connectionId, { sentry: next.length === 0 ? null : next });
+		builderState.updateConnection(connectionId, { sentry: next.length === 0 ? null : next });
 	}
 
 	function addTool(toolType: string) {
 		if (!connectionId) return;
 		if (toolType === 'form') {
-			const form = state.addForm({ connectionId });
+			const form = builderState.addForm({ connectionId });
 			ui.select({ type: 'form', id: form.id });
 		} else if (toolType === 'edit') {
-			const tool = state.addEditTool({ connectionId });
+			const tool = builderState.addEditTool({ connectionId });
 			ui.select({ type: 'editTool', id: tool.id });
 		} else if (toolType === 'protocol') {
-			const tool = state.addProtocolTool({ connectionId });
+			const tool = builderState.addProtocolTool({ connectionId });
 			openProtocolTool(ctx, tool.id);
 		}
 	}
 
 	function deleteTool(toolType: string, toolId: string) {
-		if (toolType === 'form') state.deleteForm(toolId);
-		else if (toolType === 'edit') state.deleteEditTool(toolId);
-		else if (toolType === 'protocol') state.deleteProtocolTool(toolId);
+		if (toolType === 'form') builderState.deleteForm(toolId);
+		else if (toolType === 'edit') builderState.deleteEditTool(toolId);
+		else if (toolType === 'protocol') builderState.deleteProtocolTool(toolId);
 	}
 
 	function handleDelete() {
 		if (!connectionId) return;
-		state.deleteConnection(connectionId);
+		builderState.deleteConnection(connectionId);
 		ui.deselect();
 	}
 </script>
@@ -155,15 +135,13 @@
 					{/if}
 				</div>
 				<div class="header-info">
-					<Input
+					<InlineEdit
 						value={conn.action_name}
-						onblur={(e) => {
-							const v = e.currentTarget.value.trim();
-							if (v && v !== conn.action_name)
-								state.updateConnection(connectionId, { action_name: v });
-						}}
-						class="header-input"
+						onCommit={(v) => builderState.updateConnection(connectionId, { action_name: v })}
+						class="w-full cursor-text truncate border-b border-transparent bg-transparent text-left text-[0.95rem] font-semibold text-foreground transition outline-none placeholder:text-muted-foreground hover:border-border focus:border-primary"
 						placeholder={propertiesEdgePropertyActionNamePlaceholder?.() ?? 'Action name...'}
+						ariaLabel={propertiesEdgePropertyActionNamePlaceholder?.() ?? 'Action name'}
+						editTitle={builderClickToRename?.() ?? 'Click to rename'}
 					/>
 					<div class="edge-meta">
 						<span class="edge-type-badge" class:edit={isSelfLoop} class:entry={isEntry}>
@@ -185,6 +163,18 @@
 						</span>
 					</div>
 				</div>
+				{#if !isEntry}
+					<button
+						class="config-gear"
+						class:active={ui.configTarget?.kind === 'connection' &&
+							ui.configTarget?.id === connectionId}
+						onclick={() => ui.toggleConfig('connection', connectionId)}
+						title={stagePreviewButtonRoleSettings?.() ?? 'Button & role settings'}
+						aria-label={stagePreviewButtonRoleSettings?.() ?? 'Button & role settings'}
+					>
+						<Settings2 class="h-4 w-4" />
+					</button>
+				{/if}
 			</div>
 		</div>
 
@@ -202,100 +192,26 @@
 					</p>
 					<SentryEditor
 						sentry={conn.sentry ?? []}
-						fieldDefs={state.visibleFieldDefs.map((d) => d.data)}
+						fieldDefs={builderState.visibleFieldDefs.map((d) => d.data)}
 						onChange={handleSentryChange}
 					/>
 				</PropertySection>
 			{/if}
 
-			<!-- Rollen -->
-			<PropertySection title={propertiesEdgePropertyAllowedRoles?.() ?? 'Allowed Roles'}>
-				<MobileMultiSelect
-					selectedIds={conn.allowed_roles ?? []}
-					options={roles}
-					getOptionId={(r) => r.id}
-					getOptionLabel={(r) => r.name}
-					getOptionDescription={(r) => r.description}
-					allowCreate={true}
-					onCreateOption={createRole}
-					onSelectedIdsChange={(ids) =>
-						state.updateConnection(connectionId, { allowed_roles: ids })}
-					placeholder={propertiesEdgePropertyRolesPlaceholder?.() ?? 'Select or search roles...'}
-					class="w-full"
-				/>
-				<p class="help-text">
-					{propertiesEdgePropertyRolesHelp?.() ??
-						'Only participants with these roles can perform this action. Leave empty to allow all.'}
-				</p>
-			</PropertySection>
-
-			<!-- Button (the ONLY place a connection button is configured) -->
-			{#if !isEntry}
-				<PropertySection title={propertiesEdgePropertyButtonAppearance?.() ?? 'Button Appearance'}>
-					<div class="form-field">
-						<Label for="button-label"
-							>{propertiesEdgePropertyButtonLabel?.() ?? 'Button Label'}</Label
-						>
-						<Input
-							id="button-label"
-							value={conn.visual_config?.button_label ?? ''}
-							oninput={(e) => patchVisual({ button_label: e.currentTarget.value })}
-							placeholder={propertiesEdgePropertyButtonLabelPlaceholder?.() ??
-								'e.g., Submit, Approve, Continue'}
-						/>
-					</div>
-					<div class="form-field">
-						<Label for="button-color"
-							>{propertiesEdgePropertyButtonColor?.() ?? 'Button Color'}</Label
-						>
-						<div class="color-picker">
-							<input
-								type="color"
-								id="button-color"
-								value={conn.visual_config?.button_color ?? '#3b82f6'}
-								oninput={(e) => patchVisual({ button_color: e.currentTarget.value })}
-								class="color-input"
-							/>
-							<Input
-								value={conn.visual_config?.button_color ?? '#3b82f6'}
-								oninput={(e) => patchVisual({ button_color: e.currentTarget.value })}
-								placeholder="#3b82f6"
-								class="color-text"
-							/>
-						</div>
-					</div>
-					<div class="form-field-switch">
-						<div class="switch-info">
-							<Label for="requires-confirmation"
-								>{propertiesEdgePropertyRequiresConfirmation?.() ?? 'Requires Confirmation'}</Label
-							>
-							<p class="switch-description">
-								{propertiesEdgePropertyRequiresConfirmationDesc?.() ??
-									'Show a confirmation dialog before performing this action'}
-							</p>
-						</div>
-						<Switch
-							id="requires-confirmation"
-							checked={conn.visual_config?.requires_confirmation ?? false}
-							onCheckedChange={(checked) => patchVisual({ requires_confirmation: checked })}
-						/>
-					</div>
-					{#if conn.visual_config?.requires_confirmation}
-						<div class="form-field">
-							<Label for="confirmation-message"
-								>{propertiesEdgePropertyConfirmationMessage?.() ?? 'Confirmation Message'}</Label
-							>
-							<Input
-								id="confirmation-message"
-								value={conn.visual_config?.confirmation_message ?? ''}
-								oninput={(e) => patchVisual({ confirmation_message: e.currentTarget.value })}
-								placeholder={propertiesEdgePropertyConfirmationDefault?.() ??
-									'Are you sure you want to proceed?'}
-							/>
-						</div>
-					{/if}
+			<!-- Roles: entry connections only. Normal action buttons configure their
+			     appearance + roles via the gear → expandable sidebar. -->
+			{#if isEntry}
+				<PropertySection title={propertiesEdgePropertyAllowedRoles?.() ?? 'Allowed Roles'}>
+					<RoleSelect
+						selectedIds={conn.allowed_roles ?? []}
+						{roles}
+						onChange={(ids) => builderState.updateConnection(connectionId, { allowed_roles: ids })}
+						onCreateRole={createRole}
+						placeholder={propertiesEdgePropertyRolesPlaceholder?.() ?? 'Select or search roles...'}
+						help={propertiesEdgePropertyRolesHelp?.() ??
+							'Only participants with these roles can perform this action. Leave empty to allow all.'}
+					/>
 				</PropertySection>
-			{:else}
 				<p class="entry-info">
 					{propertiesEdgePropertyEntryInfo?.() ??
 						'Entry connections are configured from the workflow settings.'}
@@ -373,7 +289,8 @@
 	.connection-inspector {
 		display: flex;
 		flex-direction: column;
-		height: 100%;
+		flex: 1;
+		min-height: 0;
 	}
 
 	.panel-header {
@@ -450,6 +367,32 @@
 		color: hsl(var(--muted-foreground));
 	}
 
+	.config-gear {
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 32px;
+		height: 32px;
+		border-radius: 0.375rem;
+		border: 1px solid hsl(var(--border));
+		background: hsl(var(--background));
+		color: hsl(var(--muted-foreground));
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.config-gear:hover {
+		background: hsl(var(--accent));
+		color: hsl(var(--foreground));
+	}
+
+	.config-gear.active {
+		background: hsl(var(--primary));
+		color: hsl(var(--primary-foreground));
+		border-color: hsl(var(--primary));
+	}
+
 	.panel-content {
 		flex: 1;
 		overflow-y: auto;
@@ -476,54 +419,6 @@
 		color: hsl(var(--muted-foreground));
 		text-align: center;
 		padding: 0.75rem 0;
-	}
-
-	.form-field {
-		display: flex;
-		flex-direction: column;
-		gap: 0.375rem;
-		margin-bottom: 0.625rem;
-	}
-
-	.form-field :global(label) {
-		font-size: 0.75rem;
-		font-weight: 500;
-		color: hsl(var(--muted-foreground));
-	}
-
-	.color-picker {
-		display: flex;
-		gap: 0.5rem;
-		align-items: center;
-	}
-
-	.color-input {
-		width: 2.25rem;
-		height: 2.25rem;
-		padding: 0;
-		border: 1px solid hsl(var(--border));
-		border-radius: 0.375rem;
-		cursor: pointer;
-		background: transparent;
-	}
-
-	.form-field-switch {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 0.75rem;
-		margin-bottom: 0.625rem;
-	}
-
-	.switch-info {
-		display: flex;
-		flex-direction: column;
-		gap: 0.125rem;
-	}
-
-	.switch-description {
-		font-size: 0.6875rem;
-		color: hsl(var(--muted-foreground));
 	}
 
 	.empty-text {
@@ -613,6 +508,7 @@
 	}
 
 	.panel-footer {
+		flex-shrink: 0;
 		padding: 0.75rem;
 		border-top: 1px solid hsl(var(--border));
 	}

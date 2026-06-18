@@ -9,7 +9,6 @@
 import type { Component } from 'svelte';
 import type { Selection } from '../builder-context.svelte';
 
-import EmptyInspector from './views/EmptyInspector.svelte';
 import StageInspector from './views/StageInspector.svelte';
 import ConnectionInspector from './views/ConnectionInspector.svelte';
 import FormInspector from './views/FormInspector.svelte';
@@ -26,7 +25,8 @@ export interface InspectorEntry {
 }
 
 export const inspectorRegistry: Record<Selection['type'], InspectorEntry> = {
-	none: { component: EmptyInspector },
+	// No selection → the participant "default view" (data tabs only).
+	none: { component: StageInspector, wide: true },
 	stage: { component: StageInspector, wide: true },
 	connection: { component: ConnectionInspector },
 	form: { component: FormInspector, wide: true },

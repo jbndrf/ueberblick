@@ -236,10 +236,6 @@ export class WorkflowBuilderState {
 		fieldDefsOps.reorderDataTabs(this, orderedNames);
 	}
 
-	setTabViewRoles(tabName: string, roleIds: string[]): void {
-		fieldDefsOps.setTabViewRoles(this, tabName, roleIds);
-	}
-
 	// =========================================================================
 	// Workflow-Level Permissions
 	// =========================================================================

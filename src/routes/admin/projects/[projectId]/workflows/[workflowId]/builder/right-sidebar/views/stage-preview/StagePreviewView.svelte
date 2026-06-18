@@ -2,30 +2,24 @@
 	import { ChevronLeft, ChevronRight } from '@lucide/svelte';
 	import {
 		stagePreviewViewCollapsePanel,
-		stagePreviewViewSelectButton
+		stagePreviewViewFieldsHint
 	} from '$lib/paraglide/messages';
-	import type { Edge } from '@xyflow/svelte';
-	import type { WorkflowStage, ToolsForm, ToolsEdit, VisualConfig } from '$lib/workflow-builder';
-	import type {
-		StageAction,
-		TimelineStage,
-		Role,
-		ConfigPanelMode,
-		IncomingFormGroup
-	} from './types';
+	import type { WorkflowStage } from '$lib/workflow-builder';
+	import type { WorkflowFieldDef } from '$lib/workflow-builder';
+	import type { StageAction, Role } from './types';
 	import ParticipantPreview from './ParticipantPreview.svelte';
 	import AddButtonPicker from './AddButtonPicker.svelte';
+	import LibraryFieldsPalette from '../form-editor/LibraryFieldsPalette.svelte';
+	import { getBuilderContext } from '../../../builder-context.svelte';
 
 	interface Props {
-		stage: WorkflowStage;
+		/** Null = the participant default view (no stage selected). */
+		stage: WorkflowStage | null;
 		actions: StageAction[];
 		globalTools: StageAction[];
-		timeline: TimelineStage[];
 		roles: Role[];
 		// Available target stages for creating connections
 		availableTargetStages: WorkflowStage[];
-		// Incoming forms for Details tab
-		incomingForms?: IncomingFormGroup[];
 		// Handlers
 		onStageRename?: (stageId: string, name: string) => void;
 		onStageDelete?: (stageId: string) => void;
@@ -38,8 +32,6 @@
 		// Navigation — preview buttons select their object's inspector
 		onSelectTool?: (toolType: string, toolId: string) => void;
 		onSelectConnection?: (connectionId: string) => void;
-		// Role creation
-		onCreateRole?: (name: string) => Promise<Role>;
 		// Canvas highlight callbacks
 		onHighlightEdge?: (edgeId: string | null) => void;
 		onHighlightStageTool?: (toolId: string | null) => void;
@@ -49,10 +41,8 @@
 		stage,
 		actions,
 		globalTools,
-		timeline,
 		roles,
 		availableTargetStages,
-		incomingForms = [],
 		onStageRename,
 		onStageDelete,
 		onClose,
@@ -61,17 +51,60 @@
 		onCreateStageAndConnect,
 		onSelectTool,
 		onSelectConnection,
-		onCreateRole,
 		onHighlightEdge,
 		onHighlightStageTool
 	}: Props = $props();
 
-	// Panel state (add-picker only)
-	let configPanel = $state<ConfigPanelMode>({ type: 'collapsed' });
+	const { state: builderState, ui } = getBuilderContext();
+
+	// Left panel mode: collapsed | fields palette | add-picker.
+	type LeftMode = 'collapsed' | 'fields' | 'add-picker';
+	let leftMode = $state<LeftMode>('collapsed');
 	let selectedButtonId = $state<string | null>(null);
 	let roleFilter = $state<string>('all');
 
-	const isPanelOpen = $derived(configPanel.type !== 'collapsed');
+	const isPanelOpen = $derived(leftMode !== 'collapsed');
+
+	// Mirror the panel-open state to the shared flag so the inspector widens
+	// outward (keeping the preview the same size) instead of squeezing it.
+	// Reset on teardown so the flag never leaks to the next inspector.
+	$effect(() => {
+		ui.paletteExpanded = isPanelOpen;
+		return () => {
+			ui.paletteExpanded = false;
+		};
+	});
+
+	// Keep the breadcrumb at most 3 panels deep: while a field config/detail
+	// drill is open, this view's own field palette stays collapsed.
+	$effect(() => {
+		if (ui.configTarget || ui.detailTarget) leftMode = 'collapsed';
+	});
+
+	// Library palette: all defs; those already in the active tab are greyed out.
+	const paletteDefs = $derived<WorkflowFieldDef[]>(
+		builderState.visibleFieldDefs.map((d) => d.data)
+	);
+	const usedInActiveTab = $derived(
+		new Set(builderState.getFieldDefsForTab(ui.activeDataTab).map((d) => d.data.id))
+	);
+
+	function addFieldToActiveTab(defId: string) {
+		const row = builderState.getFieldDefsForTab(ui.activeDataTab).length;
+		builderState.moveFieldDefToTab(defId, ui.activeDataTab, row, 'full');
+	}
+
+	// The gear on a roll-bar action opens the ONE shared config sidebar.
+	function handleConfigButton(actionId: string) {
+		const a = [...actions, ...globalTools].find((x) => x.id === actionId);
+		if (!a) return;
+		const kind =
+			a.type === 'connection' ? 'connection' : a.type === 'stage_form' ? 'form' : 'editTool';
+		ui.toggleConfig(kind, actionId);
+		selectedButtonId = actionId;
+		onHighlightEdge?.(null);
+		onHighlightStageTool?.(null);
+	}
 
 	/**
 	 * Buttons in the preview SELECT their object — the connection, form or
@@ -109,42 +142,41 @@
 	}
 
 	function handleAddButtonClick() {
+		if (!stage) return;
 		selectedButtonId = null;
-		configPanel = { type: 'add-picker' };
+		leftMode = 'add-picker';
 		onHighlightEdge?.(null);
 		onHighlightStageTool?.(null);
 	}
 
-	function handleConfigClose() {
+	function handlePickerClose() {
 		selectedButtonId = null;
-		configPanel = { type: 'collapsed' };
+		leftMode = 'fields';
 		onHighlightEdge?.(null);
 		onHighlightStageTool?.(null);
 	}
 
 	function handleTogglePanel() {
-		if (isPanelOpen) {
-			handleConfigClose();
-		}
-		// Don't auto-open on toggle -- panel opens on button click
+		leftMode = isPanelOpen ? 'collapsed' : 'fields';
 	}
 
 	function handleConnectionCreated(toStageId: string) {
+		if (!stage) return;
 		onAddConnection?.(stage.id, toStageId);
-		// Panel stays open -- the new button will appear and can be clicked to configure
-		configPanel = { type: 'collapsed' };
+		leftMode = 'fields';
 		selectedButtonId = null;
 	}
 
 	function handleStageToolCreated(toolType: string) {
+		if (!stage) return;
 		onAddStageTool?.(stage.id, toolType);
-		configPanel = { type: 'collapsed' };
+		leftMode = 'fields';
 		selectedButtonId = null;
 	}
 </script>
 
 <div class="stage-preview-view">
-	<!-- Left Panel (config, expandable) -->
+	<!-- Left Panel (field palette / add-picker, expandable) -->
 	<div class="left-panel" class:wide={isPanelOpen}>
 		<!-- Toggle button -->
 		<button
@@ -152,26 +184,33 @@
 			onclick={handleTogglePanel}
 			title={isPanelOpen
 				? (stagePreviewViewCollapsePanel?.() ?? 'Collapse panel')
-				: (stagePreviewViewSelectButton?.() ?? 'Select a button to configure')}
+				: (stagePreviewViewFieldsHint?.() ?? 'Add fields to the active tab')}
 		>
 			{#if isPanelOpen}
-				<ChevronLeft class="h-3 w-3" />
+				<ChevronRight class="h-[30px] w-[30px]" />
 			{:else}
-				<ChevronRight class="h-3 w-3" />
+				<ChevronLeft class="h-[30px] w-[30px]" />
 			{/if}
 		</button>
 
-		<!-- Panel content (add-picker only — buttons select their object's inspector) -->
+		<!-- Panel content -->
 		{#if isPanelOpen}
 			<div class="panel-content">
-				{#if configPanel.type === 'add-picker'}
+				{#if leftMode === 'add-picker' && stage}
 					<AddButtonPicker
 						stageId={stage.id}
 						{availableTargetStages}
 						onAddConnection={handleConnectionCreated}
 						onAddStageTool={handleStageToolCreated}
 						{onCreateStageAndConnect}
-						onClose={handleConfigClose}
+						onClose={handlePickerClose}
+					/>
+				{:else}
+					<LibraryFieldsPalette
+						expanded={true}
+						fieldDefs={paletteDefs}
+						usedDefIds={usedInActiveTab}
+						onPick={addFieldToActiveTab}
 					/>
 				{/if}
 			</div>
@@ -184,17 +223,15 @@
 			{stage}
 			{actions}
 			{globalTools}
-			{timeline}
 			{roles}
-			{incomingForms}
 			{selectedButtonId}
 			{roleFilter}
-			{onCreateRole}
 			onButtonSelect={handleButtonSelect}
 			onButtonHover={handleButtonHover}
+			onConfigButton={handleConfigButton}
 			onAddButtonClick={handleAddButtonClick}
-			onStageRename={(name) => onStageRename?.(stage.id, name)}
-			onStageDelete={() => onStageDelete?.(stage.id)}
+			onStageRename={(name) => stage && onStageRename?.(stage.id, name)}
+			onStageDelete={() => stage && onStageDelete?.(stage.id)}
 			{onClose}
 			onRoleFilterChange={(role) => (roleFilter = role)}
 		/>
@@ -214,13 +251,13 @@
 		display: flex;
 		flex-shrink: 0;
 		border-right: 1px solid oklch(0.88 0.01 250);
-		width: 20px; /* just the toggle */
+		width: 38px; /* just the toggle */
 		transition: width 0.2s ease;
 		overflow: hidden;
 	}
 
 	.left-panel.wide {
-		width: 220px; /* toggle (20px) + config panel (200px) */
+		width: 238px; /* toggle (38px) + panel (200px) */
 	}
 
 	:global(.dark) .left-panel {
@@ -228,7 +265,7 @@
 	}
 
 	.palette-toggle {
-		width: 20px;
+		width: 38px;
 		height: 100%;
 		display: flex;
 		align-items: center;
@@ -237,14 +274,24 @@
 		border: none;
 		border-right: 1px solid hsl(var(--border));
 		cursor: pointer;
-		transition: all 0.15s ease;
+		transition:
+			background 0.15s ease,
+			color 0.15s ease;
 		flex-shrink: 0;
 		color: hsl(var(--muted-foreground));
 	}
 
+	.palette-toggle :global(svg) {
+		transition: transform 0.15s ease;
+	}
+
 	.palette-toggle:hover {
-		background: hsl(var(--accent));
+		background: hsl(var(--primary) / 0.1);
 		color: hsl(var(--primary));
+	}
+
+	.palette-toggle:hover :global(svg) {
+		transform: scale(1.2);
 	}
 
 	.panel-content {

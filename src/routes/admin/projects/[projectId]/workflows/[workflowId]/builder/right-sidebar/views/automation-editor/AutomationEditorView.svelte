@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { X, Zap, Trash2, Plus } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { Switch } from '$lib/components/ui/switch';
+	import InlineEdit from '../../../components/InlineEdit.svelte';
 	import {
+		builderClickToRename,
 		automationEditorViewAddStep,
 		automationEditorViewDefaultStepName,
 		automationEditorViewDeleteAutomation,
@@ -64,23 +65,14 @@
 		onClose
 	}: Props = $props();
 
-	// Local name state synced from prop
-	let name = $state(automation.name);
 	let currentId = $state(automation.id);
 
 	$effect(() => {
 		if (automation.id !== currentId) {
 			currentId = automation.id;
-			name = automation.name;
 			selectedStepIndex = null;
 		}
 	});
-
-	function handleNameBlur() {
-		if (name !== automation.name) {
-			onNameChange?.(name);
-		}
-	}
 
 	// Step selection state
 	let selectedStepIndex = $state<number | null>(null);
@@ -197,11 +189,13 @@
 			<!-- Name + Enabled -->
 			<div class="field-group">
 				<Label class="text-xs">{automationEditorViewNameLabel?.() ?? 'Name'}</Label>
-				<Input
-					bind:value={name}
-					onblur={handleNameBlur}
+				<InlineEdit
+					value={automation.name}
+					onCommit={(v) => onNameChange?.(v)}
+					class="w-full cursor-text truncate border-b border-transparent bg-transparent text-left text-sm font-semibold text-foreground transition outline-none placeholder:text-muted-foreground hover:border-border focus:border-primary"
 					placeholder={automationEditorViewNamePlaceholder?.() ?? 'Automation name...'}
-					class="h-8 text-sm"
+					ariaLabel={automationEditorViewNameLabel?.() ?? 'Name'}
+					editTitle={builderClickToRename?.() ?? 'Click to rename'}
 				/>
 			</div>
 

@@ -82,7 +82,7 @@ export type {
 export { DEFAULT_DATA_TAB } from './types';
 
 // Utilities
-export { generateId, arraysEqual, deepEqual } from './utils';
+export { generateId, arraysEqual, deepEqual, resolveButtonLabel } from './utils';
 
 // Permission helpers
 export { roleHasAccess, toggleRoleInList } from './permissions';

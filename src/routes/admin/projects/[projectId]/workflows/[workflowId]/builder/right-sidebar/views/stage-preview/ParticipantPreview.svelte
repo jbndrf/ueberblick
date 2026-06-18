@@ -1,87 +1,68 @@
 <script lang="ts">
-	import { X, Plus, ArrowRight, Wrench, MapPin, Globe, FileText } from '@lucide/svelte';
+	import {
+		X,
+		Plus,
+		Trash2,
+		ArrowRight,
+		Wrench,
+		MapPin,
+		Globe,
+		FileText,
+		Layers,
+		Settings2
+	} from '@lucide/svelte';
 	import {
 		commonClose,
 		stagePreviewParticipantAddActionButton,
 		stagePreviewParticipantAllRoles,
-		stagePreviewParticipantConnection,
-		stagePreviewParticipantConnections,
-		stagePreviewParticipantDataCollected,
 		stagePreviewParticipantDeleteStage,
 		stagePreviewParticipantEditStageName,
-		stagePreviewParticipantNoFields,
-		stagePreviewParticipantNoForms,
-		stagePreviewParticipantOutgoing,
-		stagePreviewParticipantProgress,
-		stagePreviewParticipantStageName,
-		stagePreviewParticipantStageNameHint,
-		stagePreviewParticipantStageNamePlaceholder,
-		stagePreviewParticipantTabDetails,
-		stagePreviewParticipantTabOverview,
-		stagePreviewParticipantTabSettings,
-		stagePreviewParticipantTool,
-		stagePreviewParticipantTools,
-		stagePreviewParticipantToolsCount,
-		stagePreviewParticipantUnnamedForm,
-		stagePreviewParticipantVia
+		stagePreviewDefaultViewTitle,
+		stagePreviewDefaultViewHint,
+		stagePreviewButtonRoleSettings
 	} from '$lib/paraglide/messages';
-	import * as Tabs from '$lib/components/ui/tabs';
-	import * as Card from '$lib/components/ui/card';
-	import { Separator } from '$lib/components/ui/separator';
-	import { FormRenderer } from '$lib/components/form-renderer';
-	import type { FormFieldWithValue } from '$lib/components/form-renderer';
 	import type { WorkflowStage } from '$lib/workflow-builder';
 	import { getDefaultButtonColor } from './types';
-	import type { StageAction, TimelineStage, Role, IncomingFormGroup } from './types';
+	import type { StageAction, Role } from './types';
+	import DataTabsSection from './DataTabsSection.svelte';
+	import InlineEdit from '../../../components/InlineEdit.svelte';
 
 	interface Props {
-		stage: WorkflowStage;
+		/** Null = the participant default view (no stage selected). */
+		stage: WorkflowStage | null;
 		actions: StageAction[];
 		globalTools: StageAction[];
-		timeline: TimelineStage[];
 		roles: Role[];
-		incomingForms?: IncomingFormGroup[];
 		selectedButtonId?: string | null;
 		roleFilter?: string;
 		// Handlers
 		onButtonSelect?: (actionId: string) => void;
 		onButtonHover?: (actionId: string | null) => void;
+		/** Gear on an action → open its appearance + roles in the expandable sidebar. */
+		onConfigButton?: (actionId: string) => void;
 		onAddButtonClick?: () => void;
 		onStageRename?: (name: string) => void;
 		onStageDelete?: () => void;
 		onClose?: () => void;
 		onRoleFilterChange?: (roleId: string) => void;
-		onCreateRole?: (name: string) => Promise<Role>;
 	}
 
 	let {
 		stage,
 		actions,
 		globalTools,
-		timeline,
 		roles,
-		incomingForms = [],
 		selectedButtonId = null,
 		roleFilter = 'all',
 		onButtonSelect,
 		onButtonHover,
+		onConfigButton,
 		onAddButtonClick,
 		onStageRename,
 		onStageDelete,
 		onClose,
-		onRoleFilterChange,
-		onCreateRole
+		onRoleFilterChange
 	}: Props = $props();
-
-	// Local state
-	let activeTab = $state<string>('overview');
-	let editingName = $state(false);
-	let nameInputValue = $state(stage.stage_name);
-
-	// Keep nameInputValue in sync when stage changes externally
-	$effect(() => {
-		nameInputValue = stage.stage_name;
-	});
 
 	// All buttons to display (actions + global tools)
 	const allButtons = $derived([...actions, ...globalTools]);
@@ -100,28 +81,6 @@
 		});
 	});
 
-	// Stage info counts
-	const incomingCount = $derived(timeline.filter((s) => s.status === 'completed').length);
-	const outgoingCount = $derived(
-		actions.filter((a) => a.type === 'connection' && !('isEntry' in a && a.isEntry)).length
-	);
-	const toolCount = $derived(actions.filter((a) => a.type !== 'connection').length);
-	function handleNameBlur() {
-		editingName = false;
-		if (nameInputValue.trim() && nameInputValue !== stage.stage_name) {
-			onStageRename?.(nameInputValue.trim());
-		}
-	}
-
-	function handleNameKeydown(e: KeyboardEvent) {
-		if (e.key === 'Enter') {
-			(e.target as HTMLInputElement).blur();
-		} else if (e.key === 'Escape') {
-			nameInputValue = stage.stage_name;
-			editingName = false;
-		}
-	}
-
 	function getDisplayColor(action: StageAction): string {
 		return action.buttonColor || getDefaultButtonColor(action.type);
 	}
@@ -134,11 +93,6 @@
 		if (action.type === 'stage_tool' && action.tool.edit_mode === 'location') return MapPin;
 		if (action.type === 'stage_form') return FileText;
 		return Wrench;
-	}
-
-	// Convert ToolsFormField[] to FormFieldWithValue[] for FormRenderer
-	function toFormFields(fields: IncomingFormGroup['fields']): FormFieldWithValue[] {
-		return fields as unknown as FormFieldWithValue[];
 	}
 
 	function handleWheelScroll(e: WheelEvent) {
@@ -159,23 +113,26 @@
 	>
 		<div class="min-w-0 flex-1 space-y-0.5">
 			<div class="flex items-center gap-2">
-				{#if editingName}
-					<!-- svelte-ignore a11y_autofocus (intentional: rename input opens contextually and should receive focus) -->
-					<input
-						class="w-full border-b border-primary-foreground/40 bg-transparent text-lg font-semibold outline-none placeholder:text-primary-foreground/50"
-						bind:value={nameInputValue}
-						onblur={handleNameBlur}
-						onkeydown={handleNameKeydown}
-						autofocus
+				{#if stage}
+					<InlineEdit
+						value={stage.stage_name}
+						onCommit={(v) => onStageRename?.(v)}
+						class="w-full cursor-text truncate border-b border-transparent bg-transparent text-left text-lg font-semibold transition outline-none placeholder:text-primary-foreground/50 hover:opacity-80 focus:border-primary-foreground/40"
+						ariaLabel={stagePreviewParticipantEditStageName?.() ?? 'Stage name'}
+						editTitle={stagePreviewParticipantEditStageName?.() ?? 'Click to edit stage name'}
 					/>
 				{:else}
-					<button
-						class="cursor-text truncate text-left text-lg font-semibold transition-opacity hover:opacity-80"
-						onclick={() => (editingName = true)}
-						title={stagePreviewParticipantEditStageName?.() ?? 'Click to edit stage name'}
-					>
-						{stage.stage_name}
-					</button>
+					<div class="flex items-center gap-2">
+						<Layers class="h-4 w-4 opacity-80" />
+						<div class="min-w-0">
+							<div class="truncate text-lg font-semibold">
+								{stagePreviewDefaultViewTitle?.() ?? 'Default view'}
+							</div>
+							<div class="truncate text-xs text-primary-foreground/70">
+								{stagePreviewDefaultViewHint?.() ?? 'Tabs every participant sees'}
+							</div>
+						</div>
+					</div>
 				{/if}
 			</div>
 		</div>
@@ -193,6 +150,18 @@
 				{/each}
 			</select>
 
+			{#if stage}
+				<!-- Delete stage -->
+				<button
+					class="flex items-center justify-center rounded p-2 transition-colors hover:bg-primary-foreground/10"
+					onclick={() => onStageDelete?.()}
+					title={stagePreviewParticipantDeleteStage?.() ?? 'Delete this stage'}
+					aria-label={stagePreviewParticipantDeleteStage?.() ?? 'Delete this stage'}
+				>
+					<Trash2 class="h-4 w-4" />
+				</button>
+			{/if}
+
 			<!-- Close -->
 			<button
 				class="flex items-center justify-center rounded p-2 transition-colors hover:bg-primary-foreground/10"
@@ -209,252 +178,75 @@
 	<!-- ================================================================== -->
 	<div class="min-h-0 flex-1 overflow-y-auto">
 		<div class="p-4">
-			<!-- Action Roll Bar -->
-			<div class="mb-4">
-				<div class="flex items-stretch gap-2">
-					<!-- [+] pinned left -->
-					<button
-						class="flex min-h-[56px] min-w-[56px] flex-shrink-0
-							flex-col items-center justify-center rounded-xl
-							border-2 border-dashed
-							border-muted-foreground/30 px-3 py-2.5
-							text-muted-foreground/50
-							transition-all duration-200
-							ease-out hover:scale-[1.02] hover:border-muted-foreground/50
-							hover:text-muted-foreground/80 active:scale-[0.98]"
-						onclick={() => onAddButtonClick?.()}
-						title={stagePreviewParticipantAddActionButton?.() ?? 'Add action button'}
-					>
-						<Plus class="h-5 w-5" />
-					</button>
+			{#if stage}
+				<!-- Action Roll Bar -->
+				<div class="mb-4">
+					<div class="flex items-stretch gap-2">
+						<!-- [+] pinned left -->
+						<button
+							class="flex min-h-[56px] min-w-[56px] flex-shrink-0
+								flex-col items-center justify-center rounded-xl
+								border-2 border-dashed
+								border-muted-foreground/30 px-3 py-2.5
+								text-muted-foreground/50
+								transition-all duration-200
+								ease-out hover:scale-[1.02] hover:border-muted-foreground/50
+								hover:text-muted-foreground/80 active:scale-[0.98]"
+							onclick={() => onAddButtonClick?.()}
+							title={stagePreviewParticipantAddActionButton?.() ?? 'Add action button'}
+						>
+							<Plus class="h-5 w-5" />
+						</button>
 
-					<!-- Scrollable action buttons -->
-					<div
-						class="scrollbar-thin flex min-w-0 flex-1 gap-2.5 overflow-x-auto pb-2"
-						onwheel={handleWheelScroll}
-					>
-						{#each visibleButtons as action}
-							{@const isDimmed = '_dimmed' in action && action._dimmed}
-							<button
-								class="action-btn action-btn-colored group relative flex min-h-[56px] max-w-[120px] min-w-[72px]
-									flex-shrink-0 flex-col items-center justify-center rounded-xl
-									px-3 py-2.5
-									transition-all duration-200 ease-out
-									hover:-translate-y-0.5 hover:scale-[1.02] active:scale-[0.98]"
-								class:action-btn-selected={selectedButtonId === action.id}
-								class:opacity-40={isDimmed}
-								style="--btn-color: {getDisplayColor(action)}"
-								onclick={() => onButtonSelect?.(action.id)}
-								onmouseenter={() => onButtonHover?.(action.id)}
-								onmouseleave={() => onButtonHover?.(null)}
-							>
-								<!-- Type indicator (top-right corner) -->
-								<span class="absolute top-1 right-1 opacity-60">
-									<svelte:component this={getActionTypeIcon(action)} class="h-2.5 w-2.5" />
-								</span>
-								<span class="line-clamp-2 text-center text-xs leading-snug font-semibold">
-									{action.buttonLabel}
-								</span>
-							</button>
-						{/each}
-					</div>
-				</div>
-			</div>
-
-			<!-- Tabs (exact participant styling) -->
-			<Tabs.Root
-				value={activeTab}
-				onValueChange={(v) => (activeTab = v as string)}
-				class="flex min-h-0 flex-1 flex-col"
-			>
-				<Tabs.List
-					class="grid w-full flex-shrink-0"
-					style="grid-template-columns: repeat(3, minmax(0, 1fr))"
-				>
-					<Tabs.Trigger value="overview" class="text-xs sm:text-sm">
-						{stagePreviewParticipantTabOverview?.() ?? 'Overview'}
-					</Tabs.Trigger>
-					<Tabs.Trigger value="details" class="text-xs sm:text-sm">
-						{stagePreviewParticipantTabDetails?.() ?? 'Details'}
-					</Tabs.Trigger>
-					<Tabs.Trigger value="settings" class="text-xs sm:text-sm">
-						{stagePreviewParticipantTabSettings?.() ?? 'Settings'}
-					</Tabs.Trigger>
-				</Tabs.List>
-
-				<!-- ====================================================== -->
-				<!-- Overview Tab -->
-				<!-- ====================================================== -->
-				<Tabs.Content value="overview" class="pt-4">
-					<div class="space-y-4">
-						<!-- Progress Timeline (exact participant styling) -->
-						<div class="space-y-3">
-							<h4 class="text-sm font-semibold">
-								{stagePreviewParticipantProgress?.() ?? 'Progress'}
-							</h4>
-
-							<div class="space-y-2">
-								{#each timeline as timelineStage, index}
-									<div class="flex items-start gap-3">
-										<!-- Dot -->
-										<div class="mt-1 shrink-0">
-											{#if timelineStage.status === 'completed'}
-												<div class="h-4 w-4 rounded-full bg-green-400"></div>
-											{:else if timelineStage.status === 'current'}
-												<div class="h-4 w-4 rounded-full bg-muted-foreground"></div>
-											{:else}
-												<div class="h-4 w-4 rounded-full border-2 border-muted-foreground"></div>
-											{/if}
-										</div>
-
-										<!-- Content -->
-										<div class="min-w-0 flex-1">
-											{#if timelineStage.status === 'current'}
-												<!-- Current stage name is editable -->
-												<button
-													class="cursor-text text-left text-sm font-medium text-foreground hover:opacity-80"
-													onclick={() => (editingName = true)}
-												>
-													{timelineStage.name}
-												</button>
-											{:else}
-												<div
-													class="text-sm font-medium {timelineStage.status === 'completed'
-														? 'text-foreground'
-														: 'text-muted-foreground'}"
-												>
-													{timelineStage.name}
-												</div>
-											{/if}
-										</div>
-									</div>
-
-									<!-- Connector Line -->
-									{#if index < timeline.length - 1}
-										<div class="ml-2 h-3 w-px bg-border"></div>
-									{/if}
-								{/each}
-							</div>
-						</div>
-
-						<Separator />
-
-						<!-- Stage Info Cards (same card styling as participant) -->
-						<div class="grid grid-cols-2 gap-2">
-							<Card.Root>
-								<Card.Content class="p-3">
-									<div class="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-										<ArrowRight class="h-3 w-3" />
-										{stagePreviewParticipantOutgoing?.() ?? 'Outgoing'}
-									</div>
-									<div class="text-xs font-medium text-foreground">
-										{outgoingCount}
-										{outgoingCount === 1
-											? (stagePreviewParticipantConnection?.() ?? 'connection')
-											: (stagePreviewParticipantConnections?.() ?? 'connections')}
-									</div>
-								</Card.Content>
-							</Card.Root>
-							<Card.Root>
-								<Card.Content class="p-3">
-									<div class="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-										<Wrench class="h-3 w-3" />
-										{stagePreviewParticipantTools?.() ?? 'Tools'}
-									</div>
-									<div class="text-xs font-medium text-foreground">
-										{toolCount}
-										{toolCount === 1
-											? (stagePreviewParticipantTool?.() ?? 'tool')
-											: (stagePreviewParticipantToolsCount?.() ?? 'tools')}
-									</div>
-								</Card.Content>
-							</Card.Root>
-						</div>
-					</div>
-				</Tabs.Content>
-
-				<!-- ====================================================== -->
-				<!-- Details Tab -->
-				<!-- ====================================================== -->
-				<Tabs.Content value="details" class="pt-4">
-					<div class="space-y-4">
-						{#if incomingForms.length === 0}
-							<p class="py-4 text-center text-sm text-muted-foreground">
-								{stagePreviewParticipantNoForms?.() ??
-									'No forms are attached to incoming connections for this stage.'}
-							</p>
-						{:else}
-							<p class="mb-2 text-xs text-muted-foreground">
-								{stagePreviewParticipantDataCollected?.() ??
-									'Data collected when arriving at this stage via incoming connections.'}
-							</p>
-							{#each incomingForms as group}
-								<div class="form-group">
-									<div class="form-group-header">
-										<FileText class="h-3.5 w-3.5 text-muted-foreground" />
-										<span class="text-xs font-semibold"
-											>{group.form.name ||
-												(stagePreviewParticipantUnnamedForm?.() ?? 'Unnamed form')}</span
-										>
-										<span class="ml-auto text-[10px] text-muted-foreground"
-											>{stagePreviewParticipantVia?.({ name: group.connectionName }) ??
-												`via ${group.connectionName}`}</span
-										>
-									</div>
-									{#if group.fields.length === 0}
-										<p class="px-3 py-2 text-xs text-muted-foreground">
-											{stagePreviewParticipantNoFields?.() ?? 'No fields yet'}
-										</p>
-									{:else}
-										<div class="p-3">
-											<FormRenderer
-												mode="view"
-												fields={toFormFields(group.fields)}
-												pages={group.form.pages ?? []}
-											/>
-										</div>
-									{/if}
+						<!-- Scrollable action buttons -->
+						<div
+							class="scrollbar-thin flex min-w-0 flex-1 gap-2.5 overflow-x-auto pb-2"
+							onwheel={handleWheelScroll}
+						>
+							{#each visibleButtons as action}
+								{@const isDimmed = '_dimmed' in action && action._dimmed}
+								<div class="action-wrap group relative flex-shrink-0" class:opacity-40={isDimmed}>
+									<button
+										class="action-btn action-btn-colored relative flex min-h-[56px] max-w-[120px] min-w-[72px]
+											flex-col items-center justify-center rounded-xl
+											px-3 py-2.5
+											transition-all duration-200 ease-out
+											hover:-translate-y-0.5 hover:scale-[1.02] active:scale-[0.98]"
+										class:action-btn-selected={selectedButtonId === action.id}
+										style="--btn-color: {getDisplayColor(action)}"
+										onclick={() => onButtonSelect?.(action.id)}
+										onmouseenter={() => onButtonHover?.(action.id)}
+										onmouseleave={() => onButtonHover?.(null)}
+									>
+										<!-- Type indicator (top-right corner) -->
+										<span class="absolute top-1 right-1 opacity-60">
+											<svelte:component this={getActionTypeIcon(action)} class="h-2.5 w-2.5" />
+										</span>
+										<span class="line-clamp-2 text-center text-xs leading-snug font-semibold">
+											{action.buttonLabel}
+										</span>
+									</button>
+									<!-- Gear: appearance + roles in the expandable sidebar -->
+									<button
+										class="action-gear"
+										onclick={(e) => {
+											e.stopPropagation();
+											onConfigButton?.(action.id);
+										}}
+										title={stagePreviewButtonRoleSettings?.() ?? 'Button & role settings'}
+										aria-label={stagePreviewButtonRoleSettings?.() ?? 'Button & role settings'}
+									>
+										<Settings2 class="h-3 w-3" />
+									</button>
 								</div>
 							{/each}
-						{/if}
-					</div>
-				</Tabs.Content>
-
-				<!-- ====================================================== -->
-				<!-- Settings Tab -->
-				<!-- ====================================================== -->
-				<Tabs.Content value="settings" class="pt-4">
-					<div class="space-y-6">
-						<!-- Stage Name -->
-						<div class="space-y-2">
-							<label class="text-sm font-medium" for="stage-name-input">
-								{stagePreviewParticipantStageName?.() ?? 'Stage Name'}
-							</label>
-							<input
-								id="stage-name-input"
-								class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
-								value={stage.stage_name}
-								oninput={(e) => onStageRename?.(e.currentTarget.value)}
-								placeholder={stagePreviewParticipantStageNamePlaceholder?.() ?? 'Stage name...'}
-							/>
-							<p class="text-xs text-muted-foreground">
-								{stagePreviewParticipantStageNameHint?.() ??
-									'Shown in the participant progress view'}
-							</p>
-						</div>
-
-						<!-- Delete -->
-						<div class="border-t pt-4">
-							<button
-								class="text-sm text-destructive transition-colors hover:text-destructive/80"
-								onclick={() => onStageDelete?.()}
-							>
-								{stagePreviewParticipantDeleteStage?.() ?? 'Delete this stage'}
-							</button>
 						</div>
 					</div>
-				</Tabs.Content>
-			</Tabs.Root>
+				</div>
+			{/if}
+
+			<!-- Data tabs (the participant Data view + tab builder) -->
+			<DataTabsSection />
 		</div>
 	</div>
 </div>
@@ -505,6 +297,37 @@
 		outline-offset: 2px;
 	}
 
+	/* Per-action gear — opens appearance + roles in the expandable sidebar.
+	   Always visible and high-contrast so it reads on any button colour. */
+	.action-gear {
+		position: absolute;
+		top: 3px;
+		left: 3px;
+		z-index: 5;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 20px;
+		height: 20px;
+		border-radius: 9999px;
+		border: 1px solid hsl(var(--border));
+		background: hsl(var(--background));
+		color: hsl(var(--foreground));
+		cursor: pointer;
+		opacity: 1;
+		transition:
+			transform 0.15s ease,
+			color 0.15s ease,
+			background 0.15s ease;
+		box-shadow: 0 1px 3px hsl(0 0% 0% / 0.3);
+	}
+
+	.action-gear:hover {
+		background: hsl(var(--primary));
+		color: hsl(var(--primary-foreground));
+		transform: scale(1.1);
+	}
+
 	/* Line clamp for button text */
 	.line-clamp-2 {
 		display: -webkit-box;
@@ -526,21 +349,5 @@
 	.scrollbar-thin::-webkit-scrollbar-thumb {
 		background: hsl(var(--border));
 		border-radius: 2px;
-	}
-
-	/* Form group for Details tab */
-	.form-group {
-		border: 1px solid hsl(var(--border));
-		border-radius: 0.5rem;
-		overflow: hidden;
-	}
-
-	.form-group-header {
-		display: flex;
-		align-items: center;
-		gap: 0.375rem;
-		padding: 0.5rem 0.75rem;
-		background: hsl(var(--muted) / 0.5);
-		border-bottom: 1px solid hsl(var(--border));
 	}
 </style>

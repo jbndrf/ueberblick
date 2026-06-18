@@ -2,6 +2,23 @@
  * Workflow Builder Utilities
  */
 
+import type { VisualConfig } from './types';
+
+/**
+ * The text shown on an action's participant button. Every action entity
+ * (connection, form, edit tool, protocol tool) carries a canonical identity
+ * name plus an OPTIONAL `visual_config.button_label` override; the button shows
+ * the override when set, else the identity. One resolver so the canvas, the
+ * builder preview and the participant runtime can never disagree.
+ */
+export function resolveButtonLabel(
+	visualConfig: VisualConfig | null | undefined,
+	fallbackName: string
+): string {
+	const label = visualConfig?.button_label?.trim();
+	return label || fallbackName;
+}
+
 /**
  * Generate a PocketBase-compatible ID (15 alphanumeric characters)
  * PocketBase accepts custom IDs in this format

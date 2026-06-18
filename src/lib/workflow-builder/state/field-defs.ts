@@ -227,14 +227,3 @@ export function reorderDataTabs(state: WorkflowBuilderState, orderedNames: strin
 		}
 	});
 }
-
-/** Bulk-apply view_roles to every field def in a tab. */
-export function setTabViewRoles(
-	state: WorkflowBuilderState,
-	tabName: string,
-	roleIds: string[]
-): void {
-	for (const d of getFieldDefsForTab(state, tabName)) {
-		updateFieldDef(state, d.data.id, { view_roles: [...roleIds] });
-	}
-}

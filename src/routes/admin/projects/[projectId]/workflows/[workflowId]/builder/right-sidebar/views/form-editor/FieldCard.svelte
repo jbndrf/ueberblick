@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { GripVertical, Upload, ChevronDown, Pencil, Shield, GitBranch } from '@lucide/svelte';
+	import { GripVertical, Upload, ChevronDown, Pencil, Shield, GitBranch, X } from '@lucide/svelte';
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Type } from '@lucide/svelte';
@@ -27,8 +27,11 @@
 		 * protocol-local fields are visually distinct. `null` = no tint.
 		 */
 		scopeTint?: 'lifecycle' | 'local' | null;
+		/** Optional remove affordance (× in the corner). Omit to hide it. */
+		removeLabel?: string;
 		onSelect?: () => void;
 		onUpdate?: (updates: Partial<ToolsFormField>) => void;
+		onRemove?: () => void;
 		onDragStart?: () => void;
 		onDragEnd?: () => void;
 	};
@@ -39,8 +42,10 @@
 		dragging = false,
 		halfWidth = false,
 		scopeTint = null,
+		removeLabel,
 		onSelect,
 		onUpdate,
+		onRemove,
 		onDragStart,
 		onDragEnd
 	}: Props = $props();
@@ -254,6 +259,21 @@
 
 	<!-- Field type and status indicators -->
 	<div class="field-badges">
+		{#if onRemove}
+			<button
+				type="button"
+				class="remove-badge"
+				title={removeLabel ?? 'Remove'}
+				aria-label={removeLabel ?? 'Remove'}
+				onclick={(e) => {
+					e.stopPropagation();
+					onRemove?.();
+				}}
+				onmousedown={(e) => e.stopPropagation()}
+			>
+				<X class="h-3 w-3" />
+			</button>
+		{/if}
 		{#if hasValidation}
 			<div
 				class="indicator-badge validation"
@@ -536,6 +556,34 @@
 	.field-card:hover .indicator-badge,
 	.field-card.selected .indicator-badge {
 		opacity: 1;
+	}
+
+	.remove-badge {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 18px;
+		height: 18px;
+		border: none;
+		border-radius: 0.25rem;
+		background: hsl(var(--muted));
+		color: hsl(var(--muted-foreground));
+		cursor: pointer;
+		opacity: 0;
+		transition:
+			opacity 0.15s ease,
+			background 0.15s ease,
+			color 0.15s ease;
+	}
+
+	.field-card:hover .remove-badge,
+	.field-card.selected .remove-badge {
+		opacity: 1;
+	}
+
+	.remove-badge:hover {
+		background: hsl(var(--destructive) / 0.15);
+		color: hsl(var(--destructive));
 	}
 
 	.indicator-badge.validation {

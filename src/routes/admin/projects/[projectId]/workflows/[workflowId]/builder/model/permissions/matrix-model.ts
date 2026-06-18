@@ -113,21 +113,19 @@ export function buildMatrixModel(state: WorkflowBuilderState): MatrixSection[] {
 		const defs = state.getFieldDefsForTab(tab.name);
 		if (defs.length === 0) continue;
 		const tabName = tab.name;
+		// Field visibility is configured per field only — the tab is a grouping
+		// label with no bulk role control (no inheritance from tabs/forms).
 		visibilityBands.push({
 			id: `tab:${tabName}`,
 			label: tab.isDefault ? permMatrixDefaultTab() : tabName,
 			advanced: false,
-			header: {
-				roles: () => state.getFieldDefsForTab(tabName)[0]?.data.view_roles ?? [],
-				setRoles: (next) => state.setTabViewRoles(tabName, next)
-			},
 			rows: defs.map((def) => {
 				const defId = def.data.id;
 				return {
 					id: `field:${defId}`,
 					label: def.data.label || '—',
 					tone: 'view' as CellTone,
-					advanced: true,
+					advanced: false,
 					readOnly: false,
 					indent: 1,
 					roles: () => state.getFieldDefById(defId)?.view_roles ?? [],

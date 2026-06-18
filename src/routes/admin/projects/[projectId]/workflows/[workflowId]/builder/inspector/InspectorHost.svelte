@@ -32,10 +32,17 @@
 	});
 
 	const wide = $derived(entry.wide === true && !showYaml);
-	const expanded = $derived(ui.selection.type === 'form' && ui.paletteExpanded && !showYaml);
+	// The form editor and the stage/default preview both grow the inspector
+	// outward when their field palette opens, so the editing surface keeps its
+	// width instead of being squeezed by the panel.
+	const stageLike = $derived(ui.selection.type === 'stage' || ui.selection.type === 'none');
+	const expanded = $derived(
+		(ui.selection.type === 'form' || stageLike) && ui.paletteExpanded && !showYaml
+	);
+	const stageExpanded = $derived(expanded && stageLike);
 </script>
 
-<aside class="inspector" class:wide class:expanded>
+<aside class="inspector" class:wide class:expanded class:stage-expanded={stageExpanded}>
 	{#if yamlTarget}
 		<div class="mode-toggle">
 			<button class="mode-btn" class:active={!showYaml} onclick={() => (showYaml = false)}>
@@ -77,6 +84,12 @@
 	/* Expanded mode when the form palette is expanded (+130px for labels) */
 	.inspector.wide.expanded {
 		width: 650px;
+	}
+
+	/* Stage/default preview: grow by the full field-panel width (220px) so the
+	   preview keeps its size when the palette opens. */
+	.inspector.wide.expanded.stage-expanded {
+		width: 720px;
 	}
 
 	:global(.dark) .inspector {

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
-	import { Plus, Trash2, ChevronUp, ChevronDown, ChevronRight } from '@lucide/svelte';
+	import { Plus, X, ChevronUp, ChevronDown, ChevronRight } from '@lucide/svelte';
 	import {
 		automationStepBuilderActionsLabel,
 		automationStepBuilderAddStep,
@@ -125,7 +125,7 @@
 					{/if}
 					{#if steps.length > 1}
 						<Button variant="ghost" size="icon" class="h-5 w-5" onclick={() => removeStep(index)}>
-							<Trash2 class="h-3 w-3" />
+							<X class="h-3 w-3" />
 						</Button>
 					{/if}
 				</div>
