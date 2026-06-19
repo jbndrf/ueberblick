@@ -36,6 +36,12 @@
 		onNodeContextMenu: NodeEventWithPointer<MouseEvent>;
 		onNodeAdded: (node: Node) => void;
 		onConnect: (connection: Connection) => void;
+		onToolDropped: (target: {
+			toolType: string;
+			scope: 'global' | 'stage' | 'connection';
+			stageId?: string;
+			connectionId?: string;
+		}) => void;
 	}
 
 	let {
@@ -50,7 +56,8 @@
 		onEdgeClick,
 		onNodeContextMenu,
 		onNodeAdded,
-		onConnect
+		onConnect,
+		onToolDropped
 	}: Props = $props();
 
 	// Access SvelteFlow context for coordinate transformations and viewport control
@@ -61,10 +68,45 @@
 		setTimeout(() => fitView(), 50);
 	});
 
+	// A tool was dragged from the catalog matrix: resolve whether it landed on a
+	// stage node, a connection edge, or empty canvas, and hand off to the host.
+	// Node/edge ids map directly to stage/connection ids (see flow-sync).
+	function handleToolDrop(event: DragEvent, raw: string) {
+		let payload: { toolType: string; scope: 'global' | 'stage' | 'connection' };
+		try {
+			payload = JSON.parse(raw);
+		} catch {
+			return;
+		}
+
+		const el = event.target as HTMLElement | null;
+		const stageId = el?.closest('.svelte-flow__node')?.getAttribute('data-id') ?? undefined;
+		// The edge SVG path is thin; the visible toolbar carries data-connection-id
+		// so dropping on it resolves reliably too.
+		const connectionId =
+			el?.closest('[data-connection-id]')?.getAttribute('data-connection-id') ??
+			el?.closest('.svelte-flow__edge')?.getAttribute('data-id') ??
+			undefined;
+
+		// A node hit wins over an edge hit (nodes sit above edges visually).
+		onToolDropped({
+			toolType: payload.toolType,
+			scope: payload.scope,
+			stageId,
+			connectionId: stageId ? undefined : connectionId
+		});
+	}
+
 	// Handle drop on canvas - now with correct coordinate transformation
 	function onDrop(event: DragEvent) {
 		event.preventDefault();
 		if (!event.dataTransfer) return;
+
+		const toolPayload = event.dataTransfer.getData('application/ueberblick-tool');
+		if (toolPayload) {
+			handleToolDrop(event, toolPayload);
+			return;
+		}
 
 		const type = event.dataTransfer.getData('application/xyflow') as
 			| 'start'
@@ -107,7 +149,11 @@
 	function onDragOver(event: DragEvent) {
 		event.preventDefault();
 		if (event.dataTransfer) {
-			event.dataTransfer.dropEffect = 'move';
+			event.dataTransfer.dropEffect = event.dataTransfer.types.includes(
+				'application/ueberblick-tool'
+			)
+				? 'copy'
+				: 'move';
 		}
 	}
 </script>

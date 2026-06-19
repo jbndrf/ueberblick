@@ -8,6 +8,7 @@
 		MapPin,
 		Globe,
 		FileText,
+		ClipboardList,
 		Layers,
 		Settings2
 	} from '@lucide/svelte';
@@ -92,6 +93,7 @@
 		if (action.type === 'global_tool') return Globe;
 		if (action.type === 'stage_tool' && action.tool.edit_mode === 'location') return MapPin;
 		if (action.type === 'stage_form') return FileText;
+		if (action.type === 'stage_protocol') return ClipboardList;
 		return Wrench;
 	}
 

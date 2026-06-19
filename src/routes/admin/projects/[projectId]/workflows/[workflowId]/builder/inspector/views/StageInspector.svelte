@@ -63,6 +63,18 @@
 			form: f.data
 		}));
 
+		// Stage protocol tools (stage-attached, = protocol buttons)
+		const stageProtocolActions: StageAction[] = state
+			.getProtocolToolsForStage(stageId)
+			.map((p) => ({
+				type: 'stage_protocol' as const,
+				id: p.data.id,
+				buttonLabel: resolveButtonLabel(p.data.visual_config, p.data.name),
+				buttonColor: p.data.visual_config?.button_color,
+				allowed_roles: p.data.allowed_roles || [],
+				tool: p.data
+			}));
+
 		// Global tools (shown at every stage)
 		const globalToolActions: StageAction[] = state.getGlobalEditTools().map((t) => ({
 			type: 'global_tool' as const,
@@ -78,7 +90,12 @@
 
 		return {
 			stage,
-			actions: [...outgoing, ...stageToolActions, ...stageFormActions] as StageAction[],
+			actions: [
+				...outgoing,
+				...stageToolActions,
+				...stageFormActions,
+				...stageProtocolActions
+			] as StageAction[],
 			globalTools: globalToolActions,
 			availableTargetStages: allStages.filter((s) => s.id !== stageId)
 		};

@@ -99,7 +99,13 @@
 		const a = [...actions, ...globalTools].find((x) => x.id === actionId);
 		if (!a) return;
 		const kind =
-			a.type === 'connection' ? 'connection' : a.type === 'stage_form' ? 'form' : 'editTool';
+			a.type === 'connection'
+				? 'connection'
+				: a.type === 'stage_form'
+					? 'form'
+					: a.type === 'stage_protocol'
+						? 'protocolTool'
+						: 'editTool';
 		ui.toggleConfig(kind, actionId);
 		selectedButtonId = actionId;
 		onHighlightEdge?.(null);
@@ -122,6 +128,8 @@
 			onSelectTool?.('edit', action.tool.id);
 		} else if (action.type === 'stage_form') {
 			onSelectTool?.('form', action.form.id);
+		} else if (action.type === 'stage_protocol') {
+			onSelectTool?.('protocol', action.tool.id);
 		}
 	}
 
@@ -138,6 +146,8 @@
 			onHighlightStageTool?.(action.tool.id);
 		} else if (action?.type === 'stage_form') {
 			onHighlightStageTool?.(action.form.id);
+		} else if (action?.type === 'stage_protocol') {
+			onHighlightStageTool?.(action.tool.id);
 		}
 	}
 

@@ -177,7 +177,7 @@
 
 <!-- Tool bar positioned at edge midpoint, direction based on line angle -->
 <EdgeLabel x={resolvedAnchor.x} y={resolvedAnchor.y}>
-	<div class="edge-toolbar-container nodrag nopan">
+	<div class="edge-toolbar-container nodrag nopan" data-connection-id={id}>
 		{#if data?.hasSentry}
 			<!-- Guarded transition: sentry conditions restrict availability -->
 			<span class="sentry-badge" title="Wächter aktiv">

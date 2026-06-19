@@ -19,7 +19,12 @@
 	import InspectorHost from './inspector/InspectorHost.svelte';
 	import ExpandableConfigSidebar from './components/ExpandableConfigSidebar.svelte';
 	import ExpandableDetailSidebar from './components/ExpandableDetailSidebar.svelte';
-	import { BuilderUi, setBuilderContext, type Role } from './builder-context.svelte';
+	import {
+		BuilderUi,
+		setBuilderContext,
+		openProtocolTool,
+		type Role
+	} from './builder-context.svelte';
 	import { FlowSync } from './canvas/flow-sync.svelte';
 
 	import { createWorkflowBuilderState } from '$lib/workflow-builder';
@@ -127,6 +132,54 @@
 	function onNodeAdded(node: Node) {
 		const stageType = node.data.stageType as 'start' | 'intermediate' | 'end';
 		builderState.addStage(stageType, node.position);
+	}
+
+	// A tool was dragged from the catalog matrix. The dragged cell carries its scope
+	// (global / stage / connection); attach it to the matching drop target (a Global
+	// tool needs none) and open it in the inspector. Mirrors the inspector handlers.
+	function onToolDropped({
+		toolType,
+		scope,
+		stageId,
+		connectionId
+	}: {
+		toolType: string;
+		scope: 'global' | 'stage' | 'connection';
+		stageId?: string;
+		connectionId?: string;
+	}) {
+		if (scope === 'global') {
+			if (toolType === 'form') {
+				const form = builderState.addForm({ isGlobal: true });
+				ui.select({ type: 'form', id: form.id });
+			} else if (toolType === 'edit') {
+				const tool = builderState.addGlobalEditTool('form_fields');
+				ui.select({ type: 'editTool', id: tool.id });
+			} else if (toolType === 'protocol') {
+				const tool = builderState.addProtocolTool({ isGlobal: true });
+				openProtocolTool(ctx, tool.id);
+			}
+		} else if (scope === 'stage' && stageId) {
+			if (toolType === 'form') {
+				const form = builderState.addForm({ stageId });
+				ui.select({ type: 'form', id: form.id });
+			} else if (toolType === 'edit') {
+				const tool = builderState.addEditTool({ stageId });
+				ui.select({ type: 'editTool', id: tool.id });
+			} else if (toolType === 'protocol') {
+				const tool = builderState.addProtocolTool({ stageId });
+				openProtocolTool(ctx, tool.id);
+			}
+		} else if (scope === 'connection' && connectionId) {
+			if (toolType === 'form') {
+				const form = builderState.addForm({ connectionId });
+				ui.select({ type: 'form', id: form.id });
+			} else if (toolType === 'protocol') {
+				const tool = builderState.addProtocolTool({ connectionId });
+				openProtocolTool(ctx, tool.id);
+			}
+		}
+		// Otherwise (dropped away from a required target) — no-op.
 	}
 
 	// Right-click to connect: first click arms, second click connects.
@@ -312,6 +365,7 @@
 						onNodeContextMenu={handleNodeContextMenu}
 						{onNodeAdded}
 						onConnect={handleConnect}
+						{onToolDropped}
 					/>
 				</SvelteFlowProvider>
 			</div>

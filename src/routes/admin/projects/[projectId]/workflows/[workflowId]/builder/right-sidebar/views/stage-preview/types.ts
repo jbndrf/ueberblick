@@ -6,7 +6,13 @@
  */
 
 import type { Edge } from '@xyflow/svelte';
-import type { WorkflowStage, ToolsForm, ToolsEdit, ToolsFormField } from '$lib/workflow-builder';
+import type {
+	WorkflowStage,
+	ToolsForm,
+	ToolsEdit,
+	ToolsProtocol,
+	ToolsFormField
+} from '$lib/workflow-builder';
 
 /** A button action displayed in the participant preview */
 export type StageAction =
@@ -38,6 +44,14 @@ export type StageAction =
 			buttonColor?: string;
 			allowed_roles?: string[];
 			form: ToolsForm;
+	  }
+	| {
+			type: 'stage_protocol';
+			id: string;
+			buttonLabel: string;
+			buttonColor?: string;
+			allowed_roles?: string[];
+			tool: ToolsProtocol;
 	  }
 	| {
 			type: 'global_tool';
@@ -78,6 +92,8 @@ export function getDefaultButtonColor(actionType: StageAction['type']): string {
 			return '#57534e'; // stone-600 -- warm dark grey
 		case 'stage_form':
 			return '#57534e'; // stone-600 -- warm dark grey
+		case 'stage_protocol':
+			return '#059669'; // emerald-600 -- matches the protocol tool registry colour
 		case 'global_tool':
 			return '#6b7280'; // gray-500  -- neutral mid grey
 		default:
