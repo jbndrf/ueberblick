@@ -11,7 +11,8 @@
 	import { getBuilderContext, selectTool, openProtocolTool } from '../../builder-context.svelte';
 	import EmptyInspector from './EmptyInspector.svelte';
 	import {
-		propertiesEdgePropertyActionNamePlaceholder,
+		propertiesEdgePropertyButtonLabel,
+		propertiesEdgePropertyButtonLabelPlaceholder,
 		propertiesEdgePropertyAllowedRoles,
 		propertiesEdgePropertyConnectedTools,
 		propertiesEdgePropertyDeleteAction,
@@ -136,11 +137,14 @@
 				</div>
 				<div class="header-info">
 					<InlineEdit
-						value={conn.action_name}
-						onCommit={(v) => builderState.updateConnection(connectionId, { action_name: v })}
+						value={conn.visual_config?.button_label ?? conn.action_name}
+						onCommit={(v) =>
+							builderState.updateConnection(connectionId, {
+								visual_config: { ...conn.visual_config, button_label: v }
+							})}
 						class="w-full cursor-text truncate border-b border-transparent bg-transparent text-left text-[0.95rem] font-semibold text-foreground transition outline-none placeholder:text-muted-foreground hover:border-border focus:border-primary"
-						placeholder={propertiesEdgePropertyActionNamePlaceholder?.() ?? 'Action name...'}
-						ariaLabel={propertiesEdgePropertyActionNamePlaceholder?.() ?? 'Action name'}
+						placeholder={propertiesEdgePropertyButtonLabelPlaceholder?.() ?? 'Button label...'}
+						ariaLabel={propertiesEdgePropertyButtonLabel?.() ?? 'Button label'}
 						editTitle={builderClickToRename?.() ?? 'Click to rename'}
 					/>
 					<div class="edge-meta">

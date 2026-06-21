@@ -25,7 +25,7 @@
 	import { FormRenderer } from '$lib/components/form-renderer';
 	import { Button } from '$lib/components/ui/button';
 	import * as Tabs from '$lib/components/ui/tabs';
-	import { Save, X, Loader2 } from '@lucide/svelte';
+	import { Save, Loader2, ChevronLeft, ChevronRight } from '@lucide/svelte';
 	import type { FormFieldWithValue, FormPage } from '$lib/components/form-renderer';
 	import { getTotalPages } from '$lib/components/form-renderer';
 	import type { ToolProtocol, FormField } from '../state.svelte';
@@ -33,6 +33,8 @@
 	import { evaluateShowIf } from '$lib/form-engine/conditional-logic';
 	import {
 		commonCancel,
+		participantFormFillToolBack,
+		participantFormFillToolNext,
 		participantFormFillToolGoToPage,
 		participantFormFillToolTabMissingCount,
 		participantProtocolToolFieldRequired,
@@ -142,6 +144,8 @@
 	// Pagination: one tab per distinct `page` across all fields. Single-page
 	// forms get no tab strip and render inline.
 	const totalPages = $derived(getTotalPages(allFields));
+	const canNext = $derived(currentPage < totalPages);
+	const canPrev = $derived(currentPage > 1);
 	const tabPages = $derived.by((): Array<{ page: number; title: string }> => {
 		const metaByPage = new Map<number, FormPage>();
 		for (const p of pages) metaByPage.set(p.page, p);
@@ -282,6 +286,14 @@
 		return Object.keys(next).length === 0;
 	}
 
+	function handleNextPage() {
+		if (currentPage < totalPages) currentPage += 1;
+	}
+
+	function handlePreviousPage() {
+		if (currentPage > 1) currentPage -= 1;
+	}
+
 	async function handleSave() {
 		if (isSubmitting) return;
 		if (!validate()) {
@@ -311,18 +323,24 @@
 	}
 </script>
 
-<div class="flex flex-col min-h-full">
+<div class="flex min-h-full flex-col">
 	<div class="flex-1">
 		{#if isLoading}
-			<div class="flex-1 flex items-center justify-center py-12">
+			<div class="flex flex-1 items-center justify-center py-12">
 				<div class="text-center">
-					<div class="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-					<p class="text-sm text-muted-foreground">{participantProtocolToolLoading?.() ?? 'Loading...'}</p>
+					<div
+						class="mx-auto mb-2 h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent"
+					></div>
+					<p class="text-sm text-muted-foreground">
+						{participantProtocolToolLoading?.() ?? 'Loading...'}
+					</p>
 				</div>
 			</div>
 		{:else if !hasFields}
-			<div class="flex-1 flex items-center justify-center p-4 py-12">
-				<p class="text-sm text-muted-foreground">{participantProtocolToolNoFields?.() ?? 'No fields configured for this protocol tool.'}</p>
+			<div class="flex flex-1 items-center justify-center p-4 py-12">
+				<p class="text-sm text-muted-foreground">
+					{participantProtocolToolNoFields?.() ?? 'No fields configured for this protocol tool.'}
+				</p>
 			</div>
 		{:else}
 			<div class="p-4">
@@ -332,15 +350,16 @@
 						onValueChange={(v) => (currentPage = Number(v))}
 						class="mb-4"
 					>
-						<Tabs.List class="w-full overflow-x-auto flex-nowrap">
+						<Tabs.List class="w-full flex-nowrap overflow-x-auto">
 							{#each tabPages as p (p.page)}
 								{@const missing = pageErrorCounts.get(p.page) ?? 0}
-								<Tabs.Trigger value={String(p.page)} class="whitespace-nowrap text-xs">
+								<Tabs.Trigger value={String(p.page)} class="text-xs whitespace-nowrap">
 									<span>{p.title}</span>
 									{#if missing > 0}
 										<span
-											class="ml-1.5 inline-flex items-center justify-center rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-medium text-destructive-foreground"
-											aria-label={participantFormFillToolTabMissingCount?.({ count: missing }) ?? `${missing} missing`}
+											class="text-destructive-foreground ml-1.5 inline-flex items-center justify-center rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-medium"
+											aria-label={participantFormFillToolTabMissingCount?.({ count: missing }) ??
+												`${missing} missing`}
 										>
 											{missing}
 										</span>
@@ -365,12 +384,15 @@
 				/>
 
 				{#if totalPages > 1 && !showTabs}
-					<div class="flex justify-center gap-1.5 mt-4">
+					<div class="mt-4 flex justify-center gap-1.5">
 						{#each Array(totalPages) as _, i}
 							<button
-								class="w-2 h-2 rounded-full transition-colors {currentPage === i + 1 ? 'bg-primary' : 'bg-muted-foreground/30'}"
+								class="h-2 w-2 rounded-full transition-colors {currentPage === i + 1
+									? 'bg-primary'
+									: 'bg-muted-foreground/30'}"
 								onclick={() => (currentPage = i + 1)}
-								aria-label={participantFormFillToolGoToPage?.({ page: i + 1 }) ?? `Go to page ${i + 1}`}
+								aria-label={participantFormFillToolGoToPage?.({ page: i + 1 }) ??
+									`Go to page ${i + 1}`}
 							></button>
 						{/each}
 					</div>
@@ -379,22 +401,41 @@
 		{/if}
 	</div>
 
-	<div class="sticky bottom-0 bg-background border-t border-border">
+	<div class="sticky bottom-0 border-t border-border bg-background">
 		<div class="p-4">
 			<div class="flex gap-2">
-				<Button variant="outline" onclick={onCancel} disabled={isSubmitting} class="flex-1">
-					<X class="w-4 h-4 mr-1" />
-					{commonCancel?.() ?? 'Cancel'}
-				</Button>
-				<Button onclick={handleSave} disabled={isSubmitting || !hasFields} class="flex-1">
-					{#if isSubmitting}
-						<Loader2 class="w-4 h-4 mr-2 animate-spin" />
-						{participantProtocolToolSaving?.() ?? 'Saving...'}
-					{:else}
-						<Save class="w-4 h-4 mr-2" />
-						{participantProtocolToolSave?.() ?? 'Save Protocol'}
-					{/if}
-				</Button>
+				{#if canPrev}
+					<Button
+						variant="outline"
+						onclick={handlePreviousPage}
+						disabled={isSubmitting}
+						class="flex-1"
+					>
+						<ChevronLeft class="mr-1 h-4 w-4" />
+						{participantFormFillToolBack?.() ?? 'Back'}
+					</Button>
+				{:else}
+					<Button variant="outline" onclick={onCancel} disabled={isSubmitting} class="flex-1">
+						{commonCancel?.() ?? 'Cancel'}
+					</Button>
+				{/if}
+
+				{#if canNext}
+					<Button onclick={handleNextPage} disabled={isSubmitting} class="flex-1">
+						{participantFormFillToolNext?.() ?? 'Next'}
+						<ChevronRight class="ml-1 h-4 w-4" />
+					</Button>
+				{:else}
+					<Button onclick={handleSave} disabled={isSubmitting || !hasFields} class="flex-1">
+						{#if isSubmitting}
+							<Loader2 class="mr-2 h-4 w-4 animate-spin" />
+							{participantProtocolToolSaving?.() ?? 'Saving...'}
+						{:else}
+							<Save class="mr-2 h-4 w-4" />
+							{participantProtocolToolSave?.() ?? 'Save Protocol'}
+						{/if}
+					</Button>
+				{/if}
 			</div>
 		</div>
 	</div>
