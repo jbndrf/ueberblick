@@ -23,7 +23,9 @@ export type DuplicationLayer = {
 	remapArrays?: Record<string, string>;
 	/** Hook for remapping IDs embedded inside JSON fields. */
 	transformRecord?: (record: any, idMaps: IdMaps) => any;
-	/** Fields referencing role IDs -- cleared to [] on cross-project import. */
+	/** Fields referencing role IDs. Remapped through idMaps['roles'] when present
+	 * (name-matched cross-project roles); cleared to [] only when copying cross
+	 * project with no role map; left as-is for same-project copies. */
 	roleFields?: string[];
 };
 
@@ -79,18 +81,50 @@ function stripSystemFields(record: any): any {
 // JSON transform hooks (for IDs embedded inside JSON fields)
 // ---------------------------------------------------------------------------
 
+/** Remap one id through a map, leaving it untouched when the map is absent or
+ * doesn't know the id (e.g. same-project duplication where ids stay valid). */
+function remapId(id: any, map?: Map<string, string>): any {
+	return typeof id === 'string' && map?.has(id) ? map.get(id) : id;
+}
+
+/** Remap an array of ids in place-style (returns a new array). Non-arrays pass
+ * through unchanged so callers don't need to pre-check. */
+function remapIdArray(arr: any, map?: Map<string, string>): any {
+	if (!Array.isArray(arr) || !map) return arr;
+	return arr.map((id: string) => remapId(id, map));
+}
+
+/**
+ * Remap ids embedded in a field def's `field_options` JSON. Two field types
+ * carry cross-references that change on import:
+ *  - `smart_dropdown`: `source_field` (field-def id), `source_stage_id`.
+ *  - `custom_table_selector`: `custom_table_id`, `marker_category_id`, and the
+ *    role arrays `allowed_roles` / `self_select_roles` / `any_select_roles`
+ *    (the latter back "self-assign" permissions). `display_field` / `value_field`
+ *    are custom-table column NAMES, not ids — left untouched.
+ */
 export function remapFieldOptions(record: any, idMaps: IdMaps): any {
-	if (record.field_type !== 'smart_dropdown' || !record.field_options) return record;
-	const opts = { ...record.field_options };
-	const fieldMap = idMaps['workflow_field_defs'];
-	const stageMap = idMaps['workflow_stages'];
-	if (opts.source_field && fieldMap?.has(opts.source_field)) {
-		opts.source_field = fieldMap.get(opts.source_field);
+	if (!record.field_options) return record;
+
+	if (record.field_type === 'smart_dropdown') {
+		const opts = { ...record.field_options };
+		opts.source_field = remapId(opts.source_field, idMaps['workflow_field_defs']);
+		opts.source_stage_id = remapId(opts.source_stage_id, idMaps['workflow_stages']);
+		return { ...record, field_options: opts };
 	}
-	if (opts.source_stage_id && stageMap?.has(opts.source_stage_id)) {
-		opts.source_stage_id = stageMap.get(opts.source_stage_id);
+
+	if (record.field_type === 'custom_table_selector') {
+		const opts = { ...record.field_options };
+		opts.custom_table_id = remapId(opts.custom_table_id, idMaps['custom_tables']);
+		opts.marker_category_id = remapId(opts.marker_category_id, idMaps['marker_categories']);
+		const roleMap = idMaps['roles'];
+		opts.allowed_roles = remapIdArray(opts.allowed_roles, roleMap);
+		opts.self_select_roles = remapIdArray(opts.self_select_roles, roleMap);
+		opts.any_select_roles = remapIdArray(opts.any_select_roles, roleMap);
+		return { ...record, field_options: opts };
 	}
-	return { ...record, field_options: opts };
+
+	return record;
 }
 
 export function remapAutomationJson(record: any, idMaps: IdMaps): any {
@@ -411,8 +445,15 @@ async function processLayers(
 				data = layer.transformRecord(data, idMaps);
 			}
 
-			if (options?.clearRoles && layer.roleFields) {
-				for (const field of layer.roleFields) data[field] = [];
+			// Role arrays: clear on cross-project copy when no role map is given,
+			// otherwise remap through idMaps['roles'] (name-matched roles). Same
+			// project: no map, ids stay valid, pass through unchanged.
+			if (layer.roleFields) {
+				const roleMap = idMaps['roles'];
+				for (const field of layer.roleFields) {
+					if (roleMap) data[field] = remapIdArray(data[field], roleMap);
+					else if (options?.clearRoles) data[field] = [];
+				}
 			}
 
 			data.id = newId;
@@ -425,6 +466,40 @@ async function processLayers(
 // Workflow Duplication (used by workflows page)
 // ---------------------------------------------------------------------------
 
+/**
+ * Build an old-role-id -> target-role-id map for a cross-project copy. Source
+ * roles are matched to target-project roles by `name`; any source role with no
+ * same-named target role is created. This lets role references survive a
+ * cross-project copy instead of being wiped and redone by hand.
+ */
+export async function resolveRolesByName(
+	pb: PocketBase,
+	sourceProjectId: string,
+	targetProjectId: string
+): Promise<Map<string, string>> {
+	const [sourceRoles, targetRoles] = await Promise.all([
+		pb.collection('roles').getFullList({ filter: `project_id = "${sourceProjectId}"` }),
+		pb.collection('roles').getFullList({ filter: `project_id = "${targetProjectId}"` })
+	]);
+	const targetByName = new Map<string, string>(targetRoles.map((r: any) => [r.name, r.id]));
+	const map = new Map<string, string>();
+	for (const role of sourceRoles) {
+		let targetId = targetByName.get(role.name);
+		if (!targetId) {
+			targetId = generateId();
+			await pb.collection('roles').create({
+				id: targetId,
+				project_id: targetProjectId,
+				name: role.name,
+				description: role.description || null
+			});
+			targetByName.set(role.name, targetId);
+		}
+		map.set(role.id, targetId);
+	}
+	return map;
+}
+
 export async function duplicateWorkflow(
 	pb: PocketBase,
 	sourceWorkflowId: string,
@@ -433,26 +508,30 @@ export async function duplicateWorkflow(
 	const source = await pb.collection('workflows').getOne(sourceWorkflowId);
 	const crossProject = source.project_id !== targetProjectId;
 
-	const newWorkflowId = generateId();
-	const wfData: any = stripSystemFields(source);
+	const idMaps: IdMaps = {
+		workflow: new Map([[sourceWorkflowId, generateId()]])
+	};
+	// Cross-project: roles live in a different project, so match them by name in
+	// the target (creating any that are missing) and remap every role reference
+	// through that map instead of clearing it.
+	if (crossProject) {
+		idMaps['roles'] = await resolveRolesByName(pb, source.project_id, targetProjectId);
+	}
+
+	const newWorkflowId = idMaps['workflow'].get(sourceWorkflowId)!;
+	let wfData: any = stripSystemFields(source);
 	delete wfData.id;
 	wfData.project_id = targetProjectId;
 	wfData.name = `Copy of ${source.name}`;
 	wfData.is_active = false;
-	if (crossProject) {
-		wfData.entry_allowed_roles = [];
-		wfData.visible_to_roles = [];
+	if (idMaps['roles']) {
+		wfData.entry_allowed_roles = remapIdArray(wfData.entry_allowed_roles, idMaps['roles']);
+		wfData.visible_to_roles = remapIdArray(wfData.visible_to_roles, idMaps['roles']);
 	}
 	wfData.id = newWorkflowId;
 	await pb.collection('workflows').create(wfData);
 
-	const idMaps: IdMaps = {
-		workflow: new Map([[sourceWorkflowId, newWorkflowId]])
-	};
-
-	await processLayers(pb, WORKFLOW_LAYERS, sourceWorkflowId, 'workflow_id', idMaps, {
-		clearRoles: crossProject
-	});
+	await processLayers(pb, WORKFLOW_LAYERS, sourceWorkflowId, 'workflow_id', idMaps);
 
 	return newWorkflowId;
 }

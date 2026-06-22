@@ -181,22 +181,42 @@ function remapAutomationRefs(
 // Serialize:  state -> WorkflowPart
 // ===========================================================================
 
+/** Role-array keys inside a custom_table_selector's field_options. Held as role
+ * NAMES in the portable part so they survive a cross-project copy. */
+const ENTITY_SELECTOR_ROLE_KEYS = ['allowed_roles', 'self_select_roles', 'any_select_roles'];
+
 function defOptionsToLabels(
 	def: WorkflowFieldDef,
 	defLabelOf: (id: string) => string | undefined,
-	stageKeyOf: (id: string) => string | undefined
+	stageKeyOf: (id: string) => string | undefined,
+	roleNamesOf: (ids?: string[] | null) => string[]
 ): Record<string, unknown> | null {
 	const opts = def.field_options;
 	if (!opts) return null;
-	if (def.field_type !== 'smart_dropdown') return opts;
-	const next: Record<string, unknown> = { ...opts };
-	const src = next.source_field;
-	if (typeof src === 'string' && src) next.source_field_label = defLabelOf(src) ?? src;
-	delete next.source_field;
-	const stage = next.source_stage_id;
-	if (typeof stage === 'string' && stage) next.source_stage = stageKeyOf(stage) ?? stage;
-	delete next.source_stage_id;
-	return next;
+
+	if (def.field_type === 'smart_dropdown') {
+		const next: Record<string, unknown> = { ...opts };
+		const src = next.source_field;
+		if (typeof src === 'string' && src) next.source_field_label = defLabelOf(src) ?? src;
+		delete next.source_field;
+		const stage = next.source_stage_id;
+		if (typeof stage === 'string' && stage) next.source_stage = stageKeyOf(stage) ?? stage;
+		delete next.source_stage_id;
+		return next;
+	}
+
+	if (def.field_type === 'custom_table_selector') {
+		// custom_table_id / marker_category_id stay as ids: valid for in-project
+		// copies, and the builder has no project-table registry to name-resolve
+		// them. Only the role arrays are made portable (by name).
+		const next: Record<string, unknown> = { ...opts };
+		for (const key of ENTITY_SELECTOR_ROLE_KEYS) {
+			if (Array.isArray(next[key])) next[key] = roleNamesOf(next[key] as string[]);
+		}
+		return next;
+	}
+
+	return opts;
 }
 
 function logicToLabels(
@@ -235,7 +255,9 @@ export function buildWorkflowPart(state: WorkflowBuilderState, opts: Opts = {}):
 		field_type: d.field_type,
 		...(d.write_mode && d.write_mode !== 'singleton' ? { write_mode: d.write_mode } : {}),
 		...(d.output_type ? { output_type: d.output_type } : {}),
-		field_options: defOptionsToLabels(d, defLabelOf, (id) => stageKeyOf(id)),
+		field_options: defOptionsToLabels(d, defLabelOf, (id) => stageKeyOf(id), (ids) =>
+			roles.toNames(ids)
+		),
 		validation_rules: d.validation_rules ?? null,
 		...(d.compute_expression ? { compute_expression: d.compute_expression } : {}),
 		...(d.view_roles?.length ? { view_roles: roles.toNames(d.view_roles) } : {}),
@@ -461,6 +483,12 @@ export function applyWorkflowPart(
 		const opts2 = pd.field_options ? { ...pd.field_options } : null;
 		if (pd.field_type === 'smart_dropdown' && opts2 && 'source_field_label' in opts2) {
 			smartDefs.push({ label: pd.label, options: opts2 });
+		}
+		if (pd.field_type === 'custom_table_selector' && opts2) {
+			// Reverse of defOptionsToLabels: role names -> ids in the target project.
+			for (const key of ENTITY_SELECTOR_ROLE_KEYS) {
+				if (Array.isArray(opts2[key])) opts2[key] = rolesToIds(opts2[key] as string[]);
+			}
 		}
 		const patch: Partial<WorkflowFieldDef> = {
 			label: pd.label,

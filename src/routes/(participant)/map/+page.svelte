@@ -76,6 +76,7 @@
 		description?: string;
 		entry_button_label?: string;
 		entry_allowed_roles?: string[];
+		visible_to_roles?: string[];
 		filter_value_icons?: Record<string, any>;
 	}
 
@@ -545,7 +546,13 @@
 
 	const quotaReached = $derived(myMaxInstances > 0 && myInstanceCount >= myMaxInstances);
 
-	// Workflows with entry labels derived from connections, filtered by participant role
+	// Display list: every workflow the participant may VIEW (visible_to_roles),
+	// with entry labels derived from connections. Used by the map markers, geometry
+	// shapes, recents, filters and cluster grouping to resolve each instance's
+	// workflow for styling & labels. Instance visibility is already enforced
+	// server-side via visible_to_roles on workflow_instances; this mirrors it.
+	// IMPORTANT: do NOT filter this by entry_allowed_roles (a *create* permission) --
+	// a view-only role must still see (and have styled) entries it cannot create.
 	const workflows: Workflow[] = $derived.by(() => {
 		const entryLabelByWorkflow = new Map<string, string>();
 		for (const conn of connectionsLive.records) {
@@ -555,7 +562,7 @@
 		}
 		return (workflowsLive.records as any[])
 			.filter(wf => {
-				const roles = wf.entry_allowed_roles;
+				const roles = wf.visible_to_roles;
 				return !roles || roles.length === 0 || participantRoleIds.some(rid => roles.includes(rid));
 			})
 			.map(wf => ({
@@ -569,6 +576,15 @@
 				return (a.name ?? '').localeCompare(b.name ?? '');
 			});
 	});
+
+	// Subset of viewable workflows this participant may CREATE (entry_allowed_roles).
+	// Drives the "+" WorkflowSelector ONLY -- never the display path above.
+	const creatableWorkflows: Workflow[] = $derived(
+		workflows.filter(wf => {
+			const roles = wf.entry_allowed_roles;
+			return !roles || roles.length === 0 || participantRoleIds.some(rid => roles.includes(rid));
+		})
+	);
 
 	// Visual key registry for cluster donut colors (shared between MapCanvas and ClusterDetailModule)
 	const visualKeyRegistry: VisualKeyRegistry = $derived.by(() => {
@@ -2000,7 +2016,7 @@
 	     Internally portals to document.body so it works regardless of where it
 	     sits in the tree. -->
 	<WorkflowSelector
-		{workflows}
+		workflows={creatableWorkflows}
 		{map}
 		bind:isOpen={workflowSelectorOpen}
 		bind:isSelectingCoordinates
