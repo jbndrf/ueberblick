@@ -116,6 +116,9 @@ export interface ToolsForm {
 	/** Per-page metadata (title + description). Index in array is irrelevant;
 	 *  each entry carries its own `page` number. */
 	pages?: FormPage[];
+	/** AND-ed availability clauses. Empty/missing = always available. Gated
+	 *  client-side on top of scope (global/stage/connection) + role gating. */
+	sentry?: SentryClause[] | null;
 	/**
 	 * Protocol-local inline fields. Only populated when this form backs a
 	 * protocol tool and the admin added fields that should NOT enter the
@@ -453,6 +456,9 @@ export interface ToolsEdit {
 	 * - If stage_id is set: USED (defines the button appearance)
 	 */
 	visual_config?: VisualConfig;
+	/** AND-ed availability clauses. Empty/missing = always available. Gated
+	 *  client-side on top of scope (global/stage/connection) + role gating. */
+	sentry?: SentryClause[] | null;
 }
 
 // =============================================================================
@@ -472,6 +478,9 @@ export interface ToolsProtocol {
 	protocol_form_id?: string;
 	allowed_roles: string[];
 	visual_config?: VisualConfig;
+	/** AND-ed availability clauses. Empty/missing = always available. Gated
+	 *  client-side on top of scope (global/stage/connection) + role gating. */
+	sentry?: SentryClause[] | null;
 }
 
 // =============================================================================

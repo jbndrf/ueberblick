@@ -222,6 +222,14 @@ export function buildWorkflowPart(state: WorkflowBuilderState, opts: Opts = {}):
 	for (const d of defs) defLabelById.set(d.id, d.label);
 	const defLabelOf = (id: string) => defLabelById.get(id);
 
+	// Sentry clauses are portable by field LABEL (not id), matching connections.
+	const sentryToPart = (sentry: SentryClause[] | null | undefined) =>
+		(sentry ?? []).map((s) => ({
+			field: defLabelOf(s.field_def_id) ?? s.field_def_id,
+			op: s.op,
+			...(s.value !== undefined ? { value: s.value } : {})
+		}));
+
 	const fieldDefs: WorkflowFieldDefPart[] = defs.map((d) => ({
 		label: d.label,
 		field_type: d.field_type,
@@ -255,15 +263,7 @@ export function buildWorkflowPart(state: WorkflowBuilderState, opts: Opts = {}):
 			...(vc?.requires_confirmation ? { requires_confirmation: true } : {}),
 			...(vc?.confirmation_message ? { confirmation_message: vc.confirmation_message } : {}),
 			...(c.allowed_roles?.length ? { allowed_roles: roles.toNames(c.allowed_roles) } : {}),
-			...(c.sentry?.length
-				? {
-						sentry: c.sentry.map((s) => ({
-							field: defLabelOf(s.field_def_id) ?? s.field_def_id,
-							op: s.op,
-							...(s.value !== undefined ? { value: s.value } : {})
-						}))
-					}
-				: {})
+			...(c.sentry?.length ? { sentry: sentryToPart(c.sentry) } : {})
 		};
 	});
 
@@ -313,6 +313,7 @@ export function buildWorkflowPart(state: WorkflowBuilderState, opts: Opts = {}):
 				? { allowed_roles: roles.toNames(f.allowed_roles) }
 				: {}),
 			...(attach.type !== 'connection' && vc ? { visual_config: vc } : {}),
+			...(f.sentry?.length ? { sentry: sentryToPart(f.sentry) } : {}),
 			fields: formFieldsOf(f.id)
 		});
 	}
@@ -327,7 +328,8 @@ export function buildWorkflowPart(state: WorkflowBuilderState, opts: Opts = {}):
 			editable_fields: (e.editable_fields ?? []).map((id) => defLabelOf(id) ?? id),
 			...(e.self_edit_roles?.length ? { self_edit_roles: roles.toNames(e.self_edit_roles) } : {}),
 			...(e.any_edit_roles?.length ? { any_edit_roles: roles.toNames(e.any_edit_roles) } : {}),
-			...(visualOf(e.visual_config) ? { visual_config: visualOf(e.visual_config) } : {})
+			...(visualOf(e.visual_config) ? { visual_config: visualOf(e.visual_config) } : {}),
+			...(e.sentry?.length ? { sentry: sentryToPart(e.sentry) } : {})
 		};
 	});
 
@@ -355,7 +357,8 @@ export function buildWorkflowPart(state: WorkflowBuilderState, opts: Opts = {}):
 			editable_fields: (p.editable_fields ?? []).map((id) => defLabelOf(id) ?? id),
 			...(Object.keys(prefill).length ? { prefill_config: prefill } : {}),
 			...(p.allowed_roles?.length ? { allowed_roles: roles.toNames(p.allowed_roles) } : {}),
-			...(visualOf(p.visual_config) ? { visual_config: visualOf(p.visual_config) } : {})
+			...(visualOf(p.visual_config) ? { visual_config: visualOf(p.visual_config) } : {}),
+			...(p.sentry?.length ? { sentry: sentryToPart(p.sentry) } : {})
 		};
 		if (p.protocol_form_id) {
 			const bf = state.getFormById(p.protocol_form_id)?.data;
@@ -554,24 +557,7 @@ export function applyWorkflowPart(
 			visual_config: connVisual(pc),
 			...(pc.allowed_roles !== undefined ? { allowed_roles: rolesToIds(pc.allowed_roles) } : {}),
 			...(pc.sentry !== undefined
-				? {
-						sentry: pc.sentry
-							.map((s): SentryClause | null => {
-								const fid = fieldLabelToId(s.field);
-								if (!fid) {
-									warnings.push(
-										`Sentry on "${pc.action}" references unknown field "${s.field}" — dropped.`
-									);
-									return null;
-								}
-								return {
-									field_def_id: fid,
-									op: s.op,
-									...(s.value !== undefined ? { value: s.value } : {})
-								};
-							})
-							.filter((x): x is SentryClause => x !== null)
-					}
+				? { sentry: partSentryToClauses(pc.sentry, { fieldLabelToId, warnings, label: pc.action }) }
 				: {})
 		};
 		const existingId = connByIdentity.get(ident);
@@ -646,6 +632,8 @@ export function applyWorkflowPart(
 				init.visual_config = pf.visual_config;
 				init.allowed_roles = pf.allowed_roles ? rolesToIds(pf.allowed_roles) : [];
 			}
+			if (pf.sentry !== undefined)
+				init.sentry = partSentryToClauses(pf.sentry, { fieldLabelToId, warnings, label: pf.name });
 			state.updateForm(formId, init);
 		} else {
 			const upd: Partial<ToolsForm> = { pages: pf.pages ?? [] };
@@ -653,6 +641,8 @@ export function applyWorkflowPart(
 				if (pf.allowed_roles !== undefined) upd.allowed_roles = rolesToIds(pf.allowed_roles);
 				if (pf.visual_config !== undefined) upd.visual_config = pf.visual_config;
 			}
+			if (pf.sentry !== undefined)
+				upd.sentry = partSentryToClauses(pf.sentry, { fieldLabelToId, warnings, label: pf.name });
 			state.updateForm(formId, upd);
 		}
 		reconcileFormFields(state, formId, pf.fields, fieldLabelToId, pf.name, warnings);
@@ -696,7 +686,10 @@ export function applyWorkflowPart(
 				...(pe.any_edit_roles !== undefined
 					? { any_edit_roles: rolesToIds(pe.any_edit_roles) }
 					: {}),
-				...(pe.visual_config !== undefined ? { visual_config: pe.visual_config } : {})
+				...(pe.visual_config !== undefined ? { visual_config: pe.visual_config } : {}),
+				...(pe.sentry !== undefined
+					? { sentry: partSentryToClauses(pe.sentry, { fieldLabelToId, warnings, label: pe.name }) }
+					: {})
 			});
 		}
 		for (const [key, id] of existing) if (!seen.has(key)) state.deleteEditTool(id);
@@ -804,6 +797,32 @@ export function applyWorkflowPart(
 // ---------------------------------------------------------------------------
 // Apply sub-helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Convert a label-based part sentry into id-based `SentryClause[]`. Clauses
+ * referencing an unknown field label are dropped with a warning. Returns
+ * `undefined` when the part omitted `sentry` (leave unchanged), otherwise the
+ * resolved clauses (possibly empty → caller may store as null).
+ */
+function partSentryToClauses(
+	sentry: Array<{ field: string; op: SentryClause['op']; value?: string }> | undefined,
+	ctx: { fieldLabelToId: (label: string) => string | undefined; warnings: string[]; label: string }
+): SentryClause[] | null | undefined {
+	if (sentry === undefined) return undefined;
+	const out = sentry
+		.map((s): SentryClause | null => {
+			const fid = ctx.fieldLabelToId(s.field);
+			if (!fid) {
+				ctx.warnings.push(
+					`Sentry on "${ctx.label}" references unknown field "${s.field}" — dropped.`
+				);
+				return null;
+			}
+			return { field_def_id: fid, op: s.op, ...(s.value !== undefined ? { value: s.value } : {}) };
+		})
+		.filter((x): x is SentryClause => x !== null);
+	return out.length ? out : null;
+}
 
 function connVisual(pc: WorkflowConnectionPart): VisualConfig {
 	return {
@@ -938,7 +957,10 @@ function applyProtocolTool(
 		prefill_config: prefill,
 		...(pp.attach.type === 'stages' ? { stage_id: stageIds, is_global: isGlobal } : {}),
 		...(pp.allowed_roles !== undefined ? { allowed_roles: rolesToIds(pp.allowed_roles) } : {}),
-		...(pp.visual_config !== undefined ? { visual_config: pp.visual_config } : {})
+		...(pp.visual_config !== undefined ? { visual_config: pp.visual_config } : {}),
+		...(pp.sentry !== undefined
+			? { sentry: partSentryToClauses(pp.sentry, { fieldLabelToId, warnings, label: pp.name }) }
+			: {})
 	});
 
 	// Backing form. The builder creates it detached from any connection:

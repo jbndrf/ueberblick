@@ -205,6 +205,8 @@ export const workflowFormPartSchema = z.object({
 	/** Used only for stage/global forms; connection forms inherit from the connection. */
 	allowed_roles: roleNames.optional(),
 	visual_config: visualConfigSchema,
+	/** AND-ed availability clauses. Omit/empty = always available. */
+	sentry: z.array(sentryClausePartSchema).optional(),
 	fields: z.array(workflowFormFieldSchema)
 });
 
@@ -218,7 +220,9 @@ export const workflowEditToolPartSchema = z.object({
 	editable_fields: z.array(z.string()),
 	self_edit_roles: roleNames.optional(),
 	any_edit_roles: roleNames.optional(),
-	visual_config: visualConfigSchema
+	visual_config: visualConfigSchema,
+	/** AND-ed availability clauses. Omit/empty = always available. */
+	sentry: z.array(sentryClausePartSchema).optional()
 });
 
 // --- Protocol tools (+ their backing form) ---------------------------------
@@ -271,6 +275,8 @@ export const workflowProtocolToolPartSchema = z.object({
 	prefill_config: z.record(z.string(), z.boolean()).optional(),
 	allowed_roles: roleNames.optional(),
 	visual_config: visualConfigSchema,
+	/** AND-ed availability clauses. Omit/empty = always available. */
+	sentry: z.array(sentryClausePartSchema).optional(),
 	form: protocolFormPartSchema.optional()
 });
 

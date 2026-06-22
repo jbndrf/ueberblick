@@ -368,6 +368,11 @@ export interface ToolForm {
 	description: string;
 	allowed_roles: string[];
 	visual_config: Record<string, unknown> | null;
+	/**
+	 * AND-ed availability clauses. Empty/null = always available. Gated
+	 * client-side on top of scope + role gating, same as connection sentries.
+	 */
+	sentry: SentryClause[] | null;
 	/** Per-page metadata (title + description) for multi-page forms. */
 	pages: FormPage[] | null;
 	/**

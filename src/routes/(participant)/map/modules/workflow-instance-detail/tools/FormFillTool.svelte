@@ -10,9 +10,13 @@
 	import { FormRenderer } from '$lib/components/form-renderer';
 	import { Button } from '$lib/components/ui/button';
 	import * as Tabs from '$lib/components/ui/tabs';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import { ChevronLeft, ChevronRight, Send, Loader2 } from '@lucide/svelte';
 	import {
 		commonCancel,
+		participantFormClearTitle,
+		participantFormClearDescription,
+		participantFormClearConfirm,
 		participantFormFillToolBack,
 		participantFormFillToolCreateEntry,
 		participantFormFillToolError,
@@ -34,9 +38,11 @@
 		canGoPrevious,
 		validateAll,
 		pruneHiddenValues,
+		computeFieldsToClear,
 		getPages,
 		errorsByPage,
-		type FormFillState
+		type FormFillState,
+		type FieldToClear
 	} from './form-state';
 	import type { FormFieldWithValue } from '$lib/components/form-renderer';
 	import type { FieldValue } from '../state.svelte';
@@ -58,13 +64,27 @@
 		existingFieldValues?: FieldValue[];
 		/** Participant role ids — used to hide fields the role can't view. */
 		participantRoleIds?: string[];
-		/** Called when form is submitted successfully */
-		onSubmit: (values: Record<string, unknown>, connectionId: string) => Promise<void>;
+		/** Called when form is submitted successfully. `clearedFieldIds` are field
+		 *  def ids whose previously-saved value must be cleared (tombstoned)
+		 *  because they no longer apply or were emptied. */
+		onSubmit: (
+			values: Record<string, unknown>,
+			connectionId: string,
+			clearedFieldIds: string[]
+		) => Promise<void>;
 		/** Called when user cancels/closes the form */
 		onCancel: () => void;
 	}
 
-	let { workflowId, connectionId, formId, existingFieldValues, participantRoleIds = [], onSubmit, onCancel }: Props = $props();
+	let {
+		workflowId,
+		connectionId,
+		formId,
+		existingFieldValues,
+		participantRoleIds = [],
+		onSubmit,
+		onCancel
+	}: Props = $props();
 
 	const gateway = getParticipantGateway();
 
@@ -75,6 +95,11 @@
 	let formState = $state<FormFillState | null>(null);
 	let isSubmitting = $state(false);
 	let fileChanges = $state<Record<string, File[]>>({});
+
+	// Fields whose saved value will be cleared on save (no longer apply / emptied).
+	// When non-empty, a confirmation dialog is shown before the actual submit.
+	let pendingClear = $state<FieldToClear[]>([]);
+	let showClearDialog = $state(false);
 
 	// ==========================================================================
 	// Derived
@@ -107,9 +132,11 @@
 	// not by array position, or a stale earlier row can win. Mirrors the
 	// newest-wins semantics of WorkflowInstanceDetailState.indexFieldValues.
 	const priorValues = $derived.by((): Record<string, unknown> => {
+		// Collapse to the newest row per field — INCLUDING empty rows. An empty
+		// newest row is a tombstone (the field was cleared); skipping empties here
+		// would let an older non-empty row resurface a stale value.
 		const newestByKey: Record<string, FieldValue> = {};
 		for (const fv of existingFieldValues ?? []) {
-			if (!fv.value) continue;
 			const key = (fv as { field_def_id?: string }).field_def_id;
 			if (!key) continue;
 			const prev = newestByKey[key];
@@ -119,11 +146,10 @@
 		}
 		const out: Record<string, unknown> = {};
 		for (const [key, fv] of Object.entries(newestByKey)) {
+			if (!fv.value) continue; // cleared (tombstone) → no current value
 			try {
 				out[key] =
-					fv.value.startsWith('[') || fv.value.startsWith('{')
-						? JSON.parse(fv.value)
-						: fv.value;
+					fv.value.startsWith('[') || fv.value.startsWith('{') ? JSON.parse(fv.value) : fv.value;
 			} catch {
 				out[key] = fv.value;
 			}
@@ -134,16 +160,18 @@
 	// Values passed to FormRenderer: prior context overlaid with this form's
 	// own collected values. formState.values keeps only the form's own data so
 	// submit logic remains unchanged.
-	const renderValues = $derived.by((): Record<string, unknown> => ({
-		...priorValues,
-		...(formState?.values ?? {})
-	}));
+	const renderValues = $derived.by(
+		(): Record<string, unknown> => ({
+			...priorValues,
+			...(formState?.values ?? {})
+		})
+	);
 
 	// Convert FormFillState fields to FormFieldWithValue format
 	const formFields = $derived.by((): FormFieldWithValue[] => {
 		const state = formState;
 		if (!state) return [];
-		return state.fields.map(field => ({
+		return state.fields.map((field) => ({
 			...field,
 			value: state.values[field.id]
 		}));
@@ -193,9 +221,7 @@
 
 		const updated = { ...formState.values, [fieldId]: value };
 		const pruned = pruneHiddenValues(formState.fields, updated, priorValues);
-		const newErrors = formState.errors.filter(
-			e => e.fieldId !== fieldId && e.fieldId in pruned
-		);
+		const newErrors = formState.errors.filter((e) => e.fieldId !== fieldId && e.fieldId in pruned);
 		formState = { ...formState, values: pruned, errors: newErrors };
 	}
 
@@ -241,8 +267,8 @@
 		if (errors.length > 0) {
 			// Go to first page with errors
 			for (let page = 1; page <= totalPages; page++) {
-				const pageErrors = errors.filter(e => {
-					const field = formState!.fields.find(f => f.id === e.fieldId);
+				const pageErrors = errors.filter((e) => {
+					const field = formState!.fields.find((f) => f.id === e.fieldId);
 					return field && (field.page || 1) === page;
 				});
 				if (pageErrors.length > 0) {
@@ -253,12 +279,39 @@
 			return;
 		}
 
+		// Determine which saved field values would be cleared by this save (hidden
+		// by conditional logic or actively emptied). If any, confirm first so the
+		// user knows data is being removed.
+		const toClear = computeFieldsToClear(
+			formState.fields,
+			formState.values,
+			priorValues,
+			renderValues
+		);
+		if (toClear.length > 0) {
+			pendingClear = toClear;
+			showClearDialog = true;
+			return;
+		}
+
+		await doSubmit([]);
+	}
+
+	async function confirmClear() {
+		showClearDialog = false;
+		const ids = pendingClear.map((f) => f.id);
+		pendingClear = [];
+		await doSubmit(ids);
+	}
+
+	async function doSubmit(clearedFieldIds: string[]) {
+		if (!formState || isSubmitting) return;
 		isSubmitting = true;
 
 		try {
 			// Merge file changes into values
 			const finalValues = { ...formState.values, ...fileChanges };
-			await onSubmit(finalValues, formState.connectionId);
+			await onSubmit(finalValues, formState.connectionId, clearedFieldIds);
 		} catch (err) {
 			console.error('Form submission failed:', err);
 		} finally {
@@ -269,18 +322,22 @@
 
 {#snippet contentSnippet()}
 	{#if formState?.isLoading}
-		<div class="flex-1 flex items-center justify-center py-12">
+		<div class="flex flex-1 items-center justify-center py-12">
 			<div class="text-center">
 				<div
-					class="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2"
+					class="mx-auto mb-2 h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent"
 				></div>
-				<p class="text-sm text-muted-foreground">{participantFormFillToolLoading?.() ?? 'Loading form...'}</p>
+				<p class="text-sm text-muted-foreground">
+					{participantFormFillToolLoading?.() ?? 'Loading form...'}
+				</p>
 			</div>
 		</div>
 	{:else if formState?.loadError}
-		<div class="flex-1 flex items-center justify-center p-4 py-12">
+		<div class="flex flex-1 items-center justify-center p-4 py-12">
 			<div class="text-center">
-				<p class="text-sm text-destructive font-medium mb-1">{participantFormFillToolError?.() ?? 'Error'}</p>
+				<p class="mb-1 text-sm font-medium text-destructive">
+					{participantFormFillToolError?.() ?? 'Error'}
+				</p>
 				<p class="text-xs text-muted-foreground">{formState.loadError}</p>
 			</div>
 		</div>
@@ -292,15 +349,16 @@
 					onValueChange={(v) => handlePageChange(Number(v))}
 					class="mb-4"
 				>
-					<Tabs.List class="w-full overflow-x-auto flex-nowrap">
+					<Tabs.List class="w-full flex-nowrap overflow-x-auto">
 						{#each pages as p (p.page)}
 							{@const missing = pageErrorCounts.get(p.page) ?? 0}
-							<Tabs.Trigger value={String(p.page)} class="whitespace-nowrap text-xs">
+							<Tabs.Trigger value={String(p.page)} class="text-xs whitespace-nowrap">
 								<span>{p.title}</span>
 								{#if missing > 0}
 									<span
-										class="ml-1.5 inline-flex items-center justify-center rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-medium text-destructive-foreground"
-										aria-label={participantFormFillToolTabMissingCount?.({ count: missing }) ?? `${missing} missing`}
+										class="text-destructive-foreground ml-1.5 inline-flex items-center justify-center rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-medium"
+										aria-label={participantFormFillToolTabMissingCount?.({ count: missing }) ??
+											`${missing} missing`}
 									>
 										{missing}
 									</span>
@@ -317,15 +375,17 @@
 				errors={errorRecord}
 				pages={formState?.form?.pages ?? []}
 				paginated={totalPages > 1}
-				currentPage={currentPage}
+				{currentPage}
 				onValueChange={handleValueChange}
 				onFileChange={handleFileChange}
 				onPageChange={handlePageChange}
 			/>
 		</div>
 	{:else if formState}
-		<div class="flex-1 flex flex-col items-center justify-center p-4 py-12">
-			<p class="text-sm text-muted-foreground mb-4">{participantFormFillToolNoFields?.() ?? 'No additional information required.'}</p>
+		<div class="flex flex-1 flex-col items-center justify-center p-4 py-12">
+			<p class="mb-4 text-sm text-muted-foreground">
+				{participantFormFillToolNoFields?.() ?? 'No additional information required.'}
+			</p>
 		</div>
 	{/if}
 {/snippet}
@@ -334,12 +394,14 @@
 	<div class="p-4">
 		<!-- Page Indicator: suppressed when tab strip is rendered to avoid two indicators competing. -->
 		{#if totalPages > 1 && !showTabs}
-			<div class="flex justify-center gap-1.5 mb-3">
-				{#each Array(totalPages) as _, i}
+			<div class="mb-3 flex justify-center gap-1.5">
+				{#each Array.from({ length: totalPages }, (_, i) => i) as i (i)}
 					<button
-						class="w-2 h-2 rounded-full transition-colors {currentPage === i + 1 ? 'bg-primary' : 'bg-muted-foreground/30'}"
+						class="h-2 w-2 rounded-full transition-colors {currentPage === i + 1
+							? 'bg-primary'
+							: 'bg-muted-foreground/30'}"
 						onclick={() => handlePageChange(i + 1)}
-						aria-label={(participantFormFillToolGoToPage?.({ page: i + 1 }) ?? `Go to page ${i + 1}`)}
+						aria-label={participantFormFillToolGoToPage?.({ page: i + 1 }) ?? `Go to page ${i + 1}`}
 					></button>
 				{/each}
 			</div>
@@ -354,41 +416,30 @@
 					disabled={isSubmitting}
 					class="flex-1"
 				>
-					<ChevronLeft class="w-4 h-4 mr-1" />
+					<ChevronLeft class="mr-1 h-4 w-4" />
 					{participantFormFillToolBack?.() ?? 'Back'}
 				</Button>
 			{:else}
-				<Button
-					variant="outline"
-					onclick={onCancel}
-					disabled={isSubmitting}
-					class="flex-1"
-				>
+				<Button variant="outline" onclick={onCancel} disabled={isSubmitting} class="flex-1">
 					{commonCancel?.() ?? 'Cancel'}
 				</Button>
 			{/if}
 
 			{#if canNext}
-				<Button
-					onclick={handleNextPage}
-					disabled={isSubmitting}
-					class="flex-1"
-				>
+				<Button onclick={handleNextPage} disabled={isSubmitting} class="flex-1">
 					{participantFormFillToolNext?.() ?? 'Next'}
-					<ChevronRight class="w-4 h-4 ml-1" />
+					<ChevronRight class="ml-1 h-4 w-4" />
 				</Button>
 			{:else}
-				<Button
-					onclick={handleSubmit}
-					disabled={isSubmitting}
-					class="flex-1"
-				>
+				<Button onclick={handleSubmit} disabled={isSubmitting} class="flex-1">
 					{#if isSubmitting}
-						<Loader2 class="w-4 h-4 mr-2 animate-spin" />
+						<Loader2 class="mr-2 h-4 w-4 animate-spin" />
 						{participantFormFillToolSubmitting?.() ?? 'Submitting...'}
 					{:else}
-						<Send class="w-4 h-4 mr-2" />
-						{hasFields ? (participantFormFillToolSubmit?.() ?? 'Submit') : (participantFormFillToolCreateEntry?.() ?? 'Create Entry')}
+						<Send class="mr-2 h-4 w-4" />
+						{hasFields
+							? (participantFormFillToolSubmit?.() ?? 'Submit')
+							: (participantFormFillToolCreateEntry?.() ?? 'Create Entry')}
 					{/if}
 				</Button>
 			{/if}
@@ -397,11 +448,39 @@
 {/snippet}
 
 <!-- Render content - parent (ModuleShell) handles scrolling -->
-<div class="flex flex-col min-h-full">
+<div class="flex min-h-full flex-col">
 	<div class="flex-1">
 		{@render contentSnippet()}
 	</div>
-	<div class="sticky bottom-0 bg-background border-t border-border">
+	<div class="sticky bottom-0 border-t border-border bg-background">
 		{@render footerSnippet()}
 	</div>
 </div>
+
+<AlertDialog.Root bind:open={showClearDialog}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>
+				{participantFormClearTitle?.() ?? 'Fields will be cleared'}
+			</AlertDialog.Title>
+			<AlertDialog.Description>
+				{participantFormClearDescription?.() ??
+					'The following fields no longer apply and will be cleared when you save:'}
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<ul class="my-2 list-disc pl-5 text-sm text-foreground">
+			{#each pendingClear as field (field.id)}
+				<li>{field.label}</li>
+			{/each}
+		</ul>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel>{commonCancel?.() ?? 'Cancel'}</AlertDialog.Cancel>
+			<AlertDialog.Action
+				class="text-destructive-foreground bg-destructive hover:bg-destructive/90"
+				onclick={confirmClear}
+			>
+				{participantFormClearConfirm?.() ?? 'Clear & save'}
+			</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>

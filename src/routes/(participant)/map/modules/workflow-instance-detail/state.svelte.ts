@@ -10,8 +10,14 @@ import { onDataChange } from '$lib/participant-state/gateway.svelte';
 import type { FieldValueCache } from '$lib/participant-state/field-value-cache.svelte';
 import { getPocketBase } from '$lib/pocketbase';
 import type { Snippet } from 'svelte';
-import type { FieldDef, FieldDisplayConfig, FieldValue as TFieldValue, ToolFormFieldRef, WriteMode } from '$lib/participant-state/types';
-import { connectionIsAvailable } from '$lib/workflow-builder/sentry';
+import type {
+	FieldDef,
+	FieldDisplayConfig,
+	FieldValue as TFieldValue,
+	ToolFormFieldRef,
+	WriteMode
+} from '$lib/participant-state/types';
+import { connectionIsAvailable, sentryPasses } from '$lib/workflow-builder/sentry';
 import type { ToolUsageRecord } from '$lib/utils/activity-sections';
 
 /** Tab key for the default "Data" tab — field defs with no display_config. */
@@ -65,6 +71,8 @@ export interface ToolForm {
 	tool_order?: number;
 	allowed_roles: string[];
 	visual_config?: Record<string, unknown>;
+	/** AND-ed availability clauses. null/[] = always available. */
+	sentry?: import('$lib/participant-state/types').SentryClause[] | null;
 	pages?: import('$lib/participant-state/types').FormPage[] | null;
 	local_fields?: import('$lib/participant-state/types').ProtocolLocalField[] | null;
 }
@@ -79,10 +87,10 @@ export interface ToolForm {
  * read/write path in the detail module keys field values by the def id.
  */
 export interface FormField {
-	id: string;            // field_def.id
-	form_id: string;       // ref.form_id
-	field_def_id: string;  // === id; explicit duplicate for clarity
-	ref_id: string;        // ref.id
+	id: string; // field_def.id
+	form_id: string; // ref.form_id
+	field_def_id: string; // === id; explicit duplicate for clarity
+	ref_id: string; // ref.id
 	field_label: string;
 	field_type: string;
 	field_order: number;
@@ -117,6 +125,8 @@ export interface ToolEdit {
 	self_edit_roles: string[];
 	any_edit_roles: string[];
 	visual_config?: Record<string, unknown>;
+	/** AND-ed availability clauses. null/[] = always available. */
+	sentry?: import('$lib/participant-state/types').SentryClause[] | null;
 }
 
 export interface ToolProtocol {
@@ -130,6 +140,8 @@ export interface ToolProtocol {
 	tool_order?: number;
 	allowed_roles: string[];
 	visual_config?: Record<string, unknown>;
+	/** AND-ed availability clauses. null/[] = always available. */
+	sentry?: import('$lib/participant-state/types').SentryClause[] | null;
 }
 
 export interface ToolQueueItem {
@@ -145,7 +157,6 @@ export interface ActionButton {
 	disabled?: boolean;
 	onClick: () => void;
 }
-
 
 /** Tool-usage audit row. Shape lives in the shared activity-feed module. */
 export type { ToolUsageRecord };
@@ -194,16 +205,16 @@ export class WorkflowInstanceDetailState {
 	currentStage = $derived.by((): WorkflowStage | null => {
 		if (!this.instance) return null;
 		const currentStageId = this.instance.current_stage_id as string;
-		return this.stages.find(s => s.id === currentStageId) || null;
+		return this.stages.find((s) => s.id === currentStageId) || null;
 	});
 
 	availableConnections = $derived.by((): WorkflowConnection[] => {
 		if (!this.instance) return [];
 		const currentStageId = this.instance.current_stage_id as string;
-		const fromStage = this.connections.filter(c => c.from_stage_id === currentStageId);
+		const fromStage = this.connections.filter((c) => c.from_stage_id === currentStageId);
 		// Phase 3: sentry-gate. Connections with no sentry stay always-available.
 		const ctx = { fieldValuesByDefId: this.fieldValuesByDefId };
-		return fromStage.filter(c => connectionIsAvailable(c, ctx));
+		return fromStage.filter((c) => connectionIsAvailable(c, ctx));
 	});
 
 	/**
@@ -224,23 +235,27 @@ export class WorkflowInstanceDetailState {
 	availableStageForms = $derived.by((): ToolForm[] => {
 		if (!this.instance) return [];
 		const currentStageId = this.instance.current_stage_id as string;
+		const ctx = { fieldValuesByDefId: this.fieldValuesByDefId };
 		return this.forms.filter(
-			f =>
+			(f) =>
 				!f.connection_id &&
 				(f.stage_id === currentStageId || !f.stage_id) &&
-				!this.protocolBackingFormIds.has(f.id)
+				!this.protocolBackingFormIds.has(f.id) &&
+				sentryPasses(f.sentry, ctx)
 		);
 	});
 
 	availableStageEditTools = $derived.by((): ToolEdit[] => {
 		if (!this.instance) return [];
 		const currentStageId = this.instance.current_stage_id as string;
+		const ctx = { fieldValuesByDefId: this.fieldValuesByDefId };
 		const seen = new Set<string>();
 		const out: ToolEdit[] = [];
 		for (const t of this.editTools) {
 			if (seen.has(t.id)) continue;
 			if (t.connection_id) continue;
 			if (!(t.is_global || (t.stage_id?.includes(currentStageId) ?? false))) continue;
+			if (!sentryPasses(t.sentry, ctx)) continue;
 			seen.add(t.id);
 			out.push(t);
 		}
@@ -250,7 +265,7 @@ export class WorkflowInstanceDetailState {
 	progressPercentage = $derived.by((): number => {
 		if (!this.stages.length || !this.instance) return 0;
 		const currentStageId = this.instance.current_stage_id as string;
-		const currentIndex = this.stages.findIndex(s => s.id === currentStageId);
+		const currentIndex = this.stages.findIndex((s) => s.id === currentStageId);
 		if (currentIndex < 0) return 0;
 		return Math.round(((currentIndex + 1) / this.stages.length) * 100);
 	});
@@ -258,7 +273,7 @@ export class WorkflowInstanceDetailState {
 	currentStageIndex = $derived.by((): number => {
 		if (!this.stages.length || !this.instance) return 0;
 		const currentStageId = this.instance.current_stage_id as string;
-		const index = this.stages.findIndex(s => s.id === currentStageId);
+		const index = this.stages.findIndex((s) => s.id === currentStageId);
 		return index >= 0 ? index + 1 : 0;
 	});
 
@@ -304,7 +319,8 @@ export class WorkflowInstanceDetailState {
 			if (!WorkflowInstanceDetailState.METADATA_COLLECTIONS.has(detail.collection)) return;
 			// For per-record events on workflow_instances, only react to our row.
 			const detailId = (detail as { id?: string }).id;
-			if (detail.collection === 'workflow_instances' && detailId && detailId !== this.instanceId) return;
+			if (detail.collection === 'workflow_instances' && detailId && detailId !== this.instanceId)
+				return;
 			if (this.metadataRefreshTimer) clearTimeout(this.metadataRefreshTimer);
 			this.metadataRefreshTimer = setTimeout(() => {
 				this.metadataRefreshTimer = null;
@@ -319,7 +335,10 @@ export class WorkflowInstanceDetailState {
 			const key = (fv as any).field_def_id as string | undefined;
 			if (!key) continue;
 			let arr = map.get(key);
-			if (!arr) { arr = []; map.set(key, arr); }
+			if (!arr) {
+				arr = [];
+				map.set(key, arr);
+			}
 			arr.push(fv);
 		}
 		// Sort observation arrays newest-first by recorded_at.
@@ -334,8 +353,8 @@ export class WorkflowInstanceDetailState {
 			const fresh = this.fieldValueCache
 				? this.fieldValueCache.getForInstance(this.instanceId)
 				: await this.gateway.collection('workflow_field_values').getFullList({
-					filter: `instance_id = "${this.instanceId}"`
-				});
+						filter: `instance_id = "${this.instanceId}"`
+					});
 			this.fieldValues = fresh as unknown as FieldValue[];
 			this.fieldValuesByDefId = this.indexFieldValues(this.fieldValues);
 		} catch (error) {
@@ -415,9 +434,11 @@ export class WorkflowInstanceDetailState {
 		const t0 = performance.now();
 
 		try {
-			const instanceResult = await this.gateway.collection('workflow_instances').getOne(this.instanceId, {
-				expand: 'workflow_id'
-			});
+			const instanceResult = await this.gateway
+				.collection('workflow_instances')
+				.getOne(this.instanceId, {
+					expand: 'workflow_id'
+				});
 			const tInstance = performance.now();
 			console.log(`[DetailLoad] getOne instance: ${(tInstance - t0).toFixed(1)}ms`);
 
@@ -428,7 +449,14 @@ export class WorkflowInstanceDetailState {
 			const workflowId = instanceResult.workflow_id as string;
 
 			const p1Start = performance.now();
-			const [stagesResult, connectionsResult, fieldValuesResult, formsResult, toolUsageResult, fieldDefsResult] = await Promise.all([
+			const [
+				stagesResult,
+				connectionsResult,
+				fieldValuesResult,
+				formsResult,
+				toolUsageResult,
+				fieldDefsResult
+			] = await Promise.all([
 				this.gateway.collection('workflow_stages').getFullList({
 					filter: `workflow_id = "${workflowId}"`,
 					sort: 'stage_order'
@@ -436,12 +464,11 @@ export class WorkflowInstanceDetailState {
 				this.gateway.collection('workflow_connections').getFullList({
 					filter: `workflow_id = "${workflowId}"`
 				}),
-				(this.fieldValueCache
+				this.fieldValueCache
 					? Promise.resolve(this.fieldValueCache.getForInstance(this.instanceId))
 					: this.gateway.collection('workflow_field_values').getFullList({
-						filter: `instance_id = "${this.instanceId}"`
-					})
-				),
+							filter: `instance_id = "${this.instanceId}"`
+						}),
 				this.gateway.collection('tools_forms').getFullList({
 					filter: `workflow_id = "${workflowId}"`
 				}),
@@ -462,7 +489,7 @@ export class WorkflowInstanceDetailState {
 			this.fieldValuesByDefId = this.indexFieldValues(this.fieldValues);
 			this.forms = formsResult as unknown as ToolForm[];
 			this.toolUsageHistory = toolUsageResult as unknown as ToolUsageRecord[];
-			this.fieldDefs = (fieldDefsResult as unknown as FieldDef[]).map(d => ({
+			this.fieldDefs = (fieldDefsResult as unknown as FieldDef[]).map((d) => ({
 				...d,
 				field_options: this.parseFieldOptions((d as any).field_options) as any
 			}));
@@ -472,8 +499,8 @@ export class WorkflowInstanceDetailState {
 			}
 			this.fieldDefsById = byId;
 
-			const connectionIds = new Set(this.connections.map(c => c.id));
-			const stageIds = new Set(this.stages.map(s => s.id));
+			const connectionIds = new Set(this.connections.map((c) => c.id));
+			const stageIds = new Set(this.stages.map((s) => s.id));
 
 			const p2Start = performance.now();
 			const [formFieldRefsResult, protocolToolsResult, editToolsResult] = await Promise.all([
@@ -498,13 +525,14 @@ export class WorkflowInstanceDetailState {
 			});
 
 			// Filter refs to those whose form belongs to this workflow.
-			const formIds = new Set(this.forms.map(f => f.id));
-			this.formFieldRefs = (formFieldRefsResult as unknown as ToolFormFieldRef[])
-				.filter(r => formIds.has(r.form_id));
+			const formIds = new Set(this.forms.map((f) => f.id));
+			this.formFieldRefs = (formFieldRefsResult as unknown as ToolFormFieldRef[]).filter((r) =>
+				formIds.has(r.form_id)
+			);
 
 			// Join refs with field defs to produce the flat FormField view.
 			this.formFields = this.formFieldRefs
-				.map(ref => {
+				.map((ref) => {
 					const def = byId.get(ref.field_def_id);
 					if (!def) return null;
 					const config = ref.config ?? ({} as Record<string, unknown>);
@@ -533,25 +561,25 @@ export class WorkflowInstanceDetailState {
 				.filter((f): f is FormField => f !== null);
 
 			const workflowProtocols = (protocolToolsResult as unknown as ToolProtocol[]).filter(
-				p => !workflowId || p.workflow_id === workflowId
+				(p) => !workflowId || p.workflow_id === workflowId
 			);
 
 			// Every protocol backing form, regardless of whether the protocol is
 			// reachable/global — these must never render as standalone form buttons.
 			this.protocolBackingFormIds = new Set(
-				workflowProtocols.map(p => p.protocol_form_id).filter((id): id is string => !!id)
+				workflowProtocols.map((p) => p.protocol_form_id).filter((id): id is string => !!id)
 			);
 
-			this.protocolTools = workflowProtocols.filter(p => {
+			this.protocolTools = workflowProtocols.filter((p) => {
 				if (p.is_global) return false;
 				if (p.connection_id && connectionIds.has(p.connection_id)) return true;
-				if (p.stage_id && p.stage_id.some(sid => stageIds.has(sid))) return true;
+				if (p.stage_id && p.stage_id.some((sid) => stageIds.has(sid))) return true;
 				return false;
 			});
 
 			if (!this.activeDataTab) {
 				const tabs = this.getDataTabs();
-				const firstWithData = tabs.find(t => this.tabHasData(t.name));
+				const firstWithData = tabs.find((t) => this.tabHasData(t.name));
 				this.activeDataTab = (firstWithData ?? tabs[0])?.name ?? DEFAULT_DATA_TAB;
 			}
 
@@ -620,7 +648,9 @@ export class WorkflowInstanceDetailState {
 				for (const defId of this.getFieldDefIdsForTab(tab.name)) {
 					if (!this.canViewDef(defId, roleIds)) continue;
 					const values = this.fieldValuesByDefId.get(defId) ?? [];
-					if (values.some((v) => this.hasValue(v))) return true;
+					// Only the current (newest) row counts — a cleared field whose
+					// newest row is an empty tombstone must not keep a tab alive.
+					if (values[0] && this.hasValue(values[0])) return true;
 				}
 				return false;
 			})
@@ -642,7 +672,11 @@ export class WorkflowInstanceDetailState {
 		if (!options) return null;
 		if (typeof options === 'object') return options as Record<string, unknown>;
 		if (typeof options === 'string') {
-			try { return JSON.parse(options); } catch { return null; }
+			try {
+				return JSON.parse(options);
+			} catch {
+				return null;
+			}
 		}
 		return null;
 	}
@@ -654,7 +688,11 @@ export class WorkflowInstanceDetailState {
 	private parseFieldValue(value: string | undefined): unknown {
 		if (!value) return undefined;
 		if (value.startsWith('[') || value.startsWith('{')) {
-			try { return JSON.parse(value); } catch { return value; }
+			try {
+				return JSON.parse(value);
+			} catch {
+				return value;
+			}
 		}
 		return value;
 	}
@@ -666,9 +704,21 @@ export class WorkflowInstanceDetailState {
 	 * When `roleIds` is given, defs the role cannot view are omitted so their
 	 * rows collapse ("collapse empties").
 	 */
-	getFieldsForFormRenderer(tabName: string, roleIds?: string[]): Array<FormField & { value?: unknown; fileValue?: string; fileRecordId?: string; storedFiles?: Array<{ recordId: string; fileName: string }>; valueHistory?: Array<{ id: string; value: unknown; recorded_at: string }> }> {
-		const defIds = this.getFieldDefIdsForTab(tabName)
-			.filter((id) => !roleIds || this.canViewDef(id, roleIds));
+	getFieldsForFormRenderer(
+		tabName: string,
+		roleIds?: string[]
+	): Array<
+		FormField & {
+			value?: unknown;
+			fileValue?: string;
+			fileRecordId?: string;
+			storedFiles?: Array<{ recordId: string; fileName: string }>;
+			valueHistory?: Array<{ id: string; value: unknown; recorded_at: string }>;
+		}
+	> {
+		const defIds = this.getFieldDefIdsForTab(tabName).filter(
+			(id) => !roleIds || this.canViewDef(id, roleIds)
+		);
 		// Unconfigured defs render in `created` order, one per row, below any
 		// explicitly-configured rows.
 		let maxConfiguredRow = -1;
@@ -686,22 +736,40 @@ export class WorkflowInstanceDetailState {
 		const fallbackRow = new Map<string, number>();
 		unconfigured.forEach((id, i) => fallbackRow.set(id, maxConfiguredRow + 1 + i));
 
-		const out: Array<FormField & { value?: unknown; fileValue?: string; fileRecordId?: string; storedFiles?: Array<{ recordId: string; fileName: string }>; valueHistory?: Array<{ id: string; value: unknown; recorded_at: string }> }> = [];
+		const out: Array<
+			FormField & {
+				value?: unknown;
+				fileValue?: string;
+				fileRecordId?: string;
+				storedFiles?: Array<{ recordId: string; fileName: string }>;
+				valueHistory?: Array<{ id: string; value: unknown; recorded_at: string }>;
+			}
+		> = [];
 		for (const defId of defIds) {
 			const def = this.fieldDefsById.get(defId);
 			if (!def) continue;
 			const cfg = def.display_config;
 			const values = this.fieldValuesByDefId.get(defId) ?? [];
 			const storedFiles = values
-				.filter(v => v.file_value)
-				.map(v => ({ recordId: v.id, fileName: v.file_value }));
-			const firstValue = values.find(v => v.value);
+				.filter((v) => v.file_value)
+				.map((v) => ({ recordId: v.id, fileName: v.file_value }));
+			// Current value = newest row (arrays are sorted newest-first in
+			// indexFieldValues). An empty newest row is a tombstone — the field was
+			// cleared — so it must read as "no value" even if older non-empty rows
+			// exist. Matches the append-only "newest wins" semantic.
+			const latestRow = values[0];
+			const firstValue =
+				latestRow && latestRow.value !== '' && latestRow.value != null ? latestRow : undefined;
 
 			// History is available for every field now (workflow_field_values is
 			// append-only). The renderer decides whether to surface the expander
 			// based on row count, not write_mode.
+			// Include tombstone rows (empty value, no file) so a "cleared" event is
+			// visible in the timeline. File rows are surfaced via storedFiles, not
+			// here. Pre-release: no legacy empty rows exist, so the only empty
+			// non-file rows are intentional clears.
 			const valueHistory = values
-				.filter((v) => v.value !== undefined && v.value !== null && v.value !== '')
+				.filter((v) => !v.file_value)
 				.map((v) => ({
 					id: v.id,
 					value: this.parseFieldValue(v.value),
@@ -738,7 +806,9 @@ export class WorkflowInstanceDetailState {
 		out.sort((a, b) => {
 			if ((a.row_index ?? 0) !== (b.row_index ?? 0)) return (a.row_index ?? 0) - (b.row_index ?? 0);
 			const posOrder = { left: 0, right: 1, full: 2 };
-			return (posOrder[a.column_position ?? 'full'] ?? 2) - (posOrder[b.column_position ?? 'full'] ?? 2);
+			return (
+				(posOrder[a.column_position ?? 'full'] ?? 2) - (posOrder[b.column_position ?? 'full'] ?? 2)
+			);
 		});
 
 		return out;
@@ -762,11 +832,11 @@ export class WorkflowInstanceDetailState {
 		if (!this.instance) return [];
 
 		const currentStageId = this.instance.current_stage_id as string;
-		const currentStageIndex = this.stages.findIndex(s => s.id === currentStageId);
+		const currentStageIndex = this.stages.findIndex((s) => s.id === currentStageId);
 		if (currentStageIndex < 0) return [];
 
 		const reachedStageIds = new Set(
-			this.stages.filter((_, index) => index <= currentStageIndex).map(s => s.id)
+			this.stages.filter((_, index) => index <= currentStageIndex).map((s) => s.id)
 		);
 
 		const reachedFormIds = new Set<string>();
@@ -776,36 +846,45 @@ export class WorkflowInstanceDetailState {
 				continue;
 			}
 			if (form.connection_id) {
-				const connection = this.connections.find(c => c.id === form.connection_id);
+				const connection = this.connections.find((c) => c.id === form.connection_id);
 				if (connection && reachedStageIds.has(connection.to_stage_id)) {
 					reachedFormIds.add(form.id);
 				}
 			}
 		}
 
-		return this.formFields.filter(f => reachedFormIds.has(f.form_id));
+		return this.formFields.filter((f) => reachedFormIds.has(f.form_id));
 	}
 
 	getProtocolToolsForStage(stageId: string): ToolProtocol[] {
-		return this.protocolTools.filter(p => {
+		const ctx = { fieldValuesByDefId: this.fieldValuesByDefId };
+		return this.protocolTools.filter((p) => {
 			if (p.connection_id) return false;
 			if (!p.stage_id || p.stage_id.length === 0) return false;
-			return p.stage_id.includes(stageId);
+			if (!p.stage_id.includes(stageId)) return false;
+			return sentryPasses(p.sentry, ctx);
 		});
 	}
 
 	getProtocolToolsForConnection(connectionId: string): ToolProtocol[] {
-		return this.protocolTools.filter(p => p.connection_id === connectionId);
+		const ctx = { fieldValuesByDefId: this.fieldValuesByDefId };
+		return this.protocolTools.filter(
+			(p) => p.connection_id === connectionId && sentryPasses(p.sentry, ctx)
+		);
 	}
 
 	getProtocolFormFields(protocolFormId: string): FormField[] {
 		const fields = this.formFields
-			.filter(f => f.form_id === protocolFormId)
+			.filter((f) => f.form_id === protocolFormId)
 			.sort((a, b) => {
 				if ((a.page ?? 1) !== (b.page ?? 1)) return (a.page ?? 1) - (b.page ?? 1);
-				if ((a.row_index ?? 0) !== (b.row_index ?? 0)) return (a.row_index ?? 0) - (b.row_index ?? 0);
+				if ((a.row_index ?? 0) !== (b.row_index ?? 0))
+					return (a.row_index ?? 0) - (b.row_index ?? 0);
 				const posOrder = { left: 0, right: 1, full: 2 };
-				return (posOrder[a.column_position ?? 'full'] ?? 2) - (posOrder[b.column_position ?? 'full'] ?? 2);
+				return (
+					(posOrder[a.column_position ?? 'full'] ?? 2) -
+					(posOrder[b.column_position ?? 'full'] ?? 2)
+				);
 			});
 
 		if (fields.length === 0) {
@@ -815,20 +894,23 @@ export class WorkflowInstanceDetailState {
 	}
 
 	/** Inline `local_fields` from the protocol's backing form. Empty if the form has none. */
-	getProtocolLocalFields(protocolFormId: string | undefined): import('$lib/participant-state/types').ProtocolLocalField[] {
+	getProtocolLocalFields(
+		protocolFormId: string | undefined
+	): import('$lib/participant-state/types').ProtocolLocalField[] {
 		if (!protocolFormId) return [];
 		const form = this.forms.find((f) => f.id === protocolFormId);
-		const list = (form?.local_fields ?? []) as import('$lib/participant-state/types').ProtocolLocalField[];
-		return list
-			.slice()
-			.sort((a, b) => {
-				if ((a.page ?? 0) !== (b.page ?? 0)) return (a.page ?? 0) - (b.page ?? 0);
-				return (a.row_index ?? 0) - (b.row_index ?? 0);
-			});
+		const list = (form?.local_fields ??
+			[]) as import('$lib/participant-state/types').ProtocolLocalField[];
+		return list.slice().sort((a, b) => {
+			if ((a.page ?? 0) !== (b.page ?? 0)) return (a.page ?? 0) - (b.page ?? 0);
+			return (a.row_index ?? 0) - (b.row_index ?? 0);
+		});
 	}
 
 	/** Per-page metadata (titles/descriptions) from the protocol's backing form. */
-	getProtocolFormPages(protocolFormId: string | undefined): import('$lib/participant-state/types').FormPage[] {
+	getProtocolFormPages(
+		protocolFormId: string | undefined
+	): import('$lib/participant-state/types').FormPage[] {
 		if (!protocolFormId) return [];
 		const form = this.forms.find((f) => f.id === protocolFormId);
 		return (form?.pages ?? []) as import('$lib/participant-state/types').FormPage[];
@@ -845,19 +927,28 @@ export class WorkflowInstanceDetailState {
 		for (const [defId, enabled] of Object.entries(cfg)) {
 			if (!enabled) continue;
 			const values = this.fieldValuesByDefId.get(defId) ?? [];
-			const firstValue = values.find((v) => v.value !== undefined && v.value !== null && v.value !== '');
-			if (firstValue) out[defId] = this.parseFieldValue(firstValue.value);
+			// Newest row wins (sorted newest-first); an empty newest row is a
+			// tombstone, so don't prefill a cleared field.
+			const latest = values[0];
+			if (latest && latest.value !== undefined && latest.value !== null && latest.value !== '') {
+				out[defId] = this.parseFieldValue(latest.value);
+			}
 		}
 		return out;
 	}
 
 	getToolsForConnection(connectionId: string): ToolQueueItem[] {
-		const connectionForms = this.forms.filter(f => f.connection_id === connectionId);
-		const connectionProtocolTools = this.protocolTools.filter(p => p.connection_id === connectionId);
+		const ctx = { fieldValuesByDefId: this.fieldValuesByDefId };
+		const connectionForms = this.forms.filter(
+			(f) => f.connection_id === connectionId && sentryPasses(f.sentry, ctx)
+		);
+		const connectionProtocolTools = this.protocolTools.filter(
+			(p) => p.connection_id === connectionId && sentryPasses(p.sentry, ctx)
+		);
 
 		const allTools: ToolQueueItem[] = [
-			...connectionForms.map(f => ({ type: 'form' as const, tool: f })),
-			...connectionProtocolTools.map(p => ({ type: 'protocol' as const, tool: p }))
+			...connectionForms.map((f) => ({ type: 'form' as const, tool: f })),
+			...connectionProtocolTools.map((p) => ({ type: 'protocol' as const, tool: p }))
 		];
 
 		return allTools.sort((a, b) => (a.tool.tool_order ?? 0) - (b.tool.tool_order ?? 0));
@@ -866,8 +957,8 @@ export class WorkflowInstanceDetailState {
 	isStageCompleted(stageId: string): boolean {
 		if (!this.instance) return false;
 		const currentStageId = this.instance.current_stage_id as string;
-		const currentIndex = this.stages.findIndex(s => s.id === currentStageId);
-		const stageIndex = this.stages.findIndex(s => s.id === stageId);
+		const currentIndex = this.stages.findIndex((s) => s.id === currentStageId);
+		const stageIndex = this.stages.findIndex((s) => s.id === stageId);
 		return stageIndex < currentIndex;
 	}
 

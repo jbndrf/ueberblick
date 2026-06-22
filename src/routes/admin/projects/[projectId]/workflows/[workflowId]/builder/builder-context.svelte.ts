@@ -138,7 +138,11 @@ export interface BuilderContext {
 	createRole: (name: string) => Promise<Role>;
 }
 
-const KEY = Symbol('workflow-builder');
+// Interned via the global registry (not a bare `Symbol(...)`) so the key stays
+// identical across HMR re-evaluations / duplicate module instances in dev —
+// otherwise setContext and getContext can end up with mismatched symbols and
+// children throw "getBuilderContext() outside the builder tree".
+const KEY = Symbol.for('workflow-builder');
 
 export function setBuilderContext(ctx: BuilderContext): BuilderContext {
 	return setContext(KEY, ctx);

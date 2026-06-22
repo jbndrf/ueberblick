@@ -6,7 +6,13 @@
  */
 
 import type { ParticipantGateway } from '$lib/participant-state/gateway.svelte';
-import type { Form, FormField, FormValues, FieldError, DateFieldOptions } from '$lib/components/form-renderer/types';
+import type {
+	Form,
+	FormField,
+	FormValues,
+	FieldError,
+	DateFieldOptions
+} from '$lib/components/form-renderer/types';
 import { evaluateShowIf } from '$lib/form-engine/conditional-logic';
 
 /**
@@ -32,14 +38,16 @@ async function fetchFormFields(
 ): Promise<FormField[]> {
 	if (formIds.length === 0) return [];
 	const refFilter = formIds.map((id) => `form_id = "${id}"`).join(' || ');
-	const refs = await gateway.collection('tools_form_field_refs').getFullList({
+	const refs = (await gateway.collection('tools_form_field_refs').getFullList({
 		filter: refFilter
-	}) as Array<Record<string, any>>;
+	})) as Array<Record<string, any>>;
 	if (refs.length === 0) return [];
 	const defIds = Array.from(new Set(refs.map((r) => r.field_def_id).filter(Boolean)));
 	const defFilter = defIds.map((id) => `id = "${id}"`).join(' || ');
 	const defs = defFilter
-		? (await gateway.collection('workflow_field_defs').getFullList({ filter: defFilter })) as Array<Record<string, any>>
+		? ((await gateway
+				.collection('workflow_field_defs')
+				.getFullList({ filter: defFilter })) as Array<Record<string, any>>)
 		: [];
 	const defById = new Map(defs.map((d) => [d.id, d]));
 	return refs
@@ -125,12 +133,12 @@ function createInitialState(): FormFillState {
 
 export function getTotalPages(state: FormFillState): number {
 	if (state.fields.length === 0) return 1;
-	return Math.max(...state.fields.map(f => f.page || 1));
+	return Math.max(...state.fields.map((f) => f.page || 1));
 }
 
 export function getCurrentPageFields(state: FormFillState): FormField[] {
 	return state.fields
-		.filter(f => (f.page || 1) === state.currentPage)
+		.filter((f) => (f.page || 1) === state.currentPage)
 		.sort((a, b) => {
 			if (a.row_index !== b.row_index) {
 				return a.row_index - b.row_index;
@@ -201,7 +209,9 @@ export function isMeaningfulValue(value: unknown): boolean {
 	return true;
 }
 
-export function getCurrentPageRows(state: FormFillState): Array<{ rowIndex: number; fields: FormField[] }> {
+export function getCurrentPageRows(
+	state: FormFillState
+): Array<{ rowIndex: number; fields: FormField[] }> {
 	const pageFields = getCurrentPageFields(state);
 	const rowMap = new Map<number, FormField[]>();
 
@@ -233,7 +243,7 @@ export function canGoPrevious(state: FormFillState): boolean {
 }
 
 export function getFieldError(state: FormFillState, fieldId: string): string | undefined {
-	return state.errors.find(e => e.fieldId === fieldId)?.message;
+	return state.errors.find((e) => e.fieldId === fieldId)?.message;
 }
 
 // ==========================================================================
@@ -306,7 +316,7 @@ export function validatePage(
 	page: number,
 	extraValues: Record<string, unknown> = {}
 ): FieldError[] {
-	const pageFields = state.fields.filter(f => (f.page || 1) === page);
+	const pageFields = state.fields.filter((f) => (f.page || 1) === page);
 	const newErrors: FieldError[] = [];
 	const ctx = { ...extraValues, ...state.values };
 
@@ -364,6 +374,47 @@ export function pruneHiddenValues(
 		}
 	}
 	return changed ? out : values;
+}
+
+export interface FieldToClear {
+	/** field_def_id of the field whose saved value will be tombstoned. */
+	id: string;
+	/** Human label for the confirmation dialog. */
+	label: string;
+}
+
+/**
+ * At submit time, decide which referenced singleton fields that currently hold
+ * a saved value must be cleared (tombstoned). A field is cleared when it had a
+ * meaningful prior value AND is now either:
+ *   - hidden by its conditional logic (its precondition no longer holds), or
+ *   - actively emptied by the user in this session (present in `sessionValues`
+ *     but blank).
+ *
+ * A still-visible field the user never touched is NOT in `sessionValues`, so it
+ * is never cleared — its prior value is preserved as-is. Only singleton fields
+ * are clearable; observation fields accumulate and computed fields are
+ * server-evaluated.
+ */
+export function computeFieldsToClear(
+	fields: FormField[],
+	sessionValues: FormValues,
+	priorValues: Record<string, unknown>,
+	renderValues: Record<string, unknown>
+): FieldToClear[] {
+	const out: FieldToClear[] = [];
+	for (const field of fields) {
+		if (field.write_mode !== 'singleton') continue;
+		// Nothing saved to lose → nothing to clear.
+		if (!isMeaningfulValue(priorValues[field.id])) continue;
+		const hidden = !evaluateShowIf(field.conditional_logic, renderValues);
+		const activelyEmptied =
+			field.id in sessionValues && !isMeaningfulValue(sessionValues[field.id]);
+		if (hidden || activelyEmptied) {
+			out.push({ id: field.id, label: field.field_label || field.id });
+		}
+	}
+	return out;
 }
 
 // ==========================================================================
@@ -515,7 +566,7 @@ export async function loadStageForm(
 	state.connectionId = '';
 
 	try {
-		const form = await gateway.collection('tools_forms').getOne(formId) as unknown as Form;
+		const form = (await gateway.collection('tools_forms').getOne(formId)) as unknown as Form;
 		state.form = form;
 		state.fields = await fetchFormFields(gateway, [form.id], participantRoleIds);
 		state.values = initializeValues(state.fields);
@@ -549,17 +600,21 @@ export async function loadConnectionForms(
 	participantRoleIds: string[] = []
 ): Promise<LoadedFormsData> {
 	// Load all forms for this connection, ordered by created
-	const forms = await gateway.collection('tools_forms').getFullList({
+	const forms = (await gateway.collection('tools_forms').getFullList({
 		filter: `connection_id = "${connectionId}"`,
 		sort: 'created'
-	}) as unknown as Form[];
+	})) as unknown as Form[];
 
 	if (forms.length === 0) {
 		return { forms: [], fields: [], connectionId };
 	}
 
 	// Load fields for all forms (join refs + defs)
-	const fields = await fetchFormFields(gateway, forms.map((f) => f.id), participantRoleIds);
+	const fields = await fetchFormFields(
+		gateway,
+		forms.map((f) => f.id),
+		participantRoleIds
+	);
 
 	return { forms, fields, connectionId };
 }
@@ -591,7 +646,7 @@ export async function loadEntryForms(
  * Get fields for a specific form
  */
 export function getFieldsForForm(allFields: FormField[], formId: string): FormField[] {
-	return allFields.filter(f => f.form_id === formId);
+	return allFields.filter((f) => f.form_id === formId);
 }
 
 /**

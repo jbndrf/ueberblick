@@ -20,6 +20,7 @@ export interface InstanceLabelInput {
 	fieldValues?: Array<{
 		field_def_id: string;
 		value: string;
+		recorded_at?: string;
 		created?: string;
 	}>;
 	/**
@@ -59,7 +60,9 @@ function formatValue(raw: string, fieldType: string | undefined, locale: 'de' | 
 		try {
 			const arr = JSON.parse(raw);
 			if (Array.isArray(arr) && arr.length) return arr.map(String).join(', ');
-		} catch { /* fall through */ }
+		} catch {
+			/* fall through */
+		}
 	}
 	if (fieldType === 'date' || ISO_DATE.test(raw)) {
 		const d = new Date(raw);
@@ -102,11 +105,19 @@ export function instanceLabel(input: InstanceLabelInput): InstanceLabel {
 	let primary: string | null = null;
 
 	if (formFields.length > 0 && fieldValues.length > 0) {
-		const byKey = new Map<string, { value: string; type?: string }>();
+		// Collapse to the newest row per field (append-only log). An empty newest
+		// row is a tombstone (cleared), so the field contributes no label value.
+		const newestByKey = new Map<string, { value: string; recorded_at: string }>();
 		for (const fv of fieldValues) {
-			if (fv.value && !byKey.has(fv.field_def_id)) {
-				byKey.set(fv.field_def_id, { value: fv.value });
+			const at = fv.recorded_at ?? fv.created ?? '';
+			const prev = newestByKey.get(fv.field_def_id);
+			if (!prev || at > prev.recorded_at) {
+				newestByKey.set(fv.field_def_id, { value: fv.value, recorded_at: at });
 			}
+		}
+		const byKey = new Map<string, { value: string; type?: string }>();
+		for (const [defId, row] of newestByKey) {
+			if (row.value) byKey.set(defId, { value: row.value });
 		}
 		const colWeight = (c?: string) => (c === 'left' ? 0 : c === 'full' ? 1 : c === 'right' ? 2 : 3);
 		const sorted = [...formFields].sort((a, b) => {
@@ -119,7 +130,9 @@ export function instanceLabel(input: InstanceLabelInput): InstanceLabel {
 			const ca = colWeight(a.column_position);
 			const cb = colWeight(b.column_position);
 			if (ca !== cb) return ca - cb;
-			return (a.field_order ?? Number.MAX_SAFE_INTEGER) - (b.field_order ?? Number.MAX_SAFE_INTEGER);
+			return (
+				(a.field_order ?? Number.MAX_SAFE_INTEGER) - (b.field_order ?? Number.MAX_SAFE_INTEGER)
+			);
 		});
 		const preferDate = sorted.find((f) => f.field_type === 'date' && byKey.has(f.id));
 		const pick = preferDate ?? sorted.find((f) => byKey.has(f.id));

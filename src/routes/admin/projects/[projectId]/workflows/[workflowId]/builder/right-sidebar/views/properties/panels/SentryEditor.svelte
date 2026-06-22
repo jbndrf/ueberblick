@@ -8,9 +8,16 @@
 		sentry: SentryClause[];
 		fieldDefs: WorkflowFieldDef[];
 		onChange: (next: SentryClause[]) => void;
+		/** Intro line above the clauses. Defaults to connection-specific wording. */
+		introText?: string;
 	};
 
-	let { sentry = $bindable<SentryClause[]>([]), fieldDefs, onChange }: Props = $props();
+	let {
+		sentry = $bindable<SentryClause[]>([]),
+		fieldDefs,
+		onChange,
+		introText = 'Show this connection only when…'
+	}: Props = $props();
 
 	const OPS: Array<{ value: SentryClause['op']; label: string }> = $derived([
 		{ value: 'equals', label: 'equals' },
@@ -58,7 +65,7 @@
 
 <div class="sentry-editor">
 	<p class="hint">
-		{'Show this connection only when…'}
+		{introText}
 	</p>
 
 	{#if !sentry || sentry.length === 0}
@@ -189,6 +196,20 @@
 		padding: 0 0.375rem;
 		border: 1px solid hsl(var(--border));
 		border-radius: 0.25rem;
+		background: hsl(var(--background));
+		color: hsl(var(--foreground));
+		/* Render the native popup (and its options) in the current theme. */
+		color-scheme: light;
+	}
+
+	:global(.dark) .field-select,
+	:global(.dark) .op-select {
+		color-scheme: dark;
+	}
+
+	/* Explicit option colors for browsers that don't fully honor color-scheme. */
+	.field-select option,
+	.op-select option {
 		background: hsl(var(--background));
 		color: hsl(var(--foreground));
 	}

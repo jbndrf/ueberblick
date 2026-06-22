@@ -1,14 +1,14 @@
 /**
- * Connection sentry evaluator (Phase 3 — CMMN-style conditional connections).
+ * Sentry evaluator (CMMN-style conditional availability).
  *
- * A sentry is an AND-ed list of `SentryClause`s on a workflow_connection.
- * `connectionIsAvailable` returns true when:
+ * A sentry is an AND-ed list of `SentryClause`s. Originally added to
+ * workflow_connections (Phase 3); now also carried by tools (forms, edit tools,
+ * protocol tools). `sentryPasses` returns true when:
  *   - the sentry is empty/null (always available — today's behavior), OR
  *   - every clause matches the latest field value for its `field_def_id`.
  *
  * For observation-mode fields, "latest" means the most recent `recorded_at`.
- * Pre-existing role gating (`connection.allowed_roles`) is orthogonal and
- * checked separately by the caller.
+ * Pre-existing role + scope gating is orthogonal and checked by the caller.
  *
  * Pure function; no Svelte, no IDB, no PB. Unit-testable.
  */
@@ -20,17 +20,29 @@ export interface SentryContext {
 	fieldValuesByDefId: Map<string, FieldValue[]>;
 }
 
-export function connectionIsAvailable(
-	connection: Pick<WorkflowConnection, 'sentry'>,
+/**
+ * Scope-neutral evaluator: true when `sentry` is empty/null or every clause
+ * matches the instance's current field values. Works for any entity carrying a
+ * sentry (connection or tool).
+ */
+export function sentryPasses(
+	sentry: SentryClause[] | null | undefined,
 	ctx: SentryContext
 ): boolean {
-	const sentry = connection.sentry;
 	if (!sentry || sentry.length === 0) return true;
 
 	for (const clause of sentry) {
 		if (!clauseMatches(clause, ctx)) return false;
 	}
 	return true;
+}
+
+/** Connection-specific wrapper kept for existing call-sites/tests. */
+export function connectionIsAvailable(
+	connection: Pick<WorkflowConnection, 'sentry'>,
+	ctx: SentryContext
+): boolean {
+	return sentryPasses(connection.sentry, ctx);
 }
 
 function clauseMatches(clause: SentryClause, ctx: SentryContext): boolean {

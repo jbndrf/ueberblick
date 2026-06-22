@@ -143,6 +143,24 @@ describe('buildWorkflowPart', () => {
 		const back = parsePart(stringifyPart(part));
 		expect(back).toEqual(part);
 	});
+
+	it('serializes a tool sentry by field label and resolves it back on apply', () => {
+		const s = buildState();
+		// Gate the connection form on Status == Open.
+		s.updateForm(FORM, {
+			sentry: [{ field_def_id: D_STATUS, op: 'equals', value: 'Open' }]
+		});
+		const part = buildWorkflowPart(s);
+		expect(part.forms[0].sentry).toEqual([{ field: 'Status', op: 'equals', value: 'Open' }]);
+		// The portable part must reference the field by LABEL, never by id.
+		expect(JSON.stringify(part)).not.toContain(D_STATUS);
+
+		// Apply into a fresh workflow → the label resolves back to the def id.
+		const s2 = buildState();
+		applyWorkflowPart(s2, part);
+		const applied = s2.visibleForms.find((f) => f.data.name === 'Intake')?.data;
+		expect(applied?.sentry).toEqual([{ field_def_id: D_STATUS, op: 'equals', value: 'Open' }]);
+	});
 });
 
 describe('applyWorkflowPart — idempotency', () => {

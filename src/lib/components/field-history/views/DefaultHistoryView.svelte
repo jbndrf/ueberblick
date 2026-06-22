@@ -1,9 +1,12 @@
 <script lang="ts">
 	import { renderSnapshotValue } from '$lib/utils/value-formatter';
-	import { field_history_empty } from '$lib/paraglide/messages';
+	import { field_history_empty, field_history_cleared } from '$lib/paraglide/messages';
 	import type { FieldHistoryViewProps } from '../types';
 
 	let { entries }: FieldHistoryViewProps = $props();
+
+	// An empty entry is a tombstone (the field was cleared at that time).
+	const isCleared = (v: unknown) => v === null || v === undefined || v === '';
 
 	function fmt(ts: string): string {
 		if (!ts) return '';
@@ -20,7 +23,11 @@
 		{#each entries as row (row.id)}
 			<li class="history-row">
 				<span class="history-time">{fmt(row.recorded_at)}</span>
-				<span class="history-value">{renderSnapshotValue(row.value)}</span>
+				{#if isCleared(row.value)}
+					<span class="history-value history-cleared">{field_history_cleared()}</span>
+				{:else}
+					<span class="history-value">{renderSnapshotValue(row.value)}</span>
+				{/if}
 			</li>
 		{/each}
 	</ol>
@@ -70,5 +77,11 @@
 		color: hsl(var(--foreground));
 		text-align: right;
 		word-break: break-word;
+	}
+
+	.history-cleared {
+		font-weight: 400;
+		font-style: italic;
+		color: hsl(var(--muted-foreground));
 	}
 </style>

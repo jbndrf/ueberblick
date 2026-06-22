@@ -57,7 +57,13 @@
 	import * as Tabs from '$lib/components/ui/tabs';
 	import { ChevronRight, Check, X } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { FormFillTool, ViewFieldsTool, LocationEditTool, ConflictResolutionTool, ProtocolTool } from './tools';
+	import {
+		FormFillTool,
+		ViewFieldsTool,
+		LocationEditTool,
+		ConflictResolutionTool,
+		ProtocolTool
+	} from './tools';
 	import { FormRenderer } from '$lib/components/form-renderer';
 	import { isMeaningfulValue } from './tools/form-state';
 	import FieldValueImage from './FieldValueImage.svelte';
@@ -93,7 +99,15 @@
 		onClose: () => void;
 	}
 
-	let { selection, isExpanded = $bindable(false), map = null, isEditingLocation = $bindable(false), fieldValueCache, participantRoleIds = [], onClose }: Props = $props();
+	let {
+		selection,
+		isExpanded = $bindable(false),
+		map = null,
+		isEditingLocation = $bindable(false),
+		fieldValueCache,
+		participantRoleIds = [],
+		onClose
+	}: Props = $props();
 
 	// ==========================================================================
 	// State
@@ -191,7 +205,10 @@
 		const nowIso = new Date().toISOString();
 
 		if (writeMode === 'computed') {
-			console.warn('[writeFieldValue] computed field is server-evaluated; skipping client write', fieldDef.id);
+			console.warn(
+				'[writeFieldValue] computed field is server-evaluated; skipping client write',
+				fieldDef.id
+			);
 			return;
 		}
 
@@ -301,7 +318,9 @@
 	// Use untrack on the write to avoid a bidirectional binding feedback loop
 	$effect(() => {
 		const active = isLocationPickerActive || geometryDrawMode !== null;
-		untrack(() => { isEditingLocation = active; });
+		untrack(() => {
+			isEditingLocation = active;
+		});
 	});
 
 	// ==========================================================================
@@ -339,7 +358,7 @@
 		if (activeLocationEditTool) {
 			return activeLocationEditTool.name || 'Edit Location';
 		}
-		return detailState?.workflow?.name as string || 'Workflow';
+		return (detailState?.workflow?.name as string) || 'Workflow';
 	});
 
 	const subtitle = $derived.by(() => {
@@ -358,8 +377,16 @@
 			column_position: f.column_position
 		}));
 		const label = instanceLabel({
-			instance: { id: inst.id, updated: inst.updated, created: inst.created, current_stage_id: inst.current_stage_id },
-			fieldValues: instanceFVs.map((fv) => ({ field_def_id: (fv as any).field_def_id, value: fv.value })),
+			instance: {
+				id: inst.id,
+				updated: inst.updated,
+				created: inst.created,
+				current_stage_id: inst.current_stage_id
+			},
+			fieldValues: instanceFVs.map((fv) => ({
+				field_def_id: (fv as any).field_def_id,
+				value: fv.value
+			})),
 			formFields,
 			locale: 'de'
 		});
@@ -372,7 +399,7 @@
 		if (!detailState) return [];
 
 		// Connection actions (transitions to next stage)
-		const connectionActions = detailState.availableConnections.map(conn => ({
+		const connectionActions = detailState.availableConnections.map((conn) => ({
 			id: conn.id,
 			label: conn.visual_config?.button_label || conn.action_name,
 			color: conn.visual_config?.button_color,
@@ -381,7 +408,7 @@
 		}));
 
 		// Stage edit tool actions (edit without transition)
-		const editActions = detailState.availableStageEditTools.map(tool => ({
+		const editActions = detailState.availableStageEditTools.map((tool) => ({
 			id: `edit-${tool.id}`,
 			label: tool.visual_config?.button_label || tool.name,
 			color: tool.visual_config?.button_color,
@@ -390,7 +417,7 @@
 		}));
 
 		// Stage-attached form actions (open form, save, no transition)
-		const stageFormActions = detailState.availableStageForms.map(form => ({
+		const stageFormActions = detailState.availableStageForms.map((form) => ({
 			id: `stage-form-${form.id}`,
 			label: (form.visual_config?.button_label as string | undefined) || form.name,
 			color: form.visual_config?.button_color as string | undefined,
@@ -401,13 +428,13 @@
 		// Stage protocol tool actions
 		const currentStageId = detailState.instance?.current_stage_id as string;
 		const protocolActions = currentStageId
-			? detailState.getProtocolToolsForStage(currentStageId).map(tool => ({
-				id: `protocol-${tool.id}`,
-				label: tool.visual_config?.button_label || tool.name,
-				color: tool.visual_config?.button_color,
-				disabled: false,
-				onClick: () => handleProtocolToolClick(tool)
-			}))
+			? detailState.getProtocolToolsForStage(currentStageId).map((tool) => ({
+					id: `protocol-${tool.id}`,
+					label: tool.visual_config?.button_label || tool.name,
+					color: tool.visual_config?.button_color,
+					disabled: false,
+					onClick: () => handleProtocolToolClick(tool)
+				}))
 			: [];
 
 		return [...editActions, ...stageFormActions, ...protocolActions, ...connectionActions];
@@ -436,10 +463,10 @@
 		const diffH = Math.floor(diffMs / 3600000);
 		const diffDays = Math.floor(diffMs / 86400000);
 
-		if (diffMin < 1) return (participantWorkflowInstanceDetailJustNow?.() ?? 'Just now');
+		if (diffMin < 1) return participantWorkflowInstanceDetailJustNow?.() ?? 'Just now';
 		if (diffMin < 60) return `${diffMin}m ago`;
 		if (diffH < 24) return `${diffH}h ago`;
-		if (diffDays === 1) return (participantWorkflowInstanceDetailYesterday?.() ?? 'Yesterday');
+		if (diffDays === 1) return participantWorkflowInstanceDetailYesterday?.() ?? 'Yesterday';
 		if (diffDays < 7) return `${diffDays}d ago`;
 		return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 	}
@@ -469,8 +496,7 @@
 
 	function getEntryLabel(metadata: ToolUsageRecord['metadata']): string {
 		return buildEntryLabel(metadata, {
-			resolveFieldLabel: (key) =>
-				detailState?.formFields.find((f) => f.id === key)?.field_label,
+			resolveFieldLabel: (key) => detailState?.formFields.find((f) => f.id === key)?.field_label,
 			t: {
 				action: participantWorkflowInstanceDetailEntryAction?.() ?? 'Action',
 				created: participantWorkflowInstanceDetailEntryCreated?.() ?? 'Created',
@@ -570,7 +596,8 @@
 			// the shape (vertex-edit is out of scope).
 			activeLocationEditTool = editTool;
 			isOpen = false;
-			const geomType = (detailState?.instance?.geometry as InstanceGeometry | null | undefined)?.type;
+			const geomType = (detailState?.instance?.geometry as InstanceGeometry | null | undefined)
+				?.type;
 			if (geomType === 'LineString' || geomType === 'MultiLineString') {
 				geometryDrawMode = 'line';
 			} else if (geomType === 'Polygon' || geomType === 'MultiPolygon') {
@@ -599,7 +626,10 @@
 		activeStageForm = null;
 	}
 
-	async function handleStageFormSubmit(formValues: Record<string, unknown>) {
+	async function handleStageFormSubmit(
+		formValues: Record<string, unknown>,
+		clearedFieldIds: string[] = []
+	) {
 		if (!activeStageForm || !detailState || !gateway) return;
 
 		const form = activeStageForm;
@@ -607,19 +637,29 @@
 
 		try {
 			const refDefIds = new Set(
-				detailState.formFieldRefs.filter(r => r.form_id === form.id).map(r => r.field_def_id)
+				detailState.formFieldRefs.filter((r) => r.form_id === form.id).map((r) => r.field_def_id)
 			);
 
 			const fieldEntries = Object.entries(formValues).filter(
 				([fieldId, value]) => refDefIds.has(fieldId) && isMeaningfulValue(value)
 			);
+			const clearedIds = clearedFieldIds.filter((id) => refDefIds.has(id));
+
+			if (fieldEntries.length === 0 && clearedIds.length === 0) {
+				activeStageForm = null;
+				return;
+			}
 
 			const createdFields = fieldEntries.map(([fieldId]) => ({
 				field_key: fieldId,
 				field_name: getFieldName(fieldId) || fieldId
 			}));
+			const clearedFields = clearedIds.map((fieldId) => ({
+				field_key: fieldId,
+				field_name: getFieldName(fieldId) || fieldId
+			}));
 
-			const toolUsage = await gateway.collection('workflow_instance_tool_usage').create({
+			const toolUsage = (await gateway.collection('workflow_instance_tool_usage').create({
 				instance_id: detailState.instanceId,
 				stage_id: stageId,
 				executed_by: gateway.participantId,
@@ -627,9 +667,10 @@
 				metadata: {
 					action: 'form_fill',
 					stage_name: getStageName(stageId) || stageId,
-					created_fields: createdFields
+					created_fields: createdFields,
+					cleared_fields: clearedFields
 				}
-			}) as { id: string };
+			})) as { id: string };
 
 			for (const [fieldId, value] of fieldEntries) {
 				const def = detailState.fieldDefsById.get(fieldId);
@@ -651,6 +692,17 @@
 				}
 			}
 
+			// Tombstone cleared fields (append an empty-value row).
+			for (const fieldId of clearedIds) {
+				const def = detailState.fieldDefsById.get(fieldId);
+				if (!def) continue;
+				await writeFieldValue(def, '', {
+					instanceId: detailState.instanceId,
+					stageId,
+					toolUsageId: toolUsage.id
+				});
+			}
+
 			await detailState.refresh();
 			activeStageForm = null;
 		} catch (error) {
@@ -665,20 +717,24 @@
 
 	function getFieldName(fieldKey: string): string | undefined {
 		return (
-			detailState?.formFields.find(f => f.id === fieldKey)?.field_label
-			?? detailState?.fieldDefsById.get(fieldKey)?.label
+			detailState?.formFields.find((f) => f.id === fieldKey)?.field_label ??
+			detailState?.fieldDefsById.get(fieldKey)?.label
 		);
 	}
 
 	function getStageName(stageId: string): string | undefined {
-		return detailState?.stages.find(s => s.id === stageId)?.stage_name;
+		return detailState?.stages.find((s) => s.id === stageId)?.stage_name;
 	}
 
 	// ==========================================================================
 	// Tool Flow: Form Submit
 	// ==========================================================================
 
-	async function handleToolFormSubmit(formValues: Record<string, unknown>, connectionId: string) {
+	async function handleToolFormSubmit(
+		formValues: Record<string, unknown>,
+		connectionId: string,
+		clearedFieldIds: string[] = []
+	) {
 		if (!activeToolFlow || !detailState || !gateway) return;
 
 		const targetStageId = activeToolFlow.connection.to_stage_id;
@@ -688,15 +744,18 @@
 			// this connection's form(s); the formValues object may carry prior
 			// instance values seeded for dependent-field resolution.
 			const formIds = new Set(
-				detailState.forms.filter(f => f.connection_id === connectionId).map(f => f.id)
+				detailState.forms.filter((f) => f.connection_id === connectionId).map((f) => f.id)
 			);
 			const refDefIds = new Set(
-				detailState.formFieldRefs.filter(r => formIds.has(r.form_id)).map(r => r.field_def_id)
+				detailState.formFieldRefs.filter((r) => formIds.has(r.form_id)).map((r) => r.field_def_id)
 			);
 
 			const fieldEntries = Object.entries(formValues).filter(
 				([fieldId, value]) => refDefIds.has(fieldId) && isMeaningfulValue(value)
 			);
+			// Fields whose previously-saved value must be tombstoned (no longer
+			// applicable / emptied). Restricted to this form's referenced fields.
+			const clearedIds = clearedFieldIds.filter((id) => refDefIds.has(id));
 
 			// Only field identifiers go into the audit metadata — never values.
 			// Values live exclusively in workflow_field_values (append-only), where
@@ -707,15 +766,19 @@
 				field_key: fieldId,
 				field_name: getFieldName(fieldId) || fieldId
 			}));
+			const clearedFields = clearedIds.map((fieldId) => ({
+				field_key: fieldId,
+				field_name: getFieldName(fieldId) || fieldId
+			}));
 
-			// Nothing meaningful submitted — skip audit + value writes entirely.
-			if (fieldEntries.length === 0) {
+			// Nothing meaningful submitted and nothing to clear — skip writes entirely.
+			if (fieldEntries.length === 0 && clearedIds.length === 0) {
 				advanceToolFlow();
 				return;
 			}
 
 			// 1. Create tool_usage record with actual data (audit trail)
-			const toolUsage = await gateway.collection('workflow_instance_tool_usage').create({
+			const toolUsage = (await gateway.collection('workflow_instance_tool_usage').create({
 				instance_id: activeToolFlow.instanceId,
 				stage_id: targetStageId,
 				executed_by: gateway.participantId,
@@ -723,9 +786,10 @@
 				metadata: {
 					action: 'form_fill',
 					stage_name: getStageName(targetStageId) || targetStageId,
-					created_fields: createdFields
+					created_fields: createdFields,
+					cleared_fields: clearedFields
 				}
-			}) as { id: string };
+			})) as { id: string };
 
 			// 2. Save field values through the unified write helper.
 			for (const [fieldId, value] of fieldEntries) {
@@ -749,6 +813,17 @@
 						toolUsageId: toolUsage.id
 					});
 				}
+			}
+
+			// 3. Tombstone cleared fields (append an empty-value row).
+			for (const fieldId of clearedIds) {
+				const def = detailState.fieldDefsById.get(fieldId);
+				if (!def) continue;
+				await writeFieldValue(def, '', {
+					instanceId: activeToolFlow.instanceId,
+					stageId: targetStageId,
+					toolUsageId: toolUsage.id
+				});
 			}
 
 			// Advance to next tool or complete transition
@@ -835,11 +910,11 @@
 		if (!detailState) return null;
 
 		// Find the field definition
-		const field = detailState.formFields.find(f => f.id === fieldId);
+		const field = detailState.formFields.find((f) => f.id === fieldId);
 		if (!field) return null;
 
 		// Find the form this field belongs to
-		const form = detailState.forms.find(f => f.id === field.form_id);
+		const form = detailState.forms.find((f) => f.id === field.form_id);
 		if (!form) return null;
 
 		// If form is directly attached to a stage, use that
@@ -849,7 +924,7 @@
 
 		// If form is attached to a connection, use the connection's target stage
 		if (form.connection_id) {
-			const connection = detailState.connections.find(c => c.id === form.connection_id);
+			const connection = detailState.connections.find((c) => c.id === form.connection_id);
 			if (connection) {
 				return connection.to_stage_id;
 			}
@@ -883,9 +958,10 @@
 		const sourceGroups = new Map<SourceKey, { opts: any; fieldIds: string[] }>();
 
 		for (const field of fields) {
-			const opts = typeof field.field_options === 'string'
-				? JSON.parse(field.field_options)
-				: field.field_options;
+			const opts =
+				typeof field.field_options === 'string'
+					? JSON.parse(field.field_options)
+					: field.field_options;
 			if (!opts?.source_type) continue;
 
 			const key = `${opts.source_type}:${opts.custom_table_id || ''}:${opts.marker_category_id || ''}:${opts.display_field || ''}`;
@@ -898,7 +974,13 @@
 		}
 
 		// Fetch all unique sources in parallel
-		interface GenericNamedRow { id: string; name?: string; email?: string; title?: string; row_data?: unknown }
+		interface GenericNamedRow {
+			id: string;
+			name?: string;
+			email?: string;
+			title?: string;
+			row_data?: unknown;
+		}
 
 		const entries = Array.from(sourceGroups.entries());
 		const results = await Promise.allSettled(
@@ -918,12 +1000,15 @@
 					}
 					case 'custom_table': {
 						if (opts.custom_table_id) {
-							const records = await gateway.collection<GenericNamedRow>('custom_table_data').getFullList({
-								filter: `table_id = "${opts.custom_table_id}"`
-							});
+							const records = await gateway
+								.collection<GenericNamedRow>('custom_table_data')
+								.getFullList({
+									filter: `table_id = "${opts.custom_table_id}"`
+								});
 							const displayField = opts.display_field || 'name';
 							for (const r of records) {
-								const rowData = typeof r.row_data === 'string' ? JSON.parse(r.row_data) : r.row_data;
+								const rowData =
+									typeof r.row_data === 'string' ? JSON.parse(r.row_data) : r.row_data;
 								entityMap.set(r.id, String(rowData?.[displayField] ?? r.id));
 							}
 						}
@@ -967,7 +1052,11 @@
 		// Parse JSON string to array if needed
 		let parsed = value;
 		if (typeof parsed === 'string' && parsed.startsWith('[')) {
-			try { parsed = JSON.parse(parsed); } catch { /* keep as string */ }
+			try {
+				parsed = JSON.parse(parsed);
+			} catch {
+				/* keep as string */
+			}
 		}
 
 		// Resolve entity IDs if we have a lookup map for this field
@@ -1028,7 +1117,7 @@
 				field_name: getFieldName(fieldId) || fieldId
 			}));
 
-			const toolUsage = await gateway.collection('workflow_instance_tool_usage').create({
+			const toolUsage = (await gateway.collection('workflow_instance_tool_usage').create({
 				instance_id: detailState.instanceId,
 				stage_id: currentStageId,
 				executed_by: gateway.participantId,
@@ -1038,7 +1127,7 @@
 					stage_name: getStageName(currentStageId) || currentStageId,
 					changes: changedFields
 				}
-			}) as { id: string };
+			})) as { id: string };
 
 			for (const [fieldId, value] of entries) {
 				const def = detailState.fieldDefsById.get(fieldId);
@@ -1094,7 +1183,13 @@
 		if (obj === null || typeof obj !== 'object') return JSON.stringify(obj);
 		if (Array.isArray(obj)) return '[' + obj.map(sortedStringify).join(',') + ']';
 		const sorted = Object.keys(obj as Record<string, unknown>).sort();
-		return '{' + sorted.map(k => JSON.stringify(k) + ':' + sortedStringify((obj as Record<string, unknown>)[k])).join(',') + '}';
+		return (
+			'{' +
+			sorted
+				.map((k) => JSON.stringify(k) + ':' + sortedStringify((obj as Record<string, unknown>)[k]))
+				.join(',') +
+			'}'
+		);
 	}
 
 	async function sha256Hex(input: string): Promise<string> {
@@ -1102,18 +1197,21 @@
 		const subtle = (globalThis as any).crypto?.subtle;
 		if (subtle?.digest) {
 			const buf = await subtle.digest('SHA-256', bytes);
-			return Array.from(new Uint8Array(buf)).map((b: number) => b.toString(16).padStart(2, '0')).join('');
+			return Array.from(new Uint8Array(buf))
+				.map((b: number) => b.toString(16).padStart(2, '0'))
+				.join('');
 		}
 		// Pure-JS SHA-256 fallback for insecure contexts (HTTP / LAN IP) where
 		// window.crypto.subtle is unavailable. Produces the same hex digest.
 		const K = new Uint32Array([
-			0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-			0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-			0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-			0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-			0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-			0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-			0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+			0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4,
+			0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe,
+			0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f,
+			0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
+			0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc,
+			0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
+			0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116,
+			0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
 			0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
 		]);
 		const H = new Uint32Array([
@@ -1145,11 +1243,23 @@
 				const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
 				const mj = (a & b) ^ (a & c) ^ (b & c);
 				const t2 = (S0 + mj) >>> 0;
-				h = g; g = f; f = e; e = (d + t1) >>> 0;
-				d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+				h = g;
+				g = f;
+				f = e;
+				e = (d + t1) >>> 0;
+				d = c;
+				c = b;
+				b = a;
+				a = (t1 + t2) >>> 0;
 			}
-			H[0] = (H[0] + a) >>> 0; H[1] = (H[1] + b) >>> 0; H[2] = (H[2] + c) >>> 0; H[3] = (H[3] + d) >>> 0;
-			H[4] = (H[4] + e) >>> 0; H[5] = (H[5] + f) >>> 0; H[6] = (H[6] + g) >>> 0; H[7] = (H[7] + h) >>> 0;
+			H[0] = (H[0] + a) >>> 0;
+			H[1] = (H[1] + b) >>> 0;
+			H[2] = (H[2] + c) >>> 0;
+			H[3] = (H[3] + d) >>> 0;
+			H[4] = (H[4] + e) >>> 0;
+			H[5] = (H[5] + f) >>> 0;
+			H[6] = (H[6] + g) >>> 0;
+			H[7] = (H[7] + h) >>> 0;
 		}
 		let hex = '';
 		for (let i = 0; i < 8; i++) hex += H[i].toString(16).padStart(8, '0');
@@ -1339,9 +1449,12 @@
 				executed_at: new Date().toISOString(),
 				metadata: {
 					action: 'location_edit',
-					stage_name: locationStageId ? (getStageName(locationStageId) || locationStageId) : null,
+					stage_name: locationStageId ? getStageName(locationStageId) || locationStageId : null,
 					before: detailState.instance?.centroid
-						? { lat: (detailState.instance.centroid as any).lat, lon: (detailState.instance.centroid as any).lon }
+						? {
+								lat: (detailState.instance.centroid as any).lat,
+								lon: (detailState.instance.centroid as any).lon
+							}
 						: null,
 					after: { lat: coordinates.lat, lon: coordinates.lng }
 				}
@@ -1350,7 +1463,10 @@
 			// 2. Update instance geometry. Client-derived centroid/bbox go along
 			//    for optimistic offline rendering; the pb_hook will recompute on
 			//    the server so values stay authoritative.
-			const newGeometry = { type: 'Point' as const, coordinates: [coordinates.lng, coordinates.lat] as [number, number] };
+			const newGeometry = {
+				type: 'Point' as const,
+				coordinates: [coordinates.lng, coordinates.lat] as [number, number]
+			};
 			await gateway.collection('workflow_instances').update(detailState.instanceId, {
 				geometry: newGeometry,
 				centroid: { lat: coordinates.lat, lon: coordinates.lng },
@@ -1397,11 +1513,14 @@
 				executed_at: new Date().toISOString(),
 				metadata: {
 					action: 'location_edit',
-					stage_name: locationStageId ? (getStageName(locationStageId) || locationStageId) : null,
+					stage_name: locationStageId ? getStageName(locationStageId) || locationStageId : null,
 					before_geometry_type: beforeGeometry?.type ?? null,
 					after_geometry_type: newGeometry.type,
 					before_centroid: detailState.instance?.centroid
-						? { lat: (detailState.instance.centroid as any).lat, lon: (detailState.instance.centroid as any).lon }
+						? {
+								lat: (detailState.instance.centroid as any).lat,
+								lon: (detailState.instance.centroid as any).lon
+							}
 						: null,
 					after_centroid: centroid
 				}
@@ -1430,7 +1549,13 @@
 	// Conflict Resolution Handlers
 	// ==========================================================================
 
-	async function handleConflictResolve(resolutions: Array<{ conflictId: string; action: 'keep_server' | 'reapply_local'; fieldsToReapply?: string[] }>) {
+	async function handleConflictResolve(
+		resolutions: Array<{
+			conflictId: string;
+			action: 'keep_server' | 'reapply_local';
+			fieldsToReapply?: string[];
+		}>
+	) {
 		if (!detailState || !gateway) return;
 
 		for (const resolution of resolutions) {
@@ -1515,7 +1640,9 @@
 				<ProtocolTool
 					protocolTool={protocolToolInFlow}
 					instanceId={detailState.instanceId}
-					protocolFormFields={protocolToolInFlow.protocol_form_id ? detailState.getProtocolFormFields(protocolToolInFlow.protocol_form_id) : []}
+					protocolFormFields={protocolToolInFlow.protocol_form_id
+						? detailState.getProtocolFormFields(protocolToolInFlow.protocol_form_id)
+						: []}
 					localFields={detailState.getProtocolLocalFields(protocolToolInFlow.protocol_form_id)}
 					pages={detailState.getProtocolFormPages(protocolToolInFlow.protocol_form_id)}
 					prefillValues={detailState.getProtocolPrefillValues(protocolToolInFlow)}
@@ -1532,7 +1659,9 @@
 				formId={activeStageForm.id}
 				existingFieldValues={detailState.fieldValues}
 				{participantRoleIds}
-				onSubmit={async (values) => { await handleStageFormSubmit(values); }}
+				onSubmit={async (values, _connectionId, clearedFieldIds) => {
+					await handleStageFormSubmit(values, clearedFieldIds);
+				}}
 				onCancel={handleStageFormCancel}
 			/>
 		{:else if showConflictTool && pendingConflicts.length > 0 && detailState}
@@ -1546,7 +1675,9 @@
 			<ProtocolTool
 				protocolTool={activeProtocolTool}
 				instanceId={detailState.instanceId}
-				protocolFormFields={activeProtocolTool.protocol_form_id ? detailState.getProtocolFormFields(activeProtocolTool.protocol_form_id) : []}
+				protocolFormFields={activeProtocolTool.protocol_form_id
+					? detailState.getProtocolFormFields(activeProtocolTool.protocol_form_id)
+					: []}
 				localFields={detailState.getProtocolLocalFields(activeProtocolTool.protocol_form_id)}
 				pages={detailState.getProtocolFormPages(activeProtocolTool.protocol_form_id)}
 				prefillValues={detailState.getProtocolPrefillValues(activeProtocolTool)}
@@ -1565,8 +1696,11 @@
 						<AlertTriangle class="h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
 						<span class="text-sm text-amber-800 dark:text-amber-200">
 							{pendingConflicts.length === 1
-								? (participantWorkflowInstanceDetailConflictOne?.() ?? 'One of your changes was overridden. Tap to review.')
-								: (participantWorkflowInstanceDetailConflictMany?.({ count: pendingConflicts.length }) ?? `${pendingConflicts.length} changes were overridden. Tap to review.`)}
+								? (participantWorkflowInstanceDetailConflictOne?.() ??
+									'One of your changes was overridden. Tap to review.')
+								: (participantWorkflowInstanceDetailConflictMany?.({
+										count: pendingConflicts.length
+									}) ?? `${pendingConflicts.length} changes were overridden. Tap to review.`)}
 						</span>
 					</button>
 				{/if}
@@ -1580,36 +1714,36 @@
 							class:is-at-end={editRowAtEnd}
 						>
 							<div
-								class="flex gap-2.5 overflow-x-auto pb-2 scrollbar-thin pr-6"
+								class="scrollbar-thin flex gap-2.5 overflow-x-auto pr-6 pb-2"
 								bind:this={editRowEl}
 								onscroll={() => updateRowFade(editRowEl, 'edit')}
 							>
 								<button
-									class="action-btn action-btn-default group relative flex flex-col items-center justify-center
-										min-w-[72px] max-w-[104px] min-h-[56px] px-3 py-2.5
-										rounded-xl flex-shrink-0
+									class="action-btn action-btn-default group relative flex min-h-[56px] max-w-[104px] min-w-[72px]
+										flex-shrink-0 flex-col items-center justify-center rounded-xl
+										px-3 py-2.5
 										transition-all duration-200 ease-out
-										hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98]
-										disabled:opacity-50 disabled:pointer-events-none"
+										hover:-translate-y-0.5 hover:scale-[1.02] active:scale-[0.98]
+										disabled:pointer-events-none disabled:opacity-50"
 									disabled={isEditSaving}
 									onclick={handleEditCancel}
 								>
-									<span class="text-xs font-semibold text-center leading-snug line-clamp-2">
+									<span class="line-clamp-2 text-center text-xs leading-snug font-semibold">
 										{participantEditToolCancel?.() ?? 'Discard'}
 									</span>
 								</button>
 								<button
-									class="action-btn action-btn-colored group relative flex flex-col items-center justify-center
-										min-w-[72px] max-w-[104px] min-h-[56px] px-3 py-2.5
-										rounded-xl flex-shrink-0
+									class="action-btn action-btn-colored group relative flex min-h-[56px] max-w-[104px] min-w-[72px]
+										flex-shrink-0 flex-col items-center justify-center rounded-xl
+										px-3 py-2.5
 										transition-all duration-200 ease-out
-										hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98]
-										disabled:opacity-50 disabled:pointer-events-none"
+										hover:-translate-y-0.5 hover:scale-[1.02] active:scale-[0.98]
+										disabled:pointer-events-none disabled:opacity-50"
 									style="--btn-color: #16a34a"
 									disabled={isEditSaving}
 									onclick={handleEditSave}
 								>
-									<span class="text-xs font-semibold text-center leading-snug line-clamp-2">
+									<span class="line-clamp-2 text-center text-xs leading-snug font-semibold">
 										{participantEditToolSave?.() ?? 'Save'}
 									</span>
 								</button>
@@ -1624,25 +1758,25 @@
 							class:is-at-end={actionRowAtEnd}
 						>
 							<div
-								class="flex gap-2.5 overflow-x-auto pb-2 scrollbar-thin pr-6"
+								class="scrollbar-thin flex gap-2.5 overflow-x-auto pr-6 pb-2"
 								bind:this={actionRowEl}
 								onscroll={() => updateRowFade(actionRowEl, 'action')}
 							>
 								{#each actions as action}
 									<button
-										class="action-btn group relative flex flex-col items-center justify-center
-											min-w-[72px] max-w-[104px] min-h-[56px] px-3 py-2.5
-											rounded-xl flex-shrink-0
+										class="action-btn group relative flex min-h-[56px] max-w-[104px] min-w-[72px]
+											flex-shrink-0 flex-col items-center justify-center rounded-xl
+											px-3 py-2.5
 											transition-all duration-200 ease-out
-											hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98]
-											disabled:opacity-50 disabled:pointer-events-none"
+											hover:-translate-y-0.5 hover:scale-[1.02] active:scale-[0.98]
+											disabled:pointer-events-none disabled:opacity-50"
 										class:action-btn-colored={action.color}
 										class:action-btn-default={!action.color}
 										style={action.color ? `--btn-color: ${action.color}` : undefined}
 										disabled={action.disabled}
 										onclick={action.onClick}
 									>
-										<span class="text-xs font-semibold text-center leading-snug line-clamp-2">
+										<span class="line-clamp-2 text-center text-xs leading-snug font-semibold">
 											{action.label}
 										</span>
 									</button>
@@ -1656,7 +1790,7 @@
 				<Tabs.Root
 					value={activeTab}
 					onValueChange={(v) => handleTabChange(v as string)}
-					class="flex-1 flex flex-col min-h-0"
+					class="flex min-h-0 flex-1 flex-col"
 				>
 					<Tabs.List
 						class="grid w-full flex-shrink-0"
@@ -1672,83 +1806,139 @@
 					<Tabs.Content value="activity" class="pt-4">
 						<!-- ACTIVITY TAB - Grouped by stage -->
 						{#if activitySections.length === 0}
-							<div class="text-center py-12 text-muted-foreground">
-								<p class="text-sm">{participantWorkflowInstanceDetailNoActivity?.() ?? 'No activity yet'}</p>
+							<div class="py-12 text-center text-muted-foreground">
+								<p class="text-sm">
+									{participantWorkflowInstanceDetailNoActivity?.() ?? 'No activity yet'}
+								</p>
 							</div>
 						{:else}
 							<div class="space-y-1">
 								{#each activitySections as section, sectionIndex}
 									<!-- Stage header -->
 									{#if section.transitionEntry}
-										{@const transBy = section.transitionEntry.metadata?.action === 'admin_edit' ? 'Admin' : (section.transitionEntry.expand?.executed_by?.name || section.transitionEntry.expand?.executed_by?.email || '')}
+										{@const transBy =
+											section.transitionEntry.metadata?.action === 'admin_edit'
+												? 'Admin'
+												: section.transitionEntry.expand?.executed_by?.name ||
+													section.transitionEntry.expand?.executed_by?.email ||
+													''}
 										<button
-											class="w-full flex items-center gap-3 rounded-lg bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 px-3 py-2 text-left transition-colors hover:bg-blue-100 dark:hover:bg-blue-900/50"
+											class="flex w-full items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-left transition-colors hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/50 dark:hover:bg-blue-900/50"
 											class:mt-2={sectionIndex > 0}
 											onclick={() => navigateToData()}
 										>
-											<div class="flex-1 min-w-0">
+											<div class="min-w-0 flex-1">
 												<p class="text-sm font-semibold text-blue-900 dark:text-blue-100">
-													{participantWorkflowInstanceDetailMovedTo?.({ stageName: section.stageName }) ?? `Moved to: ${section.stageName}`}
+													{participantWorkflowInstanceDetailMovedTo?.({
+														stageName: section.stageName
+													}) ?? `Moved to: ${section.stageName}`}
 												</p>
 												<p class="text-xs text-blue-700/70 dark:text-blue-300/70">
-													{relativeTime(section.transitionEntry.executed_at)}{transBy ? ` \u00b7 ${transBy}` : ''}
+													{relativeTime(section.transitionEntry.executed_at)}{transBy
+														? ` \u00b7 ${transBy}`
+														: ''}
 												</p>
 											</div>
-											<ChevronRight class="w-4 h-4 text-blue-400 shrink-0" />
+											<ChevronRight class="h-4 w-4 shrink-0 text-blue-400" />
 										</button>
 									{:else}
 										<!-- Initial stage (no transition into it) -->
 										<div
-											class="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50"
+											class="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2"
 											class:mt-2={sectionIndex > 0}
 										>
-											<div class="h-2 w-2 rounded-full bg-green-500 shrink-0"></div>
+											<div class="h-2 w-2 shrink-0 rounded-full bg-green-500"></div>
 											<p class="text-sm font-semibold text-foreground">{section.stageName}</p>
 										</div>
 									{/if}
 
 									<!-- Entries within this stage -->
 									{#if section.entries.length > 0}
-										<div class="border-l-2 border-border ml-3 pl-3 space-y-0.5">
+										<div class="ml-3 space-y-0.5 border-l-2 border-border pl-3">
 											{#each section.entries as entry, entryIndex (entry.id)}
-												{@const metadata = (entry.metadata ?? {}) as NonNullable<ToolUsageRecord['metadata']>}
+												{@const metadata = (entry.metadata ?? {}) as NonNullable<
+													ToolUsageRecord['metadata']
+												>}
 												{@const prevEntry = entryIndex > 0 ? section.entries[entryIndex - 1] : null}
-												{@const executedBy = metadata.action === 'admin_edit' ? 'Admin' : (entry.expand?.executed_by?.name || entry.expand?.executed_by?.email || 'Unknown')}
-												{@const showActor = !prevEntry || (prevEntry.expand?.executed_by?.name || prevEntry.expand?.executed_by?.email) !== (entry.expand?.executed_by?.name || entry.expand?.executed_by?.email) || (prevEntry.metadata?.action === 'admin_edit') !== (metadata.action === 'admin_edit')}
-												{@const hasExpandableContent = (metadata.action === 'instance_created' || metadata.action === 'form_fill') && Array.isArray(metadata.created_fields) && metadata.created_fields.length > 2}
+												{@const executedBy =
+													metadata.action === 'admin_edit'
+														? 'Admin'
+														: entry.expand?.executed_by?.name ||
+															entry.expand?.executed_by?.email ||
+															'Unknown'}
+												{@const showActor =
+													!prevEntry ||
+													(prevEntry.expand?.executed_by?.name ||
+														prevEntry.expand?.executed_by?.email) !==
+														(entry.expand?.executed_by?.name || entry.expand?.executed_by?.email) ||
+													(prevEntry.metadata?.action === 'admin_edit') !==
+														(metadata.action === 'admin_edit')}
+												{@const hasExpandableContent =
+													(metadata.action === 'instance_created' ||
+														metadata.action === 'form_fill') &&
+													Array.isArray(metadata.created_fields) &&
+													metadata.created_fields.length > 2}
 												{@const label = getEntryLabel(metadata)}
-												{@const valuesForEntry = detailState?.fieldValues.filter((fv) => (fv as any).recorded_by_action === entry.id) ?? []}
+												{@const valuesForEntry =
+													detailState?.fieldValues.filter(
+														(fv) => (fv as any).recorded_by_action === entry.id
+													) ?? []}
 
 												<details class="group" data-testid="activity-entry">
-													<summary class="flex items-baseline justify-between gap-2 py-1.5 cursor-pointer select-none hover:bg-muted/30 -mx-1 px-1 rounded">
-														<div class="flex items-baseline gap-1.5 min-w-0">
-															<span class="text-xs font-medium text-foreground shrink-0">{label}</span>
+													<summary
+														class="-mx-1 flex cursor-pointer items-baseline justify-between gap-2 rounded px-1 py-1.5 select-none hover:bg-muted/30"
+													>
+														<div class="flex min-w-0 items-baseline gap-1.5">
+															<span class="shrink-0 text-xs font-medium text-foreground"
+																>{label}</span
+															>
 															{#if showActor}
-																<span class="text-[11px] text-muted-foreground shrink-0">{executedBy}</span>
+																<span class="shrink-0 text-[11px] text-muted-foreground"
+																	>{executedBy}</span
+																>
 															{/if}
 														</div>
-														<span class="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
+														<span
+															class="shrink-0 text-[11px] whitespace-nowrap text-muted-foreground"
+														>
 															{relativeTime(entry.executed_at)}
 														</span>
 													</summary>
 
-													<div class="pb-2 pt-0.5">
+													<div class="pt-0.5 pb-2">
 														<!-- Field rows render from workflow_field_values keyed by recorded_by_action.
 														     Values live exclusively there, gated row-by-row by workflow_field_defs.view_roles. -->
 														<!-- instance_created -->
 														{#if metadata.action === 'instance_created'}
 															{#if metadata.centroid}
-																<div class="flex gap-1.5 text-xs mb-0.5">
-																	<span class="text-muted-foreground shrink-0">{participantWorkflowInstanceDetailLocationLabel?.() ?? 'Location'}:</span>
-																	<span class="font-medium truncate">{metadata.centroid.lat.toFixed(5)}, {metadata.centroid.lon.toFixed(5)}{metadata.geometry_type && metadata.geometry_type !== 'Point' ? ` (${metadata.geometry_type})` : ''}</span>
+																<div class="mb-0.5 flex gap-1.5 text-xs">
+																	<span class="shrink-0 text-muted-foreground"
+																		>{participantWorkflowInstanceDetailLocationLabel?.() ??
+																			'Location'}:</span
+																	>
+																	<span class="truncate font-medium"
+																		>{metadata.centroid.lat.toFixed(5)}, {metadata.centroid.lon.toFixed(
+																			5
+																		)}{metadata.geometry_type && metadata.geometry_type !== 'Point'
+																			? ` (${metadata.geometry_type})`
+																			: ''}</span
+																	>
 																</div>
 															{/if}
 															{#each valuesForEntry as fv (fv.id)}
 																{@const defId = (fv as any).field_def_id as string}
-																{@const fieldDef = detailState?.formFields.find((f) => f.id === defId)}
-																<div class="flex gap-1.5 text-xs mb-0.5">
-																	<span class="text-muted-foreground shrink-0">{fieldDef?.field_label || detailState?.fieldDefsById.get(defId)?.label || defId}:</span>
-																	<span class="font-medium truncate">{formatHistoryValue((fv as any).value, defId)}</span>
+																{@const fieldDef = detailState?.formFields.find(
+																	(f) => f.id === defId
+																)}
+																<div class="mb-0.5 flex gap-1.5 text-xs">
+																	<span class="shrink-0 text-muted-foreground"
+																		>{fieldDef?.field_label ||
+																			detailState?.fieldDefsById.get(defId)?.label ||
+																			defId}:</span
+																	>
+																	<span class="truncate font-medium"
+																		>{formatHistoryValue((fv as any).value, defId)}</span
+																	>
 																</div>
 															{/each}
 														{/if}
@@ -1757,10 +1947,18 @@
 														{#if metadata.action === 'form_fill'}
 															{#each valuesForEntry as fv (fv.id)}
 																{@const defId = (fv as any).field_def_id as string}
-																{@const fieldDef = detailState?.formFields.find((f) => f.id === defId)}
-																<div class="flex gap-1.5 text-xs mb-0.5">
-																	<span class="text-muted-foreground shrink-0">{fieldDef?.field_label || detailState?.fieldDefsById.get(defId)?.label || defId}:</span>
-																	<span class="font-medium truncate">{formatHistoryValue((fv as any).value, defId)}</span>
+																{@const fieldDef = detailState?.formFields.find(
+																	(f) => f.id === defId
+																)}
+																<div class="mb-0.5 flex gap-1.5 text-xs">
+																	<span class="shrink-0 text-muted-foreground"
+																		>{fieldDef?.field_label ||
+																			detailState?.fieldDefsById.get(defId)?.label ||
+																			defId}:</span
+																	>
+																	<span class="truncate font-medium"
+																		>{formatHistoryValue((fv as any).value, defId)}</span
+																	>
 																</div>
 															{/each}
 														{/if}
@@ -1769,10 +1967,18 @@
 														{#if metadata.action === 'edit' || metadata.action === 'admin_edit'}
 															{#each valuesForEntry as fv (fv.id)}
 																{@const defId = (fv as any).field_def_id as string}
-																{@const fieldDef = detailState?.formFields.find((f) => f.id === defId)}
-																<div class="text-xs mb-0.5">
-																	<span class="text-muted-foreground">{fieldDef?.field_label || detailState?.fieldDefsById.get(defId)?.label || defId}: </span>
-																	<span class="font-medium">{formatHistoryValue((fv as any).value, defId)}</span>
+																{@const fieldDef = detailState?.formFields.find(
+																	(f) => f.id === defId
+																)}
+																<div class="mb-0.5 text-xs">
+																	<span class="text-muted-foreground"
+																		>{fieldDef?.field_label ||
+																			detailState?.fieldDefsById.get(defId)?.label ||
+																			defId}:
+																	</span>
+																	<span class="font-medium"
+																		>{formatHistoryValue((fv as any).value, defId)}</span
+																	>
 																</div>
 															{/each}
 														{/if}
@@ -1781,13 +1987,24 @@
 														{#if metadata.action === 'location_edit'}
 															<div class="text-xs">
 																{#if metadata.before}
-																	<span class="line-through text-muted-foreground/60">{metadata.before.lat.toFixed(5)}, {metadata.before.lon.toFixed(5)}</span>
+																	<span class="text-muted-foreground/60 line-through"
+																		>{metadata.before.lat.toFixed(5)}, {metadata.before.lon.toFixed(
+																			5
+																		)}</span
+																	>
 																{:else}
-																	<span class="text-muted-foreground">({participantWorkflowInstanceDetailNoLocation?.() ?? 'no location'})</span>
+																	<span class="text-muted-foreground"
+																		>({participantWorkflowInstanceDetailNoLocation?.() ??
+																			'no location'})</span
+																	>
 																{/if}
-																<span class="text-muted-foreground mx-0.5">-></span>
+																<span class="mx-0.5 text-muted-foreground">-></span>
 																{#if metadata.after}
-																	<span class="font-medium">{metadata.after.lat.toFixed(5)}, {metadata.after.lon.toFixed(5)}</span>
+																	<span class="font-medium"
+																		>{metadata.after.lat.toFixed(5)}, {metadata.after.lon.toFixed(
+																			5
+																		)}</span
+																	>
 																{/if}
 															</div>
 														{/if}
@@ -1796,29 +2013,44 @@
 														{#if metadata.action === 'protocol'}
 															{#each valuesForEntry as fv (fv.id)}
 																{@const defId = (fv as any).field_def_id as string}
-																{@const fieldDef = detailState?.formFields.find((f) => f.id === defId)}
-																<div class="text-xs mb-0.5">
-																	<span class="text-muted-foreground">{fieldDef?.field_label || detailState?.fieldDefsById.get(defId)?.label || defId}: </span>
-																	<span class="font-medium">{formatHistoryValue((fv as any).value, defId)}</span>
+																{@const fieldDef = detailState?.formFields.find(
+																	(f) => f.id === defId
+																)}
+																<div class="mb-0.5 text-xs">
+																	<span class="text-muted-foreground"
+																		>{fieldDef?.field_label ||
+																			detailState?.fieldDefsById.get(defId)?.label ||
+																			defId}:
+																	</span>
+																	<span class="font-medium"
+																		>{formatHistoryValue((fv as any).value, defId)}</span
+																	>
 																</div>
 															{/each}
 														{/if}
 
 														<!-- Photo thumbnails -->
 														{#if metadata.action === 'form_fill' || metadata.action === 'instance_created' || metadata.action === 'protocol'}
-															{@const fileValues = detailState?.fieldValues.filter(fv => fv.file_value && (fv as any).recorded_by_action === entry.id) ?? []}
+															{@const fileValues =
+																detailState?.fieldValues.filter(
+																	(fv) =>
+																		fv.file_value && (fv as any).recorded_by_action === entry.id
+																) ?? []}
 															{#if fileValues.length > 0}
-																<div class="flex gap-1.5 mt-1.5 flex-wrap">
+																<div class="mt-1.5 flex flex-wrap gap-1.5">
 																	{#each fileValues.slice(0, 4) as fv}
 																		<FieldValueImage
 																			recordId={fv.id}
 																			fileName={fv.file_value}
-																			alt={participantWorkflowInstanceDetailAttachmentAlt?.() ?? 'Attachment'}
-																			class="h-12 w-12 rounded object-cover border border-border"
+																			alt={participantWorkflowInstanceDetailAttachmentAlt?.() ??
+																				'Attachment'}
+																			class="h-12 w-12 rounded border border-border object-cover"
 																		/>
 																	{/each}
 																	{#if fileValues.length > 4}
-																		<div class="h-12 w-12 rounded border border-border bg-muted flex items-center justify-center text-xs text-muted-foreground">
+																		<div
+																			class="flex h-12 w-12 items-center justify-center rounded border border-border bg-muted text-xs text-muted-foreground"
+																		>
 																			+{fileValues.length - 4}
 																		</div>
 																	{/if}
@@ -1832,12 +2064,15 @@
 									{/if}
 								{/each}
 								{#if detailState && detailState.hasMoreOlderValues}
-									<div class="pt-3 flex justify-center">
+									<div class="flex justify-center pt-3">
 										<button
 											type="button"
-											class="text-xs px-3 py-1.5 rounded border border-border text-muted-foreground hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+											class="rounded border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
 											disabled={detailState.loadingOlderValues || !navigator.onLine}
-											title={navigator.onLine ? '' : (participantWorkflowInstanceDetailLoadOlderOfflineHint?.() ?? 'Online required to load older activity')}
+											title={navigator.onLine
+												? ''
+												: (participantWorkflowInstanceDetailLoadOlderOfflineHint?.() ??
+													'Online required to load older activity')}
 											onclick={() => detailState && detailState.loadOlderFieldValues()}
 										>
 											{participantWorkflowInstanceDetailLoadOlder?.() ?? 'Load older activity'}
@@ -1851,9 +2086,9 @@
 					<Tabs.Content value="data" class="pt-4">
 						{@const ds = detailState}
 						{@const visibleTabs = ds
-							? (activeEditTool
+							? activeEditTool
 								? ds.getDataTabs().map((t) => ({ name: t.name, isDefault: t.isDefault }))
-								: ds.getVisibleDataTabs(participantRoleIds))
+								: ds.getVisibleDataTabs(participantRoleIds)
 							: []}
 						{@const activeName = visibleTabs.some((t) => t.name === ds?.activeDataTab)
 							? (ds?.activeDataTab ?? '')
@@ -1865,7 +2100,7 @@
 									value={activeName === '' ? DATA_TAB_SENTINEL : activeName}
 									onValueChange={(v) => handleDataTabChange(v as string)}
 								>
-									<Tabs.List class="w-full overflow-x-auto flex-nowrap">
+									<Tabs.List class="w-full flex-nowrap overflow-x-auto">
 										{#each visibleTabs as tab}
 											<Tabs.Trigger
 												value={tab.name === '' ? DATA_TAB_SENTINEL : tab.name}
@@ -1883,7 +2118,10 @@
 											value={tab.name === '' ? DATA_TAB_SENTINEL : tab.name}
 											class="pt-4"
 										>
-											{@const fields = ds.getFieldsForFormRenderer(tab.name, participantRoleIds) as import('$lib/components/form-renderer').FormFieldWithValue[]}
+											{@const fields = ds.getFieldsForFormRenderer(
+												tab.name,
+												participantRoleIds
+											) as import('$lib/components/form-renderer').FormFieldWithValue[]}
 											{#if activeEditTool}
 												<FormRenderer
 													mode="view"
@@ -1901,8 +2139,10 @@
 									{/each}
 								</Tabs.Root>
 							{:else}
-								<div class="text-center py-8 text-muted-foreground">
-									<p class="text-sm">{participantWorkflowInstanceDetailNoData?.() ?? 'No data yet'}</p>
+								<div class="py-8 text-center text-muted-foreground">
+									<p class="text-sm">
+										{participantWorkflowInstanceDetailNoData?.() ?? 'No data yet'}
+									</p>
 								</div>
 							{/if}
 						</div>
@@ -1923,10 +2163,14 @@
 	<AlertDialog.Content>
 		<AlertDialog.Header>
 			<AlertDialog.Title>
-				{pendingConfirmConnection?.visual_config?.button_label || pendingConfirmConnection?.action_name || (participantWorkflowInstanceDetailConfirmAction?.() ?? 'Confirm action')}
+				{pendingConfirmConnection?.visual_config?.button_label ||
+					pendingConfirmConnection?.action_name ||
+					(participantWorkflowInstanceDetailConfirmAction?.() ?? 'Confirm action')}
 			</AlertDialog.Title>
 			<AlertDialog.Description>
-				{pendingConfirmConnection?.visual_config?.confirmation_message || (participantWorkflowInstanceDetailConfirmProceed?.() ?? 'Are you sure you want to proceed?')}
+				{pendingConfirmConnection?.visual_config?.confirmation_message ||
+					(participantWorkflowInstanceDetailConfirmProceed?.() ??
+						'Are you sure you want to proceed?')}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<AlertDialog.Footer>
@@ -1957,7 +2201,8 @@
 {/if}
 {#if isLocationPickerActive && map && detailState}
 	{@const centroid = detailState.instance?.centroid as { lat: number; lon: number } | null}
-	{@const buttonLabel = (activeLocationEditTool?.visual_config?.button_label as string) || 'Update Location'}
+	{@const buttonLabel =
+		(activeLocationEditTool?.visual_config?.button_label as string) || 'Update Location'}
 	<LocationEditTool
 		{map}
 		initialCoordinates={centroid ? { lat: centroid.lat, lng: centroid.lon } : null}
@@ -1974,7 +2219,9 @@
 		background-color: hsl(var(--secondary));
 		color: hsl(var(--secondary-foreground));
 		border: 1px solid hsl(var(--border));
-		box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.05);
+		box-shadow:
+			0 1px 3px 0 rgb(0 0 0 / 0.05),
+			0 1px 2px -1px rgb(0 0 0 / 0.05);
 	}
 
 	.action-btn-default:hover {
@@ -2025,18 +2272,8 @@
 	/* Scrollable action row with peek + edge fade */
 	.action-row-fade {
 		/* Default: content overflows and is at start — fade right edge only. */
-		-webkit-mask-image: linear-gradient(
-			to right,
-			#000 0,
-			#000 calc(100% - 32px),
-			transparent 100%
-		);
-		mask-image: linear-gradient(
-			to right,
-			#000 0,
-			#000 calc(100% - 32px),
-			transparent 100%
-		);
+		-webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 32px), transparent 100%);
+		mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 32px), transparent 100%);
 	}
 	.action-row-fade.is-scrolled-start:not(.is-at-end) {
 		/* Mid-scroll: fade both sides. */

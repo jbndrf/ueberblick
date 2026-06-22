@@ -5,10 +5,12 @@
 	 * `ui.configTarget`, and this single panel renders that action's appearance +
 	 * roles. Same thing, same place, every time.
 	 */
-	import { X } from '@lucide/svelte';
+	import { Lock, X } from '@lucide/svelte';
 	import { getBuilderContext } from '../builder-context.svelte';
 	import ActionConfigPanel from './ActionConfigPanel.svelte';
 	import FieldDefinitionEditor from './FieldDefinitionEditor.svelte';
+	import SentryEditor from '../right-sidebar/views/properties/panels/SentryEditor.svelte';
+	import type { SentryClause } from '$lib/workflow-builder';
 	import {
 		propertiesEdgePropertyAllowedRoles,
 		builderEditToolAnyRoles,
@@ -16,6 +18,9 @@
 		builderEditToolOwnRolesHint,
 		builderProtocolToolRoles,
 		stagePreviewButtonRoleSettings,
+		connectionInspectorSentryTitle,
+		toolSentryHint,
+		toolSentryIntro,
 		commonClose
 	} from '$lib/paraglide/messages';
 
@@ -46,7 +51,10 @@
 						selectedIds: c.allowed_roles ?? [],
 						onChange: (ids: string[]) => builderState.updateConnection(t.id, { allowed_roles: ids })
 					}
-				]
+				],
+				// Connections edit their sentry in the ConnectionInspector body, not here.
+				sentry: [] as SentryClause[],
+				onSentryChange: undefined as ((next: SentryClause[]) => void) | undefined
 			};
 		}
 
@@ -64,7 +72,10 @@
 						selectedIds: f.allowed_roles ?? [],
 						onChange: (ids: string[]) => builderState.updateForm(t.id, { allowed_roles: ids })
 					}
-				]
+				],
+				sentry: f.sentry ?? [],
+				onSentryChange: (next: SentryClause[]) =>
+					builderState.updateForm(t.id, { sentry: next.length ? next : null })
 			};
 		}
 
@@ -89,7 +100,10 @@
 						selectedIds: e.self_edit_roles ?? [],
 						onChange: (ids: string[]) => builderState.updateEditTool(t.id, { self_edit_roles: ids })
 					}
-				]
+				],
+				sentry: e.sentry ?? [],
+				onSentryChange: (next: SentryClause[]) =>
+					builderState.updateEditTool(t.id, { sentry: next.length ? next : null })
 			};
 		}
 
@@ -107,7 +121,10 @@
 					selectedIds: p.allowed_roles ?? [],
 					onChange: (ids: string[]) => builderState.updateProtocolTool(t.id, { allowed_roles: ids })
 				}
-			]
+			],
+			sentry: p.sentry ?? [],
+			onSentryChange: (next: SentryClause[]) =>
+				builderState.updateProtocolTool(t.id, { sentry: next.length ? next : null })
 		};
 	});
 </script>
@@ -145,6 +162,29 @@
 					{roles}
 					onCreateRole={createRole}
 				/>
+				{#if cfg.onSentryChange}
+					<section class="sentry-block">
+						<header class="sentry-head">
+							<Lock class="h-3.5 w-3.5" />
+							<span class="sentry-title">
+								{connectionInspectorSentryTitle?.() ?? 'Sentry (availability)'}{(cfg.sentry
+									?.length ?? 0) > 0
+									? ` · ${cfg.sentry?.length}`
+									: ''}
+							</span>
+						</header>
+						<p class="sentry-hint">
+							{toolSentryHint?.() ??
+								'This tool is only offered when all conditions hold (evaluated on the device, offline-capable).'}
+						</p>
+						<SentryEditor
+							sentry={cfg.sentry ?? []}
+							fieldDefs={builderState.visibleFieldDefs.map((d) => d.data)}
+							onChange={cfg.onSentryChange}
+							introText={toolSentryIntro?.() ?? 'Show this tool only when…'}
+						/>
+					</section>
+				{/if}
 			{/if}
 		</div>
 	</aside>
@@ -222,5 +262,32 @@
 	.config-body {
 		flex: 1;
 		overflow-y: auto;
+	}
+
+	.sentry-block {
+		padding: 0.75rem;
+		border-top: 1px solid hsl(var(--border));
+	}
+
+	.sentry-head {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		color: hsl(32 95% 44%);
+		margin-bottom: 0.25rem;
+	}
+
+	.sentry-title {
+		font-size: 0.6875rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+
+	.sentry-hint {
+		font-size: 0.6875rem;
+		color: hsl(var(--muted-foreground));
+		margin: 0 0 0.5rem;
+		line-height: 1.4;
 	}
 </style>
