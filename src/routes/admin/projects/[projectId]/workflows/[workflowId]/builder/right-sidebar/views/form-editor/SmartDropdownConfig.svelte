@@ -128,10 +128,15 @@
 		return Array.from(stageMap.values());
 	});
 
-	// Find the selected source field and its options
+	// Find the selected source field and its options.
+	// `sourceFieldId` holds the field-DEF id (`field_def_id`), not the per-form
+	// ref id: `field_options.source_field` lives on the shared field def and must
+	// resolve in the same id-space the renderer keys form values by. Matching on
+	// `field.id` (the ref id) here would also break for fields reused in several
+	// forms, which each have a distinct ref id but one def id.
 	const selectedSource = $derived.by(() => {
 		if (!sourceFieldId) return null;
-		return eligibleFields.find((f) => f.field.id === sourceFieldId) || null;
+		return eligibleFields.find((f) => f.field.field_def_id === sourceFieldId) || null;
 	});
 
 	// Source field options become modal tabs
@@ -282,8 +287,8 @@
 						{#each group.fields as source (source.field.id)}
 							<button
 								class="picker-field-card"
-								class:selected={sourceFieldId === source.field.id}
-								onclick={() => handleSourceFieldSelect(source.field.id)}
+								class:selected={sourceFieldId === source.field.field_def_id}
+								onclick={() => handleSourceFieldSelect(source.field.field_def_id ?? '')}
 								type="button"
 							>
 								<div class="card-header">
