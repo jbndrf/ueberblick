@@ -85,11 +85,19 @@
 		return pageGroups.find((pg) => pg.page === currentPage) || null;
 	});
 
-	// Context for smart dropdowns
-	const fieldContext = $derived.by((): FieldContext => ({
-		values,
-		fields
-	}));
+	// Context for smart dropdowns and conditional logic. Mirrors the
+	// `values[field.id] ?? field.value` fallback used when rendering each field:
+	// callers that only track touched values (the detail-view edit tool) still
+	// need saved values visible to dependent fields.
+	const fieldContext = $derived.by((): FieldContext => {
+		const merged: FormValues = { ...values };
+		for (const field of fieldsWithValues) {
+			if (merged[field.id] === undefined || merged[field.id] === null) {
+				merged[field.id] = field.value;
+			}
+		}
+		return { values: merged, fields };
+	});
 
 	// ==========================================================================
 	// Handlers
