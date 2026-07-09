@@ -23,6 +23,7 @@
 		type VisualKeyRegistry
 	} from '$lib/components/map/donut-cluster-icon';
 	import { ClusterClient } from '$lib/workers/cluster-client';
+	import { parseFilterValues, passesTagFilter } from '$lib/filter-engine/tag-visibility';
 	import type Supercluster from 'supercluster';
 
 	export interface MapLayer {
@@ -189,14 +190,6 @@
 		return sum;
 	}
 
-	/** Parse a field value that might be a JSON array into individual values */
-	function splitMultiValue(value: string): string[] {
-		if (value.startsWith('[')) {
-			try { return JSON.parse(value); } catch { /* fall through */ }
-		}
-		return [value];
-	}
-
 	// Click vs drag detection
 	let mouseDownPos: { x: number; y: number } | null = null;
 	const CLICK_THRESHOLD = 5;
@@ -254,13 +247,7 @@
 	const visibleWorkflowIdSet = $derived(new Set(visibleWorkflowIds));
 
 	// Pre-parse splitMultiValue results so JSON.parse runs once per data change, not per filter check
-	const parsedFilterValues = $derived.by(() => {
-		const map = new Map<string, string[]>();
-		for (const [id, value] of filterableValues) {
-			map.set(id, splitMultiValue(value));
-		}
-		return map;
-	});
+	const parsedFilterValues = $derived(parseFilterValues(filterableValues));
 
 	// Derived: compute which markers should be visible on the map
 	const visibleMarkers = $derived.by(() => {
@@ -276,14 +263,7 @@
 		return workflowInstances.filter((i) => {
 			if (!visibleWorkflowIdSet.has(i.workflow_id)) return false;
 			if (!i.centroid?.lat || !i.centroid?.lon) return false;
-			const allowedValues = visibleTagValues.get(i.workflow_id);
-			if (allowedValues) {
-				const values = parsedFilterValues.get(i.id);
-				if (values) {
-					if (!values.some(v => allowedValues.has(v))) return false;
-				}
-			}
-			return true;
+			return passesTagFilter(i.id, i.workflow_id, visibleTagValues, parsedFilterValues);
 		});
 	});
 

@@ -41,6 +41,7 @@
 		ViewDefinition
 	} from '$lib/participant-state/types';
 	import { buildPredicate } from '$lib/filter-engine/predicate';
+	import { parseFilterValues, passesTagFilter } from '$lib/filter-engine/tag-visibility';
 	import { isFeatureEnabled, toggleFeature, type FeatureKey } from '$lib/participant-state/enabled-features.svelte';
 	import {
 		createToolConfig,
@@ -105,14 +106,6 @@
 	}
 
 	let { data }: Props = $props();
-
-	/** Parse a field value that might be a JSON array (multiple_choice) into individual values */
-	function splitMultiValue(value: string): string[] {
-		if (value.startsWith('[')) {
-			try { return JSON.parse(value); } catch { /* fall through */ }
-		}
-		return [value];
-	}
 
 	const gateway = getParticipantGateway();
 
@@ -1428,6 +1421,22 @@
 		return (workflowInstances as any[]).filter((inst) => predicate(inst as any));
 	});
 
+	const parsedFilterValues = $derived(parseFilterValues(filterableValues));
+
+	/**
+	 * Instances handed to the non-clustered shape layer. Unlike the clustered
+	 * point layer -- which applies the Simple tag/stage filter itself from
+	 * `visibleTagValues` -- InstanceGeometryLayer only knows about workflow-level
+	 * visibility, so the tag filter has to be applied here. Without this a
+	 * polygon whose stage was toggled off stays on the map for as long as any
+	 * other stage of the same workflow remains visible.
+	 */
+	const shapeInstances = $derived.by(() =>
+		(filteredInstances as any[]).filter((inst) =>
+			passesTagFilter(inst.id, inst.workflow_id, effectiveVisibleTagValues, parsedFilterValues)
+		)
+	);
+
 	// ==========================================================================
 	// Cluster Detail Helpers
 	// ==========================================================================
@@ -2050,7 +2059,7 @@
 	{#if map}
 		<InstanceGeometryLayer
 			{map}
-			instances={filteredInstances}
+			instances={shapeInstances}
 			{workflows}
 			{colorByInstance}
 			visibleWorkflowIds={effectiveVisibleWorkflowIds}
