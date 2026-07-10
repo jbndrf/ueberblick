@@ -181,7 +181,7 @@
 </script>
 
 <Sheet.Root bind:open>
-	<Sheet.ContentNoOverlay side="right" class="w-56 md:w-64 p-0">
+	<Sheet.ContentNoOverlay side="right" class="w-56 wide:w-64 p-0">
 		<Sheet.Header class="px-4 pt-4 pb-2">
 			<Sheet.Title>
 				{#if filteredWorkflow}

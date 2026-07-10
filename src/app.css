@@ -6,6 +6,10 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Applies only where the document root opts in via data-ui="wide" (see UiMode).
+   Portalled content lands outside the app subtree, so this is keyed on the root. */
+@custom-variant wide (&:where([data-ui="wide"], [data-ui="wide"] *));
+
 :root {
   color-scheme: light;
   --radius: 0.625rem;

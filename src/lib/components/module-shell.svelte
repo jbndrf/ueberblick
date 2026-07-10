@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { onMount, type Snippet } from 'svelte';
+	import { type Snippet } from 'svelte';
 	import { Portal } from 'bits-ui';
+	import { getUiMode } from '$lib/stores/ui-mode.svelte';
 	import type { Action as SvelteAction } from 'svelte/action';
 	import { X } from '@lucide/svelte';
 	import { moduleShellClose, moduleShellDefaultTitle, moduleShellError, moduleShellLoading, moduleShellNoContent } from '$lib/paraglide/messages';
@@ -73,7 +74,8 @@
 	// State
 	// ==========================================================================
 
-	let isMobile = $state(true); // Mobile-first to prevent flash on open
+	const uiMode = getUiMode();
+	const isMobile = $derived(uiMode.isMobile);
 	let isDragging = $state(false);
 	let container: HTMLDivElement | undefined = $state();
 
@@ -132,12 +134,12 @@
 	// Device Detection
 	// ==========================================================================
 
-	function updateDeviceMode() {
-		isMobile = window.innerWidth <= 768;
+	// The wide presentation is a static side panel, so it has no collapsed state.
+	$effect(() => {
 		if (!isMobile && isOpen) {
 			isExpanded = true;
 		}
-	}
+	});
 
 	// ==========================================================================
 	// Scroll Boundary Detection
@@ -366,16 +368,6 @@
 			close();
 		}
 	}
-
-	// ==========================================================================
-	// Lifecycle
-	// ==========================================================================
-
-	onMount(() => {
-		updateDeviceMode();
-		window.addEventListener('resize', updateDeviceMode);
-		return () => window.removeEventListener('resize', updateDeviceMode);
-	});
 
 	// ==========================================================================
 	// Derived Classes

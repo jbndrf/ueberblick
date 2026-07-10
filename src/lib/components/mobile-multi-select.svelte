@@ -18,6 +18,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { cn } from '$lib/utils';
+	import { getUiMode } from '$lib/stores/ui-mode.svelte';
 
 	// Portal action to render element in document.body
 	function portal(node: HTMLElement, enabled: boolean = true) {
@@ -139,7 +140,8 @@
 	}: Props = $props();
 
 	let isOpen = $state(false);
-	let isMobile = $state(false);
+	const uiMode = getUiMode();
+	const isMobile = $derived(uiMode.isMobile);
 	let searchQuery = $state('');
 	let searchInput: HTMLInputElement | null = $state(null);
 	let triggerElement: HTMLButtonElement | null = $state(null);
@@ -359,12 +361,7 @@
 		}
 	}
 
-	// Check mobile on mount and resize
 	onMount(() => {
-		function checkMobile() {
-			isMobile = window.innerWidth < 768;
-		}
-
 		function updateViewportHeight() {
 			if (window.visualViewport) {
 				viewportHeight = window.visualViewport.height;
@@ -373,14 +370,11 @@
 			}
 		}
 
-		checkMobile();
 		updateViewportHeight();
-		window.addEventListener('resize', checkMobile);
 		document.addEventListener('click', handleClickOutside);
 		document.addEventListener('keydown', handleKeydown);
 
 		return () => {
-			window.removeEventListener('resize', checkMobile);
 			document.removeEventListener('click', handleClickOutside);
 			document.removeEventListener('keydown', handleKeydown);
 			if (window.visualViewport) {

@@ -10,6 +10,7 @@
 		isParticipantAuthError
 	} from '$lib/pocketbase';
 	import { checkBackendReachable } from '$lib/participant-state/network.svelte';
+	import { UiMode, setUiMode } from '$lib/stores/ui-mode.svelte';
 	import {
 		mapFilterLayers,
 		mapFilters,
@@ -45,6 +46,16 @@
 	import { setSyncCollections, startPushListener, runCatchUpSync, abortStalledRun, syncStatus, appLoadingMessage } from '$lib/participant-state/sync.svelte';
 	import { setupRealtime } from '$lib/participant-state/realtime.svelte';
 	import { initEnabledFeatures } from '$lib/participant-state/enabled-features.svelte';
+
+	// The participant app renders its mobile presentation at every width. Flip
+	// this to `false` to restore viewport-driven switching at 768px.
+	const uiMode = setUiMode(new UiMode(true));
+
+	$effect(() => {
+		const root = document.documentElement;
+		root.dataset.ui = uiMode.attribute;
+		return () => delete root.dataset.ui;
+	});
 
 	// Register service worker for PWA using absolute path.
 	// virtual:pwa-register generates relative "./sw.js" which breaks on sub-paths like /participant/map.
@@ -502,8 +513,8 @@
 				{/if}
 			</div>
 
-			<!-- Desktop Navigation (hidden on mobile) -->
-			<div class="hidden md:flex items-center gap-1">
+			<!-- Wide-layout navigation; the mobile presentation uses BottomControlBar -->
+			<div class="hidden wide:flex items-center gap-1">
 				<Button variant="ghost" size="icon" onclick={() => $mapNavCallbacks.onLayersClick?.()} title={mapFilterLayers?.() ?? 'Layers'}>
 					<Layers class="h-5 w-5" />
 				</Button>

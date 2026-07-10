@@ -113,7 +113,7 @@
 		     surrounding UI stay interactive. -->
 		<aside
 			class="fixed right-0 top-0 z-[9999] flex flex-col border-l bg-background shadow-xl
-				w-full md:w-96"
+				w-full wide:w-96"
 			style={viewportHeight > 0 ? `height: ${viewportHeight}px;` : 'height: 100vh;'}
 			role="dialog"
 			aria-modal="false"

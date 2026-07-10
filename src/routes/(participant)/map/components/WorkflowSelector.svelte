@@ -243,7 +243,7 @@
 	<!-- Coordinate Selection Mode UI -->
 	<div
 		bind:this={confirmButtonEl}
-		class="fixed bottom-20 left-1/2 z-[1100] flex -translate-x-1/2 items-center justify-between gap-3 rounded-full bg-destructive px-5 py-3 text-white shadow-lg lg:bottom-8"
+		class="fixed bottom-20 left-1/2 z-[1100] flex -translate-x-1/2 items-center justify-between gap-3 rounded-full bg-destructive px-5 py-3 text-white shadow-lg wide:bottom-8"
 	>
 		<button
 			onclick={confirmCoordinateSelection}
@@ -273,8 +273,8 @@
 		     position='left' anchors to the left half so a sidebar can share the screen. -->
 		<div
 			class={[
-				'fixed z-[1100] flex flex-col items-center gap-2.5 bottom-20 md:bottom-auto md:top-16',
-				position === 'center' ? 'left-1/2 -translate-x-1/2' : 'left-4 md:left-16'
+				'fixed z-[1100] flex flex-col items-center gap-2.5 bottom-20 wide:bottom-auto wide:top-16',
+				position === 'center' ? 'left-1/2 -translate-x-1/2' : 'left-4 wide:left-16'
 			]}
 		>
 				{#if quotaReached && quotaHint}

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy, untrack } from 'svelte';
+	import { getUiMode } from '$lib/stores/ui-mode.svelte';
 	import {
 		participantMapDefaultName,
 		participantMapDownloadingOfflineData,
@@ -50,6 +51,8 @@
 		updateToolConfig
 	} from '$lib/participant-state/tool-configs';
 	import type { BuilderContext } from './components/view-builder/types';
+
+	const uiMode = getUiMode();
 
 	const SAVED_VIEWS_KEY = 'filter.saved_views';
 	const ACTIVE_VIEW_KEY = 'filter.active_view';
@@ -1878,11 +1881,11 @@
 		workflowSelectorOpen = false;
 		if (workflow.workflow_type === 'incident' && instance.centroid && map) {
 			const zoom = Math.max(map.getZoom(), 17);
-			const isDesktop = window.innerWidth >= 768;
-			const rightPx = recentSheetOpen ? (isDesktop ? 256 : 224) : 0;
-			// On mobile the detail sheet peeks from the bottom (35vh); on desktop
+			const isWide = uiMode.isWide;
+			const rightPx = recentSheetOpen ? (isWide ? 256 : 224) : 0;
+			// On mobile the detail sheet peeks from the bottom (35vh); when wide
 			// it's a right-edge overlay that doesn't eat vertical map space.
-			const bottomPx = isDesktop ? 0 : Math.round(window.innerHeight * 0.35);
+			const bottomPx = isWide ? 0 : Math.round(window.innerHeight * 0.35);
 			flyToWithOffset(
 				map,
 				{ lat: instance.centroid.lat, lng: instance.centroid.lon },
@@ -2212,7 +2215,7 @@
 
 	<!-- Floating download progress (always visible outside modal) -->
 	{#if downloadProgress && downloadProgress.status === 'downloading'}
-		<div class="fixed bottom-20 left-4 right-4 z-[1200] md:left-auto md:right-4 md:w-80">
+		<div class="fixed bottom-20 left-4 right-4 z-[1200] wide:left-auto wide:right-4 wide:w-80">
 			<div class="rounded-lg bg-background/95 p-3 shadow-lg backdrop-blur-sm border">
 				<div class="flex items-center gap-2 mb-2">
 					<Loader2 class="h-4 w-4 animate-spin text-blue-600" />

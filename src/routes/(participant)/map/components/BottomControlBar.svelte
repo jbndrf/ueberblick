@@ -65,7 +65,7 @@
 <!-- Bottom bar with raised center button (mobile only) -->
 {#if !isSelectingCoordinates && !isEditingLocation}
 	<div
-		class="fixed bottom-0 left-0 right-0 z-[1060] flex md:hidden items-end justify-around border-t bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:bg-background/80"
+		class="fixed bottom-0 left-0 right-0 z-[1060] flex wide:hidden items-end justify-around border-t bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:bg-background/80"
 	>
 		<button
 			onclick={onLayersClick}

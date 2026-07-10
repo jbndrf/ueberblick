@@ -242,7 +242,7 @@
 	<!-- Red pill button matching WorkflowSelector style -->
 	<div
 		bind:this={confirmButtonEl}
-		class="fixed bottom-20 left-1/2 z-[1100] flex -translate-x-1/2 items-center justify-between gap-3 rounded-full bg-destructive px-5 py-3 text-white shadow-lg lg:bottom-8"
+		class="fixed bottom-20 left-1/2 z-[1100] flex -translate-x-1/2 items-center justify-between gap-3 rounded-full bg-destructive px-5 py-3 text-white shadow-lg wide:bottom-8"
 	>
 		<button
 			onclick={handleConfirm}

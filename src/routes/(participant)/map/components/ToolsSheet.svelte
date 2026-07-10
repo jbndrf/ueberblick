@@ -27,7 +27,7 @@
 </script>
 
 <Sheet.Root bind:open>
-	<Sheet.ContentNoOverlay side="right" class="w-28 md:w-32 p-0 gap-0">
+	<Sheet.ContentNoOverlay side="right" class="w-28 wide:w-32 p-0 gap-0">
 		<Sheet.Header class="border-b p-2">
 			<Sheet.Title class="text-sm">{participantToolsSheetTitle?.() ?? 'Tools'}</Sheet.Title>
 		</Sheet.Header>

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import type { Map as LeafletMap, TileLayer, Marker as LeafletMarker, LayerGroup } from 'leaflet';
+	import { getUiMode } from '$lib/stores/ui-mode.svelte';
 	import { createCachedTileLayer } from '$lib/components/map/cached-tile-layer';
 	import {
 		markersToFeatures,
@@ -191,6 +192,8 @@
 	}
 
 	// Click vs drag detection
+	const uiMode = getUiMode();
+
 	let mouseDownPos: { x: number; y: number } | null = null;
 	const CLICK_THRESHOLD = 5;
 
@@ -206,8 +209,9 @@
 		const deltaY = Math.abs(pos.clientY - mouseDownPos.y);
 
 		if (deltaX < CLICK_THRESHOLD && deltaY < CLICK_THRESHOLD) {
-			// Ignore clicks in the bottom bar area (h-16 = 64px) on mobile
-			if (pos.clientY <= window.innerHeight - 64 || window.innerWidth >= 768) {
+			// Ignore clicks in the bottom bar area (h-16 = 64px); it only renders
+			// in the mobile presentation.
+			if (pos.clientY <= window.innerHeight - 64 || uiMode.isWide) {
 				onMapClick?.();
 			}
 		}
