@@ -69,7 +69,7 @@
 	>
 		<button
 			onclick={onLayersClick}
-			class="flex h-16 w-14 flex-col items-center justify-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
+			class="flex h-16 w-14 flex-col items-center justify-center gap-1 text-black dark:text-white"
 			title={participantBottomControlBarLayers?.() ?? 'Layers'}
 		>
 			<Layers class="h-5 w-5" />
@@ -78,7 +78,7 @@
 
 		<button
 			onclick={onFiltersClick ?? (() => {})}
-			class="flex h-16 w-14 flex-col items-center justify-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
+			class="flex h-16 w-14 flex-col items-center justify-center gap-1 text-black dark:text-white"
 			title={mapFilters?.() ?? 'Filters'}
 		>
 			<Filter class="h-5 w-5" />
@@ -98,7 +98,7 @@
 
 		<button
 			onclick={onLocationClick ?? (() => {})}
-			class="flex h-16 w-14 flex-col items-center justify-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
+			class="flex h-16 w-14 flex-col items-center justify-center gap-1 text-black dark:text-white"
 			title={mapMyLocation?.() ?? 'My Location'}
 		>
 			<Navigation class="h-5 w-5" />
@@ -108,7 +108,7 @@
 		{#if participantToolsAvailable}
 			<button
 				onclick={onParticipantToolsClick ?? (() => {})}
-				class="relative flex h-16 w-14 flex-col items-center justify-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
+				class="relative flex h-16 w-14 flex-col items-center justify-center gap-1 text-black dark:text-white"
 				title={participantBottomControlBarTools?.() ?? 'Tools'}
 			>
 				<div class="relative">
@@ -127,7 +127,7 @@
 
 		<button
 			onclick={onToolsClick ?? (() => {})}
-			class="flex h-16 w-14 flex-col items-center justify-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
+			class="flex h-16 w-14 flex-col items-center justify-center gap-1 text-black dark:text-white"
 			title={mapTools?.() ?? 'Tools'}
 		>
 			<Settings class="h-5 w-5" />
