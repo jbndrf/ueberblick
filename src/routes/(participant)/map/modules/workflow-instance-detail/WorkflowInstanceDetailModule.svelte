@@ -116,7 +116,7 @@
 	const gateway = requireParticipantGateway();
 	let detailState = $state<WorkflowInstanceDetailState | null>(null);
 	let isOpen = $state(true);
-	let activeTab = $state<string>('activity');
+	let activeTab = $state<string>('data');
 
 	// Tool flow state (managed internally now)
 	interface ActiveToolFlow {
@@ -255,7 +255,7 @@
 		const previous = untrack(() => detailState);
 		const newState = createWorkflowInstanceDetailState(instanceId, gateway, fieldValueCache);
 		detailState = newState;
-		activeTab = 'activity';
+		activeTab = 'data';
 		activeToolFlow = null;
 		activeEditTool = null;
 		editValues = {};
@@ -328,8 +328,8 @@
 	// ==========================================================================
 
 	const tabs = [
-		{ id: 'activity', label: participantWorkflowInstanceDetailTabActivity?.() ?? 'Activity' },
-		{ id: 'data', label: participantWorkflowInstanceDetailTabData?.() ?? 'Data' }
+		{ id: 'data', label: participantWorkflowInstanceDetailTabData?.() ?? 'Data' },
+		{ id: 'activity', label: participantWorkflowInstanceDetailTabActivity?.() ?? 'Activity' }
 	];
 
 	// ==========================================================================
